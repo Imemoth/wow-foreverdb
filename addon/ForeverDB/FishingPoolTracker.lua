@@ -1,6 +1,7 @@
 local _, FDB = ...
 
 local poolFrame
+local tooltipElapsed = 0
 
 local POOL_WORDS = {
     "school",
@@ -209,6 +210,28 @@ function FDB:InitializeFishingPoolTracker()
         GameTooltip:HookScript(
             "OnShow",
             function(tooltip)
+                local name = getTooltipFirstLine(tooltip)
+                if name and name ~= "" then
+                    FDB:RememberFishingPoolHover(name)
+                end
+            end
+        )
+
+        -- World-object tooltips can change while the tooltip frame remains
+        -- visible. A light throttle keeps the latest pool/location fresh,
+        -- matching the behavior expected from gathering-style addons.
+        GameTooltip:HookScript(
+            "OnUpdate",
+            function(tooltip, elapsed)
+                tooltipElapsed =
+                    tooltipElapsed + (tonumber(elapsed) or 0)
+
+                if tooltipElapsed < 0.5 then
+                    return
+                end
+
+                tooltipElapsed = 0
+
                 local name = getTooltipFirstLine(tooltip)
                 if name and name ~= "" then
                     FDB:RememberFishingPoolHover(name)
