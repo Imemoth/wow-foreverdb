@@ -138,6 +138,72 @@ local function resolveSourceName(guid, sourceType)
     return nil
 end
 
+local function quantizeCoordinate(value)
+    if not value then return nil end
+
+    local percent = value * 100
+    return math.floor(percent * 2 + 0.5) / 2
+end
+
+local function getCurrentLocation()
+    local mapId
+    local zoneName
+    local subZoneName
+    local x
+    local y
+
+    if C_Map and C_Map.GetBestMapForUnit then
+        mapId = C_Map.GetBestMapForUnit("player")
+    end
+
+    if GetZoneText then
+        zoneName = GetZoneText()
+    end
+
+    if GetSubZoneText then
+        subZoneName = GetSubZoneText()
+    end
+
+    if (not zoneName or zoneName == "") and mapId and C_Map and C_Map.GetMapInfo then
+        local info = C_Map.GetMapInfo(mapId)
+        if info and info.name and info.name ~= "" then
+            zoneName = info.name
+        end
+    end
+
+    if mapId and C_Map and C_Map.GetPlayerMapPosition then
+        local position = C_Map.GetPlayerMapPosition(mapId, "player")
+        if position then
+            local px
+            local py
+
+            if position.GetXY then
+                px, py = position:GetXY()
+            else
+                px = position.x
+                py = position.y
+            end
+
+            if px and py and px >= 0 and py >= 0 then
+                x = quantizeCoordinate(px)
+                y = quantizeCoordinate(py)
+            end
+        end
+    end
+
+    if not mapId and (not zoneName or zoneName == "") then
+        return nil
+    end
+
+    return {
+        mapId = mapId or 0,
+        zoneName = zoneName or "Unknown zone",
+        subZoneName = subZoneName or "",
+        x = x,
+        y = y,
+    }
+end
+
 local function collectItems()
     local items = {}
 
@@ -221,6 +287,7 @@ function FDB:CaptureLootWindow()
     end
 
     local items = collectItems()
+    local location = getCurrentLocation()
 
     local observedLevel
     if sourceType == "creature"
@@ -238,7 +305,8 @@ function FDB:CaptureLootWindow()
         sourceId,
         sourceName,
         items,
-        observedLevel
+        observedLevel,
+        location
     )
 
     local itemKinds = 0
