@@ -83,24 +83,55 @@ public sealed class WowClientMapAssetProvider
             }
         }
 
-        return await Task.Run(
-            () => ExtractMap(
-                metadata,
-                layer,
-                cachePath,
-                cancellationToken),
-            cancellationToken);
+        var raw =
+            await Task.Run(
+                () => ExtractRawMap(
+                    metadata,
+                    layer,
+                    cancellationToken),
+                cancellationToken);
+
+        if (raw.Pixels is null)
+        {
+            return Unavailable(
+                raw.Status);
+        }
+
+        var bitmap =
+            BitmapSource.Create(
+                raw.Width,
+                raw.Height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null,
+                raw.Pixels,
+                raw.Width * 4);
+
+        bitmap.Freeze();
+
+        TrySaveCache(
+            bitmap,
+            cachePath);
+
+        return new MapAssetResult
+        {
+            Image = bitmap,
+            Width = raw.Width,
+            Height = raw.Height,
+            FromCache = false,
+            Status = raw.Status
+        };
     }
 
-    private MapAssetResult ExtractMap(
+    private RawMapAsset ExtractRawMap(
         ForeverDbMap metadata,
         ForeverDbMapLayer layer,
-        string cachePath,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_settings.WowRoot))
         {
-            return Unavailable(
+            return RawMapAsset.Failed(
                 "WoW installation path is not configured.");
         }
 
@@ -108,7 +139,7 @@ public sealed class WowClientMapAssetProvider
 
         if (cascRoot is null)
         {
-            return Unavailable(
+            return RawMapAsset.Failed(
                 "WoW .build.info was not found. Client map extraction cannot open CASC.");
         }
 
@@ -124,7 +155,7 @@ public sealed class WowClientMapAssetProvider
 
             if (storage is null)
             {
-                return Unavailable(
+                return RawMapAsset.Failed(
                     "WoW CASC storage could not be opened for this client.");
             }
 
@@ -132,13 +163,13 @@ public sealed class WowClientMapAssetProvider
 
             var targetWidth = layer.LayerWidth;
             var targetHeight = layer.LayerHeight;
-            var writeable = new WriteableBitmap(
-                targetWidth,
-                targetHeight,
-                96,
-                96,
-                PixelFormats.Bgra32,
-                null);
+
+            var targetPixels =
+                new byte[
+                    checked(
+                        targetWidth *
+                        targetHeight *
+                        4)];
 
             var columns =
                 (int)Math.Ceiling(
@@ -232,54 +263,40 @@ public sealed class WowClientMapAssetProvider
                     continue;
                 }
 
-                writeable.WritePixels(
-                    new Int32Rect(
-                        destinationX,
-                        destinationY,
-                        copyWidth,
-                        copyHeight),
-                    pixels,
-                    tileWidth * 4,
-                    0);
+                var sourceStride =
+                    tileWidth * 4;
+
+                var copyBytes =
+                    copyWidth * 4;
+
+                for (var y = 0;
+                     y < copyHeight;
+                     y++)
+                {
+                    Buffer.BlockCopy(
+                        pixels,
+                        y * sourceStride,
+                        targetPixels,
+                        ((destinationY + y) *
+                         targetWidth +
+                         destinationX) * 4,
+                        copyBytes);
+                }
 
                 decodedTiles++;
             }
 
             if (decodedTiles == 0)
             {
-                return Unavailable(
+                return RawMapAsset.Failed(
                     $"WoW CASC opened ({product}), but none of the map tiles could be decoded.");
             }
 
-            writeable.Freeze();
-
-            try
+            return new RawMapAsset
             {
-                Directory.CreateDirectory(
-                    Path.GetDirectoryName(cachePath)!);
-
-                var encoder =
-                    new PngBitmapEncoder();
-
-                encoder.Frames.Add(
-                    BitmapFrame.Create(writeable));
-
-                using var file =
-                    File.Create(cachePath);
-
-                encoder.Save(file);
-            }
-            catch
-            {
-                // Cache failure must not hide an otherwise usable map.
-            }
-
-            return new MapAssetResult
-            {
-                Image = writeable,
+                Pixels = targetPixels,
                 Width = targetWidth,
                 Height = targetHeight,
-                FromCache = false,
                 Status =
                     $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {product}"
             };
@@ -290,7 +307,7 @@ public sealed class WowClientMapAssetProvider
         }
         catch (Exception ex)
         {
-            return Unavailable(
+            return RawMapAsset.Failed(
                 $"WoW client map unavailable: {ex.Message}");
         }
         finally
@@ -307,6 +324,32 @@ public sealed class WowClientMapAssetProvider
             catch
             {
             }
+        }
+    }
+
+    private static void TrySaveCache(
+        BitmapSource bitmap,
+        string cachePath)
+    {
+        try
+        {
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(cachePath)!);
+
+            var encoder =
+                new PngBitmapEncoder();
+
+            encoder.Frames.Add(
+                BitmapFrame.Create(bitmap));
+
+            using var file =
+                File.Create(cachePath);
+
+            encoder.Save(file);
+        }
+        catch
+        {
+            // Cache failure must not hide an otherwise usable map.
         }
     }
 
@@ -561,5 +604,22 @@ public sealed class WowClientMapAssetProvider
             Width = 1000,
             Height = 700
         };
+    }
+
+    private sealed class RawMapAsset
+    {
+        public byte[]? Pixels { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public string Status { get; init; } = "";
+
+        public static RawMapAsset Failed(
+            string status)
+        {
+            return new RawMapAsset
+            {
+                Status = status
+            };
+        }
     }
 }
