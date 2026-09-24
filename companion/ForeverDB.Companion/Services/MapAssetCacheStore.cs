@@ -110,6 +110,31 @@ public static class MapAssetCacheStore
         }
     }
 
+    public static string? GetPreferredStorageLabel(
+        string wowBuildFingerprint)
+    {
+        lock (Gate)
+        {
+            return LoadAll()
+                .Where(
+                    entry =>
+                        entry.Success &&
+                        string.Equals(
+                            entry.WowBuildFingerprint,
+                            wowBuildFingerprint,
+                            StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(
+                            entry.StorageLabel))
+                .OrderByDescending(
+                    entry =>
+                        entry.UpdatedAtUtc)
+                .Select(
+                    entry =>
+                        entry.StorageLabel)
+                .FirstOrDefault();
+        }
+    }
+
     public static string GetWowBuildFingerprint(
         string wowRoot)
     {
