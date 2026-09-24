@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
 
@@ -272,10 +274,22 @@ public partial class MainWindow : Window
                 });
         }
 
+        if (detail.Locations.Count > 0)
+        {
+            DetailTabs.Items.Add(
+                new TabItem
+                {
+                    Header =
+                        $"Locations ({detail.Locations.Count})",
+                    Content =
+                        BuildLocationsPanel(detail.Locations)
+                });
+        }
+
         DetailTabs.SelectedIndex = 0;
     }
 
-    private static DataGrid BuildDetailGrid(
+    private DataGrid BuildDetailGrid(
         SearchEntityKind kind,
         DetailGroup group)
     {
@@ -289,8 +303,13 @@ public partial class MainWindow : Window
             HeadersVisibility = DataGridHeadersVisibility.Column,
             GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
             ItemsSource = group.Rows,
-            Margin = new Thickness(0, 8, 0, 0)
+            Margin = new Thickness(0, 8, 0, 0),
+            Cursor = Cursors.Hand,
+            ToolTip = "Double-click a row to open it"
         };
+
+        grid.MouseDoubleClick +=
+            DetailGrid_MouseDoubleClick;
 
         grid.Columns.Add(
             new DataGridTextColumn
@@ -313,7 +332,7 @@ public partial class MainWindow : Window
                     Header = "Level",
                     Binding =
                         new Binding(nameof(DetailRow.Level)),
-                    Width = 65
+                    Width = 82
                 });
         }
 
@@ -353,6 +372,37 @@ public partial class MainWindow : Window
                 Width = 80
             });
 
+        if (group.Rows.Any(
+                row => !string.IsNullOrWhiteSpace(row.Location)))
+        {
+            grid.Columns.Add(
+                new DataGridTextColumn
+                {
+                    Header = "Location",
+                    Binding =
+                        new Binding(nameof(DetailRow.Location)),
+                    Width = 150
+                });
+
+            grid.Columns.Add(
+                new DataGridTextColumn
+                {
+                    Header = "Coords",
+                    Binding =
+                        new Binding(nameof(DetailRow.Coordinates)),
+                    Width = 82
+                });
+        }
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Sample",
+                Binding =
+                    new Binding(nameof(DetailRow.SampleQuality)),
+                Width = 90
+            });
+
         if (group.Rows.Any(row => row.QuestDrops > 0))
         {
             grid.Columns.Add(
@@ -366,6 +416,308 @@ public partial class MainWindow : Window
         }
 
         return grid;
+    }
+
+    private async void DetailGrid_MouseDoubleClick(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (sender is not DataGrid grid ||
+            grid.SelectedItem is not DetailRow row)
+        {
+            return;
+        }
+
+        var target =
+            row.TargetKind == SearchEntityKind.Item
+                ? new SearchResultItem
+                {
+                    Kind = SearchEntityKind.Item,
+                    ItemId = row.TargetItemId,
+                    Name = row.TargetName,
+                    DisplayText =
+                        $"Item #{row.TargetItemId} — {row.TargetName}"
+                }
+                : new SearchResultItem
+                {
+                    Kind = SearchEntityKind.Source,
+                    SourceType = row.TargetSourceType,
+                    SourceId = row.TargetSourceId,
+                    SourceLevel = row.TargetSourceLevel,
+                    Name = row.TargetName,
+                    DisplayText = row.TargetName
+                };
+
+        await LoadSearchDetailAsync(target);
+    }
+
+    private FrameworkElement BuildLocationsPanel(
+        IReadOnlyList<DetailLocation> locations)
+    {
+        var root = new Grid
+        {
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+
+        root.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(
+                    1,
+                    GridUnitType.Star)
+            });
+
+        root.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(16)
+            });
+
+        root.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(
+                    1,
+                    GridUnitType.Star)
+            });
+
+        var table = new DataGrid
+        {
+            AutoGenerateColumns = false,
+            IsReadOnly = true,
+            CanUserAddRows = false,
+            HeadersVisibility =
+                DataGridHeadersVisibility.Column,
+            ItemsSource = locations
+        };
+
+        table.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Area",
+                Binding =
+                    new Binding(nameof(DetailLocation.Area)),
+                Width = new DataGridLength(
+                    1,
+                    DataGridLengthUnitType.Star)
+            });
+
+        table.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Coords",
+                Binding =
+                    new Binding(
+                        nameof(DetailLocation.Coordinates)),
+                Width = 85
+            });
+
+        table.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Seen",
+                Binding =
+                    new Binding(
+                        nameof(DetailLocation.Observations)),
+                Width = 65
+            });
+
+        table.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Kind",
+                Binding =
+                    new Binding(
+                        nameof(DetailLocation.LootKind)),
+                Width = 82
+            });
+
+        Grid.SetColumn(table, 0);
+        root.Children.Add(table);
+
+        var primaryGroup = locations
+            .GroupBy(
+                location =>
+                    $"{location.MapId}|{location.ZoneName}")
+            .OrderByDescending(
+                group =>
+                    group.Sum(
+                        location => location.Observations))
+            .First();
+
+        var previewBorder = new Border
+        {
+            Background =
+                (Brush)FindResource("SurfaceAltBrush"),
+            BorderBrush =
+                (Brush)FindResource("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(12)
+        };
+
+        Grid.SetColumn(previewBorder, 2);
+        root.Children.Add(previewBorder);
+
+        var previewGrid = new Grid();
+        previewGrid.RowDefinitions.Add(
+            new RowDefinition
+            {
+                Height = GridLength.Auto
+            });
+
+        previewGrid.RowDefinitions.Add(
+            new RowDefinition
+            {
+                Height = new GridLength(
+                    1,
+                    GridUnitType.Star)
+            });
+
+        var title = new TextBlock
+        {
+            Text =
+                $"Map preview — {primaryGroup.First().ZoneName}",
+            FontWeight = FontWeights.SemiBold,
+            Foreground =
+                (Brush)FindResource("TextBrush"),
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+
+        previewGrid.Children.Add(title);
+
+        var mapBorder = new Border
+        {
+            Background = new SolidColorBrush(
+                Color.FromRgb(15, 24, 34)),
+            BorderBrush =
+                (Brush)FindResource("BorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            ClipToBounds = true
+        };
+
+        Grid.SetRow(mapBorder, 1);
+        previewGrid.Children.Add(mapBorder);
+
+        var viewbox = new Viewbox
+        {
+            Stretch = Stretch.Uniform
+        };
+
+        mapBorder.Child = viewbox;
+
+        var canvas = new Canvas
+        {
+            Width = 100,
+            Height = 100,
+            Background = Brushes.Transparent
+        };
+
+        viewbox.Child = canvas;
+
+        for (var i = 10; i < 100; i += 10)
+        {
+            canvas.Children.Add(
+                new Line
+                {
+                    X1 = i,
+                    X2 = i,
+                    Y1 = 0,
+                    Y2 = 100,
+                    Stroke = new SolidColorBrush(
+                        Color.FromRgb(35, 53, 70)),
+                    StrokeThickness = 0.25
+                });
+
+            canvas.Children.Add(
+                new Line
+                {
+                    X1 = 0,
+                    X2 = 100,
+                    Y1 = i,
+                    Y2 = i,
+                    Stroke = new SolidColorBrush(
+                        Color.FromRgb(35, 53, 70)),
+                    StrokeThickness = 0.25
+                });
+        }
+
+        foreach (var location in primaryGroup)
+        {
+            var dot = new Ellipse
+            {
+                Width = 3,
+                Height = 3,
+                Fill =
+                    (Brush)FindResource("AccentBrush"),
+                Stroke = Brushes.White,
+                StrokeThickness = 0.35,
+                ToolTip =
+                    $"{location.Area} · {location.Coordinates} · n={location.Observations}"
+            };
+
+            Canvas.SetLeft(
+                dot,
+                Math.Clamp(location.X, 0d, 100d) - 1.5);
+
+            Canvas.SetTop(
+                dot,
+                Math.Clamp(location.Y, 0d, 100d) - 1.5);
+
+            canvas.Children.Add(dot);
+        }
+
+        previewBorder.Child = previewGrid;
+
+        return root;
+    }
+
+    private void TitleBar_MouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximize();
+            return;
+        }
+
+        DragMove();
+    }
+
+    private void MinimizeButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void MaximizeButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        ToggleMaximize();
+    }
+
+    private void CloseButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void ToggleMaximize()
+    {
+        WindowState =
+            WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized;
     }
 
     private async void SaveSettings_Click(
@@ -412,6 +764,7 @@ public partial class MainWindow : Window
         System.ComponentModel.CancelEventArgs e)
     {
         e.Cancel = true;
+        ShowInTaskbar = false;
         Hide();
     }
 }
