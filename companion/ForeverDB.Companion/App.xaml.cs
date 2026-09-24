@@ -27,11 +27,15 @@ public partial class App : System.Windows.Application
         _trayIcon.ContextMenuStrip = menu;
         _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
 
-        var settings = SettingsService.Load();
-
         ShowMainWindow();
 
-        if (settings.StartMinimized)
+        var startMinimized = e.Args.Any(
+            arg => string.Equals(
+                arg,
+                "--minimized",
+                StringComparison.OrdinalIgnoreCase));
+
+        if (startMinimized)
         {
             _mainWindow.Hide();
         }
