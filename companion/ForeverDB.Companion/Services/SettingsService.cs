@@ -30,13 +30,46 @@ public static class SettingsService
 
         try
         {
-            return JsonSerializer.Deserialize<CompanionSettings>(
-                File.ReadAllText(SettingsPath))
-                ?? new CompanionSettings { WowRoot = DetectWowRoot() };
+            var settings =
+                JsonSerializer.Deserialize<CompanionSettings>(
+                    File.ReadAllText(SettingsPath))
+                ?? new CompanionSettings();
+
+            var changed = false;
+
+            if (string.IsNullOrWhiteSpace(settings.WowRoot))
+            {
+                settings.WowRoot = DetectWowRoot();
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.SupabaseUrl))
+            {
+                settings.SupabaseUrl =
+                    "https://klxhikdlfwgxurdyexdi.supabase.co";
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.SupabaseKey))
+            {
+                settings.SupabaseKey =
+                    "sb_publishable_kKvBJsH5M3yFDmKP3IJDwQ_2yiGaT9-";
+                changed = true;
+            }
+
+            if (changed)
+            {
+                Save(settings);
+            }
+
+            return settings;
         }
         catch
         {
-            return new CompanionSettings { WowRoot = DetectWowRoot() };
+            return new CompanionSettings
+            {
+                WowRoot = DetectWowRoot()
+            };
         }
     }
 
