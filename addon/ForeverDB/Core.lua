@@ -3,8 +3,8 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.2.7-alpha"
-FDB.SCHEMA_VERSION = 7
+FDB.VERSION = "0.3.0-alpha"
+FDB.SCHEMA_VERSION = 8
 FDB.DEBUG = true
 
 local PREFIX = "|cff7dd3fcForeverDB|r"
@@ -31,7 +31,9 @@ function FDB:PrintStatus()
         "mining:", stats.byKind.mining or 0,
         "herbalism:", stats.byKind.herbalism or 0,
         "fishing:", stats.byKind.fishing or 0,
-        "chest:", stats.byKind.chest or 0
+        "pools:", stats.byKind.fishing_pool or 0,
+        "chest:", stats.byKind.chest or 0,
+        "disenchant:", stats.byKind.disenchant or 0
     )
     print("unresolved loot windows:", stats.unresolvedLootWindows)
     print("installation:", db.installationId or "missing")
@@ -109,6 +111,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:InitializeDatabase()
         FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
+        FDB:InitializeFishingPoolTracker()
+        FDB:InitializeDisenchantTracker()
         FDB:InitializeLootTracker()
         FDB:InitializeTooltip()
         registerSlashCommands()
