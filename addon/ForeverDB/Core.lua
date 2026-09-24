@@ -3,42 +3,88 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.1.1-alpha"
-FDB.SCHEMA_VERSION = 1
+FDB.VERSION = "0.2.0-alpha"
+FDB.SCHEMA_VERSION = 2
 FDB.DEBUG = true
+
+local PREFIX = "|cff7dd3fcForeverDB|r"
 
 function FDB:Debug(...)
     if not self.DEBUG then return end
-    print("|cff7dd3fcForeverDB|r", ...)
+    print(PREFIX, ...)
 end
 
 function FDB:PrintStatus()
     local db = self.DB
     if not db then
-        print("|cff7dd3fcForeverDB|r database not initialized")
+        print(PREFIX, "database not initialized")
         return
     end
 
-    local mobCount = 0
-    local normalObservations = 0
-    local skinningObservations = 0
+    local stats = self:GetDatabaseStats()
 
-    for _, mob in pairs(db.mobs or {}) do
-        mobCount = mobCount + 1
-        normalObservations = normalObservations + ((mob.normal and mob.normal.observations) or 0)
-        skinningObservations = skinningObservations + ((mob.skinning and mob.skinning.observations) or 0)
+    print(PREFIX, self.VERSION)
+    print("schema:", db.schemaVersion, "sources:", stats.sourceCount)
+    print(
+        "mob:", stats.byKind.mob or 0,
+        "skinning:", stats.byKind.skinning or 0,
+        "mining:", stats.byKind.mining or 0,
+        "herbalism:", stats.byKind.herbalism or 0,
+        "chest:", stats.byKind.chest or 0
+    )
+    print("unresolved loot windows:", stats.unresolvedLootWindows)
+    print("installation:", db.installationId or "missing")
+    print("export bytes:", type(ForeverDB_Export) == "string" and #ForeverDB_Export or 0)
+end
+
+function FDB:PrintLastObservation()
+    local last = self.DB and self.DB.lastObservation
+    if not last then
+        print(PREFIX, "no observation recorded yet")
+        return
     end
 
-    print("|cff7dd3fcForeverDB|r", self.VERSION)
-    print("schema:", db.schemaVersion, "mobs:", mobCount)
-    print("normal observations:", normalObservations, "skinning observations:", skinningObservations)
-    print("installation:", db.installationId or "missing")
+    print(
+        PREFIX,
+        "last:",
+        last.kind or "?",
+        last.sourceType or "?",
+        last.sourceId or "?",
+        last.sourceName or ""
+    )
+    print(
+        "items:", last.itemKinds or 0,
+        "quest items:", last.questItemKinds or 0,
+        "quantity:", last.totalQuantity or 0
+    )
+end
+
+local function registerSlashCommands()
+    SLASH_FOREVERDB1 = "/fdb"
+    SlashCmdList.FOREVERDB = function(message)
+        local command = (message or ""):match("^%s*(.-)%s*$"):lower()
+
+        if command == "" or command == "status" then
+            FDB:PrintStatus()
+        elseif command == "last" then
+            FDB:PrintLastObservation()
+        elseif command == "export" then
+            FDB:BuildExportSnapshot()
+            print(PREFIX, "export snapshot rebuilt:", #ForeverDB_Export, "bytes")
+        elseif command == "debug" then
+            FDB.DEBUG = not FDB.DEBUG
+            print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
+        else
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb debug")
+        end
+    end
 end
 
 local frame = CreateFrame("Frame")
 FDB.EventFrame = frame
 
 frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
 
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -47,24 +93,17 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if loadedAddon ~= addonName then return end
 
         FDB:InitializeDatabase()
-        FDB:InitializeLootTracker()
+        FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
+        FDB:InitializeLootTracker()
         FDB:InitializeTooltip()
-
-        SLASH_FOREVERDB1 = "/fdb"
-        SlashCmdList.FOREVERDB = function(message)
-            local command = (message or ""):match("^%s*(.-)%s*$"):lower()
-            if command == "" or command == "status" then
-                FDB:PrintStatus()
-            elseif command == "debug" then
-                FDB.DEBUG = not FDB.DEBUG
-                print("|cff7dd3fcForeverDB|r debug:", FDB.DEBUG and "on" or "off")
-            else
-                print("|cff7dd3fcForeverDB|r commands: /fdb status, /fdb debug")
-            end
-        end
+        registerSlashCommands()
+        FDB:BuildExportSnapshot()
 
         FDB:Debug("loaded", FDB.VERSION, "schema", FDB.SCHEMA_VERSION)
+    elseif event == "PLAYER_LOGIN" then
+        FDB:EnsureInstallationId()
+        FDB:BuildExportSnapshot()
     elseif event == "PLAYER_LOGOUT" then
         FDB:PrepareForSave()
     end
