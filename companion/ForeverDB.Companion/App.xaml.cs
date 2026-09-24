@@ -3,7 +3,7 @@ using ForeverDB.Companion.Services;
 
 namespace ForeverDB.Companion;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private MainWindow? _mainWindow;
