@@ -3,7 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using BLPSharp;
+using War3BlpFile = War3Net.Drawing.Blp.BlpFile;
 using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
@@ -213,13 +213,14 @@ public sealed class WowClientMapAssetProvider
                 try
                 {
                     using var blp =
-                        new BLPFile(stream);
+                        new War3BlpFile(stream);
 
                     pixels =
                         blp.GetPixels(
                             0,
                             out tileWidth,
-                            out tileHeight);
+                            out tileHeight,
+                            bgra: true);
                 }
                 catch
                 {
