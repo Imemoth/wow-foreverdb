@@ -4,7 +4,7 @@ Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
 ## Collector alpha
 
-Current addon version: **0.2.5-alpha**  
+Current addon version: **0.2.6-alpha**  
 Forever interface target: **16001**
 
 The collector distinguishes two dimensions:
@@ -90,3 +90,19 @@ Creature sources remain separate by exact level in item tooltips. For example,
 level 6 and level 7 Greater Duskbat can appear as separate Top-source rows.
 Historical `Lvl ?` creature rows are hidden once exact-level observations for
 that NPC/item exist, avoiding duplicate-looking aggregated legacy data.
+
+
+## Location observations
+
+Every observed loot source can also record location metadata in the background:
+
+- uiMapID
+- zone name
+- subzone name
+- x/y player position
+
+Coordinates are quantized to a 0.5% map grid and aggregated with observation
+counts. This keeps SavedVariables compact while preserving enough resolution
+for later zone maps and heatmaps.
+
+Location data is not shown in normal in-game tooltips.
