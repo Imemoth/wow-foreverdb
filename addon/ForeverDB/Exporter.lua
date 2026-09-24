@@ -30,6 +30,16 @@ local function questIdsCsv(item)
     return table.concat(ids, ",")
 end
 
+local function numberListCsv(values)
+    local result = {}
+
+    for _, value in ipairs(values or {}) do
+        result[#result + 1] = tostring(value)
+    end
+
+    return table.concat(result, ",")
+end
+
 function FDB:BuildExportSnapshot()
     if not self.DB then
         ForeverDB_Export = ""
@@ -47,6 +57,34 @@ function FDB:BuildExportSnapshot()
             tostring(self.DB.updatedAt or 0),
         }, "|")
     }
+
+    for _, mapKey in ipairs(sortedKeys(self.DB.maps or {})) do
+        local map = self.DB.maps[mapKey]
+
+        lines[#lines + 1] = table.concat({
+            "M",
+            tostring(map.mapId or mapKey),
+            encode(map.name),
+            tostring(map.parentMapId or 0),
+            tostring(map.mapArtId or 0),
+        }, "|")
+
+        for index, layer in ipairs(map.layers or {}) do
+            lines[#lines + 1] = table.concat({
+                "A",
+                tostring(map.mapId or mapKey),
+                tostring(index),
+                tostring(layer.layerWidth or 0),
+                tostring(layer.layerHeight or 0),
+                tostring(layer.tileWidth or 0),
+                tostring(layer.tileHeight or 0),
+                tostring(layer.minScale or 0),
+                tostring(layer.maxScale or 0),
+                tostring(layer.additionalZoomSteps or 0),
+                numberListCsv(layer.fileDataIds),
+            }, "|")
+        end
+    end
 
     for _, sourceKey in ipairs(sortedKeys(self.DB.sources)) do
         local source = self.DB.sources[sourceKey]
