@@ -270,34 +270,101 @@ function FDB:CaptureLootWindow()
     if lootWindowCaptured then return end
     lootWindowCaptured = true
 
-    local sourceGuid = getSourceGuidFromLoot() or getFallbackGuid()
-    local sourceType, sourceId = self:ParseSourceGuid(sourceGuid)
+    local sourceGuid
+    local sourceType
+    local sourceId
+    local sourceName
+    local kind
+    local location
+    local observedLevel
 
-    if not sourceType or not sourceId then
-        self:RegisterUnresolvedLootWindow()
-        self:Debug("loot unresolved; slots:", GetNumLootItems())
-        return
-    end
+    local disenchant =
+        self.GetActiveDisenchant
+        and self:GetActiveDisenchant()
 
-    local sourceName = resolveSourceName(sourceGuid, sourceType)
-    local kind = self:GetLootKind(sourceType, sourceGuid, sourceName)
+    if disenchant then
+        sourceType = "item"
+        sourceId = disenchant.itemId
+        sourceName =
+            disenchant.name
+            or ("Item " .. tostring(disenchant.itemId))
+        kind = "disenchant"
+    else
+        sourceGuid =
+            getSourceGuidFromLoot()
+            or getFallbackGuid()
 
-    if kind == "fishing" then
-        sourceType, sourceId, sourceName = getFishingZoneSource()
+        sourceType, sourceId =
+            self:ParseSourceGuid(sourceGuid)
+
+        if not sourceType or not sourceId then
+            self:RegisterUnresolvedLootWindow()
+            self:Debug(
+                "loot unresolved; slots:",
+                GetNumLootItems()
+            )
+            return
+        end
+
+        sourceName =
+            resolveSourceName(
+                sourceGuid,
+                sourceType
+            )
+
+        kind =
+            self:GetLootKind(
+                sourceType,
+                sourceGuid,
+                sourceName
+            )
+
+        local pool =
+            self.GetActiveFishingPool
+            and self:GetActiveFishingPool()
+
+        if pool
+            and sourceType == "gameobject" then
+            kind = "fishing_pool"
+            sourceType = "gameobject"
+            sourceId = pool.sourceId
+            sourceName = pool.name
+            location =
+                pool.location
+                or self:GetProjectedInteractionLocation(15)
+        elseif kind == "fishing" then
+            sourceType, sourceId, sourceName =
+                getFishingZoneSource()
+        end
+
+        local pending =
+            self.GetPendingGathering
+            and self:GetPendingGathering()
+
+        if not location then
+            location =
+                pending and pending.location
+                or self:GetCurrentLocation()
+        end
+
+        if sourceType == "creature" then
+            if UnitGUID("target") == sourceGuid
+                and UnitLevel then
+                local level = UnitLevel("target")
+                if level and level > 0 then
+                    observedLevel = level
+                end
+            end
+
+            if not observedLevel
+                and pending
+                and pending.sourceLevel then
+                observedLevel = pending.sourceLevel
+            end
+        end
     end
 
     local items = collectItems()
-    local location = getCurrentLocation()
-
-    local observedLevel
-    if sourceType == "creature"
-        and UnitGUID("target") == sourceGuid
-        and UnitLevel then
-        local level = UnitLevel("target")
-        if level and level > 0 then
-            observedLevel = level
-        end
-    end
 
     self:RecordObservation(
         kind,
@@ -311,9 +378,12 @@ function FDB:CaptureLootWindow()
 
     local itemKinds = 0
     local questKinds = 0
+
     for _, item in pairs(items) do
         itemKinds = itemKinds + 1
-        if item.isQuestItem then questKinds = questKinds + 1 end
+        if item.isQuestItem then
+            questKinds = questKinds + 1
+        end
     end
 
     self:Debug(
@@ -331,6 +401,14 @@ function FDB:CaptureLootWindow()
     )
 
     self:ConsumePendingGatheringKind(kind)
+
+    if kind == "fishing_pool"
+        and self.ConsumeActiveFishingPool then
+        self:ConsumeActiveFishingPool()
+    elseif kind == "disenchant"
+        and self.ConsumeActiveDisenchant then
+        self:ConsumeActiveDisenchant()
+    end
 end
 
 function FDB:InitializeLootTracker()
