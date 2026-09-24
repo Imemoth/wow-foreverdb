@@ -169,8 +169,8 @@ public sealed class WowClientMapAssetProvider
                 AssetMode = raw.AssetMode,
                 Stage =
                     raw.Pixels is null
-                        ? "local-casc-resolve"
-                        : "local-casc-render",
+                        ? "map-resolve"
+                        : "map-render",
                 DurationMs =
                     (int)Math.Min(
                         int.MaxValue,
@@ -312,6 +312,7 @@ public sealed class WowClientMapAssetProvider
 
         try
         {
+            // 1) Exact local product + FileDataID.
             (storage, storageLabel) =
                 OpenStorageForReferences(
                     cascRoot,
@@ -319,34 +320,9 @@ public sealed class WowClientMapAssetProvider
                     effectiveTextureRefs,
                     preferredStorageLabel);
 
-            if (storage is null)
-            {
-                foreach (var classicCandidate in
-                         GetClassicMapTextureCandidates(
-                             metadata.Name))
-                {
-                    var selection =
-                        OpenStorageForReferences(
-                            cascRoot,
-                            _settings.WowRoot,
-                            classicCandidate.TextureRefs,
-                            preferredStorageLabel);
-
-                    if (selection.Storage is null)
-                    {
-                        continue;
-                    }
-
-                    storage = selection.Storage;
-                    storageLabel = selection.Label;
-                    effectiveTextureRefs =
-                        classicCandidate.TextureRefs;
-                    assetMode =
-                        $"classic-path:{classicCandidate.Directory}";
-                    break;
-                }
-            }
-
+            // 2) If the streamed map art is not physically present, use the
+            // exact installed Forever build on Blizzard's CDN. The resulting
+            // CASC metadata/data is cached under LocalAppData.
             if (storage is null)
             {
                 foreach (var online in
@@ -387,6 +363,35 @@ public sealed class WowClientMapAssetProvider
                     }
 
                     reader.Dispose();
+                }
+            }
+
+            // 3) Last-resort compatibility path for older clients/listfiles.
+            if (storage is null)
+            {
+                foreach (var classicCandidate in
+                         GetClassicMapTextureCandidates(
+                             metadata.Name))
+                {
+                    var selection =
+                        OpenStorageForReferences(
+                            cascRoot,
+                            _settings.WowRoot,
+                            classicCandidate.TextureRefs,
+                            preferredStorageLabel);
+
+                    if (selection.Storage is null)
+                    {
+                        continue;
+                    }
+
+                    storage = selection.Storage;
+                    storageLabel = selection.Label;
+                    effectiveTextureRefs =
+                        classicCandidate.TextureRefs;
+                    assetMode =
+                        $"classic-path:{classicCandidate.Directory}";
+                    break;
                 }
             }
 
@@ -858,18 +863,19 @@ public sealed class WowClientMapAssetProvider
                 });
         }
 
-        return result
+        var filtered =
+            !string.IsNullOrWhiteSpace(
+                expectedProduct)
+                ? result.Where(
+                    candidate =>
+                        string.Equals(
+                            candidate.Product,
+                            expectedProduct,
+                            StringComparison.OrdinalIgnoreCase))
+                : result;
+
+        return filtered
             .OrderBy(
-                candidate =>
-                    !string.IsNullOrWhiteSpace(
-                        expectedProduct) &&
-                    string.Equals(
-                        candidate.Product,
-                        expectedProduct,
-                        StringComparison.OrdinalIgnoreCase)
-                        ? 0
-                        : 1)
-            .ThenBy(
                 candidate =>
                     candidate.Product,
                 StringComparer.OrdinalIgnoreCase)
