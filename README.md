@@ -4,7 +4,7 @@ Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
 ## Collector alpha
 
-Current addon version: **0.2.2-alpha**  
+Current addon version: **0.2.3-alpha**  
 Forever interface target: **16001**
 
 The collector distinguishes two dimensions:
@@ -14,6 +14,7 @@ The collector distinguishes two dimensions:
    - skinning
    - mining GameObject
    - herbalism GameObject
+   - fishing bobber / fishing loot
    - chest/container GameObject
    - other GameObject
 
