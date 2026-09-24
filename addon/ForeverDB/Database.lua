@@ -40,8 +40,7 @@ function FDB:InitializeDatabase()
     db.pendingBatches = db.pendingBatches or {}
 
     if not db.installationId then
-        math.randomseed(now() + math.floor(GetTime() * 1000))
-        db.installationId = randomHex(32)
+        -- WoW does not expose math.randomseed in the addon sandbox.\n        -- The client RNG is already initialized; we only need a stable anonymous local ID.\n        db.installationId = randomHex(32)
     end
 
     self.DB = db
