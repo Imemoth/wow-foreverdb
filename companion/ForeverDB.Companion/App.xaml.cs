@@ -29,9 +29,11 @@ public partial class App : System.Windows.Application
 
         var settings = SettingsService.Load();
 
-        if (!settings.StartMinimized)
+        ShowMainWindow();
+
+        if (settings.StartMinimized)
         {
-            ShowMainWindow();
+            _mainWindow.Hide();
         }
     }
 
