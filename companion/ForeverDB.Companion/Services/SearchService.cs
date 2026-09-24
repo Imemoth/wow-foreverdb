@@ -9,6 +9,7 @@ public sealed class SearchService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly LocationService _locationService;
 
     public SearchService(
         HttpClient httpClient,
@@ -16,6 +17,9 @@ public sealed class SearchService
     {
         _httpClient = httpClient;
         _settings = settings;
+        _locationService = new LocationService(
+            httpClient,
+            settings);
     }
 
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
@@ -118,15 +122,24 @@ public sealed class SearchService
         SearchResultItem result,
         CancellationToken cancellationToken)
     {
-        var data = await GetAsync(
+        var dataTask = GetAsync(
             "/rest/v1/observed_loot_stats" +
             "?select=source_type,source_id,source_level,source_name,loot_kind,item_id,item_name,observations,drop_count,quantity,quest_drop_count,observed_drop_rate" +
             $"&item_id=eq.{result.ItemId}",
             cancellationToken);
 
-        var rows = ParseObservedRows(data);
+        var locationsTask =
+            _locationService.GetItemLocationsAsync(
+                result.ItemId,
+                cancellationToken);
+
+        await Task.WhenAll(dataTask, locationsTask);
+
+        var rows = ParseObservedRows(await dataTask);
+        var locations = await locationsTask;
 
         rows = HideHistoricalRowsWhenExactLevelExists(rows);
+        ApplyLocationSummaries(rows, locations);
 
         var groups = rows
             .GroupBy(row => row.LootKind)
@@ -152,7 +165,8 @@ public sealed class SearchService
             Title = $"{result.Name}",
             Subtitle =
                 $"Item #{result.ItemId} · {sourceCount} observed source row(s)",
-            Groups = groups
+            Groups = groups,
+            Locations = locations
         };
     }
 
@@ -162,7 +176,7 @@ public sealed class SearchService
     {
         var type = Uri.EscapeDataString(result.SourceType);
 
-        var data = await GetAsync(
+        var dataTask = GetAsync(
             "/rest/v1/observed_loot_stats" +
             "?select=source_type,source_id,source_level,source_name,loot_kind,item_id,item_name,observations,drop_count,quantity,quest_drop_count,observed_drop_rate" +
             $"&source_type=eq.{type}" +
@@ -170,7 +184,19 @@ public sealed class SearchService
             $"&source_level=eq.{result.SourceLevel}",
             cancellationToken);
 
-        var rows = ParseObservedRows(data);
+        var locationsTask =
+            _locationService.GetSourceLocationsAsync(
+                result.SourceType,
+                result.SourceId,
+                result.SourceLevel,
+                cancellationToken);
+
+        await Task.WhenAll(dataTask, locationsTask);
+
+        var rows = ParseObservedRows(await dataTask);
+        var locations = await locationsTask;
+
+        ApplyLocationSummaries(rows, locations);
 
         var groups = rows
             .GroupBy(row => row.LootKind)
@@ -199,7 +225,8 @@ public sealed class SearchService
             Title = result.Name,
             Subtitle =
                 $"{FormatSourceType(result.SourceType)} #{result.SourceId} · {level}",
-            Groups = groups
+            Groups = groups,
+            Locations = locations
         };
     }
 
@@ -275,17 +302,23 @@ public sealed class SearchService
         return new DetailRow
         {
             Name = row.SourceName,
-            Level =
-                row.SourceLevel > 0
-                    ? row.SourceLevel.ToString()
-                    : "—",
+            Level = FormatLevel(row.SourceType, row.SourceLevel),
             SourceType = row.SourceType,
             Drops = row.Drops,
             Observations = row.Observations,
             Quantity = row.Quantity,
             QuestDrops = row.QuestDrops,
             RatePercent = row.RatePercent,
-            ConfidenceScore = row.ConfidenceScore
+            ConfidenceScore = row.ConfidenceScore,
+            Location = row.Location,
+            Coordinates = row.Coordinates,
+            SampleQuality = SampleQuality(row.Observations),
+            QuestFlag = row.QuestDrops > 0 ? "Quest" : "",
+            TargetKind = SearchEntityKind.Source,
+            TargetSourceType = row.SourceType,
+            TargetSourceId = row.SourceId,
+            TargetSourceLevel = row.SourceLevel,
+            TargetName = row.SourceName
         };
     }
 
@@ -302,8 +335,84 @@ public sealed class SearchService
             Quantity = row.Quantity,
             QuestDrops = row.QuestDrops,
             RatePercent = row.RatePercent,
-            ConfidenceScore = row.ConfidenceScore
+            ConfidenceScore = row.ConfidenceScore,
+            Location = row.Location,
+            Coordinates = row.Coordinates,
+            SampleQuality = SampleQuality(row.Observations),
+            QuestFlag = row.QuestDrops > 0 ? "Quest" : "",
+            TargetKind = SearchEntityKind.Item,
+            TargetItemId = row.ItemId,
+            TargetName = row.ItemName
         };
+    }
+
+    private static string FormatLevel(
+        string sourceType,
+        int sourceLevel)
+    {
+        if (!sourceType.Equals(
+                "creature",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "—";
+        }
+
+        return sourceLevel > 0
+            ? sourceLevel.ToString()
+            : "Historical";
+    }
+
+    private static string SampleQuality(long observations)
+    {
+        return observations switch
+        {
+            <= 0 => "No sample",
+            < 5 => "⚠ Very low",
+            < 20 => "Low",
+            < 100 => "Medium",
+            _ => "Strong"
+        };
+    }
+
+    private static void ApplyLocationSummaries(
+        List<ObservedRow> rows,
+        IReadOnlyList<DetailLocation> locations)
+    {
+        foreach (var row in rows)
+        {
+            var matching = locations
+                .Where(
+                    location =>
+                        location.SourceType.Equals(
+                            row.SourceType,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        location.SourceId == row.SourceId &&
+                        location.SourceLevel == row.SourceLevel &&
+                        location.LootKind.Equals(
+                            row.LootKind,
+                            StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (matching.Length == 0)
+            {
+                continue;
+            }
+
+            var areas = matching
+                .Select(location => location.Area)
+                .Where(area => !string.IsNullOrWhiteSpace(area))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .ToArray();
+
+            row.Location = string.Join(", ", areas);
+
+            var primary = matching
+                .OrderByDescending(location => location.Observations)
+                .First();
+
+            row.Coordinates = primary.Coordinates;
+        }
     }
 
     private static double WilsonLowerBound(
@@ -474,5 +583,7 @@ public sealed class SearchService
         public long QuestDrops { get; init; }
         public double RatePercent { get; init; }
         public double ConfidenceScore { get; init; }
+        public string Location { get; set; } = "";
+        public string Coordinates { get; set; } = "";
     }
 }
