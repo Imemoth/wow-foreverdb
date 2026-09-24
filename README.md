@@ -1,17 +1,42 @@
 # WoW ForeverDB
 
-Community-observation loot and skinning database project for World of Warcraft: Forever.
+Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
-## Current phase
+## Collector alpha
 
-Phase 1 focuses on the in-game addon and its data contract. The website and public search UI are intentionally deferred until the addon can collect reliable observations on the Forever beta client.
+Current addon version: **0.2.0-alpha**  
+Forever interface target: **16001**
 
-## Planned components
+The collector distinguishes two dimensions:
 
-- `addon/ForeverDB/` - WoW Forever addon (Lua)
-- `database/migrations/` - PostgreSQL/Supabase schema migrations
-- `docs/` - data model, API assumptions, and beta test notes
+1. **Loot source**
+   - creature / mob
+   - skinning
+   - mining GameObject
+   - herbalism GameObject
+   - chest/container GameObject
+   - other GameObject
 
-## Beta target
+2. **Looted item metadata**
+   - item ID and name
+   - drop occurrence
+   - total quantity
+   - quest-item flag
+   - quest ID when exposed by the client
 
-Current Forever beta packages are targeting game version `1.60.1`; the addon interface value is kept explicit in the `.toc` and must be re-verified when the beta build changes.
+GameObjects are stored with their numeric GameObject ID and observed name, so
+different chest/node types can be distinguished in the database.
+
+## In-game commands
+
+- `/fdb status`
+- `/fdb last`
+- `/fdb export`
+- `/fdb debug`
+
+## Repository
+
+- `addon/ForeverDB/` - in-game collector
+- `database/migrations/` - Supabase/PostgreSQL schema
+- `scripts/` - update/sync tooling
+- `docs/` - beta test notes and data contract
