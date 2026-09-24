@@ -41,7 +41,7 @@ create table if not exists public.installation_source_stats (
     source_type text not null,
     source_id bigint not null,
     loot_kind text not null check (
-        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'chest', 'gameobject', 'unknown')
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
     ),
     observations bigint not null default 0 check (observations >= 0),
     level_counts jsonb not null default '{}'::jsonb,
@@ -57,7 +57,7 @@ create table if not exists public.installation_item_stats (
     source_type text not null,
     source_id bigint not null,
     loot_kind text not null check (
-        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'chest', 'gameobject', 'unknown')
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
     ),
     item_id bigint not null references public.items(item_id) on delete cascade,
     drop_count bigint not null default 0 check (drop_count >= 0),
