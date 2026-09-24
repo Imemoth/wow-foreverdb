@@ -31,7 +31,13 @@ local function createInstallationId()
         .. hashPart(seed, 389)
 end
 
-local function sourceKey(sourceType, sourceId)
+function FDB:SourceKey(sourceType, sourceId, sourceLevel)
+    if sourceType == "creature" then
+        return tostring(sourceType)
+            .. ":" .. tostring(sourceId)
+            .. ":" .. tostring(tonumber(sourceLevel) or 0)
+    end
+
     return tostring(sourceType) .. ":" .. tostring(sourceId)
 end
 
@@ -100,10 +106,11 @@ local function migrateV1(db)
     for npcKey, mob in pairs(db.mobs or {}) do
         local npcId = tonumber(mob.npcId) or tonumber(npcKey)
         if npcId then
-            local key = sourceKey("creature", npcId)
+            local key = FDB:SourceKey("creature", npcId, 0)
             db.sources[key] = {
                 sourceType = "creature",
                 sourceId = npcId,
+                sourceLevel = 0,
                 name = mob.name,
                 firstSeenAt = mob.firstSeenAt or now(),
                 lastSeenAt = mob.lastSeenAt or now(),
@@ -116,6 +123,27 @@ local function migrateV1(db)
     end
 
     db.mobs = nil
+end
+
+local function migrateCreatureLevelKeys(db)
+    local migrated = {}
+
+    for oldKey, source in pairs(db.sources or {}) do
+        if source.sourceType == "creature" then
+            local level = tonumber(source.sourceLevel) or 0
+            source.sourceLevel = level
+
+            -- Pre-schema-5 records were aggregated across levels. They remain
+            -- as level 0 (unknown) because their item counts cannot be split
+            -- retrospectively without inventing data.
+            local newKey = FDB:SourceKey("creature", source.sourceId, level)
+            migrated[newKey] = source
+        else
+            migrated[oldKey] = source
+        end
+    end
+
+    db.sources = migrated
 end
 
 local function migrateFishingBuckets(db)
@@ -134,7 +162,6 @@ local function migrateFishingBuckets(db)
                         target = {
                             observations = 0,
                             items = {},
-                            levels = {},
                         }
                         source.buckets.fishing = target
                     end
@@ -183,6 +210,7 @@ function FDB:InitializeDatabase()
 
     local db = ForeverDB_Saved
     migrateV1(db)
+    migrateCreatureLevelKeys(db)
     migrateFishingBuckets(db)
 
     db.schemaVersion = FDB.SCHEMA_VERSION
@@ -206,16 +234,21 @@ function FDB:PrepareForSave()
     self:BuildExportSnapshot()
 end
 
-function FDB:GetOrCreateSource(sourceType, sourceId, name)
+function FDB:GetOrCreateSource(sourceType, sourceId, sourceLevel, name)
     if not self.DB or not sourceType or not sourceId then return nil end
 
-    local key = sourceKey(sourceType, sourceId)
+    local normalizedLevel = sourceType == "creature"
+        and (tonumber(sourceLevel) or 0)
+        or 0
+
+    local key = self:SourceKey(sourceType, sourceId, normalizedLevel)
     local source = self.DB.sources[key]
 
     if not source then
         source = {
             sourceType = sourceType,
             sourceId = sourceId,
+            sourceLevel = normalizedLevel,
             name = name,
             firstSeenAt = now(),
             lastSeenAt = now(),
@@ -234,23 +267,22 @@ function FDB:GetOrCreateSource(sourceType, sourceId, name)
 end
 
 function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel)
-    local source = self:GetOrCreateSource(sourceType, sourceId, sourceName)
+    local source = self:GetOrCreateSource(
+        sourceType,
+        sourceId,
+        observedLevel,
+        sourceName
+    )
     if not source or not kind then return false end
 
     local bucket = source.buckets[kind]
     if not bucket then
-        bucket = { observations = 0, items = {}, levels = {} }
+        bucket = { observations = 0, items = {} }
         source.buckets[kind] = bucket
     end
 
     bucket.observations = (bucket.observations or 0) + 1
     bucket.items = bucket.items or {}
-    bucket.levels = bucket.levels or {}
-
-    if observedLevel and observedLevel > 0 then
-        local levelKey = tostring(observedLevel)
-        bucket.levels[levelKey] = (bucket.levels[levelKey] or 0) + 1
-    end
 
     local itemKinds = 0
     local questItemKinds = 0
@@ -304,11 +336,11 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
         kind = kind,
         sourceType = sourceType,
         sourceId = sourceId,
+        sourceLevel = source.sourceLevel,
         sourceName = source.name,
         itemKinds = itemKinds,
         questItemKinds = questItemKinds,
         totalQuantity = totalQuantity,
-        observedLevel = observedLevel,
     }
 
     if self.InvalidateItemSourceIndex then
