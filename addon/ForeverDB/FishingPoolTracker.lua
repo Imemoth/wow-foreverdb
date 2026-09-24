@@ -123,6 +123,21 @@ function FDB:RememberFishingPoolHover(name)
         at = GetTime and GetTime() or 0,
     }
 
+    local now = GetTime and GetTime() or 0
+    local castAt = self.LastFishingCastAt
+
+    if castAt and now - castAt <= 35 then
+        self.ActiveFishingPool = {
+            name = name,
+            guid = guid,
+            sourceId = sourceId,
+            location =
+                self:GetProjectedInteractionLocation(15)
+                or location,
+            at = castAt,
+        }
+    end
+
     self:Debug(
         "fishing pool hover",
         name,
@@ -135,6 +150,8 @@ end
 function FDB:ArmFishingPoolForCast()
     local hover = self.LastFishingPoolHover
     local now = GetTime and GetTime() or 0
+
+    self.LastFishingCastAt = now
 
     if hover
         and now - (hover.at or 0) <= 8 then
@@ -167,6 +184,7 @@ end
 
 function FDB:ConsumeActiveFishingPool()
     self.ActiveFishingPool = nil
+    self.LastFishingCastAt = nil
 end
 
 function FDB:InitializeFishingPoolTracker()
