@@ -3,8 +3,8 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.2.0-alpha"
-FDB.SCHEMA_VERSION = 2
+FDB.VERSION = "0.2.1-alpha"
+FDB.SCHEMA_VERSION = 3
 FDB.DEBUG = true
 
 local PREFIX = "|cff7dd3fcForeverDB|r"
@@ -55,7 +55,8 @@ function FDB:PrintLastObservation()
     print(
         "items:", last.itemKinds or 0,
         "quest items:", last.questItemKinds or 0,
-        "quantity:", last.totalQuantity or 0
+        "quantity:", last.totalQuantity or 0,
+        "level:", last.observedLevel or "?"
     )
 end
 
