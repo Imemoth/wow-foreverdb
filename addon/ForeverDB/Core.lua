@@ -121,6 +121,16 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:Debug("loaded", FDB.VERSION, "schema", FDB.SCHEMA_VERSION)
     elseif event == "PLAYER_LOGIN" then
         FDB:EnsureInstallationId()
+
+        if C_Map and C_Map.GetBestMapForUnit then
+            local mapId =
+                C_Map.GetBestMapForUnit("player")
+
+            if mapId and FDB.CaptureMapMetadata then
+                FDB:CaptureMapMetadata(mapId)
+            end
+        end
+
         FDB:BuildExportSnapshot()
     elseif event == "PLAYER_LOGOUT" then
         FDB:PrepareForSave()
