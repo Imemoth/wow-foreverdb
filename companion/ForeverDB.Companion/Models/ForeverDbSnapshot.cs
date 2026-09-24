@@ -7,6 +7,7 @@ public sealed class ForeverDbSnapshot
     public string InstallationId { get; set; } = "";
     public long UpdatedAt { get; set; }
     public List<ForeverDbSource> Sources { get; set; } = new();
+    public List<ForeverDbMap> Maps { get; set; } = new();
 }
 
 public sealed class ForeverDbSource
@@ -44,4 +45,27 @@ public sealed class ForeverDbLocation
     public string X { get; set; } = "";
     public string Y { get; set; } = "";
     public long Observations { get; set; }
+}
+
+
+public sealed class ForeverDbMap
+{
+    public long MapId { get; set; }
+    public string Name { get; set; } = "";
+    public long ParentMapId { get; set; }
+    public long MapArtId { get; set; }
+    public List<ForeverDbMapLayer> Layers { get; set; } = new();
+}
+
+public sealed class ForeverDbMapLayer
+{
+    public int LayerIndex { get; set; }
+    public int LayerWidth { get; set; }
+    public int LayerHeight { get; set; }
+    public int TileWidth { get; set; }
+    public int TileHeight { get; set; }
+    public double MinScale { get; set; }
+    public double MaxScale { get; set; }
+    public int AdditionalZoomSteps { get; set; }
+    public List<long> FileDataIds { get; set; } = new();
 }
