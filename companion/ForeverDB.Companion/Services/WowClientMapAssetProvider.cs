@@ -11,7 +11,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "5";
+    private const string ResolverVersion = "6";
 
     private readonly CompanionSettings _settings;
 
