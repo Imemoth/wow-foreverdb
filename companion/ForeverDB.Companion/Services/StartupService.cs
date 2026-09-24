@@ -9,7 +9,9 @@ public static class StartupService
 
     private const string ValueName = "ForeverDB Companion";
 
-    public static void SetEnabled(bool enabled)
+    public static void SetEnabled(
+        bool enabled,
+        bool startMinimized)
     {
         using var key = Registry.CurrentUser.OpenSubKey(
             RunKey,
@@ -25,7 +27,14 @@ public static class StartupService
             var executable = Environment.ProcessPath;
             if (!string.IsNullOrWhiteSpace(executable))
             {
-                key.SetValue(ValueName, $"\"{executable}\"");
+                var command = $"\"{executable}\"";
+
+                if (startMinimized)
+                {
+                    command += " --minimized";
+                }
+
+                key.SetValue(ValueName, command);
             }
         }
         else
