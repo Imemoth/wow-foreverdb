@@ -148,14 +148,21 @@ public sealed class WowClientMapAssetProvider
         try
         {
             (storage, storageLabel) =
-                OpenStorage(
+                OpenStorageForLayer(
                     cascRoot,
-                    _settings.WowRoot);
+                    _settings.WowRoot,
+                    layer);
 
             if (storage is null)
             {
+                var sampleRefs =
+                    string.Join(
+                        ", ",
+                        layer.TextureRefs.Take(4));
+
                 return RawMapAsset.Failed(
-                    "WoW CASC storage could not be opened for this client.");
+                    $"WoW CASC opened no product/root that contains the referenced map tiles. " +
+                    $"Sample refs: {sampleRefs}");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -402,12 +409,90 @@ public sealed class WowClientMapAssetProvider
     private static (
         NativeCascMapReader? Storage,
         string? Label)
-        OpenStorage(
+        OpenStorageForLayer(
+            string cascRoot,
+            string wowBranchPath,
+            ForeverDbMapLayer layer)
+    {
+        foreach (var candidate in
+                 GetStorageCandidates(
+                     cascRoot,
+                     wowBranchPath))
+        {
+            var reader =
+                NativeCascMapReader.TryOpenSingle(
+                    candidate.Path,
+                    candidate.Label);
+
+            if (reader is null)
+            {
+                continue;
+            }
+
+            if (CanOpenAnyTexture(
+                    reader,
+                    layer.TextureRefs))
+            {
+                return (
+                    reader,
+                    candidate.Label);
+            }
+
+            reader.Dispose();
+        }
+
+        return (null, null);
+    }
+
+    private static bool CanOpenAnyTexture(
+        NativeCascMapReader storage,
+        IReadOnlyList<string> textureRefs)
+    {
+        foreach (var textureRef in
+                 textureRefs.Take(12))
+        {
+            using var stream =
+                OpenTexture(
+                    storage,
+                    textureRef);
+
+            if (stream is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyList<(
+        string Path,
+        string Label)>
+        GetStorageCandidates(
             string cascRoot,
             string wowBranchPath)
     {
         var candidates =
-            new List<(string Path, string Label)>();
+            new List<(
+                string Path,
+                string Label)>();
+
+        var products =
+            GetProductCandidates(
+                wowBranchPath);
+
+        // Forever currently occupies Blizzard's wow_classic_beta product
+        // slot. Prefer an explicit product selection before the branch
+        // directory or auto-selection, because a multi-product WoW storage
+        // can open successfully while exposing a different ROOT build.
+        foreach (var product in products)
+        {
+            candidates.Add(
+                (
+                    $"{cascRoot}*{product}",
+                    product
+                ));
+        }
 
         if (Directory.Exists(wowBranchPath))
         {
@@ -427,28 +512,12 @@ public sealed class WowClientMapAssetProvider
                 "auto"
             ));
 
-        foreach (var product in
-                 GetProductCandidates(wowBranchPath))
-        {
-            candidates.Add(
-                (
-                    $"{cascRoot}*{product}",
-                    product
-                ));
-        }
-
-        var distinct =
-            candidates.DistinctBy(
-                value => value.Path,
-                StringComparer.OrdinalIgnoreCase);
-
-        var reader =
-            NativeCascMapReader.TryOpen(
-                distinct);
-
-        return (
-            reader,
-            reader?.Label);
+        return candidates
+            .DistinctBy(
+                candidate =>
+                    candidate.Path,
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IReadOnlyList<string>
@@ -462,6 +531,15 @@ public sealed class WowClientMapAssetProvider
 
         var candidates =
             new List<string>();
+
+        if (string.Equals(
+                folder,
+                "_classic_beta_",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add(
+                "wow_classic_beta");
+        }
 
         if (!string.IsNullOrWhiteSpace(folder))
         {
