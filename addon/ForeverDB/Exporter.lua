@@ -21,15 +21,6 @@ local function sortedKeys(source)
     return keys
 end
 
-local function levelCountsCsv(bucket)
-    local values = {}
-    for level, count in pairs(bucket.levels or {}) do
-        values[#values + 1] = tostring(level) .. "=" .. tostring(count)
-    end
-    table.sort(values)
-    return table.concat(values, ",")
-end
-
 local function questIdsCsv(item)
     local ids = {}
     for id in pairs(item.questIds or {}) do
@@ -64,6 +55,7 @@ function FDB:BuildExportSnapshot()
             "S",
             source.sourceType,
             tostring(source.sourceId),
+            tostring(source.sourceLevel or 0),
             encode(source.name),
         }, "|")
 
@@ -74,9 +66,9 @@ function FDB:BuildExportSnapshot()
                 "B",
                 source.sourceType,
                 tostring(source.sourceId),
+                tostring(source.sourceLevel or 0),
                 kind,
                 tostring(bucket.observations or 0),
-                encode(levelCountsCsv(bucket)),
             }, "|")
 
             for _, itemKey in ipairs(sortedKeys(bucket.items)) do
@@ -86,6 +78,7 @@ function FDB:BuildExportSnapshot()
                     "I",
                     source.sourceType,
                     tostring(source.sourceId),
+                    tostring(source.sourceLevel or 0),
                     kind,
                     tostring(item.itemId or itemKey),
                     encode(item.name),
