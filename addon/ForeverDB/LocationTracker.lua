@@ -17,6 +17,17 @@ local function readVector(position)
     return position.x, position.y
 end
 
+local function makeVector(x, y)
+    if CreateVector2D then
+        return CreateVector2D(x, y)
+    end
+
+    return {
+        x = x,
+        y = y,
+    }
+end
+
 function FDB:GetCurrentLocation()
     local mapId
     local zoneName
@@ -94,10 +105,11 @@ function FDB:GetProjectedInteractionLocation(distanceYards)
     local facing = GetPlayerFacing()
     if not facing then return location end
 
-    local mapPosition = {
-        x = location.x / 100,
-        y = location.y / 100,
-    }
+    local mapPosition =
+        makeVector(
+            location.x / 100,
+            location.y / 100
+        )
 
     local continentId, worldPosition =
         C_Map.GetWorldPosFromMapPos(
@@ -117,10 +129,11 @@ function FDB:GetProjectedInteractionLocation(distanceYards)
     -- WoW facing is 0=north and increases counter-clockwise.
     -- World coordinates are inverted relative to the normalized map axes,
     -- therefore north/west add to world Y/X respectively.
-    local projectedWorld = {
-        x = wx + math.sin(facing) * distance,
-        y = wy + math.cos(facing) * distance,
-    }
+    local projectedWorld =
+        makeVector(
+            wx + math.sin(facing) * distance,
+            wy + math.cos(facing) * distance
+        )
 
     local projectedMapId, projectedPosition =
         C_Map.GetMapPosFromWorldPos(
