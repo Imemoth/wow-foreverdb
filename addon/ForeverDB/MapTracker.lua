@@ -38,12 +38,26 @@ function FDB:CaptureMapMetadata(mapId)
         local layers =
             C_Map.GetMapArtLayers(mapId)
 
+        if layers
+            and #layers == 1
+            and type(layers[1]) == "table"
+            and not layers[1].layerWidth
+            and type(layers[1][1]) == "table" then
+            layers = layers[1]
+        end
+
         for index, layer in ipairs(layers or {}) do
             local textures =
                 C_Map.GetMapArtLayerTextures(
                     mapId,
                     index
                 )
+
+            if textures
+                and #textures == 1
+                and type(textures[1]) == "table" then
+                textures = textures[1]
+            end
 
             local textureRefs = {}
             for _, textureRef in ipairs(textures or {}) do
