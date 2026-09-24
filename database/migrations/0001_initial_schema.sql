@@ -99,8 +99,8 @@ create table if not exists public.installation_location_stats (
     map_id bigint not null default 0,
     zone_name text,
     subzone_name text,
-    x numeric(5,1),
-    y numeric(5,1),
+    x numeric(5,1) not null default -1,
+    y numeric(5,1) not null default -1,
     observations bigint not null default 0 check (observations >= 0),
     updated_at timestamptz not null default now(),
     primary key (
@@ -332,8 +332,8 @@ begin
                     coalesce((location->>'mapId')::bigint, 0),
                     nullif(location->>'zoneName', ''),
                     coalesce(location->>'subZoneName', ''),
-                    nullif(location->>'x', '')::numeric,
-                    nullif(location->>'y', '')::numeric,
+                    coalesce(nullif(location->>'x', '')::numeric, -1),
+                    coalesce(nullif(location->>'y', '')::numeric, -1),
                     coalesce((location->>'observations')::bigint, 0),
                     now()
                 );
