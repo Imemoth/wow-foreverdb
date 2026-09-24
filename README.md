@@ -4,7 +4,7 @@ Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
 ## Collector alpha
 
-Current addon version: **0.2.3-alpha**  
+Current addon version: **0.2.4-alpha**  
 Forever interface target: **16001**
 
 The collector distinguishes two dimensions:
@@ -59,3 +59,14 @@ Source ordering uses a sample-size-aware Wilson lower-bound score so a single
 For the full local list use:
 
 `/fdb item <itemID or item link>`
+
+
+## Creature level separation
+
+Creature loot is keyed by **NPC ID + exact creature level**. A level 6 and
+level 7 creature with the same NPC ID are separate statistical sources and
+their drop counts are never merged.
+
+Historical observations collected before schema 5 cannot be reconstructed by
+level and are retained under `Lvl ?` / source level 0. New observations never
+write into that historical bucket.
