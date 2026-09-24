@@ -10,6 +10,8 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
+    private const string ResolverVersion = "4";
+
     private readonly CompanionSettings _settings;
 
     public WowClientMapAssetProvider(
@@ -50,6 +52,21 @@ public sealed class WowClientMapAssetProvider
                 $"WoW client map metadata exists for {metadata.Name}, but it has no usable art layer.");
         }
 
+        var wowBuildFingerprint =
+            MapAssetCacheStore.GetWowBuildFingerprint(
+                _settings.WowRoot);
+
+        var resolutionKey =
+            MapAssetCacheStore.BuildKey(
+                metadata,
+                layer,
+                ResolverVersion,
+                wowBuildFingerprint);
+
+        var cachedResolution =
+            MapAssetCacheStore.Get(
+                resolutionKey);
+
         var cachePath = GetCachePath(
             metadata,
             layer);
@@ -59,6 +76,22 @@ public sealed class WowClientMapAssetProvider
             try
             {
                 var cached = LoadBitmap(cachePath);
+
+                MapAssetCacheStore.Put(
+                    new MapAssetCacheEntry
+                    {
+                        Key = resolutionKey,
+                        MapId = metadata.MapId,
+                        MapArtId = metadata.MapArtId,
+                        LayerIndex = layer.LayerIndex,
+                        ResolverVersion = ResolverVersion,
+                        WowBuildFingerprint = wowBuildFingerprint,
+                        Success = true,
+                        Status =
+                            $"WoW client map · cached · art #{metadata.MapArtId}",
+                        CacheFile = cachePath,
+                        UpdatedAtUtc = DateTimeOffset.UtcNow
+                    });
 
                 return new MapAssetResult
                 {
@@ -82,16 +115,44 @@ public sealed class WowClientMapAssetProvider
             }
         }
 
+        if (cachedResolution is not null &&
+            !cachedResolution.Success)
+        {
+            return Unavailable(
+                $"Cached map lookup · {cachedResolution.Status}");
+        }
+
+        var preferredStorageLabel =
+            MapAssetCacheStore.GetPreferredStorageLabel(
+                wowBuildFingerprint);
+
         var raw =
             await Task.Run(
                 () => ExtractRawMap(
                     metadata,
                     layer,
+                    preferredStorageLabel,
                     cancellationToken),
                 cancellationToken);
 
         if (raw.Pixels is null)
         {
+            MapAssetCacheStore.Put(
+                new MapAssetCacheEntry
+                {
+                    Key = resolutionKey,
+                    MapId = metadata.MapId,
+                    MapArtId = metadata.MapArtId,
+                    LayerIndex = layer.LayerIndex,
+                    ResolverVersion = ResolverVersion,
+                    WowBuildFingerprint = wowBuildFingerprint,
+                    Success = false,
+                    Status = raw.Status,
+                    AssetMode = raw.AssetMode,
+                    StorageLabel = raw.StorageLabel,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                });
+
             return Unavailable(
                 raw.Status);
         }
@@ -113,6 +174,23 @@ public sealed class WowClientMapAssetProvider
             bitmap,
             cachePath);
 
+        MapAssetCacheStore.Put(
+            new MapAssetCacheEntry
+            {
+                Key = resolutionKey,
+                MapId = metadata.MapId,
+                MapArtId = metadata.MapArtId,
+                LayerIndex = layer.LayerIndex,
+                ResolverVersion = ResolverVersion,
+                WowBuildFingerprint = wowBuildFingerprint,
+                Success = true,
+                Status = raw.Status,
+                AssetMode = raw.AssetMode,
+                StorageLabel = raw.StorageLabel,
+                CacheFile = cachePath,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+
         return new MapAssetResult
         {
             Image = bitmap,
@@ -126,6 +204,7 @@ public sealed class WowClientMapAssetProvider
     private RawMapAsset ExtractRawMap(
         ForeverDbMap metadata,
         ForeverDbMapLayer layer,
+        string? preferredStorageLabel,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_settings.WowRoot))
@@ -154,7 +233,8 @@ public sealed class WowClientMapAssetProvider
                 OpenStorageForReferences(
                     cascRoot,
                     _settings.WowRoot,
-                    effectiveTextureRefs);
+                    effectiveTextureRefs,
+                    preferredStorageLabel);
 
             if (storage is null)
             {
@@ -166,7 +246,8 @@ public sealed class WowClientMapAssetProvider
                         OpenStorageForReferences(
                             cascRoot,
                             _settings.WowRoot,
-                            classicCandidate.TextureRefs);
+                            classicCandidate.TextureRefs,
+                            preferredStorageLabel);
 
                     if (selection.Storage is null)
                     {
@@ -357,6 +438,8 @@ public sealed class WowClientMapAssetProvider
                 Pixels = targetPixels,
                 Width = targetWidth,
                 Height = targetHeight,
+                StorageLabel = storageLabel ?? "",
+                AssetMode = assetMode,
                 Status =
                     $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {storageLabel} · {assetMode}"
             };
@@ -449,12 +532,34 @@ public sealed class WowClientMapAssetProvider
         OpenStorageForReferences(
             string cascRoot,
             string wowBranchPath,
-            IReadOnlyList<string> textureRefs)
+            IReadOnlyList<string> textureRefs,
+            string? preferredStorageLabel)
     {
-        foreach (var candidate in
-                 GetStorageCandidates(
-                     cascRoot,
-                     wowBranchPath))
+        var candidates =
+            GetStorageCandidates(
+                cascRoot,
+                wowBranchPath);
+
+        if (!string.IsNullOrWhiteSpace(
+                preferredStorageLabel))
+        {
+            candidates =
+                candidates
+                    .OrderBy(
+                        candidate =>
+                            string.Equals(
+                                candidate.Label,
+                                preferredStorageLabel,
+                                StringComparison.OrdinalIgnoreCase)
+                                ? 0
+                                : 1)
+                    .ThenBy(
+                        candidate =>
+                            candidate.Label)
+                    .ToArray();
+        }
+
+        foreach (var candidate in candidates)
         {
             var reader =
                 NativeCascMapReader.TryOpenSingle(
@@ -969,6 +1074,8 @@ public sealed class WowClientMapAssetProvider
         public byte[]? Pixels { get; init; }
         public int Width { get; init; }
         public int Height { get; init; }
+        public string StorageLabel { get; init; } = "";
+        public string AssetMode { get; init; } = "";
         public string Status { get; init; } = "";
 
         public static RawMapAsset Failed(
