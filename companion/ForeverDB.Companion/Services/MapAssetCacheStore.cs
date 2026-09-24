@@ -110,6 +110,36 @@ public static class MapAssetCacheStore
         }
     }
 
+    public static void RemoveMap(long mapId)
+    {
+        lock (Gate)
+        {
+            if (!File.Exists(CacheIndexPath))
+            {
+                return;
+            }
+
+            var remaining =
+                LoadAll()
+                    .Where(
+                        entry =>
+                            entry.MapId != mapId)
+                    .ToArray();
+
+            Directory.CreateDirectory(
+                DirectoryPath);
+
+            File.WriteAllText(
+                CacheIndexPath,
+                JsonSerializer.Serialize(
+                    remaining,
+                    new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    }));
+        }
+    }
+
     public static string? GetPreferredStorageLabel(
         string wowBuildFingerprint)
     {
