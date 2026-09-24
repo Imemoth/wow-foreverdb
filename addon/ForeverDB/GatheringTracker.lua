@@ -19,12 +19,23 @@ local function getSpellName(spellId)
     end
 end
 
-function FDB:SetPendingGatheringKind(kind, guid)
+function FDB:SetPendingGatheringKind(kind, guid, metadata)
     self.PendingGathering = {
         kind = kind,
         guid = guid,
+        sourceLevel =
+            metadata and metadata.sourceLevel or nil,
+        location =
+            metadata and metadata.location or nil,
         at = GetTime and GetTime() or 0,
     }
+end
+
+function FDB:GetPendingGathering()
+    local pending = self:GetPendingGathering()
+    if not pending then return nil end
+
+    return pending
 end
 
 function FDB:GetPendingGatheringKind(sourceGuid)
@@ -81,7 +92,13 @@ function FDB:InitializeGatheringTracker()
             guid = nil
         end
 
-        FDB:SetPendingGatheringKind(kind, guid)
+        FDB:SetPendingGatheringKind(
+            kind,
+            guid,
+            {
+                location = FDB:GetCurrentLocation(),
+            }
+        )
         FDB:Debug(kind, "interaction detected")
     end)
 end
