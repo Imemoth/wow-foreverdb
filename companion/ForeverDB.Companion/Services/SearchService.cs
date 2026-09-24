@@ -80,7 +80,14 @@ public sealed class SearchService
             var id = source.GetProperty("source_id").GetInt64();
             var level = source.GetProperty("source_level").GetInt32();
             var name = GetString(source, "name", $"{type} #{id}");
-            var levelText = level > 0 ? $" (Lvl {level})" : "";
+            var levelText =
+                type.Equals(
+                    "creature",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? level > 0
+                        ? $" (Lvl {level})"
+                        : " (Historical)"
+                    : "";
 
             results.Add(
                 new SearchResultItem
@@ -216,9 +223,13 @@ public sealed class SearchService
             .ToArray();
 
         var level =
-            result.SourceLevel > 0
-                ? $"Level {result.SourceLevel}"
-                : "Historical / level unknown";
+            result.SourceType.Equals(
+                "creature",
+                StringComparison.OrdinalIgnoreCase)
+                ? result.SourceLevel > 0
+                    ? $"Level {result.SourceLevel}"
+                    : "Historical / level unknown"
+                : "No level";
 
         return new EntityDetail
         {
