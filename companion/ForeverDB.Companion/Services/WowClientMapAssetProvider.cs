@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using BLPSharp;
-using CASCLib;
+using CascLib.NET;
 using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
@@ -143,13 +143,13 @@ public sealed class WowClientMapAssetProvider
                 "WoW .build.info was not found. Client map extraction cannot open CASC.");
         }
 
-        CASCHandler? storage = null;
-        string? product = null;
+        CascStorage? storage = null;
+        string? storageLabel = null;
 
         try
         {
-            (storage, product) =
-                OpenLocalStorage(
+            (storage, storageLabel) =
+                OpenStorage(
                     cascRoot,
                     _settings.WowRoot);
 
@@ -289,7 +289,7 @@ public sealed class WowClientMapAssetProvider
             if (decodedTiles == 0)
             {
                 return RawMapAsset.Failed(
-                    $"WoW CASC opened ({product}), but none of the map tiles could be decoded.");
+                    $"WoW CASC opened ({storageLabel}), but none of the map tiles could be decoded.");
             }
 
             return new RawMapAsset
@@ -298,7 +298,7 @@ public sealed class WowClientMapAssetProvider
                 Width = targetWidth,
                 Height = targetHeight,
                 Status =
-                    $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {product}"
+                    $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {storageLabel}"
             };
         }
         catch (OperationCanceledException)
@@ -314,12 +314,7 @@ public sealed class WowClientMapAssetProvider
         {
             try
             {
-                storage?
-                    .GetType()
-                    .GetMethod("Clear")
-                    ?.Invoke(
-                        storage,
-                        null);
+                storage?.Dispose();
             }
             catch
             {
@@ -354,7 +349,7 @@ public sealed class WowClientMapAssetProvider
     }
 
     private static Stream? OpenTexture(
-        CASCHandler storage,
+        CascStorage storage,
         string textureRef)
     {
         if (string.IsNullOrWhiteSpace(textureRef))
@@ -370,12 +365,14 @@ public sealed class WowClientMapAssetProvider
                     CultureInfo.InvariantCulture,
                     out var fileDataId))
             {
-                if (!storage.FileExists(fileDataId))
-                {
-                    return null;
-                }
+                var fileDataName =
+                    $"FILE{fileDataId:X8}.dat";
 
-                return storage.OpenFile(fileDataId);
+                return storage.TryOpenFile(
+                    fileDataName,
+                    out var fileDataStream)
+                    ? fileDataStream
+                    : null;
             }
 
             var normalized =
@@ -383,12 +380,11 @@ public sealed class WowClientMapAssetProvider
                     .Replace('/', '\\')
                     .TrimStart('\\');
 
-            if (!storage.FileExists(normalized))
-            {
-                return null;
-            }
-
-            return storage.OpenFile(normalized);
+            return storage.TryOpenFile(
+                normalized,
+                out var stream)
+                ? stream
+                : null;
         }
         catch
         {
@@ -397,43 +393,53 @@ public sealed class WowClientMapAssetProvider
     }
 
     private static (
-        CASCHandler? Handler,
-        string? Product)
-        OpenLocalStorage(
+        CascStorage? Storage,
+        string? Label)
+        OpenStorage(
             string cascRoot,
             string wowBranchPath)
     {
-        SetCascOption(
-            "ValidateData",
-            true);
+        var candidates =
+            new List<(string Path, string Label)>();
 
-        SetCascOption(
-            "ThrowOnFileNotFound",
-            false);
+        if (Directory.Exists(wowBranchPath))
+        {
+            candidates.Add(
+                (
+                    wowBranchPath,
+                    Path.GetFileName(
+                        wowBranchPath.TrimEnd(
+                            Path.DirectorySeparatorChar,
+                            Path.AltDirectorySeparatorChar))
+                ));
+        }
 
-        SetCascOption(
-            "ThrowOnMissingDecryptionKey",
-            false);
-
-        SetCascOption(
-            "UseOnlineFallbackForMissingFiles",
-            false);
-
-        SetCascEnumOption(
-            "LoadFlags",
-            "None");
+        candidates.Add(
+            (
+                cascRoot,
+                "auto"
+            ));
 
         foreach (var product in
                  GetProductCandidates(wowBranchPath))
         {
+            candidates.Add(
+                (
+                    $"{cascRoot}*{product}",
+                    product
+                ));
+        }
+
+        foreach (var candidate in
+                 candidates.DistinctBy(
+                     value => value.Path,
+                     StringComparer.OrdinalIgnoreCase))
+        {
             try
             {
-                var handler =
-                    CASCHandler.OpenLocalStorage(
-                        cascRoot,
-                        product);
-
-                return (handler, product);
+                return (
+                    new CascStorage(candidate.Path),
+                    candidate.Label);
             }
             catch
             {
@@ -441,65 +447,6 @@ public sealed class WowClientMapAssetProvider
         }
 
         return (null, null);
-    }
-
-    private static void SetCascOption(
-        string propertyName,
-        object value)
-    {
-        try
-        {
-            var property =
-                typeof(CASCConfig)
-                    .GetProperty(
-                        propertyName,
-                        System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.Static);
-
-            if (property?.CanWrite == true)
-            {
-                property.SetValue(
-                    null,
-                    value);
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    private static void SetCascEnumOption(
-        string propertyName,
-        string enumValue)
-    {
-        try
-        {
-            var property =
-                typeof(CASCConfig)
-                    .GetProperty(
-                        propertyName,
-                        System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.Static);
-
-            if (property?.CanWrite != true ||
-                !property.PropertyType.IsEnum)
-            {
-                return;
-            }
-
-            var parsed =
-                Enum.Parse(
-                    property.PropertyType,
-                    enumValue,
-                    ignoreCase: true);
-
-            property.SetValue(
-                null,
-                parsed);
-        }
-        catch
-        {
-        }
     }
 
     private static IReadOnlyList<string>
