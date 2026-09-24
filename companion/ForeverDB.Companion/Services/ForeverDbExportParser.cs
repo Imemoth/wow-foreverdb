@@ -159,7 +159,7 @@ public sealed class ForeverDbExportParser
             .Replace("\\n", "\n")
             .Replace("\\r", "\r")
             .Replace("\\t", "\t")
-            .Replace("\\"", "\"")
+            .Replace("\\\"", "\"")
             .Replace("\\\\", "\\");
 
     private static string DecodeField(string value)
