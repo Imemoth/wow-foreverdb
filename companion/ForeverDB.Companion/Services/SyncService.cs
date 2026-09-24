@@ -39,6 +39,8 @@ public sealed class SyncService
 
         var snapshot = _parser.ParseSavedVariables(path);
 
+        MapMetadataStore.Merge(snapshot.Maps);
+
         if (_lastSyncedSnapshot.TryGetValue(
                 snapshot.InstallationId,
                 out var lastTimestamp) &&
