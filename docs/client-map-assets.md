@@ -64,3 +64,19 @@ remain usable without the map artwork.
 
 The map control surfaces the extraction status so failures can be diagnosed
 without breaking the rest of the Companion.
+
+
+## Diagnostics
+
+Fresh map-resolution attempts send a sanitized diagnostic record to Supabase.
+The record contains map IDs, MapArtID, texture references, installed product/build
+metadata, resolver status, duration and the selected storage/asset mode.
+
+The diagnostic payload intentionally does not include the user's Windows username,
+full local filesystem path, or other personal file contents. Clients only have
+INSERT permission on their own diagnostic rows; they cannot read the table through
+the Data API.
+
+Failed local resolutions are also cached locally, so revisiting the same map does
+not repeatedly scan CASC. Incrementing the resolver version invalidates that cache
+for the next controlled diagnostic attempt.
