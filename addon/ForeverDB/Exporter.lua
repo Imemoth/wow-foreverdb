@@ -30,7 +30,7 @@ local function questIdsCsv(item)
     return table.concat(ids, ",")
 end
 
-local function numberListCsv(values)
+local function stringListCsv(values)
     local result = {}
 
     for _, value in ipairs(values or {}) do
@@ -81,7 +81,7 @@ function FDB:BuildExportSnapshot()
                 tostring(layer.minScale or 0),
                 tostring(layer.maxScale or 0),
                 tostring(layer.additionalZoomSteps or 0),
-                numberListCsv(layer.fileDataIds),
+                encode(stringListCsv(layer.textureRefs)),
             }, "|")
         end
     end
