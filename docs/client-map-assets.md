@@ -1,43 +1,66 @@
-# ForeverDB client map asset plan
+# ForeverDB client map assets
 
-ForeverDB Companion will use map artwork from the user's installed WoW Forever
-client rather than download or redistribute Blizzard map textures.
+ForeverDB Companion uses map artwork from the user's installed WoW Forever
+client. Blizzard map textures are not redistributed with ForeverDB.
 
 ## Data flow
 
-1. The addon records the current uiMapID.
-2. MapTracker.lua queries the WoW client for:
+1. The addon records the current uiMapID for every location observation.
+2. MapTracker.lua captures:
    - map name and parent map
-   - map art ID
+   - MapArtID
    - map art layer dimensions
-   - map tile FileDataIDs
-3. The exporter writes this metadata as M and A records.
-4. The Companion parses and caches the metadata under
-   %LOCALAPPDATA%\ForeverDB\maps.
-5. The map asset provider will open the local WoW CASC storage, read the
-   referenced FileDataIDs, decode the BLP tiles and assemble a cached local map
-   image.
-6. Marker, cluster and heatmap layers are rendered above that cached image.
+   - map tile texture references
+3. The exporter writes map metadata as M and A records.
+4. The Companion stores the metadata under:
+   %LOCALAPPDATA%\ForeverDB\maps
+5. WowClientMapAssetProvider locates the parent WoW CASC installation.
+6. Map tiles are opened from local CASC storage by FileDataID or texture path.
+7. BLP tiles are decoded and stitched into a cached PNG.
+8. Location markers, clusters and heatmaps are rendered above the local map.
 
-## Implementation choice
+## Pinned dependencies
 
-The first provider is WowClientMapAssetProvider.
+The Companion currently pins:
 
-Candidate components:
-- CascLib / a .NET 8 CascLib wrapper for local CASC reads by FileDataID.
-- BLPSharp for .NET 8 BLP decoding.
+- CascLib 1.0.23 for local WoW CASC reads.
+- BLPSharp 0.1.0 for BLP texture decoding.
 
-Both dependencies must be pinned to explicit versions before being added to the
-release build.
+No online CASC fallback is enabled. Map extraction is local-only.
 
-## Distribution rule
+## CASC product detection
 
-Do not bundle Blizzard map texture files with ForeverDB releases. The Companion
-extracts and caches the required tiles locally from the user's own WoW
-installation.
+The Companion derives a product candidate from the configured WoW branch path
+and then tries known WoW product IDs such as wow_classic_beta, wow_classic and
+wow. The CASC root is discovered by walking upward until .build.info is found.
+
+## Cache
+
+Assembled maps are cached per uiMapID / MapArtID / art layer. Once a map is
+successfully assembled, later previews load the cached PNG instead of reopening
+the WoW archive.
+
+## Rendering
+
+The map control supports:
+
+- normalized x/y markers
+- weighted grid clustering
+- heatmap overlay
+- mouse-wheel zoom
+- click-drag pan
+- Fit-to-view
+- loot-kind marker colors
+
+Clustering weights location coordinates by observation count. The heatmap is
+also observation-weighted, so a location seen many times has more visual weight
+than a one-off observation.
 
 ## Fallback
 
-If local map extraction fails or an art layer is unavailable, the Companion
-continues to show the existing normalized 0-100 coordinate grid. Location data
-and search remain usable without artwork.
+If local CASC access or BLP decoding fails, ForeverDB continues to display the
+normalized coordinate grid. Search, locations, markers, clusters and heatmaps
+remain usable without the map artwork.
+
+The map control surfaces the extraction status so failures can be diagnosed
+without breaking the rest of the Companion.
