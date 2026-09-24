@@ -103,6 +103,7 @@ function FDB:BuildItemSourceIndex()
                         list[#list + 1] = {
                             sourceType = source.sourceType,
                             sourceId = source.sourceId,
+                            sourceLevel = source.sourceLevel or 0,
                             sourceName = source.name,
                             kind = kind,
                             observations = observations,
@@ -156,6 +157,14 @@ local function sourceDisplayName(source)
     end
 
     local kind = SOURCE_LABELS[source.kind] or source.kind or "Source"
+
+    if source.sourceType == "creature" then
+        local levelText = (source.sourceLevel and source.sourceLevel > 0)
+            and ("Lvl " .. tostring(source.sourceLevel))
+            or "Lvl ?"
+        return name .. " (" .. levelText .. ") [" .. kind .. "]"
+    end
+
     return name .. " [" .. kind .. "]"
 end
 
@@ -242,7 +251,20 @@ local function enrichUnitTooltip(tooltip, data)
     local sourceType, sourceId = FDB:ParseSourceGuid(data.guid)
     if sourceType ~= "creature" or not sourceId then return end
 
-    local source = FDB.DB.sources["creature:" .. tostring(sourceId)]
+    local sourceLevel
+    if type(data.level) == "number" and data.level > 0 then
+        sourceLevel = data.level
+    elseif UnitGUID("mouseover") == data.guid and UnitLevel then
+        local level = UnitLevel("mouseover")
+        if level and level > 0 then sourceLevel = level end
+    elseif UnitGUID("target") == data.guid and UnitLevel then
+        local level = UnitLevel("target")
+        if level and level > 0 then sourceLevel = level end
+    end
+
+    local source = FDB.DB.sources[
+        FDB:SourceKey("creature", sourceId, sourceLevel or 0)
+    ]
     if not source then return end
 
     tooltip:AddLine(" ")
