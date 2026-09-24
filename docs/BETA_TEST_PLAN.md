@@ -41,16 +41,7 @@ Record:
 
 Verify the source GUID is deduplicated for the observation count while every item slot is recorded.
 
-## Test C — AoE / multiple corpses
-
-Loot several corpses in one loot window.
-
-Verify:
-- each distinct source GUID increments one observation
-- items are attributed to the correct NPC ID
-- repeated NPC IDs from different GUIDs are counted separately
-
-## Test D — empty corpse
+## Test C — empty corpse
 
 This is the critical denominator test.
 
@@ -58,14 +49,14 @@ Kill and loot a creature that yields no item/currency slot if possible. Determin
 
 If it does not, the alpha must not claim an exact drop-rate denominator from loot events alone.
 
-## Test E — skinning
+## Test D — skinning
 
 1. Loot a skinnable corpse normally.
 2. Skin it.
 3. Confirm the skinning loot is stored under `skinning`, not `normal`.
 4. Confirm the same NPC ID is used.
 
-## Test F — persistence
+## Test E — persistence
 
 Because Forever beta has reported SavedVariables restore issues:
 
@@ -81,7 +72,6 @@ Because Forever beta has reported SavedVariables restore issues:
 Do not build the public website around calculated percentages until:
 
 - normal single-source loot attribution works
-- AoE source attribution works
 - skinning is distinguishable from normal loot
 - empty-corpse denominator behavior is understood
 - SavedVariables persistence behavior is documented for the current beta build
