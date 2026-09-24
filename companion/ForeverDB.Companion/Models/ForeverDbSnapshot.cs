@@ -67,5 +67,5 @@ public sealed class ForeverDbMapLayer
     public double MinScale { get; set; }
     public double MaxScale { get; set; }
     public int AdditionalZoomSteps { get; set; }
-    public List<long> FileDataIds { get; set; } = new();
+    public List<string> TextureRefs { get; set; } = new();
 }
