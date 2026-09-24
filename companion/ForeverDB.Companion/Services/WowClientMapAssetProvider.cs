@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -12,6 +13,11 @@ namespace ForeverDB.Companion.Services;
 public sealed class WowClientMapAssetProvider
 {
     private const string ResolverVersion = "6";
+
+    private static readonly ConcurrentDictionary<
+        string,
+        Task<RawMapAsset>>
+        InFlightResolutions = new();
 
     private readonly CompanionSettings _settings;
 
@@ -130,14 +136,34 @@ public sealed class WowClientMapAssetProvider
         var stopwatch =
             Stopwatch.StartNew();
 
-        var raw =
-            await Task.Run(
-                () => ExtractRawMap(
-                    metadata,
-                    layer,
-                    preferredStorageLabel,
-                    cancellationToken),
-                cancellationToken);
+        var rawTask =
+            InFlightResolutions.GetOrAdd(
+                resolutionKey,
+                _ => Task.Run(
+                    () => ExtractRawMap(
+                        metadata,
+                        layer,
+                        preferredStorageLabel,
+                        CancellationToken.None),
+                    CancellationToken.None));
+
+        RawMapAsset raw;
+
+        try
+        {
+            raw =
+                await rawTask.WaitAsync(
+                    cancellationToken);
+        }
+        finally
+        {
+            if (rawTask.IsCompleted)
+            {
+                InFlightResolutions.TryRemove(
+                    resolutionKey,
+                    out _);
+            }
+        }
 
         stopwatch.Stop();
 
