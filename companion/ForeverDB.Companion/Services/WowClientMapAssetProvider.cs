@@ -188,6 +188,12 @@ public sealed class WowClientMapAssetProvider
                         GetClassicMapDirectoryCandidates(
                             metadata.Name),
                     productCandidates,
+                    buildInfo =
+                        cascRoot is null
+                            ? Array.Empty<
+                                Dictionary<string, string>>()
+                            : ReadBuildInfoSummary(
+                                cascRoot),
                     preferredStorageLabel =
                         preferredStorageLabel ?? "",
                     wowBranch =
@@ -798,6 +804,97 @@ public sealed class WowClientMapAssetProvider
             .Distinct(
                 StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<
+        Dictionary<string, string>>
+        ReadBuildInfoSummary(string cascRoot)
+    {
+        var path =
+            Path.Combine(
+                cascRoot,
+                ".build.info");
+
+        if (!File.Exists(path))
+        {
+            return Array.Empty<
+                Dictionary<string, string>>();
+        }
+
+        string[] lines;
+
+        try
+        {
+            lines =
+                File.ReadAllLines(path);
+        }
+        catch
+        {
+            return Array.Empty<
+                Dictionary<string, string>>();
+        }
+
+        if (lines.Length < 2)
+        {
+            return Array.Empty<
+                Dictionary<string, string>>();
+        }
+
+        var headers = lines[0]
+            .Split('|')
+            .Select(
+                header =>
+                    header.Split('!')[0].Trim())
+            .ToArray();
+
+        var wanted =
+            new[]
+            {
+                "Active",
+                "Product",
+                "Version",
+                "Branch",
+                "Build Key",
+                "CDN Key",
+                "CDN Path"
+            };
+
+        var rows =
+            new List<
+                Dictionary<string, string>>();
+
+        foreach (var line in lines.Skip(1))
+        {
+            var fields =
+                line.Split('|');
+
+            var row =
+                new Dictionary<string, string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+            for (var index = 0;
+                 index < headers.Length &&
+                 index < fields.Length;
+                 index++)
+            {
+                if (!wanted.Contains(
+                        headers[index],
+                        StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                row[headers[index]] =
+                    fields[index].Trim();
+            }
+
+            if (row.Count > 0)
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
     }
 
     private static IEnumerable<string>
