@@ -184,7 +184,7 @@ public partial class MapPreviewControl : UserControl
 
         RenderOverlay();
 
-        Dispatcher.BeginInvoke(
+        _ = Dispatcher.BeginInvoke(
             FitToViewport);
     }
 
