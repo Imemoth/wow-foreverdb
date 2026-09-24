@@ -118,6 +118,64 @@ local function migrateV1(db)
     db.mobs = nil
 end
 
+local function migrateFishingBuckets(db)
+    for _, source in pairs(db.sources or {}) do
+        if source.sourceType == "gameobject" then
+            local lower = string.lower(source.name or "")
+            if string.find(lower, "fishing bobber", 1, true)
+                or string.find(lower, "bobber", 1, true) then
+
+                source.buckets = source.buckets or {}
+                local old = source.buckets.gameobject
+
+                if old then
+                    local target = source.buckets.fishing
+                    if not target then
+                        target = {
+                            observations = 0,
+                            items = {},
+                            levels = {},
+                        }
+                        source.buckets.fishing = target
+                    end
+
+                    target.observations =
+                        (target.observations or 0) + (old.observations or 0)
+                    target.items = target.items or {}
+
+                    for itemKey, oldItem in pairs(old.items or {}) do
+                        local item = target.items[itemKey]
+
+                        if not item then
+                            item = {
+                                itemId = oldItem.itemId,
+                                name = oldItem.name,
+                                drops = 0,
+                                quantity = 0,
+                                questDrops = 0,
+                                questIds = {},
+                            }
+                            target.items[itemKey] = item
+                        end
+
+                        item.drops = (item.drops or 0) + (oldItem.drops or 0)
+                        item.quantity = (item.quantity or 0) + (oldItem.quantity or 0)
+                        item.questDrops =
+                            (item.questDrops or 0) + (oldItem.questDrops or 0)
+                        item.questIds = item.questIds or {}
+
+                        for questId in pairs(oldItem.questIds or {}) do
+                            item.questIds[questId] = true
+                        end
+                    end
+
+                    source.buckets.gameobject = nil
+                end
+            end
+        end
+    end
+end
+
 function FDB:InitializeDatabase()
     if type(ForeverDB_Saved) ~= "table" then
         ForeverDB_Saved = newDatabase()
@@ -125,6 +183,7 @@ function FDB:InitializeDatabase()
 
     local db = ForeverDB_Saved
     migrateV1(db)
+    migrateFishingBuckets(db)
 
     db.schemaVersion = FDB.SCHEMA_VERSION
     db.addonVersion = FDB.VERSION
