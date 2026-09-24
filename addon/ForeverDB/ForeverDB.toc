@@ -2,13 +2,17 @@
 ## Title: ForeverDB
 ## Notes: Observed loot, gathering and skinning tracker for World of Warcraft: Forever
 ## Author: Imemoth
-## Version: 0.2.7-alpha
+## Version: 0.3.0-alpha
 ## SavedVariables: ForeverDB_Saved, ForeverDB_Export
 
 Core.lua
 Database.lua
 Exporter.lua
+LocationTracker.lua
+MapTracker.lua
 GatheringTracker.lua
 SkinningTracker.lua
+FishingPoolTracker.lua
+DisenchantTracker.lua
 LootTracker.lua
 Tooltip.lua
