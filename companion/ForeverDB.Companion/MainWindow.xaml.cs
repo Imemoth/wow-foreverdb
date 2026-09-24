@@ -19,6 +19,10 @@ public partial class MainWindow : Window
     private SearchService? _searchService;
     private WowSavedVariablesWatcher? _watcher;
 
+    private readonly Stack<SearchResultItem> _backHistory = new();
+    private readonly Stack<SearchResultItem> _forwardHistory = new();
+    private SearchResultItem? _currentDetail;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -200,10 +204,28 @@ public partial class MainWindow : Window
             return;
         }
 
-        await LoadSearchDetailAsync(result);
+        await NavigateToDetailAsync(result);
     }
 
-    private async Task LoadSearchDetailAsync(
+    private async Task NavigateToDetailAsync(
+        SearchResultItem result,
+        bool recordHistory = true)
+    {
+        if (recordHistory &&
+            _currentDetail is not null &&
+            !SameEntity(_currentDetail, result))
+        {
+            _backHistory.Push(_currentDetail);
+            _forwardHistory.Clear();
+        }
+
+        _currentDetail = result;
+        UpdateNavigationUi();
+
+        await LoadSearchDetailCoreAsync(result);
+    }
+
+    private async Task LoadSearchDetailCoreAsync(
         SearchResultItem result)
     {
         if (_searchService is null)
@@ -232,6 +254,89 @@ public partial class MainWindow : Window
             DetailTabs.Items.Clear();
             SetStatus(ex.Message);
         }
+    }
+
+    private async void BackButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_backHistory.Count == 0)
+        {
+            return;
+        }
+
+        if (_currentDetail is not null)
+        {
+            _forwardHistory.Push(_currentDetail);
+        }
+
+        var target = _backHistory.Pop();
+        _currentDetail = target;
+        UpdateNavigationUi();
+
+        await LoadSearchDetailCoreAsync(target);
+    }
+
+    private async void ForwardButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_forwardHistory.Count == 0)
+        {
+            return;
+        }
+
+        if (_currentDetail is not null)
+        {
+            _backHistory.Push(_currentDetail);
+        }
+
+        var target = _forwardHistory.Pop();
+        _currentDetail = target;
+        UpdateNavigationUi();
+
+        await LoadSearchDetailCoreAsync(target);
+    }
+
+    private void UpdateNavigationUi()
+    {
+        BackButton.IsEnabled = _backHistory.Count > 0;
+        ForwardButton.IsEnabled = _forwardHistory.Count > 0;
+
+        if (_currentDetail is null)
+        {
+            BreadcrumbText.Text = "Search results";
+            return;
+        }
+
+        var trail = _backHistory
+            .Reverse()
+            .Select(item => item.Name)
+            .TakeLast(3)
+            .Concat(new[] { _currentDetail.Name })
+            .ToArray();
+
+        BreadcrumbText.Text =
+            string.Join("  ›  ", trail);
+    }
+
+    private static bool SameEntity(
+        SearchResultItem left,
+        SearchResultItem right)
+    {
+        if (left.Kind != right.Kind)
+        {
+            return false;
+        }
+
+        if (left.Kind == SearchEntityKind.Item)
+        {
+            return left.ItemId == right.ItemId;
+        }
+
+        return left.SourceType == right.SourceType
+            && left.SourceId == right.SourceId
+            && left.SourceLevel == right.SourceLevel;
     }
 
     private void RenderSearchDetail(
@@ -444,8 +549,7 @@ public partial class MainWindow : Window
                     Kind = SearchEntityKind.Item,
                     ItemId = row.TargetItemId,
                     Name = row.TargetName,
-                    DisplayText =
-                        $"Item #{row.TargetItemId} — {row.TargetName}"
+                    DisplayText = row.TargetName
                 }
                 : new SearchResultItem
                 {
@@ -457,7 +561,7 @@ public partial class MainWindow : Window
                     DisplayText = row.TargetName
                 };
 
-        await LoadSearchDetailAsync(target);
+        await NavigateToDetailAsync(target);
     }
 
     private FrameworkElement BuildLocationsPanel(
