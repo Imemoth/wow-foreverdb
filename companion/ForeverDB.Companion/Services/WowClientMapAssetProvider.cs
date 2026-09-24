@@ -297,7 +297,12 @@ public sealed class WowClientMapAssetProvider
         {
             try
             {
-                storage?.Clear();
+                storage?
+                    .GetType()
+                    .GetMethod("Clear")
+                    ?.Invoke(
+                        storage,
+                        null);
             }
             catch
             {
@@ -355,11 +360,25 @@ public sealed class WowClientMapAssetProvider
             string cascRoot,
             string wowBranchPath)
     {
-        CASCConfig.ValidateData = true;
-        CASCConfig.ThrowOnFileNotFound = false;
-        CASCConfig.ThrowOnMissingDecryptionKey = false;
-        CASCConfig.UseOnlineFallbackForMissingFiles = false;
-        CASCConfig.LoadFlags = LoadFlags.None;
+        SetCascOption(
+            "ValidateData",
+            true);
+
+        SetCascOption(
+            "ThrowOnFileNotFound",
+            false);
+
+        SetCascOption(
+            "ThrowOnMissingDecryptionKey",
+            false);
+
+        SetCascOption(
+            "UseOnlineFallbackForMissingFiles",
+            false);
+
+        SetCascEnumOption(
+            "LoadFlags",
+            "None");
 
         foreach (var product in
                  GetProductCandidates(wowBranchPath))
@@ -379,6 +398,65 @@ public sealed class WowClientMapAssetProvider
         }
 
         return (null, null);
+    }
+
+    private static void SetCascOption(
+        string propertyName,
+        object value)
+    {
+        try
+        {
+            var property =
+                typeof(CASCConfig)
+                    .GetProperty(
+                        propertyName,
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Static);
+
+            if (property?.CanWrite == true)
+            {
+                property.SetValue(
+                    null,
+                    value);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void SetCascEnumOption(
+        string propertyName,
+        string enumValue)
+    {
+        try
+        {
+            var property =
+                typeof(CASCConfig)
+                    .GetProperty(
+                        propertyName,
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Static);
+
+            if (property?.CanWrite != true ||
+                !property.PropertyType.IsEnum)
+            {
+                return;
+            }
+
+            var parsed =
+                Enum.Parse(
+                    property.PropertyType,
+                    enumValue,
+                    ignoreCase: true);
+
+            property.SetValue(
+                null,
+                parsed);
+        }
+        catch
+        {
+        }
     }
 
     private static IReadOnlyList<string>
