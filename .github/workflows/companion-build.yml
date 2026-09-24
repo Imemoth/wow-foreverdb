@@ -2,15 +2,6 @@ name: Build ForeverDB Companion
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "companion/**"
-      - ".github/workflows/companion-build.yml"
-  release:
-    types:
-      - published
 
 jobs:
   build-windows:
