@@ -1,5 +1,6 @@
 -- ForeverDB initial backend schema.
--- Source-aware snapshot model for mobs, skinning, gathering nodes, chests and other GameObjects.
+-- Creature sources are split by NPC ID + exact creature level.
+-- GameObjects use source_level = 0.
 
 create schema if not exists private;
 
@@ -15,10 +16,11 @@ revoke all on all tables in schema private from public, anon, authenticated;
 create table if not exists public.sources (
     source_type text not null check (source_type in ('creature', 'gameobject')),
     source_id bigint not null,
+    source_level integer not null default 0 check (source_level >= 0),
     name text,
     first_seen_at timestamptz not null default now(),
     last_seen_at timestamptz not null default now(),
-    primary key (source_type, source_id)
+    primary key (source_type, source_id, source_level)
 );
 
 create table if not exists public.items (
@@ -40,15 +42,21 @@ create table if not exists public.installation_source_stats (
     installation_id text not null references public.installations(id) on delete cascade,
     source_type text not null,
     source_id bigint not null,
+    source_level integer not null default 0 check (source_level >= 0),
     loot_kind text not null check (
         loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
     ),
     observations bigint not null default 0 check (observations >= 0),
-    level_counts jsonb not null default '{}'::jsonb,
     updated_at timestamptz not null default now(),
-    primary key (installation_id, source_type, source_id, loot_kind),
-    foreign key (source_type, source_id)
-        references public.sources(source_type, source_id)
+    primary key (
+        installation_id,
+        source_type,
+        source_id,
+        source_level,
+        loot_kind
+    ),
+    foreign key (source_type, source_id, source_level)
+        references public.sources(source_type, source_id, source_level)
         on delete cascade
 );
 
@@ -56,6 +64,7 @@ create table if not exists public.installation_item_stats (
     installation_id text not null references public.installations(id) on delete cascade,
     source_type text not null,
     source_id bigint not null,
+    source_level integer not null default 0 check (source_level >= 0),
     loot_kind text not null check (
         loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
     ),
@@ -69,11 +78,12 @@ create table if not exists public.installation_item_stats (
         installation_id,
         source_type,
         source_id,
+        source_level,
         loot_kind,
         item_id
     ),
-    foreign key (source_type, source_id)
-        references public.sources(source_type, source_id)
+    foreign key (source_type, source_id, source_level)
+        references public.sources(source_type, source_id, source_level)
         on delete cascade
 );
 
@@ -84,7 +94,12 @@ create index if not exists items_name_lower_idx
     on public.items (lower(name));
 
 create index if not exists source_kind_idx
-    on public.installation_source_stats (loot_kind, source_type, source_id);
+    on public.installation_source_stats (
+        loot_kind,
+        source_type,
+        source_id,
+        source_level
+    );
 
 create index if not exists item_stats_item_idx
     on public.installation_item_stats (item_id, loot_kind);
@@ -103,6 +118,7 @@ create or replace view public.observed_loot_stats as
 select
     s.source_type,
     s.source_id,
+    s.source_level,
     s.name as source_name,
     ss.loot_kind,
     i.item_id,
@@ -120,16 +136,19 @@ from public.installation_source_stats ss
 join public.sources s
   on s.source_type = ss.source_type
  and s.source_id = ss.source_id
+ and s.source_level = ss.source_level
 join public.installation_item_stats ii
   on ii.installation_id = ss.installation_id
  and ii.source_type = ss.source_type
  and ii.source_id = ss.source_id
+ and ii.source_level = ss.source_level
  and ii.loot_kind = ss.loot_kind
 join public.items i
   on i.item_id = ii.item_id
 group by
     s.source_type,
     s.source_id,
+    s.source_level,
     s.name,
     ss.loot_kind,
     i.item_id,
@@ -156,6 +175,7 @@ declare
     item jsonb;
     v_source_type text;
     v_source_id bigint;
+    v_source_level integer;
     v_kind text;
     v_quest_ids bigint[];
 begin
@@ -200,18 +220,25 @@ begin
     loop
         v_source_type := src->>'sourceType';
         v_source_id := (src->>'sourceId')::bigint;
+        v_source_level := coalesce((src->>'sourceLevel')::integer, 0);
 
         insert into public.sources (
-            source_type, source_id, name, first_seen_at, last_seen_at
+            source_type,
+            source_id,
+            source_level,
+            name,
+            first_seen_at,
+            last_seen_at
         )
         values (
             v_source_type,
             v_source_id,
+            v_source_level,
             nullif(src->>'name', ''),
             now(),
             now()
         )
-        on conflict (source_type, source_id) do update set
+        on conflict (source_type, source_id, source_level) do update set
             name = coalesce(nullif(excluded.name, ''), public.sources.name),
             last_seen_at = now();
 
@@ -225,18 +252,18 @@ begin
                 installation_id,
                 source_type,
                 source_id,
+                source_level,
                 loot_kind,
                 observations,
-                level_counts,
                 updated_at
             )
             values (
                 installation,
                 v_source_type,
                 v_source_id,
+                v_source_level,
                 v_kind,
                 coalesce((bucket->>'observations')::bigint, 0),
-                coalesce(bucket->'levelCounts', '{}'::jsonb),
                 now()
             );
 
@@ -267,6 +294,7 @@ begin
                     installation_id,
                     source_type,
                     source_id,
+                    source_level,
                     loot_kind,
                     item_id,
                     drop_count,
@@ -279,6 +307,7 @@ begin
                     installation,
                     v_source_type,
                     v_source_id,
+                    v_source_level,
                     v_kind,
                     (item->>'itemId')::bigint,
                     coalesce((item->>'drops')::bigint, 0),
@@ -302,9 +331,3 @@ $$;
 revoke all on function public.ingest_foreverdb_snapshot(text, jsonb) from public;
 grant execute on function public.ingest_foreverdb_snapshot(text, jsonb)
 to anon, authenticated;
-
--- Configure once after applying:
--- insert into private.foreverdb_settings(key, value)
--- values ('ingest_token', 'REPLACE_WITH_A_LONG_RANDOM_SECRET')
--- on conflict (key) do update
--- set value = excluded.value, updated_at = now();
