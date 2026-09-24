@@ -144,14 +144,44 @@ public sealed class WowClientMapAssetProvider
 
         NativeCascMapReader? storage = null;
         string? storageLabel = null;
+        IReadOnlyList<string> effectiveTextureRefs =
+            layer.TextureRefs;
+        var assetMode = "FileDataID";
 
         try
         {
             (storage, storageLabel) =
-                OpenStorageForLayer(
+                OpenStorageForReferences(
                     cascRoot,
                     _settings.WowRoot,
-                    layer);
+                    effectiveTextureRefs);
+
+            if (storage is null)
+            {
+                foreach (var classicCandidate in
+                         GetClassicMapTextureCandidates(
+                             metadata.Name))
+                {
+                    var selection =
+                        OpenStorageForReferences(
+                            cascRoot,
+                            _settings.WowRoot,
+                            classicCandidate.TextureRefs);
+
+                    if (selection.Storage is null)
+                    {
+                        continue;
+                    }
+
+                    storage = selection.Storage;
+                    storageLabel = selection.Label;
+                    effectiveTextureRefs =
+                        classicCandidate.TextureRefs;
+                    assetMode =
+                        $"classic-path:{classicCandidate.Directory}";
+                    break;
+                }
+            }
 
             if (storage is null)
             {
@@ -160,9 +190,16 @@ public sealed class WowClientMapAssetProvider
                         ", ",
                         layer.TextureRefs.Take(4));
 
+                var classicDirs =
+                    string.Join(
+                        ", ",
+                        GetClassicMapDirectoryCandidates(
+                            metadata.Name)
+                            .Take(6));
+
                 return RawMapAsset.Failed(
-                    $"WoW CASC opened no product/root that contains the referenced map tiles. " +
-                    $"Sample refs: {sampleRefs}");
+                    $"No local WoW CASC product/root contains the map art. " +
+                    $"API refs: {sampleRefs}. Classic path candidates: {classicDirs}");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -190,7 +227,7 @@ public sealed class WowClientMapAssetProvider
             var expectedTiles = columns * rows;
             var usableTiles = Math.Min(
                 expectedTiles,
-                layer.TextureRefs.Count);
+                effectiveTextureRefs.Count);
 
             var openedTiles = 0;
             var decodedTiles = 0;
@@ -204,7 +241,7 @@ public sealed class WowClientMapAssetProvider
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var textureRef =
-                    layer.TextureRefs[index];
+                    effectiveTextureRefs[index];
 
                 using var stream =
                     OpenTexture(
@@ -321,7 +358,7 @@ public sealed class WowClientMapAssetProvider
                 Width = targetWidth,
                 Height = targetHeight,
                 Status =
-                    $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {storageLabel}"
+                    $"WoW client map · {decodedTiles}/{expectedTiles} tiles · {storageLabel} · {assetMode}"
             };
         }
         catch (OperationCanceledException)
@@ -409,10 +446,10 @@ public sealed class WowClientMapAssetProvider
     private static (
         NativeCascMapReader? Storage,
         string? Label)
-        OpenStorageForLayer(
+        OpenStorageForReferences(
             string cascRoot,
             string wowBranchPath,
-            ForeverDbMapLayer layer)
+            IReadOnlyList<string> textureRefs)
     {
         foreach (var candidate in
                  GetStorageCandidates(
@@ -431,7 +468,7 @@ public sealed class WowClientMapAssetProvider
 
             if (CanOpenAnyTexture(
                     reader,
-                    layer.TextureRefs))
+                    textureRefs))
             {
                 return (
                     reader,
@@ -479,12 +516,14 @@ public sealed class WowClientMapAssetProvider
 
         var products =
             GetProductCandidates(
+                cascRoot,
                 wowBranchPath);
 
-        // Forever currently occupies Blizzard's wow_classic_beta product
-        // slot. Prefer an explicit product selection before the branch
-        // directory or auto-selection, because a multi-product WoW storage
-        // can open successfully while exposing a different ROOT build.
+        // Prefer actual installed product identifiers discovered from
+        // .build.info/.flavor.info before generic fallbacks.
+        // An explicit product selection must be tested before branch/auto,
+        // because a multi-product WoW storage can open successfully while
+        // exposing a different ROOT build.
         foreach (var product in products)
         {
             candidates.Add(
@@ -521,7 +560,9 @@ public sealed class WowClientMapAssetProvider
     }
 
     private static IReadOnlyList<string>
-        GetProductCandidates(string wowBranchPath)
+        GetProductCandidates(
+            string cascRoot,
+            string wowBranchPath)
     {
         var folder =
             Path.GetFileName(
@@ -531,6 +572,14 @@ public sealed class WowClientMapAssetProvider
 
         var candidates =
             new List<string>();
+
+        candidates.AddRange(
+            ReadFlavorProducts(
+                wowBranchPath));
+
+        candidates.AddRange(
+            ReadBuildInfoProducts(
+                cascRoot));
 
         if (string.Equals(
                 folder,
@@ -562,6 +611,281 @@ public sealed class WowClientMapAssetProvider
         candidates.Add("wow_beta");
         candidates.Add("wowt");
         candidates.Add("wow");
+
+        return candidates
+            .Distinct(
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string>
+        ReadBuildInfoProducts(string cascRoot)
+    {
+        var path =
+            Path.Combine(
+                cascRoot,
+                ".build.info");
+
+        if (!File.Exists(path))
+        {
+            yield break;
+        }
+
+        string[] lines;
+
+        try
+        {
+            lines =
+                File.ReadAllLines(path);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        if (lines.Length < 2)
+        {
+            yield break;
+        }
+
+        var headers = lines[0]
+            .Split('|')
+            .Select(
+                header =>
+                    header.Split('!')[0].Trim())
+            .ToArray();
+
+        var productIndex =
+            Array.FindIndex(
+                headers,
+                header =>
+                    header.Equals(
+                        "Product",
+                        StringComparison.OrdinalIgnoreCase));
+
+        var activeIndex =
+            Array.FindIndex(
+                headers,
+                header =>
+                    header.Equals(
+                        "Active",
+                        StringComparison.OrdinalIgnoreCase));
+
+        if (productIndex < 0)
+        {
+            yield break;
+        }
+
+        foreach (var line in lines.Skip(1))
+        {
+            var fields =
+                line.Split('|');
+
+            if (productIndex >= fields.Length)
+            {
+                continue;
+            }
+
+            if (activeIndex >= 0 &&
+                activeIndex < fields.Length &&
+                fields[activeIndex].Trim() != "1")
+            {
+                continue;
+            }
+
+            var product =
+                fields[productIndex].Trim();
+
+            if (!string.IsNullOrWhiteSpace(product))
+            {
+                yield return product;
+            }
+        }
+    }
+
+    private static IEnumerable<string>
+        ReadFlavorProducts(string wowBranchPath)
+    {
+        var path =
+            Path.Combine(
+                wowBranchPath,
+                ".flavor.info");
+
+        if (!File.Exists(path))
+        {
+            yield break;
+        }
+
+        string text;
+
+        try
+        {
+            text =
+                File.ReadAllText(path);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var token in
+                 text.Split(
+                     new[]
+                     {
+                         '|',
+                         ':',
+                         '=',
+                         '\r',
+                         '\n',
+                         ' ',
+                         '\t'
+                     },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var value =
+                token.Trim();
+
+            if (value.StartsWith(
+                    "wow",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                yield return value;
+            }
+        }
+    }
+
+    private static IReadOnlyList<ClassicTextureCandidate>
+        GetClassicMapTextureCandidates(
+            string mapName)
+    {
+        return GetClassicMapDirectoryCandidates(
+                mapName)
+            .Select(
+                directory =>
+                    new ClassicTextureCandidate
+                    {
+                        Directory = directory,
+                        TextureRefs =
+                            Enumerable.Range(1, 12)
+                                .Select(
+                                    index =>
+                                        $"Interface\\WorldMap\\{directory}\\{directory}{index}.blp")
+                                .ToArray()
+                    })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string>
+        GetClassicMapDirectoryCandidates(
+            string mapName)
+    {
+        var aliases =
+            new Dictionary<string, string[]>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                ["Silverpine Forest"] = new[] { "Silverpine" },
+                ["Tirisfal Glades"] = new[] { "Tirisfal" },
+                ["Elwynn Forest"] = new[] { "Elwynn" },
+                ["Redridge Mountains"] = new[] { "Redridge" },
+                ["Duskwood"] = new[] { "Duskwood" },
+                ["Westfall"] = new[] { "Westfall" },
+                ["Dun Morogh"] = new[] { "DunMorogh" },
+                ["Loch Modan"] = new[] { "LochModan" },
+                ["Wetlands"] = new[] { "Wetlands" },
+                ["Alterac Mountains"] = new[] { "Alterac" },
+                ["Arathi Highlands"] = new[] { "Arathi" },
+                ["Hillsbrad Foothills"] = new[] { "Hillsbrad" },
+                ["Western Plaguelands"] = new[] { "WesternPlaguelands" },
+                ["Eastern Plaguelands"] = new[] { "EasternPlaguelands" },
+                ["The Hinterlands"] = new[] { "Hinterlands" },
+                ["Stranglethorn Vale"] = new[] { "Stranglethorn" },
+                ["Swamp of Sorrows"] = new[] { "SwampOfSorrows" },
+                ["Deadwind Pass"] = new[] { "DeadwindPass" },
+                ["Blasted Lands"] = new[] { "BlastedLands" },
+                ["Searing Gorge"] = new[] { "SearingGorge" },
+                ["Burning Steppes"] = new[] { "BurningSteppes" },
+                ["The Barrens"] = new[] { "Barrens" },
+                ["Stonetalon Mountains"] = new[] { "StonetalonMountains", "Stonetalon" },
+                ["Ashenvale"] = new[] { "Ashenvale" },
+                ["Darkshore"] = new[] { "Darkshore" },
+                ["Teldrassil"] = new[] { "Teldrassil" },
+                ["Mulgore"] = new[] { "Mulgore" },
+                ["Durotar"] = new[] { "Durotar" },
+                ["Thousand Needles"] = new[] { "ThousandNeedles" },
+                ["Desolace"] = new[] { "Desolace" },
+                ["Dustwallow Marsh"] = new[] { "Dustwallow" },
+                ["Feralas"] = new[] { "Feralas" },
+                ["Tanaris"] = new[] { "Tanaris" },
+                ["Un'Goro Crater"] = new[] { "UngoroCrater", "UnGoroCrater" },
+                ["Silithus"] = new[] { "Silithus" },
+                ["Azshara"] = new[] { "Aszhara", "Azshara" },
+                ["Winterspring"] = new[] { "Winterspring" },
+                ["Moonglade"] = new[] { "Moonglade" }
+            };
+
+        var candidates =
+            new List<string>();
+
+        if (aliases.TryGetValue(
+                mapName,
+                out var known))
+        {
+            candidates.AddRange(known);
+        }
+
+        var compact =
+            new string(
+                mapName
+                    .Where(char.IsLetterOrDigit)
+                    .ToArray());
+
+        if (!string.IsNullOrWhiteSpace(compact))
+        {
+            candidates.Add(compact);
+        }
+
+        var stripped =
+            mapName;
+
+        foreach (var suffix in
+                 new[]
+                 {
+                     " Forest",
+                     " Glades",
+                     " Mountains",
+                     " Highlands",
+                     " Foothills"
+                 })
+        {
+            if (stripped.EndsWith(
+                    suffix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                stripped =
+                    stripped[..^suffix.Length];
+                break;
+            }
+        }
+
+        stripped =
+            stripped.StartsWith(
+                "The ",
+                StringComparison.OrdinalIgnoreCase)
+                ? stripped[4..]
+                : stripped;
+
+        var compactStripped =
+            new string(
+                stripped
+                    .Where(char.IsLetterOrDigit)
+                    .ToArray());
+
+        if (!string.IsNullOrWhiteSpace(
+                compactStripped))
+        {
+            candidates.Add(
+                compactStripped);
+        }
 
         return candidates
             .Distinct(
@@ -631,6 +955,13 @@ public sealed class WowClientMapAssetProvider
             Width = 1000,
             Height = 700
         };
+    }
+
+    private sealed class ClassicTextureCandidate
+    {
+        public string Directory { get; init; } = "";
+        public IReadOnlyList<string> TextureRefs { get; init; } =
+            Array.Empty<string>();
     }
 
     private sealed class RawMapAsset
