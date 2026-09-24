@@ -15,7 +15,7 @@ client. Blizzard map textures are not redistributed with ForeverDB.
 4. The Companion stores the metadata under:
    %LOCALAPPDATA%\ForeverDB\maps
 5. WowClientMapAssetProvider locates the parent WoW CASC installation.
-6. Map tiles are opened from local CASC storage by FileDataID or texture path.
+6. Map tiles are opened from local CASC storage by native FileDataID mode or texture path.
 7. BLP tiles are decoded and stitched into a cached PNG.
 8. Location markers, clusters and heatmaps are rendered above the local map.
 
@@ -23,7 +23,7 @@ client. Blizzard map textures are not redistributed with ForeverDB.
 
 The Companion currently pins:
 
-- CascLib 1.0.23 for local WoW CASC reads.
+- CascLib.NET 1.50.0.206-alpha.3 for the pinned win-x64 native CascLib runtime.
 - BLPSharp 0.1.0 for BLP texture decoding.
 
 No online CASC fallback is enabled. Map extraction is local-only.
