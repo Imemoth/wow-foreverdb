@@ -59,6 +59,7 @@ public sealed class ForeverDbExportParser
 
         var sourceMap = new Dictionary<string, ForeverDbSource>();
         var bucketMap = new Dictionary<string, ForeverDbBucket>();
+        var mapMap = new Dictionary<long, ForeverDbMap>();
 
         foreach (var line in lines.Skip(1))
         {
@@ -66,6 +67,48 @@ public sealed class ForeverDbExportParser
 
             switch (parts[0])
             {
+                case "M":
+                {
+                    var mapId = long.Parse(parts[1]);
+                    var map = new ForeverDbMap
+                    {
+                        MapId = mapId,
+                        Name = DecodeField(parts[2]),
+                        ParentMapId = long.Parse(parts[3]),
+                        MapArtId = long.Parse(parts[4])
+                    };
+
+                    mapMap[mapId] = map;
+                    snapshot.Maps.Add(map);
+                    break;
+                }
+
+                case "A":
+                {
+                    var mapId = long.Parse(parts[1]);
+
+                    if (!mapMap.TryGetValue(mapId, out var map))
+                    {
+                        break;
+                    }
+
+                    map.Layers.Add(
+                        new ForeverDbMapLayer
+                        {
+                            LayerIndex = int.Parse(parts[2]),
+                            LayerWidth = int.Parse(parts[3]),
+                            LayerHeight = int.Parse(parts[4]),
+                            TileWidth = int.Parse(parts[5]),
+                            TileHeight = int.Parse(parts[6]),
+                            MinScale = ParseDouble(parts[7]),
+                            MaxScale = ParseDouble(parts[8]),
+                            AdditionalZoomSteps = int.Parse(parts[9]),
+                            FileDataIds = ParseLongList(parts[10])
+                        });
+
+                    break;
+                }
+
                 case "S":
                 {
                     var key = Key(
@@ -166,10 +209,18 @@ public sealed class ForeverDbExportParser
         => Uri.UnescapeDataString(value);
 
     private static List<long> ParseQuestIds(string csv)
+        => ParseLongList(csv);
+
+    private static List<long> ParseLongList(string csv)
         => csv
             .Split(
                 ',',
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(long.Parse)
             .ToList();
+
+    private static double ParseDouble(string value)
+        => double.Parse(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture);
 }
