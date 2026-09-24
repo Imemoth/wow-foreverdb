@@ -251,12 +251,12 @@ public partial class MainWindow : Window
                     Content = new TextBlock
                     {
                         Margin = new Thickness(12),
+                        Foreground =
+                            (Brush)FindResource("MutedTextBrush"),
                         Text =
                             "No observed acquisition data is available yet."
                     }
                 });
-
-            return;
         }
 
         foreach (var group in detail.Groups)
@@ -405,6 +405,15 @@ public partial class MainWindow : Window
 
         if (group.Rows.Any(row => row.QuestDrops > 0))
         {
+            grid.Columns.Add(
+                new DataGridTextColumn
+                {
+                    Header = "Flags",
+                    Binding =
+                        new Binding(nameof(DetailRow.QuestFlag)),
+                    Width = 70
+                });
+
             grid.Columns.Add(
                 new DataGridTextColumn
                 {
