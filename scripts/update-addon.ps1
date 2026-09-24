@@ -26,6 +26,7 @@ if (-not (Test-Path $AddonSource)) {
 
 if (-not $AddOnsPath) {
     $candidates = @(
+        (Join-Path $env:USERPROFILE "World of Warcraft\_classic_beta_\Interface\AddOns"),
         "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns",
         "C:\Program Files\World of Warcraft\_classic_beta_\Interface\AddOns"
     )
@@ -41,13 +42,28 @@ if (-not $AddOnsPath) {
 if (-not $AddOnsPath -or -not (Test-Path $AddOnsPath)) {
     Write-Host ""
     Write-Host "WoW Forever AddOns folder was not found automatically." -ForegroundColor Yellow
-    Write-Host "Run:"
-    Write-Host '.\scripts\update-addon.ps1 -AddOnsPath "D:\Path\To\World of Warcraft\_classic_beta_\Interface\AddOns"'
+    Write-Host ""
+    $manualPath = Read-Host "Paste the AddOns folder path, or press Enter to cancel"
+
+    if ($manualPath) {
+        $manualPath = $manualPath.Trim('"')
+        if (Test-Path $manualPath) {
+            $AddOnsPath = $manualPath
+        }
+    }
+}
+
+if (-not $AddOnsPath -or -not (Test-Path $AddOnsPath)) {
+    Write-Host ""
+    Write-Host "No valid AddOns folder selected." -ForegroundColor Red
+    Write-Host "Example:"
+    Write-Host '.\scripts\update-addon.ps1 -AddOnsPath "C:\Users\Imemoth\World of Warcraft\_classic_beta_\Interface\AddOns"'
     exit 2
 }
 
 $AddonDestination = Join-Path $AddOnsPath "ForeverDB"
 
+Write-Host ""
 Write-Host "Installing addon to:" -ForegroundColor Cyan
 Write-Host $AddonDestination
 
