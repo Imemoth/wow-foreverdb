@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -126,6 +127,9 @@ public sealed class WowClientMapAssetProvider
             MapAssetCacheStore.GetPreferredStorageLabel(
                 wowBuildFingerprint);
 
+        var stopwatch =
+            Stopwatch.StartNew();
+
         var raw =
             await Task.Run(
                 () => ExtractRawMap(
@@ -134,6 +138,79 @@ public sealed class WowClientMapAssetProvider
                     preferredStorageLabel,
                     cancellationToken),
                 cancellationToken);
+
+        stopwatch.Stop();
+
+        var cascRoot =
+            FindCascRoot(
+                _settings.WowRoot);
+
+        var productCandidates =
+            cascRoot is null
+                ? Array.Empty<string>()
+                : GetProductCandidates(
+                    cascRoot,
+                    _settings.WowRoot)
+                    .Take(16)
+                    .ToArray();
+
+        var diagnostic =
+            new MapAssetDiagnosticEvent
+            {
+                ResolverVersion = ResolverVersion,
+                MapId = metadata.MapId,
+                MapName = metadata.Name,
+                MapArtId = metadata.MapArtId,
+                LayerIndex = layer.LayerIndex,
+                WowBuildFingerprint = wowBuildFingerprint,
+                Success = raw.Pixels is not null,
+                FromCache = false,
+                StorageLabel = raw.StorageLabel,
+                AssetMode = raw.AssetMode,
+                Stage =
+                    raw.Pixels is null
+                        ? "local-casc-resolve"
+                        : "local-casc-render",
+                DurationMs =
+                    (int)Math.Min(
+                        int.MaxValue,
+                        stopwatch.ElapsedMilliseconds),
+                Status = raw.Status,
+                Details = new
+                {
+                    apiTextureRefs =
+                        layer.TextureRefs
+                            .Take(24)
+                            .ToArray(),
+                    textureRefCount =
+                        layer.TextureRefs.Count,
+                    classicPathCandidates =
+                        GetClassicMapDirectoryCandidates(
+                            metadata.Name),
+                    productCandidates,
+                    preferredStorageLabel =
+                        preferredStorageLabel ?? "",
+                    wowBranch =
+                        Path.GetFileName(
+                            _settings.WowRoot.TrimEnd(
+                                Path.DirectorySeparatorChar,
+                                Path.AltDirectorySeparatorChar)),
+                    layerWidth =
+                        layer.LayerWidth,
+                    layerHeight =
+                        layer.LayerHeight,
+                    tileWidth =
+                        layer.TileWidth,
+                    tileHeight =
+                        layer.TileHeight,
+                    layerTextureCount =
+                        layer.TextureRefs.Count
+                }
+            };
+
+        _ = MapAssetDiagnosticUploader.TryUploadAsync(
+            _settings,
+            diagnostic);
 
         if (raw.Pixels is null)
         {
