@@ -1,28 +1,121 @@
 local _, FDB = ...
 
+local MOD32 = 4294967296
+
 local function now()
+    if GetServerTime then return GetServerTime() end
     return time()
+end
+
+local function hashPart(seed, salt)
+    local h = (5381 + salt) % MOD32
+    for i = 1, #seed do
+        h = (h * 131 + string.byte(seed, i) + salt) % MOD32
+    end
+    return string.format("%08x", h)
+end
+
+local function createInstallationId()
+    local seed = table.concat({
+        tostring(now()),
+        tostring(GetTimePreciseSec and GetTimePreciseSec() or GetTime()),
+        tostring(debugprofilestop and debugprofilestop() or 0),
+        tostring(UnitGUID and UnitGUID("player") or ""),
+        tostring({}),
+        FDB.VERSION,
+    }, "|")
+
+    return hashPart(seed, 17)
+        .. hashPart(seed, 97)
+        .. hashPart(seed, 193)
+        .. hashPart(seed, 389)
+end
+
+local function sourceKey(sourceType, sourceId)
+    return tostring(sourceType) .. ":" .. tostring(sourceId)
 end
 
 local function newDatabase()
     return {
         schemaVersion = FDB.SCHEMA_VERSION,
         addonVersion = FDB.VERSION,
-        installationId = nil,
+        installationId = createInstallationId(),
         createdAt = now(),
         updatedAt = now(),
-        mobs = {},
-        sessions = {},
-        pendingBatches = {},
+        sources = {},
+        diagnostics = {
+            unresolvedLootWindows = 0,
+        },
     }
 end
 
-local function randomHex(length)
-    local out = {}
-    for i = 1, length do
-        out[i] = string.format("%x", math.random(0, 15))
+function FDB:ParseSourceGuid(guid)
+    if type(guid) ~= "string" then return nil end
+
+    local guidType, _, _, _, _, objectId = strsplit("-", guid)
+
+    if guidType == "Creature" or guidType == "Vehicle" then
+        return "creature", tonumber(objectId)
     end
-    return table.concat(out)
+
+    if guidType == "GameObject" then
+        return "gameobject", tonumber(objectId)
+    end
+
+    if guidType == "Item" then
+        return "item", nil
+    end
+
+    return nil
+end
+
+function FDB:GetSourceNameFromGuid(guid)
+    if type(guid) ~= "string" then return nil end
+
+    if UnitNameFromGUID then
+        local name = UnitNameFromGUID(guid)
+        if name and name ~= "" and name ~= UNKNOWNOBJECT then
+            return name
+        end
+    end
+
+    return nil
+end
+
+function FDB:EnsureInstallationId()
+    if not self.DB then return nil end
+
+    if type(self.DB.installationId) ~= "string" or self.DB.installationId == "" then
+        self.DB.installationId = createInstallationId()
+    end
+
+    return self.DB.installationId
+end
+
+local function migrateV1(db)
+    if type(db.sources) == "table" then return end
+
+    db.sources = {}
+
+    for npcKey, mob in pairs(db.mobs or {}) do
+        local npcId = tonumber(mob.npcId) or tonumber(npcKey)
+        if npcId then
+            local key = sourceKey("creature", npcId)
+            db.sources[key] = {
+                sourceType = "creature",
+                sourceId = npcId,
+                name = mob.name,
+                firstSeenAt = mob.firstSeenAt or now(),
+                lastSeenAt = mob.lastSeenAt or now(),
+                buckets = {
+                    mob = mob.normal or { observations = 0, items = {} },
+                    skinning = mob.skinning or { observations = 0, items = {} },
+                },
+            }
+        end
+    end
+
+    db.mobs = nil
 end
 
 function FDB:InitializeDatabase()
@@ -31,19 +124,18 @@ function FDB:InitializeDatabase()
     end
 
     local db = ForeverDB_Saved
-    db.schemaVersion = db.schemaVersion or FDB.SCHEMA_VERSION
+    migrateV1(db)
+
+    db.schemaVersion = FDB.SCHEMA_VERSION
     db.addonVersion = FDB.VERSION
     db.createdAt = db.createdAt or now()
     db.updatedAt = now()
-    db.mobs = db.mobs or {}
-    db.sessions = db.sessions or {}
-    db.pendingBatches = db.pendingBatches or {}
-
-    if not db.installationId then
-        -- WoW does not expose math.randomseed in the addon sandbox.\n        -- The client RNG is already initialized; we only need a stable anonymous local ID.\n        db.installationId = randomHex(32)
-    end
+    db.sources = db.sources or {}
+    db.diagnostics = db.diagnostics or {}
+    db.diagnostics.unresolvedLootWindows = db.diagnostics.unresolvedLootWindows or 0
 
     self.DB = db
+    self:EnsureInstallationId()
 end
 
 function FDB:PrepareForSave()
@@ -51,44 +143,140 @@ function FDB:PrepareForSave()
     self.DB.updatedAt = now()
     self.DB.addonVersion = self.VERSION
     self.DB.schemaVersion = self.SCHEMA_VERSION
+    self:EnsureInstallationId()
+    self:BuildExportSnapshot()
 end
 
-function FDB:GetOrCreateMob(npcId, name)
-    if not self.DB or not npcId then return nil end
+function FDB:GetOrCreateSource(sourceType, sourceId, name)
+    if not self.DB or not sourceType or not sourceId then return nil end
 
-    local key = tostring(npcId)
-    local mob = self.DB.mobs[key]
-    if not mob then
-        mob = {
-            npcId = npcId,
+    local key = sourceKey(sourceType, sourceId)
+    local source = self.DB.sources[key]
+
+    if not source then
+        source = {
+            sourceType = sourceType,
+            sourceId = sourceId,
             name = name,
-            normal = { observations = 0, items = {} },
-            skinning = { observations = 0, items = {} },
             firstSeenAt = now(),
             lastSeenAt = now(),
+            buckets = {},
         }
-        self.DB.mobs[key] = mob
+        self.DB.sources[key] = source
     end
 
-    if name and name ~= "" then mob.name = name end
-    mob.lastSeenAt = now()
-    return mob
+    if name and name ~= "" then
+        source.name = name
+    end
+
+    source.lastSeenAt = now()
+    source.buckets = source.buckets or {}
+    return source
 end
 
-function FDB:RecordItem(mode, npcId, mobName, itemId, quantity)
-    local mob = self:GetOrCreateMob(npcId, mobName)
-    if not mob or not itemId then return end
+function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems)
+    local source = self:GetOrCreateSource(sourceType, sourceId, sourceName)
+    if not source or not kind then return false end
 
-    local bucket = mob[mode]
-    if not bucket then return end
-
-    local key = tostring(itemId)
-    local item = bucket.items[key]
-    if not item then
-        item = { itemId = itemId, drops = 0, quantity = 0 }
-        bucket.items[key] = item
+    local bucket = source.buckets[kind]
+    if not bucket then
+        bucket = { observations = 0, items = {} }
+        source.buckets[kind] = bucket
     end
 
-    item.drops = item.drops + 1
-    item.quantity = item.quantity + (quantity or 1)
+    bucket.observations = (bucket.observations or 0) + 1
+    bucket.items = bucket.items or {}
+
+    local itemKinds = 0
+    local questItemKinds = 0
+    local totalQuantity = 0
+
+    for itemId, observed in pairs(observedItems or {}) do
+        itemKinds = itemKinds + 1
+
+        local quantity = tonumber(observed.quantity) or 1
+        totalQuantity = totalQuantity + quantity
+
+        if observed.isQuestItem then
+            questItemKinds = questItemKinds + 1
+        end
+
+        local key = tostring(itemId)
+        local item = bucket.items[key]
+
+        if not item then
+            item = {
+                itemId = tonumber(itemId),
+                name = observed.name,
+                drops = 0,
+                quantity = 0,
+                questDrops = 0,
+                questIds = {},
+            }
+            bucket.items[key] = item
+        end
+
+        if observed.name and observed.name ~= "" then
+            item.name = observed.name
+        end
+
+        item.drops = (item.drops or 0) + 1
+        item.quantity = (item.quantity or 0) + quantity
+        item.questIds = item.questIds or {}
+
+        if observed.isQuestItem then
+            item.questDrops = (item.questDrops or 0) + 1
+            if observed.questId and observed.questId > 0 then
+                item.questIds[tostring(observed.questId)] = true
+            end
+        end
+    end
+
+    local timestamp = now()
+    self.DB.updatedAt = timestamp
+    self.DB.lastObservation = {
+        timestamp = timestamp,
+        kind = kind,
+        sourceType = sourceType,
+        sourceId = sourceId,
+        sourceName = source.name,
+        itemKinds = itemKinds,
+        questItemKinds = questItemKinds,
+        totalQuantity = totalQuantity,
+    }
+
+    if self.BuildExportSnapshot then
+        self:BuildExportSnapshot()
+    end
+
+    return true
+end
+
+function FDB:RegisterUnresolvedLootWindow()
+    if not self.DB then return end
+    self.DB.diagnostics.unresolvedLootWindows =
+        (self.DB.diagnostics.unresolvedLootWindows or 0) + 1
+end
+
+function FDB:GetDatabaseStats()
+    local stats = {
+        sourceCount = 0,
+        unresolvedLootWindows = 0,
+        byKind = {},
+    }
+
+    if not self.DB then return stats end
+
+    for _, source in pairs(self.DB.sources or {}) do
+        stats.sourceCount = stats.sourceCount + 1
+        for kind, bucket in pairs(source.buckets or {}) do
+            stats.byKind[kind] =
+                (stats.byKind[kind] or 0) + (bucket.observations or 0)
+        end
+    end
+
+    stats.unresolvedLootWindows =
+        (self.DB.diagnostics and self.DB.diagnostics.unresolvedLootWindows) or 0
+
+    return stats
 end
