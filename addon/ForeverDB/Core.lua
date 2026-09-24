@@ -3,8 +3,8 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.2.2-alpha"
-FDB.SCHEMA_VERSION = 3
+FDB.VERSION = "0.2.3-alpha"
+FDB.SCHEMA_VERSION = 4
 FDB.DEBUG = true
 
 local PREFIX = "|cff7dd3fcForeverDB|r"
@@ -30,6 +30,7 @@ function FDB:PrintStatus()
         "skinning:", stats.byKind.skinning or 0,
         "mining:", stats.byKind.mining or 0,
         "herbalism:", stats.byKind.herbalism or 0,
+        "fishing:", stats.byKind.fishing or 0,
         "chest:", stats.byKind.chest or 0
     )
     print("unresolved loot windows:", stats.unresolvedLootWindows)
