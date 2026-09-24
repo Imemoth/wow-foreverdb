@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.1.0-alpha"
+FDB.VERSION = "0.1.1-alpha"
 FDB.SCHEMA_VERSION = 1
 FDB.DEBUG = true
 
