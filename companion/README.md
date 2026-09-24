@@ -4,7 +4,7 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion 0.5.0-alpha is a .NET 8 WPF application with:
+ForeverDB Companion 0.6.0-alpha is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
@@ -15,7 +15,9 @@ ForeverDB Companion 0.5.0-alpha is a .NET 8 WPF application with:
 - item/source detail navigation with Back / Forward / breadcrumb history
 - acquisition tabs for loot, skinning, mining, herbalism, fishing, pools,
   gameobjects and disenchant
-- location coordinates and map marker preview
+- location coordinates and an interactive map viewer
+- local WoW CASC map extraction with BLP tile stitching and PNG cache
+- markers, weighted clusters and heatmap overlays with zoom/pan
 - local cache for WoW client map-art metadata
 - sample-quality and quest metadata
 - a manual Inno Setup installer workflow
@@ -28,9 +30,9 @@ available in detail metadata where they are useful for diagnostics.
 The selected map provider is the user's installed WoW Forever client.
 
 Addon schema 8 exports the client-provided uiMapID, MapArtID, art-layer dimensions
-and FileDataIDs. The Companion caches that metadata locally. The current map
-preview falls back to the normalized coordinate grid until the local CASC + BLP
-extraction provider is connected.
+and FileDataIDs. The Companion caches that metadata locally. The Companion now attempts local-only CASC extraction and BLP decoding. If map
+art cannot be read, it falls back to the normalized coordinate grid while
+keeping markers, clusters and heatmaps available.
 
 See docs/client-map-assets.md.
 
