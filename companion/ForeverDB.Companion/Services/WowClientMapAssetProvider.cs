@@ -185,7 +185,10 @@ public sealed class WowClientMapAssetProvider
                 expectedTiles,
                 layer.TextureRefs.Count);
 
+            var openedTiles = 0;
             var decodedTiles = 0;
+            var decodeFailures = 0;
+            string? firstDecodeError = null;
 
             for (var index = 0;
                  index < usableTiles;
@@ -206,6 +209,8 @@ public sealed class WowClientMapAssetProvider
                     continue;
                 }
 
+                openedTiles++;
+
                 byte[] pixels;
                 int tileWidth;
                 int tileHeight;
@@ -222,8 +227,11 @@ public sealed class WowClientMapAssetProvider
                             out tileHeight,
                             bgra: true);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    decodeFailures++;
+                    firstDecodeError ??=
+                        $"{ex.GetType().Name}: {ex.Message}";
                     continue;
                 }
 
@@ -288,8 +296,16 @@ public sealed class WowClientMapAssetProvider
 
             if (decodedTiles == 0)
             {
+                var detail =
+                    openedTiles == 0
+                        ? "No referenced map tile could be opened from CASC."
+                        : $"{openedTiles} tile(s) opened, {decodeFailures} decode failure(s)." +
+                          (string.IsNullOrWhiteSpace(firstDecodeError)
+                              ? ""
+                              : $" First error: {firstDecodeError}");
+
                 return RawMapAsset.Failed(
-                    $"WoW CASC opened ({storageLabel}), but none of the map tiles could be decoded.");
+                    $"WoW CASC opened ({storageLabel}), but no map tile was decoded. {detail}");
             }
 
             return new RawMapAsset
