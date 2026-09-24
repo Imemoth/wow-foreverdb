@@ -71,6 +71,24 @@ function FDB:BuildExportSnapshot()
                 tostring(bucket.observations or 0),
             }, "|")
 
+            for _, locationKey in ipairs(sortedKeys(bucket.locations or {})) do
+                local location = bucket.locations[locationKey]
+
+                lines[#lines + 1] = table.concat({
+                    "L",
+                    source.sourceType,
+                    tostring(source.sourceId),
+                    tostring(source.sourceLevel or 0),
+                    kind,
+                    tostring(location.mapId or 0),
+                    encode(location.zoneName),
+                    encode(location.subZoneName),
+                    tostring(location.x or ""),
+                    tostring(location.y or ""),
+                    tostring(location.observations or 0),
+                }, "|")
+            end
+
             for _, itemKey in ipairs(sortedKeys(bucket.items)) do
                 local item = bucket.items[itemKey]
 
