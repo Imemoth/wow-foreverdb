@@ -81,5 +81,8 @@ public sealed class DetailLocation
             ? ZoneName
             : $"{ZoneName} — {SubZoneName}";
 
-    public string Coordinates => $"{X:0.0}, {Y:0.0}";
+    public string Coordinates =>
+        X < 0d || Y < 0d
+            ? "—"
+            : $"{X:0.0}, {Y:0.0}";
 }
