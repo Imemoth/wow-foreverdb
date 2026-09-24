@@ -140,7 +140,7 @@ public sealed class SearchService
                         .OrderByDescending(row => row.ConfidenceScore)
                         .ThenByDescending(row => row.Observations)
                         .ThenBy(row => row.Name)
-                        .Select(ToDetailRow)
+                        .Select(ToItemSourceDetailRow)
                         .ToArray()
                 })
             .ToArray();
@@ -184,7 +184,7 @@ public sealed class SearchService
                         .OrderByDescending(row => row.ConfidenceScore)
                         .ThenByDescending(row => row.Observations)
                         .ThenBy(row => row.Name)
-                        .Select(ToDetailRow)
+                        .Select(ToSourceItemDetailRow)
                         .ToArray()
                 })
             .ToArray();
@@ -269,21 +269,33 @@ public sealed class SearchService
             .ToList();
     }
 
-    private static DetailRow ToDetailRow(ObservedRow row)
+    private static DetailRow ToItemSourceDetailRow(
+        ObservedRow row)
     {
-        var isSourceRow =
-            !string.IsNullOrWhiteSpace(row.SourceName);
-
         return new DetailRow
         {
-            Name =
-                isSourceRow
-                    ? row.SourceName
-                    : row.ItemName,
+            Name = row.SourceName,
             Level =
                 row.SourceLevel > 0
                     ? row.SourceLevel.ToString()
                     : "—",
+            SourceType = row.SourceType,
+            Drops = row.Drops,
+            Observations = row.Observations,
+            Quantity = row.Quantity,
+            QuestDrops = row.QuestDrops,
+            RatePercent = row.RatePercent,
+            ConfidenceScore = row.ConfidenceScore
+        };
+    }
+
+    private static DetailRow ToSourceItemDetailRow(
+        ObservedRow row)
+    {
+        return new DetailRow
+        {
+            Name = row.ItemName,
+            Level = "",
             SourceType = row.SourceType,
             Drops = row.Drops,
             Observations = row.Observations,
