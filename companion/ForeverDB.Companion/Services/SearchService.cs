@@ -458,8 +458,10 @@ public sealed class SearchService
             "gameobject" => 30,
             "chest" => 30,
             "fishing" => 40,
+            "fishing_pool" => 45,
             "mining" => 50,
             "herbalism" => 60,
+            "disenchant" => 70,
             _ => 100
         };
     }
@@ -473,8 +475,10 @@ public sealed class SearchService
             "gameobject" => "Contained in",
             "chest" => "Contained in",
             "fishing" => "Fished in",
+            "fishing_pool" => "Fished from pool",
             "mining" => "Mined from",
             "herbalism" => "Gathered from",
+            "disenchant" => "Disenchanted from",
             _ => "Sources"
         };
     }
@@ -488,8 +492,10 @@ public sealed class SearchService
             "gameobject" => "Contains",
             "chest" => "Contains",
             "fishing" => "Fishing",
+            "fishing_pool" => "Fishing pool",
             "mining" => "Mining",
             "herbalism" => "Herbalism",
+            "disenchant" => "Disenchants into",
             _ => "Observed items"
         };
     }
@@ -501,6 +507,7 @@ public sealed class SearchService
             "creature" => "Creature",
             "gameobject" => "Object",
             "fishing" => "Fishing",
+            "item" => "Item",
             _ => type
         };
     }
