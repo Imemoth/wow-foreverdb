@@ -35,6 +35,55 @@ local function classifyGameObject(name)
     return "gameobject"
 end
 
+
+local function fallbackZoneId(name)
+    local h = 5381
+    local mod = 2147483647
+
+    for i = 1, #(name or "") do
+        h = (h * 131 + string.byte(name, i)) % mod
+    end
+
+    if h == 0 then h = 1 end
+    return -h
+end
+
+local function getFishingZoneSource()
+    local mapId
+    local zoneName
+
+    if C_Map and C_Map.GetBestMapForUnit then
+        mapId = C_Map.GetBestMapForUnit("player")
+
+        if mapId and C_Map.GetMapInfo then
+            local info = C_Map.GetMapInfo(mapId)
+            if info and info.name and info.name ~= "" then
+                zoneName = info.name
+            end
+        end
+    end
+
+    if not zoneName or zoneName == "" then
+        if GetZoneText then
+            zoneName = GetZoneText()
+        end
+    end
+
+    if (not zoneName or zoneName == "") and GetRealZoneText then
+        zoneName = GetRealZoneText()
+    end
+
+    if not zoneName or zoneName == "" then
+        zoneName = "Unknown zone"
+    end
+
+    if not mapId then
+        mapId = fallbackZoneId(zoneName)
+    end
+
+    return "fishing", mapId, zoneName
+end
+
 local function getSourceGuidFromLoot()
     if not GetLootSourceInfo then return nil end
 
@@ -166,6 +215,11 @@ function FDB:CaptureLootWindow()
 
     local sourceName = resolveSourceName(sourceGuid, sourceType)
     local kind = self:GetLootKind(sourceType, sourceGuid, sourceName)
+
+    if kind == "fishing" then
+        sourceType, sourceId, sourceName = getFishingZoneSource()
+    end
+
     local items = collectItems()
 
     local observedLevel
