@@ -146,57 +146,94 @@ local function migrateCreatureLevelKeys(db)
     db.sources = migrated
 end
 
-local function migrateFishingBuckets(db)
-    for _, source in pairs(db.sources or {}) do
+local function mergeItem(target, oldItem)
+    target.drops = (target.drops or 0) + (oldItem.drops or 0)
+    target.quantity = (target.quantity or 0) + (oldItem.quantity or 0)
+    target.questDrops = (target.questDrops or 0) + (oldItem.questDrops or 0)
+    target.questIds = target.questIds or {}
+
+    for questId in pairs(oldItem.questIds or {}) do
+        target.questIds[questId] = true
+    end
+end
+
+local function mergeBucket(target, old)
+    target.observations =
+        (target.observations or 0) + (old.observations or 0)
+    target.items = target.items or {}
+
+    for itemKey, oldItem in pairs(old.items or {}) do
+        local item = target.items[itemKey]
+
+        if not item then
+            item = {
+                itemId = oldItem.itemId,
+                name = oldItem.name,
+                drops = 0,
+                quantity = 0,
+                questDrops = 0,
+                questIds = {},
+            }
+            target.items[itemKey] = item
+        end
+
+        if oldItem.name and oldItem.name ~= "" then
+            item.name = oldItem.name
+        end
+
+        mergeItem(item, oldItem)
+    end
+end
+
+local function migrateFishingZoneSources(db)
+    local historicalKey = FDB:SourceKey("fishing", 0, 0)
+    local historical = db.sources[historicalKey]
+
+    for key, source in pairs(db.sources or {}) do
         if source.sourceType == "gameobject" then
             local lower = string.lower(source.name or "")
-            if string.find(lower, "fishing bobber", 1, true)
-                or string.find(lower, "bobber", 1, true) then
+            local isBobber =
+                string.find(lower, "fishing bobber", 1, true)
+                or string.find(lower, "bobber", 1, true)
 
-                source.buckets = source.buckets or {}
-                local old = source.buckets.gameobject
+            local oldFishing = source.buckets and source.buckets.fishing
 
-                if old then
-                    local target = source.buckets.fishing
-                    if not target then
-                        target = {
-                            observations = 0,
-                            items = {},
-                        }
-                        source.buckets.fishing = target
-                    end
+            if isBobber and oldFishing then
+                if not historical then
+                    historical = {
+                        sourceType = "fishing",
+                        sourceId = 0,
+                        sourceLevel = 0,
+                        name = "Unknown zone (historical)",
+                        firstSeenAt = source.firstSeenAt or now(),
+                        lastSeenAt = source.lastSeenAt or now(),
+                        buckets = {
+                            fishing = {
+                                observations = 0,
+                                items = {},
+                            },
+                        },
+                    }
+                    db.sources[historicalKey] = historical
+                end
 
-                    target.observations =
-                        (target.observations or 0) + (old.observations or 0)
-                    target.items = target.items or {}
+                historical.buckets = historical.buckets or {}
+                historical.buckets.fishing =
+                    historical.buckets.fishing
+                    or { observations = 0, items = {} }
 
-                    for itemKey, oldItem in pairs(old.items or {}) do
-                        local item = target.items[itemKey]
+                mergeBucket(historical.buckets.fishing, oldFishing)
 
-                        if not item then
-                            item = {
-                                itemId = oldItem.itemId,
-                                name = oldItem.name,
-                                drops = 0,
-                                quantity = 0,
-                                questDrops = 0,
-                                questIds = {},
-                            }
-                            target.items[itemKey] = item
-                        end
+                source.buckets.fishing = nil
 
-                        item.drops = (item.drops or 0) + (oldItem.drops or 0)
-                        item.quantity = (item.quantity or 0) + (oldItem.quantity or 0)
-                        item.questDrops =
-                            (item.questDrops or 0) + (oldItem.questDrops or 0)
-                        item.questIds = item.questIds or {}
+                local hasBuckets = false
+                for _ in pairs(source.buckets or {}) do
+                    hasBuckets = true
+                    break
+                end
 
-                        for questId in pairs(oldItem.questIds or {}) do
-                            item.questIds[questId] = true
-                        end
-                    end
-
-                    source.buckets.gameobject = nil
+                if not hasBuckets then
+                    db.sources[key] = nil
                 end
             end
         end
@@ -211,7 +248,7 @@ function FDB:InitializeDatabase()
     local db = ForeverDB_Saved
     migrateV1(db)
     migrateCreatureLevelKeys(db)
-    migrateFishingBuckets(db)
+    migrateFishingZoneSources(db)
 
     db.schemaVersion = FDB.SCHEMA_VERSION
     db.addonVersion = FDB.VERSION
