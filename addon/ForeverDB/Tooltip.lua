@@ -6,6 +6,7 @@ local SOURCE_LABELS = {
     mining = "Mining",
     herbalism = "Herbalism",
     chest = "Chest",
+    fishing = "Fishing",
     gameobject = "Object",
     unknown = "Unknown",
 }
@@ -141,6 +142,10 @@ function FDB:GetItemSources(itemId)
 end
 
 local function sourceDisplayName(source)
+    if source.kind == "fishing" then
+        return "Fishing"
+    end
+
     local name = source.sourceName
     if not name or name == "" then
         if source.sourceType == "creature" then
