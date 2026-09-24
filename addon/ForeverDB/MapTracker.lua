@@ -45,10 +45,10 @@ function FDB:CaptureMapMetadata(mapId)
                     index
                 )
 
-            local fileDataIds = {}
-            for _, fileDataId in ipairs(textures or {}) do
-                fileDataIds[#fileDataIds + 1] =
-                    tonumber(fileDataId) or 0
+            local textureRefs = {}
+            for _, textureRef in ipairs(textures or {}) do
+                textureRefs[#textureRefs + 1] =
+                    tostring(textureRef)
             end
 
             record.layers[index] = {
@@ -67,7 +67,7 @@ function FDB:CaptureMapMetadata(mapId)
                     tonumber(layer.maxScale) or 0,
                 additionalZoomSteps =
                     tonumber(layer.additionalZoomSteps) or 0,
-                fileDataIds = fileDataIds,
+                textureRefs = textureRefs,
             }
         end
     end
