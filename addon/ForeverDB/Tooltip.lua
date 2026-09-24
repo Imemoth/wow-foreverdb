@@ -118,6 +118,37 @@ function FDB:BuildItemSourceIndex()
         end
     end
 
+    for itemId, list in pairs(index) do
+        local exactCreature = {}
+
+        for _, source in ipairs(list) do
+            if source.sourceType == "creature"
+                and source.sourceLevel
+                and source.sourceLevel > 0 then
+                local key = tostring(source.sourceId)
+                    .. ":" .. tostring(source.kind)
+                exactCreature[key] = true
+            end
+        end
+
+        local filtered = {}
+        for _, source in ipairs(list) do
+            local historicalKey = tostring(source.sourceId)
+                .. ":" .. tostring(source.kind)
+
+            local hideHistorical =
+                source.sourceType == "creature"
+                and (not source.sourceLevel or source.sourceLevel == 0)
+                and exactCreature[historicalKey]
+
+            if not hideHistorical then
+                filtered[#filtered + 1] = source
+            end
+        end
+
+        index[itemId] = filtered
+    end
+
     for _, list in pairs(index) do
         table.sort(list, function(a, b)
             if a.score == b.score then
@@ -144,7 +175,9 @@ end
 
 local function sourceDisplayName(source)
     if source.kind == "fishing" then
-        return "Fishing"
+        local zone = source.sourceName
+        if not zone or zone == "" then zone = "Unknown zone" end
+        return "Fishing - " .. zone
     end
 
     local name = source.sourceName
