@@ -197,8 +197,9 @@ local function migrateFishingZoneSources(db)
                 or string.find(lower, "bobber", 1, true)
 
             local oldFishing = source.buckets and source.buckets.fishing
+            local oldGeneric = source.buckets and source.buckets.gameobject
 
-            if isBobber and oldFishing then
+            if isBobber and (oldFishing or oldGeneric) then
                 if not historical then
                     historical = {
                         sourceType = "fishing",
@@ -222,9 +223,16 @@ local function migrateFishingZoneSources(db)
                     historical.buckets.fishing
                     or { observations = 0, items = {} }
 
-                mergeBucket(historical.buckets.fishing, oldFishing)
+                if oldFishing then
+                    mergeBucket(historical.buckets.fishing, oldFishing)
+                end
+
+                if oldGeneric then
+                    mergeBucket(historical.buckets.fishing, oldGeneric)
+                end
 
                 source.buckets.fishing = nil
+                source.buckets.gameobject = nil
 
                 local hasBuckets = false
                 for _ in pairs(source.buckets or {}) do
