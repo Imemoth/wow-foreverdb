@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: ForeverDB
-## Notes: Observed loot, gathering and skinning tracker for World of Warcraft: Forever
+## Notes: Observed loot, gathering, fishing pool, skinning and disenchant tracker for World of Warcraft: Forever
 ## Author: Imemoth
 ## Version: 0.3.0-alpha
 ## SavedVariables: ForeverDB_Saved, ForeverDB_Export
