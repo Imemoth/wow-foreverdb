@@ -4,7 +4,7 @@ Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
 ## Collector alpha
 
-Current addon version: **0.2.4-alpha**  
+Current addon version: **0.2.5-alpha**  
 Forever interface target: **16001**
 
 The collector distinguishes two dimensions:
@@ -14,7 +14,7 @@ The collector distinguishes two dimensions:
    - skinning
    - mining GameObject
    - herbalism GameObject
-   - fishing bobber / fishing loot
+   - fishing, split by zone / uiMapID
    - chest/container GameObject
    - other GameObject
 
@@ -70,3 +70,23 @@ their drop counts are never merged.
 Historical observations collected before schema 5 cannot be reconstructed by
 level and are retained under `Lvl ?` / source level 0. New observations never
 write into that historical bucket.
+
+
+## Fishing zone separation
+
+Fishing observations are not keyed by the temporary bobber GameObject. They are
+stored as a virtual source keyed by the current zone's `uiMapID`, for example:
+
+- `Fishing - Tirisfal Glades`
+- `Fishing - Silverpine Forest`
+
+Each zone has independent observation counts and item rates. Historical fishing
+data collected before schema 6 cannot be assigned to a zone and is preserved as
+`Fishing - Unknown zone (historical)`.
+
+## Item tooltip source granularity
+
+Creature sources remain separate by exact level in item tooltips. For example,
+level 6 and level 7 Greater Duskbat can appear as separate Top-source rows.
+Historical `Lvl ?` creature rows are hidden once exact-level observations for
+that NPC/item exist, avoiding duplicate-looking aggregated legacy data.
