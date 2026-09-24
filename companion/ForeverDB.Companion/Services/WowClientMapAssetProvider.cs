@@ -349,6 +349,49 @@ public sealed class WowClientMapAssetProvider
 
             if (storage is null)
             {
+                foreach (var online in
+                         GetOnlineBuildCandidates(
+                             cascRoot,
+                             _settings.WowRoot))
+                {
+                    var onlineCache =
+                        GetOnlineCascCacheDirectory(
+                            online.Product,
+                            online.BuildKey);
+
+                    var reader =
+                        NativeCascMapReader.TryOpenOnline(
+                            onlineCache,
+                            online.Product,
+                            online.Region,
+                            online.BuildKey,
+                            $"cdn:{online.Product}:{online.Region}");
+
+                    if (reader is null)
+                    {
+                        continue;
+                    }
+
+                    if (CanOpenAnyTexture(
+                            reader,
+                            layer.TextureRefs))
+                    {
+                        storage = reader;
+                        storageLabel =
+                            reader.Label;
+                        effectiveTextureRefs =
+                            layer.TextureRefs;
+                        assetMode =
+                            $"cdn-filedataid:{online.Version}";
+                        break;
+                    }
+
+                    reader.Dispose();
+                }
+            }
+
+            if (storage is null)
+            {
                 var sampleRefs =
                     string.Join(
                         ", ",
@@ -362,7 +405,7 @@ public sealed class WowClientMapAssetProvider
                             .Take(6));
 
                 return RawMapAsset.Failed(
-                    $"No local WoW CASC product/root contains the map art. " +
+                    $"No local or Blizzard CDN CASC source contains the map art. " +
                     $"API refs: {sampleRefs}. Classic path candidates: {classicDirs}");
             }
 
@@ -702,23 +745,32 @@ public sealed class WowClientMapAssetProvider
                 string Path,
                 string Label)>();
 
-        var products =
-            GetProductCandidates(
-                cascRoot,
+        var expectedProduct =
+            GetExpectedProductForBranch(
                 wowBranchPath);
 
-        // Prefer actual installed product identifiers discovered from
-        // .build.info/.flavor.info before generic fallbacks.
-        // An explicit product selection must be tested before branch/auto,
-        // because a multi-product WoW storage can open successfully while
-        // exposing a different ROOT build.
-        foreach (var product in products)
+        if (!string.IsNullOrWhiteSpace(
+                expectedProduct))
         {
             candidates.Add(
                 (
-                    $"{cascRoot}*{product}",
-                    product
+                    $"{cascRoot}*{expectedProduct}",
+                    expectedProduct
                 ));
+        }
+        else
+        {
+            foreach (var product in
+                     GetProductCandidates(
+                         cascRoot,
+                         wowBranchPath))
+            {
+                candidates.Add(
+                    (
+                        $"{cascRoot}*{product}",
+                        product
+                    ));
+            }
         }
 
         if (Directory.Exists(wowBranchPath))
@@ -745,6 +797,145 @@ public sealed class WowClientMapAssetProvider
                     candidate.Path,
                 StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<OnlineBuildCandidate>
+        GetOnlineBuildCandidates(
+            string cascRoot,
+            string wowBranchPath)
+    {
+        var expectedProduct =
+            GetExpectedProductForBranch(
+                wowBranchPath);
+
+        var rows =
+            ReadBuildInfoSummary(
+                cascRoot);
+
+        var result =
+            new List<OnlineBuildCandidate>();
+
+        foreach (var row in rows)
+        {
+            if (!row.TryGetValue(
+                    "Active",
+                    out var active) ||
+                active != "1" ||
+                !row.TryGetValue(
+                    "Product",
+                    out var product) ||
+                !row.TryGetValue(
+                    "Build Key",
+                    out var buildKey) ||
+                string.IsNullOrWhiteSpace(product) ||
+                string.IsNullOrWhiteSpace(buildKey))
+            {
+                continue;
+            }
+
+            var region =
+                row.TryGetValue(
+                    "Branch",
+                    out var branch) &&
+                !string.IsNullOrWhiteSpace(branch)
+                    ? branch
+                    : "us";
+
+            var version =
+                row.TryGetValue(
+                    "Version",
+                    out var versionValue)
+                    ? versionValue
+                    : "";
+
+            result.Add(
+                new OnlineBuildCandidate
+                {
+                    Product = product,
+                    Region = region,
+                    BuildKey = buildKey,
+                    Version = version
+                });
+        }
+
+        return result
+            .OrderBy(
+                candidate =>
+                    !string.IsNullOrWhiteSpace(
+                        expectedProduct) &&
+                    string.Equals(
+                        candidate.Product,
+                        expectedProduct,
+                        StringComparison.OrdinalIgnoreCase)
+                        ? 0
+                        : 1)
+            .ThenBy(
+                candidate =>
+                    candidate.Product,
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string?
+        GetExpectedProductForBranch(
+            string wowBranchPath)
+    {
+        var folder =
+            Path.GetFileName(
+                wowBranchPath.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar));
+
+        return folder.ToLowerInvariant() switch
+        {
+            "_classic_beta_" =>
+                "wow_classic_beta",
+            "_classic_era_" =>
+                "wow_classic_era",
+            "_classic_" =>
+                "wow_classic",
+            "_retail_" =>
+                "wow",
+            "_beta_" =>
+                "wow_beta",
+            "_ptr_" =>
+                "wowt",
+            _ =>
+                null
+        };
+    }
+
+    private static string
+        GetOnlineCascCacheDirectory(
+            string product,
+            string buildKey)
+    {
+        var safeProduct =
+            string.Concat(
+                product.Select(
+                    character =>
+                        char.IsLetterOrDigit(character) ||
+                        character == '_' ||
+                        character == '-'
+                            ? character
+                            : '_'));
+
+        var safeBuildKey =
+            string.Concat(
+                buildKey.Where(
+                    char.IsLetterOrDigit));
+
+        var path =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "ForeverDB",
+                "casc-cache",
+                safeProduct,
+                safeBuildKey);
+
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     private static IReadOnlyList<string>
@@ -1234,6 +1425,14 @@ public sealed class WowClientMapAssetProvider
             Width = 1000,
             Height = 700
         };
+    }
+
+    private sealed class OnlineBuildCandidate
+    {
+        public string Product { get; init; } = "";
+        public string Region { get; init; } = "";
+        public string BuildKey { get; init; } = "";
+        public string Version { get; init; } = "";
     }
 
     private sealed class ClassicTextureCandidate
