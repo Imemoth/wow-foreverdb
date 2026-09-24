@@ -49,6 +49,7 @@ local function newDatabase()
         createdAt = now(),
         updatedAt = now(),
         sources = {},
+        maps = {},
         diagnostics = {
             unresolvedLootWindows = 0,
         },
@@ -263,6 +264,7 @@ function FDB:InitializeDatabase()
     db.createdAt = db.createdAt or now()
     db.updatedAt = now()
     db.sources = db.sources or {}
+    db.maps = db.maps or {}
     db.diagnostics = db.diagnostics or {}
     db.diagnostics.unresolvedLootWindows = db.diagnostics.unresolvedLootWindows or 0
 
@@ -331,6 +333,10 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
     bucket.locations = bucket.locations or {}
 
     if location and location.mapId then
+        if self.CaptureMapMetadata then
+            self:CaptureMapMetadata(location.mapId)
+        end
+
         local locationKey = table.concat({
             tostring(location.mapId),
             tostring(location.subZoneName or ""),
