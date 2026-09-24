@@ -31,30 +31,47 @@ internal sealed class NativeCascMapReader : IDisposable
     {
         foreach (var candidate in candidates)
         {
-            try
+            var reader =
+                TryOpenSingle(
+                    candidate.Path,
+                    candidate.Label);
+
+            if (reader is not null)
             {
-                if (NativeMethods.CascOpenStorage(
-                        candidate.Path,
-                        0,
-                        out var storage) &&
-                    storage != IntPtr.Zero)
-                {
-                    return new NativeCascMapReader(
-                        storage,
-                        candidate.Label);
-                }
+                return reader;
             }
-            catch (DllNotFoundException)
+        }
+
+        return null;
+    }
+
+    public static NativeCascMapReader? TryOpenSingle(
+        string path,
+        string label)
+    {
+        try
+        {
+            if (NativeMethods.CascOpenStorage(
+                    path,
+                    0,
+                    out var storage) &&
+                storage != IntPtr.Zero)
             {
-                throw;
+                return new NativeCascMapReader(
+                    storage,
+                    label);
             }
-            catch (BadImageFormatException)
-            {
-                throw;
-            }
-            catch
-            {
-            }
+        }
+        catch (DllNotFoundException)
+        {
+            throw;
+        }
+        catch (BadImageFormatException)
+        {
+            throw;
+        }
+        catch
+        {
         }
 
         return null;
