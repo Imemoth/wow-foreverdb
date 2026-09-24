@@ -79,7 +79,7 @@
 
                     <CheckBox x:Name="StartMinimizedCheck"
                               Margin="0,4,0,14"
-                              Content="Start minimized to system tray" />
+                              Content="Start minimized when launched with Windows" />
 
                     <Button Width="120"
                             HorizontalAlignment="Left"
