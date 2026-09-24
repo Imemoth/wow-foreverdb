@@ -10,6 +10,7 @@ public sealed class SearchService
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
     private readonly LocationService _locationService;
+    private readonly StatsService _statsService;
 
     public SearchService(
         HttpClient httpClient,
@@ -18,6 +19,9 @@ public sealed class SearchService
         _httpClient = httpClient;
         _settings = settings;
         _locationService = new LocationService(
+            httpClient,
+            settings);
+        _statsService = new StatsService(
             httpClient,
             settings);
     }
@@ -70,7 +74,7 @@ public sealed class SearchService
                     Kind = SearchEntityKind.Item,
                     ItemId = itemId,
                     Name = name,
-                    DisplayText = $"Item #{itemId} — {name}"
+                    DisplayText = name
                 });
         }
 
@@ -129,11 +133,10 @@ public sealed class SearchService
         SearchResultItem result,
         CancellationToken cancellationToken)
     {
-        var dataTask = GetAsync(
-            "/rest/v1/observed_loot_stats" +
-            "?select=source_type,source_id,source_level,source_name,loot_kind,item_id,item_name,observations,drop_count,quantity,quest_drop_count,observed_drop_rate" +
-            $"&item_id=eq.{result.ItemId}",
-            cancellationToken);
+        var dataTask =
+            _statsService.GetItemStatsAsync(
+                result.ItemId,
+                cancellationToken);
 
         var locationsTask =
             _locationService.GetItemLocationsAsync(
@@ -181,15 +184,12 @@ public sealed class SearchService
         SearchResultItem result,
         CancellationToken cancellationToken)
     {
-        var type = Uri.EscapeDataString(result.SourceType);
-
-        var dataTask = GetAsync(
-            "/rest/v1/observed_loot_stats" +
-            "?select=source_type,source_id,source_level,source_name,loot_kind,item_id,item_name,observations,drop_count,quantity,quest_drop_count,observed_drop_rate" +
-            $"&source_type=eq.{type}" +
-            $"&source_id=eq.{result.SourceId}" +
-            $"&source_level=eq.{result.SourceLevel}",
-            cancellationToken);
+        var dataTask =
+            _statsService.GetSourceStatsAsync(
+                result.SourceType,
+                result.SourceId,
+                result.SourceLevel,
+                cancellationToken);
 
         var locationsTask =
             _locationService.GetSourceLocationsAsync(
