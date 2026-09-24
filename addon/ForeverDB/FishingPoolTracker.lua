@@ -142,7 +142,9 @@ function FDB:ArmFishingPoolForCast()
             name = hover.name,
             guid = hover.guid,
             sourceId = hover.sourceId,
-            location = hover.location,
+            location =
+                self:GetProjectedInteractionLocation(15)
+                or hover.location,
             at = now,
         }
     else
