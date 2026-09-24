@@ -252,6 +252,10 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
         observedLevel = observedLevel,
     }
 
+    if self.InvalidateItemSourceIndex then
+        self:InvalidateItemSourceIndex()
+    end
+
     if self.BuildExportSnapshot then
         self:BuildExportSnapshot()
     end
