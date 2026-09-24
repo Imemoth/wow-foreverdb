@@ -103,7 +103,9 @@ public sealed class ForeverDbExportParser
                             MinScale = ParseDouble(parts[7]),
                             MaxScale = ParseDouble(parts[8]),
                             AdditionalZoomSteps = int.Parse(parts[9]),
-                            FileDataIds = ParseLongList(parts[10])
+                            TextureRefs =
+                                ParseStringList(
+                                    DecodeField(parts[10]))
                         });
 
                     break;
@@ -217,6 +219,15 @@ public sealed class ForeverDbExportParser
                 ',',
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(long.Parse)
+            .ToList();
+
+    private static List<string> ParseStringList(string csv)
+        => csv
+            .Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
             .ToList();
 
     private static double ParseDouble(string value)
