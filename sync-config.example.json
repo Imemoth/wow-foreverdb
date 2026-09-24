@@ -2,5 +2,6 @@
   "wowRoot": "C:\\Users\\Imemoth\\World of Warcraft\\_classic_beta_",
   "supabaseUrl": "https://YOUR_PROJECT.supabase.co",
   "supabaseKey": "PASTE_ANON_OR_PUBLISHABLE_KEY_HERE",
-  "ingestToken": "PASTE_PRIVATE_INGEST_TOKEN_HERE"
+  "ingestToken": "PASTE_PRIVATE_INGEST_TOKEN_HERE",
+  "pollSeconds": 2
 }
