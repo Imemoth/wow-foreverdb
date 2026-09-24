@@ -323,3 +323,24 @@ to authenticated;
 
 grant select on public.sources, public.items, public.observed_loot_stats
 to authenticated;
+
+-- Public Companion search access. The searchable catalog is public read-only.
+revoke all on table public.sources from anon, authenticated;
+revoke all on table public.items from anon, authenticated;
+
+grant select on table public.sources to anon, authenticated;
+grant select on table public.items to anon, authenticated;
+
+drop policy if exists "ForeverDB public read sources" on public.sources;
+create policy "ForeverDB public read sources"
+on public.sources
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "ForeverDB public read items" on public.items;
+create policy "ForeverDB public read items"
+on public.items
+for select
+to anon, authenticated
+using (true);
