@@ -28,6 +28,10 @@ public partial class MapPreviewControl : UserControl
     private double _dragHorizontalOffset;
     private double _dragVerticalOffset;
     private CancellationTokenSource? _loadCts;
+    private CompanionSettings? _settings;
+    private IReadOnlyList<DetailLocation> _sourceLocations =
+        Array.Empty<DetailLocation>();
+    private long _currentMapId;
 
     public MapPreviewControl()
     {
@@ -55,6 +59,9 @@ public partial class MapPreviewControl : UserControl
         CompanionSettings settings,
         IReadOnlyList<DetailLocation> locations)
     {
+        _settings = settings;
+        _sourceLocations = locations;
+
         _loadCts?.Cancel();
         _loadCts?.Dispose();
 
@@ -102,6 +109,8 @@ public partial class MapPreviewControl : UserControl
 
         var mapId =
             primaryMap.Key.MapId;
+
+        _currentMapId = mapId;
 
         var zoneName =
             primaryMap.Key.ZoneName;
@@ -228,6 +237,27 @@ public partial class MapPreviewControl : UserControl
         FitToViewport();
     }
 
+    private async void RetryMapButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_settings is null ||
+            _currentMapId <= 0)
+        {
+            return;
+        }
+
+        MapAssetCacheStore.RemoveMap(
+            _currentMapId);
+
+        AssetStatusText.Text =
+            "Local map cache cleared. Retrying WoW client map...";
+
+        await LoadAsync(
+            _settings,
+            _sourceLocations);
+    }
+
     private void FitToViewport()
     {
         var viewportWidth =
@@ -310,7 +340,7 @@ public partial class MapPreviewControl : UserControl
             return;
         }
 
-        Dispatcher.BeginInvoke(
+        _ = Dispatcher.BeginInvoke(
             () =>
             {
                 var viewportPoint =
