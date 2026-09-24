@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.2.1-alpha"
+FDB.VERSION = "0.2.2-alpha"
 FDB.SCHEMA_VERSION = 3
 FDB.DEBUG = true
 
@@ -72,11 +72,23 @@ local function registerSlashCommands()
         elseif command == "export" then
             FDB:BuildExportSnapshot()
             print(PREFIX, "export snapshot rebuilt:", #ForeverDB_Export, "bytes")
+        elseif command:match("^item%s+") then
+            local argument = command:match("^item%s+(.+)$")
+            local itemId = tonumber(argument or "")
+            if not itemId and argument then
+                itemId = tonumber(argument:match("item:(%d+)"))
+            end
+
+            if itemId then
+                FDB:PrintItemSources(itemId, 20)
+            else
+                print(PREFIX, "usage: /fdb item <itemID or item link>")
+            end
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb debug")
         end
     end
 end
