@@ -1,5 +1,7 @@
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
@@ -185,6 +187,185 @@ public partial class MainWindow : Window
             SearchStatusText.Text = ex.Message;
             SetStatus(ex.Message);
         }
+    }
+
+    private async void SearchResults_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (SearchResults.SelectedItem is not SearchResultItem result)
+        {
+            return;
+        }
+
+        await LoadSearchDetailAsync(result);
+    }
+
+    private async Task LoadSearchDetailAsync(
+        SearchResultItem result)
+    {
+        if (_searchService is null)
+        {
+            DetailTitleText.Text = "Search service is not ready.";
+            DetailSubtitleText.Text = "";
+            DetailTabs.Items.Clear();
+            return;
+        }
+
+        try
+        {
+            DetailTitleText.Text = result.Name;
+            DetailSubtitleText.Text = "Loading details...";
+            DetailTabs.Items.Clear();
+
+            var detail =
+                await _searchService.GetDetailAsync(result);
+
+            RenderSearchDetail(result, detail);
+        }
+        catch (Exception ex)
+        {
+            DetailTitleText.Text = result.Name;
+            DetailSubtitleText.Text = ex.Message;
+            DetailTabs.Items.Clear();
+            SetStatus(ex.Message);
+        }
+    }
+
+    private void RenderSearchDetail(
+        SearchResultItem result,
+        EntityDetail detail)
+    {
+        DetailTitleText.Text = detail.Title;
+        DetailSubtitleText.Text = detail.Subtitle;
+        DetailTabs.Items.Clear();
+
+        if (detail.Groups.Count == 0)
+        {
+            DetailTabs.Items.Add(
+                new TabItem
+                {
+                    Header = "No data",
+                    Content = new TextBlock
+                    {
+                        Margin = new Thickness(12),
+                        Text =
+                            "No observed acquisition data is available yet."
+                    }
+                });
+
+            return;
+        }
+
+        foreach (var group in detail.Groups)
+        {
+            var grid = BuildDetailGrid(
+                result.Kind,
+                group);
+
+            DetailTabs.Items.Add(
+                new TabItem
+                {
+                    Header =
+                        $"{group.Title} ({group.Rows.Count})",
+                    Content = grid
+                });
+        }
+
+        DetailTabs.SelectedIndex = 0;
+    }
+
+    private static DataGrid BuildDetailGrid(
+        SearchEntityKind kind,
+        DetailGroup group)
+    {
+        var grid = new DataGrid
+        {
+            AutoGenerateColumns = false,
+            IsReadOnly = true,
+            CanUserAddRows = false,
+            CanUserDeleteRows = false,
+            CanUserReorderColumns = true,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
+            ItemsSource = group.Rows,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header =
+                    kind == SearchEntityKind.Item
+                        ? "Source"
+                        : "Item",
+                Binding = new Binding(nameof(DetailRow.Name)),
+                Width = new DataGridLength(
+                    1,
+                    DataGridLengthUnitType.Star)
+            });
+
+        if (kind == SearchEntityKind.Item)
+        {
+            grid.Columns.Add(
+                new DataGridTextColumn
+                {
+                    Header = "Level",
+                    Binding =
+                        new Binding(nameof(DetailRow.Level)),
+                    Width = 65
+                });
+        }
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Drops",
+                Binding =
+                    new Binding(nameof(DetailRow.Drops)),
+                Width = 70
+            });
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Observed",
+                Binding =
+                    new Binding(nameof(DetailRow.Observations)),
+                Width = 85
+            });
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Rate",
+                Binding =
+                    new Binding(nameof(DetailRow.Rate)),
+                Width = 75
+            });
+
+        grid.Columns.Add(
+            new DataGridTextColumn
+            {
+                Header = "Quantity",
+                Binding =
+                    new Binding(nameof(DetailRow.Quantity)),
+                Width = 80
+            });
+
+        if (group.Rows.Any(row => row.QuestDrops > 0))
+        {
+            grid.Columns.Add(
+                new DataGridTextColumn
+                {
+                    Header = "Quest drops",
+                    Binding =
+                        new Binding(nameof(DetailRow.QuestDrops)),
+                    Width = 90
+                });
+        }
+
+        return grid;
     }
 
     private async void SaveSettings_Click(
