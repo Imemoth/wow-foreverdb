@@ -94,9 +94,18 @@
                 <StackPanel Grid.Column="1"
                             Margin="14,0,0,0"
                             VerticalAlignment="Center">
-                    <TextBlock Text="ForeverDB Companion"
-                               FontSize="23"
-                               FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="ForeverDB"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="23"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="  COMPANION"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,0,3" />
+                    </StackPanel>
                     <TextBlock Text="Community loot intelligence for WoW Forever"
                                Foreground="{StaticResource MutedTextBrush}"
                                Margin="0,3,0,0" />
@@ -290,24 +299,63 @@
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="14" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button x:Name="BackButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Width="38"
+                                            Height="30"
+                                            IsEnabled="False"
+                                            Click="BackButton_Click"
+                                            Content="←"
+                                            ToolTip="Back" />
+
+                                    <Button x:Name="ForwardButton"
+                                            Grid.Column="1"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Width="38"
+                                            Height="30"
+                                            Margin="6,0,0,0"
+                                            IsEnabled="False"
+                                            Click="ForwardButton_Click"
+                                            Content="→"
+                                            ToolTip="Forward" />
+
+                                    <TextBlock x:Name="BreadcrumbText"
+                                               Grid.Column="2"
+                                               Margin="12,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="Search results" />
+                                </Grid>
+
                                 <TextBlock x:Name="DetailTitleText"
+                                           Grid.Row="2"
                                            FontSize="25"
                                            FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextBrush}"
                                            Text="Select a result" />
 
                                 <TextBlock x:Name="DetailSubtitleText"
-                                           Grid.Row="1"
+                                           Grid.Row="3"
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            Text="Item and source details will appear here." />
 
                                 <TabControl x:Name="DetailTabs"
-                                            Grid.Row="3" />
+                                            Grid.Row="5" />
                             </Grid>
                         </Border>
                     </Grid>
