@@ -62,7 +62,7 @@ public static class MapMetadataStore
         {
             return JsonSerializer.Deserialize<List<ForeverDbMap>>(
                 File.ReadAllText(ManifestPath))
-                ?? Array.Empty<ForeverDbMap>();
+                ?? new List<ForeverDbMap>();
         }
         catch
         {
