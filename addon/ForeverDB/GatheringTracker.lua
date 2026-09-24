@@ -32,13 +32,6 @@ function FDB:SetPendingGatheringKind(kind, guid, metadata)
 end
 
 function FDB:GetPendingGathering()
-    local pending = self:GetPendingGathering()
-    if not pending then return nil end
-
-    return pending
-end
-
-function FDB:GetPendingGatheringKind(sourceGuid)
     local pending = self.PendingGathering
     if not pending then return nil end
 
@@ -47,6 +40,13 @@ function FDB:GetPendingGatheringKind(sourceGuid)
         self.PendingGathering = nil
         return nil
     end
+
+    return pending
+end
+
+function FDB:GetPendingGatheringKind(sourceGuid)
+    local pending = self:GetPendingGathering()
+    if not pending then return nil end
 
     if pending.guid and sourceGuid and pending.guid ~= sourceGuid then
         local sourceType = self:ParseSourceGuid(sourceGuid)
