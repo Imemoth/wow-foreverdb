@@ -7,6 +7,8 @@ local SOURCE_LABELS = {
     herbalism = "Herbalism",
     chest = "Chest",
     fishing = "Fishing",
+    fishing_pool = "Fishing Pool",
+    disenchant = "Disenchant",
     gameobject = "Object",
     unknown = "Unknown",
 }
@@ -180,10 +182,26 @@ local function sourceDisplayName(source)
         return "Fishing - " .. zone
     end
 
+    if source.kind == "fishing_pool" then
+        local pool = source.sourceName
+        if not pool or pool == "" then pool = "Fishing Pool" end
+        return pool .. " [Fishing Pool]"
+    end
+
+    if source.kind == "disenchant" then
+        local item = source.sourceName
+        if not item or item == "" then
+            item = "Item #" .. tostring(source.sourceId)
+        end
+        return item .. " [Disenchant]"
+    end
+
     local name = source.sourceName
     if not name or name == "" then
         if source.sourceType == "creature" then
             name = "Creature #" .. tostring(source.sourceId)
+        elseif source.sourceType == "item" then
+            name = "Item #" .. tostring(source.sourceId)
         else
             name = "Object #" .. tostring(source.sourceId)
         end
