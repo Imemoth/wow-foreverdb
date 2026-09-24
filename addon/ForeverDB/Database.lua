@@ -303,7 +303,7 @@ function FDB:GetOrCreateSource(sourceType, sourceId, sourceLevel, name)
     return source
 end
 
-function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel)
+function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel, location)
     local source = self:GetOrCreateSource(
         sourceType,
         sourceId,
@@ -320,6 +320,32 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
 
     bucket.observations = (bucket.observations or 0) + 1
     bucket.items = bucket.items or {}
+    bucket.locations = bucket.locations or {}
+
+    if location and location.mapId then
+        local locationKey = table.concat({
+            tostring(location.mapId),
+            tostring(location.subZoneName or ""),
+            tostring(location.x or ""),
+            tostring(location.y or ""),
+        }, "|")
+
+        local savedLocation = bucket.locations[locationKey]
+        if not savedLocation then
+            savedLocation = {
+                mapId = location.mapId,
+                zoneName = location.zoneName,
+                subZoneName = location.subZoneName,
+                x = location.x,
+                y = location.y,
+                observations = 0,
+            }
+            bucket.locations[locationKey] = savedLocation
+        end
+
+        savedLocation.observations =
+            (savedLocation.observations or 0) + 1
+    end
 
     local itemKinds = 0
     local questItemKinds = 0
@@ -378,6 +404,7 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
         itemKinds = itemKinds,
         questItemKinds = questItemKinds,
         totalQuantity = totalQuantity,
+        location = location,
     }
 
     if self.InvalidateItemSourceIndex then
