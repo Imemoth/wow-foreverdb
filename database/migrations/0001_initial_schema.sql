@@ -1,6 +1,6 @@
 -- ForeverDB initial backend schema.
 -- Creature sources are split by NPC ID + exact creature level.
--- GameObjects use source_level = 0.
+-- GameObjects and fishing zones use source_level = 0. Fishing uses uiMapID as source_id.
 
 create schema if not exists private;
 
@@ -14,7 +14,7 @@ revoke all on schema private from public, anon, authenticated;
 revoke all on all tables in schema private from public, anon, authenticated;
 
 create table if not exists public.sources (
-    source_type text not null check (source_type in ('creature', 'gameobject')),
+    source_type text not null check (source_type in ('creature', 'gameobject', 'fishing')),
     source_id bigint not null,
     source_level integer not null default 0 check (source_level >= 0),
     name text,
