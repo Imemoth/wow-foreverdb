@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
+using ForeverDB.Companion.Controls;
 using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
 
@@ -576,7 +576,7 @@ public partial class MainWindow : Window
             new ColumnDefinition
             {
                 Width = new GridLength(
-                    1,
+                    0.72,
                     GridUnitType.Star)
             });
 
@@ -590,7 +590,7 @@ public partial class MainWindow : Window
             new ColumnDefinition
             {
                 Width = new GridLength(
-                    1,
+                    1.28,
                     GridUnitType.Star)
             });
 
@@ -642,154 +642,28 @@ public partial class MainWindow : Window
                 Binding =
                     new Binding(
                         nameof(DetailLocation.LootKind)),
-                Width = 82
+                Width = 88
             });
 
         Grid.SetColumn(table, 0);
         root.Children.Add(table);
 
-        var primaryGroup = locations
-            .GroupBy(
-                location =>
-                    $"{location.MapId}|{location.ZoneName}")
-            .OrderByDescending(
-                group =>
-                    group.Sum(
-                        location => location.Observations))
-            .First();
-
-        var previewBorder = new Border
-        {
-            Background =
-                (Brush)FindResource("SurfaceAltBrush"),
-            BorderBrush =
-                (Brush)FindResource("BorderBrush"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(12)
-        };
-
-        Grid.SetColumn(previewBorder, 2);
-        root.Children.Add(previewBorder);
-
-        var previewGrid = new Grid();
-        previewGrid.RowDefinitions.Add(
-            new RowDefinition
+        var mapPreview =
+            new MapPreviewControl
             {
-                Height = GridLength.Auto
-            });
-
-        previewGrid.RowDefinitions.Add(
-            new RowDefinition
-            {
-                Height = new GridLength(
-                    1,
-                    GridUnitType.Star)
-            });
-
-        var primaryLocation = primaryGroup.First();
-        var mapMetadata =
-            MapMetadataStore.Find(primaryLocation.MapId);
-
-        var mapTitle =
-            mapMetadata is null
-                ? $"Map preview — {primaryLocation.ZoneName}"
-                : $"WoW client map — {primaryLocation.ZoneName} · art #{mapMetadata.MapArtId}";
-
-        var title = new TextBlock
-        {
-            Text = mapTitle,
-            FontWeight = FontWeights.SemiBold,
-            Foreground =
-                (Brush)FindResource("TextBrush"),
-            Margin = new Thickness(0, 0, 0, 10)
-        };
-
-        previewGrid.Children.Add(title);
-
-        var mapBorder = new Border
-        {
-            Background = new SolidColorBrush(
-                Color.FromRgb(15, 24, 34)),
-            BorderBrush =
-                (Brush)FindResource("BorderBrush"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            ClipToBounds = true
-        };
-
-        Grid.SetRow(mapBorder, 1);
-        previewGrid.Children.Add(mapBorder);
-
-        var viewbox = new Viewbox
-        {
-            Stretch = Stretch.Uniform
-        };
-
-        mapBorder.Child = viewbox;
-
-        var canvas = new Canvas
-        {
-            Width = 100,
-            Height = 100,
-            Background = Brushes.Transparent
-        };
-
-        viewbox.Child = canvas;
-
-        for (var i = 10; i < 100; i += 10)
-        {
-            canvas.Children.Add(
-                new Line
-                {
-                    X1 = i,
-                    X2 = i,
-                    Y1 = 0,
-                    Y2 = 100,
-                    Stroke = new SolidColorBrush(
-                        Color.FromRgb(35, 53, 70)),
-                    StrokeThickness = 0.25
-                });
-
-            canvas.Children.Add(
-                new Line
-                {
-                    X1 = 0,
-                    X2 = 100,
-                    Y1 = i,
-                    Y2 = i,
-                    Stroke = new SolidColorBrush(
-                        Color.FromRgb(35, 53, 70)),
-                    StrokeThickness = 0.25
-                });
-        }
-
-        foreach (var location in primaryGroup)
-        {
-            var dot = new Ellipse
-            {
-                Width = 3,
-                Height = 3,
-                Fill =
-                    (Brush)FindResource("AccentBrush"),
-                Stroke = Brushes.White,
-                StrokeThickness = 0.35,
-                ToolTip =
-                    $"{location.Area} · {location.Coordinates} · n={location.Observations}"
+                MinHeight = 300
             };
 
-            Canvas.SetLeft(
-                dot,
-                Math.Clamp(location.X, 0d, 100d) - 1.5);
+        Grid.SetColumn(
+            mapPreview,
+            2);
 
-            Canvas.SetTop(
-                dot,
-                Math.Clamp(location.Y, 0d, 100d) - 1.5);
+        root.Children.Add(
+            mapPreview);
 
-            canvas.Children.Add(dot);
-        }
-
-        previewBorder.Child = previewGrid;
+        _ = mapPreview.LoadAsync(
+            _settings,
+            locations);
 
         return root;
     }
