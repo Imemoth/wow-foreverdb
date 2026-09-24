@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
 using ForeverDB.Companion.Models;
@@ -138,7 +139,7 @@ public partial class MainWindow : Window
 
     private async void SearchBox_KeyDown(
         object sender,
-        KeyEventArgs e)
+        System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
         {
