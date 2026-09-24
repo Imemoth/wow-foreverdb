@@ -1,5 +1,21 @@
 local _, FDB = ...
 
+local MAP_METADATA_VERSION = 2
+
+local function hasUsableTextures(record)
+    if not record or record.metadataVersion ~= MAP_METADATA_VERSION then
+        return false
+    end
+
+    for _, layer in ipairs(record.layers or {}) do
+        if layer.textureRefs and #layer.textureRefs > 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
 function FDB:CaptureMapMetadata(mapId)
     if not self.DB
         or not mapId
@@ -10,7 +26,10 @@ function FDB:CaptureMapMetadata(mapId)
 
     self.DB.maps = self.DB.maps or {}
 
-    if self.DB.maps[tostring(mapId)] then
+    local mapKey = tostring(mapId)
+    local existing = self.DB.maps[mapKey]
+
+    if hasUsableTextures(existing) then
         return
     end
 
@@ -25,6 +44,7 @@ function FDB:CaptureMapMetadata(mapId)
         or nil
 
     local record = {
+        metadataVersion = MAP_METADATA_VERSION,
         mapId = mapId,
         name = info and info.name or nil,
         parentMapId =
@@ -86,7 +106,7 @@ function FDB:CaptureMapMetadata(mapId)
         end
     end
 
-    self.DB.maps[tostring(mapId)] = record
+    self.DB.maps[mapKey] = record
 
     self:Debug(
         "map metadata",
