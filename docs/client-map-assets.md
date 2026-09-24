@@ -24,7 +24,7 @@ client. Blizzard map textures are not redistributed with ForeverDB.
 The Companion currently pins:
 
 - CascLib.NET 1.50.0.206-alpha.3 for the pinned win-x64 native CascLib runtime.
-- BLPSharp 0.1.0 for BLP texture decoding.
+- War3Net.Drawing.Blp 6.0.2 for BLP1/BLP2 texture decoding.
 
 No online CASC fallback is enabled. Map extraction is local-only.
 
