@@ -162,12 +162,23 @@ function FDB:CaptureLootWindow()
     local kind = self:GetLootKind(sourceType, sourceGuid, sourceName)
     local items = collectItems()
 
+    local observedLevel
+    if sourceType == "creature"
+        and UnitGUID("target") == sourceGuid
+        and UnitLevel then
+        local level = UnitLevel("target")
+        if level and level > 0 then
+            observedLevel = level
+        end
+    end
+
     self:RecordObservation(
         kind,
         sourceType,
         sourceId,
         sourceName,
-        items
+        items,
+        observedLevel
     )
 
     local itemKinds = 0
@@ -186,7 +197,9 @@ function FDB:CaptureLootWindow()
         "items",
         itemKinds,
         "quest",
-        questKinds
+        questKinds,
+        "level",
+        observedLevel or "?"
     )
 
     self:ConsumePendingGatheringKind(kind)
