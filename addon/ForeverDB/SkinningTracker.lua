@@ -39,7 +39,27 @@ function FDB:InitializeSkinningTracker()
 
         if sourceType ~= "creature" or not sourceId then return end
 
-        FDB:SetPendingGatheringKind("skinning", guid)
-        FDB:Debug("skinning detected for", sourceId)
+        local level
+        if UnitLevel then
+            local observed = UnitLevel("target")
+            if observed and observed > 0 then
+                level = observed
+            end
+        end
+
+        FDB:SetPendingGatheringKind(
+            "skinning",
+            guid,
+            {
+                sourceLevel = level,
+                location = FDB:GetCurrentLocation(),
+            }
+        )
+        FDB:Debug(
+            "skinning detected for",
+            sourceId,
+            "level",
+            level or "?"
+        )
     end)
 end
