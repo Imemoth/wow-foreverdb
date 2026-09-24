@@ -21,6 +21,12 @@ end
 
 local function classifyGameObject(name)
     local lower = string.lower(name or "")
+
+    if string.find(lower, "fishing bobber", 1, true)
+        or string.find(lower, "bobber", 1, true) then
+        return "fishing"
+    end
+
     for _, word in ipairs(CHEST_WORDS) do
         if string.find(lower, word, 1, true) then
             return "chest"
