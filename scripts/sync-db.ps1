@@ -42,16 +42,17 @@ function Find-WowRoot([string]$ConfiguredRoot) {
   throw "WoW Forever beta root not found."
 }
 
-function Find-SavedVariables([string]$WowRoot) {
+function Find-SavedVariablesFiles([string]$WowRoot) {
   $AccountRoot = Join-Path $WowRoot "WTF\Account"
-  $Files = Get-ChildItem -Path $AccountRoot -Filter "ForeverDB.lua" -File -Recurse |
-    Sort-Object LastWriteTimeUtc -Descending
 
-  if (-not $Files) {
-    throw "ForeverDB.lua not found. Use /reload or logout once."
+  if (-not (Test-Path $AccountRoot)) {
+    throw "WTF Account folder not found: $AccountRoot"
   }
 
-  return $Files[0].FullName
+  return @(
+    Get-ChildItem -Path $AccountRoot -Filter "ForeverDB.lua" -File -Recurse |
+      Sort-Object FullName
+  )
 }
 
 function Read-Export([string]$Path) {
@@ -200,34 +201,69 @@ if (-not (Test-Path $ConfigPath)) {
 
 $Config = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json
 $WowRoot = Find-WowRoot $Config.wowRoot
-$SavedVariables = Find-SavedVariables $WowRoot
 
-Write-Host "ForeverDB SavedVariables:" -ForegroundColor Cyan
-Write-Host $SavedVariables
+$PollSeconds = 2
+if ($Config.pollSeconds -and [int]$Config.pollSeconds -gt 0) {
+  $PollSeconds = [int]$Config.pollSeconds
+}
 
-$LastExport = $null
+$LastExportByPath = @{}
+
+Write-Host "ForeverDB sync watcher" -ForegroundColor Cyan
+Write-Host "WoW root: $WowRoot"
+Write-Host "Watching SavedVariables for /reload, logout and client exit."
+Write-Host ""
 
 do {
-  try {
-    $ExportText = Read-Export $SavedVariables
+  $Files = Find-SavedVariablesFiles $WowRoot
 
-    if ($ExportText -ne $LastExport) {
-      $Snapshot = Parse-Export $ExportText
-      $Result = Send-Snapshot $Config $Snapshot
-      $LastExport = $ExportText
-
-      Write-Host (
-        "[{0}] synced {1} sources" -f
-        (Get-Date -Format "HH:mm:ss"),
-        $Snapshot.sources.Count
-      ) -ForegroundColor Green
+  if ($Files.Count -eq 0) {
+    if ($Once) {
+      throw "No ForeverDB.lua SavedVariables files found."
     }
   }
-  catch {
-    Write-Host ("sync error: " + $_.Exception.Message) -ForegroundColor Red
-    if ($Once) { throw }
+  else {
+    foreach ($File in $Files) {
+      try {
+        $Path = $File.FullName
+        $ExportText = Read-Export $Path
+
+        if (-not $LastExportByPath.ContainsKey($Path) -or
+            $LastExportByPath[$Path] -ne $ExportText) {
+
+          $Snapshot = Parse-Export $ExportText
+          $Result = Send-Snapshot $Config $Snapshot
+          $LastExportByPath[$Path] = $ExportText
+
+          $Status = "applied"
+          if ($Result.status) {
+            $Status = $Result.status
+          }
+
+          Write-Host (
+            "[{0}] {1}: {2} sources | {3}" -f
+            (Get-Date -Format "HH:mm:ss"),
+            $Status,
+            $Snapshot.sources.Count,
+            $Snapshot.installationId
+          ) -ForegroundColor Green
+        }
+      }
+      catch {
+        Write-Host (
+          "[{0}] sync error in {1}: {2}" -f
+          (Get-Date -Format "HH:mm:ss"),
+          $File.FullName,
+          $_.Exception.Message
+        ) -ForegroundColor Red
+
+        if ($Once) { throw }
+      }
+    }
   }
 
-  if (-not $Once) { Start-Sleep -Seconds 2 }
+  if (-not $Once) {
+    Start-Sleep -Seconds $PollSeconds
+  }
 }
 while (-not $Once)
