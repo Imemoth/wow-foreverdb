@@ -1,3 +1,4 @@
+using System.IO;
 namespace ForeverDB.Companion.Services;
 
 public sealed class WowSavedVariablesWatcher : IDisposable
