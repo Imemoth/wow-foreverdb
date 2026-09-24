@@ -9,11 +9,13 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>ForeverDB.Companion</AssemblyName>
     <RootNamespace>ForeverDB.Companion</RootNamespace>
-    <Version>0.5.0-alpha</Version>
+    <Version>0.6.0-alpha</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="BLPSharp" Version="0.1.0" />
+    <PackageReference Include="CascLib" Version="1.0.23" />
   </ItemGroup>
 
 </Project>
