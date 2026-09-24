@@ -87,6 +87,38 @@ create table if not exists public.installation_item_stats (
         on delete cascade
 );
 
+
+create table if not exists public.installation_location_stats (
+    installation_id text not null references public.installations(id) on delete cascade,
+    source_type text not null,
+    source_id bigint not null,
+    source_level integer not null default 0 check (source_level >= 0),
+    loot_kind text not null check (
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
+    ),
+    map_id bigint not null default 0,
+    zone_name text,
+    subzone_name text,
+    x numeric(5,1),
+    y numeric(5,1),
+    observations bigint not null default 0 check (observations >= 0),
+    updated_at timestamptz not null default now(),
+    primary key (
+        installation_id,
+        source_type,
+        source_id,
+        source_level,
+        loot_kind,
+        map_id,
+        subzone_name,
+        x,
+        y
+    ),
+    foreign key (source_type, source_id, source_level)
+        references public.sources(source_type, source_id, source_level)
+        on delete cascade
+);
+
 create index if not exists sources_name_lower_idx
     on public.sources (lower(name));
 
@@ -107,10 +139,12 @@ create index if not exists item_stats_item_idx
 alter table public.installations enable row level security;
 alter table public.installation_source_stats enable row level security;
 alter table public.installation_item_stats enable row level security;
+alter table public.installation_location_stats enable row level security;
 
 revoke all on public.installations from anon, authenticated;
 revoke all on public.installation_source_stats from anon, authenticated;
 revoke all on public.installation_item_stats from anon, authenticated;
+revoke all on public.installation_location_stats from anon, authenticated;
 
 grant select on public.sources, public.items to anon, authenticated;
 
@@ -173,6 +207,7 @@ declare
     src jsonb;
     bucket jsonb;
     item jsonb;
+    location jsonb;
     v_source_type text;
     v_source_id bigint;
     v_source_level integer;
@@ -212,6 +247,9 @@ begin
     where installation_id = installation;
 
     delete from public.installation_source_stats
+    where installation_id = installation;
+
+    delete from public.installation_location_stats
     where installation_id = installation;
 
     for src in
@@ -266,6 +304,40 @@ begin
                 coalesce((bucket->>'observations')::bigint, 0),
                 now()
             );
+
+            for location in
+                select value
+                from jsonb_array_elements(coalesce(bucket->'locations', '[]'::jsonb))
+            loop
+                insert into public.installation_location_stats (
+                    installation_id,
+                    source_type,
+                    source_id,
+                    source_level,
+                    loot_kind,
+                    map_id,
+                    zone_name,
+                    subzone_name,
+                    x,
+                    y,
+                    observations,
+                    updated_at
+                )
+                values (
+                    installation,
+                    v_source_type,
+                    v_source_id,
+                    v_source_level,
+                    v_kind,
+                    coalesce((location->>'mapId')::bigint, 0),
+                    nullif(location->>'zoneName', ''),
+                    coalesce(location->>'subZoneName', ''),
+                    nullif(location->>'x', '')::numeric,
+                    nullif(location->>'y', '')::numeric,
+                    coalesce((location->>'observations')::bigint, 0),
+                    now()
+                );
+            end loop;
 
             for item in
                 select value
