@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using BLPSharp;
-using CascLib.NET;
 using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
@@ -143,7 +142,7 @@ public sealed class WowClientMapAssetProvider
                 "WoW .build.info was not found. Client map extraction cannot open CASC.");
         }
 
-        CascStorage? storage = null;
+        NativeCascMapReader? storage = null;
         string? storageLabel = null;
 
         try
@@ -349,7 +348,7 @@ public sealed class WowClientMapAssetProvider
     }
 
     private static Stream? OpenTexture(
-        CascStorage storage,
+        NativeCascMapReader storage,
         string textureRef)
     {
         if (string.IsNullOrWhiteSpace(textureRef))
@@ -365,14 +364,8 @@ public sealed class WowClientMapAssetProvider
                     CultureInfo.InvariantCulture,
                     out var fileDataId))
             {
-                var fileDataName =
-                    $"FILE{fileDataId:X8}.dat";
-
-                return storage.TryOpenFile(
-                    fileDataName,
-                    out var fileDataStream)
-                    ? fileDataStream
-                    : null;
+                return storage.OpenByFileDataId(
+                    fileDataId);
             }
 
             var normalized =
@@ -380,11 +373,8 @@ public sealed class WowClientMapAssetProvider
                     .Replace('/', '\\')
                     .TrimStart('\\');
 
-            return storage.TryOpenFile(
-                normalized,
-                out var stream)
-                ? stream
-                : null;
+            return storage.OpenByName(
+                normalized);
         }
         catch
         {
@@ -393,7 +383,7 @@ public sealed class WowClientMapAssetProvider
     }
 
     private static (
-        CascStorage? Storage,
+        NativeCascMapReader? Storage,
         string? Label)
         OpenStorage(
             string cascRoot,
@@ -430,23 +420,18 @@ public sealed class WowClientMapAssetProvider
                 ));
         }
 
-        foreach (var candidate in
-                 candidates.DistinctBy(
-                     value => value.Path,
-                     StringComparer.OrdinalIgnoreCase))
-        {
-            try
-            {
-                return (
-                    new CascStorage(candidate.Path),
-                    candidate.Label);
-            }
-            catch
-            {
-            }
-        }
+        var distinct =
+            candidates.DistinctBy(
+                value => value.Path,
+                StringComparer.OrdinalIgnoreCase);
 
-        return (null, null);
+        var reader =
+            NativeCascMapReader.TryOpen(
+                distinct);
+
+        return (
+            reader,
+            reader?.Label);
     }
 
     private static IReadOnlyList<string>
