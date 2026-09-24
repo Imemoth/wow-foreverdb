@@ -179,7 +179,9 @@ public partial class MainWindow : Window
             StartMinimizedCheck.IsChecked == true;
 
         SettingsService.Save(_settings);
-        StartupService.SetEnabled(_settings.LaunchWithWindows);
+        StartupService.SetEnabled(
+            _settings.LaunchWithWindows,
+            _settings.StartMinimized);
 
         await RebuildServicesAsync();
         SetStatus("Settings saved.");
