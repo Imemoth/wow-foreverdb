@@ -25,7 +25,7 @@ public static class StartupService
             var executable = Environment.ProcessPath;
             if (!string.IsNullOrWhiteSpace(executable))
             {
-                key.SetValue(ValueName, $"\\\"{executable}\\\"");
+                key.SetValue(ValueName, $"\"{executable}\"");
             }
         }
         else
