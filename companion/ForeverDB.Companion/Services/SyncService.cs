@@ -71,6 +71,10 @@ public sealed class SyncService
                 new
                 {
                     p_snapshot = snapshot
+                },
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 }),
             Encoding.UTF8,
             "application/json");
