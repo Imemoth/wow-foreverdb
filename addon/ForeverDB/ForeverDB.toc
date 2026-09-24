@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: ForeverDB
+## Notes: Observed loot and skinning tracker for World of Warcraft: Forever
+## Author: Imemoth
+## Version: 0.1.0-alpha
+## SavedVariables: ForeverDB_Saved
+
+Core.lua
+Database.lua
+LootTracker.lua
+SkinningTracker.lua
+Tooltip.lua
