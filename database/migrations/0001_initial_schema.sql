@@ -44,6 +44,7 @@ create table if not exists public.installation_source_stats (
         loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'chest', 'gameobject', 'unknown')
     ),
     observations bigint not null default 0 check (observations >= 0),
+    level_counts jsonb not null default '{}'::jsonb,
     updated_at timestamptz not null default now(),
     primary key (installation_id, source_type, source_id, loot_kind),
     foreign key (source_type, source_id)
@@ -226,6 +227,7 @@ begin
                 source_id,
                 loot_kind,
                 observations,
+                level_counts,
                 updated_at
             )
             values (
@@ -234,6 +236,7 @@ begin
                 v_source_id,
                 v_kind,
                 coalesce((bucket->>'observations')::bigint, 0),
+                coalesce(bucket->'levelCounts', '{}'::jsonb),
                 now()
             );
 
