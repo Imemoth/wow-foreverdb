@@ -151,16 +151,38 @@ public partial class MainWindow : Window
     {
         if (_searchService is null)
         {
+            SearchStatusText.Text = "Search service is not ready.";
+            return;
+        }
+
+        var query = SearchBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            SearchResults.ItemsSource = null;
+            SearchStatusText.Text =
+                "Type an item or source name and press Search.";
             return;
         }
 
         try
         {
-            SearchResults.ItemsSource =
-                await _searchService.SearchAsync(SearchBox.Text);
+            SearchStatusText.Text = "Searching...";
+
+            var results =
+                await _searchService.SearchAsync(query);
+
+            SearchResults.ItemsSource = results;
+
+            SearchStatusText.Text =
+                results.Count == 0
+                    ? "No matching items or sources."
+                    : $"{results.Count} result(s).";
         }
         catch (Exception ex)
         {
+            SearchResults.ItemsSource = null;
+            SearchStatusText.Text = ex.Message;
             SetStatus(ex.Message);
         }
     }
