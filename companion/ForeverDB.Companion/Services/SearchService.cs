@@ -139,7 +139,7 @@ public sealed class SearchService
                     Rows = group
                         .OrderByDescending(row => row.ConfidenceScore)
                         .ThenByDescending(row => row.Observations)
-                        .ThenBy(row => row.Name)
+                        .ThenBy(row => row.SourceName)
                         .Select(ToItemSourceDetailRow)
                         .ToArray()
                 })
@@ -183,7 +183,7 @@ public sealed class SearchService
                     Rows = group
                         .OrderByDescending(row => row.ConfidenceScore)
                         .ThenByDescending(row => row.Observations)
-                        .ThenBy(row => row.Name)
+                        .ThenBy(row => row.ItemName)
                         .Select(ToSourceItemDetailRow)
                         .ToArray()
                 })
