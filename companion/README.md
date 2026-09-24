@@ -2,31 +2,48 @@
 
 Windows companion application for ForeverDB.
 
-## Current prototype
+## Current alpha
 
-The companion is a .NET 8 WPF application with:
+ForeverDB Companion 0.5.0-alpha is a .NET 8 WPF application with:
 
-- system tray operation
-- optional Windows startup
-- optional start-minimized behavior
+- single-instance system tray operation
+- optional Windows startup / start minimized
 - automatic WoW Forever path detection
-- recursive SavedVariables watcher
-- automatic upload after /reload, logout or client exit
-- Supabase anonymous authentication
-- per-user encrypted local auth session
-- authenticated ForeverDB snapshot ingest
-- basic item/source search UI
+- SavedVariables watcher and automatic authenticated sync
+- Supabase anonymous authentication with an encrypted local session
+- item and source search
+- item/source detail navigation with Back / Forward / breadcrumb history
+- acquisition tabs for loot, skinning, mining, herbalism, fishing, pools,
+  gameobjects and disenchant
+- location coordinates and map marker preview
+- local cache for WoW client map-art metadata
+- sample-quality and quest metadata
+- a manual Inno Setup installer workflow
 
-## Supabase requirement
+Search results intentionally show item names without an Item # prefix. IDs remain
+available in detail metadata where they are useful for diagnostics.
 
-Before the authenticated sync can work:
+## Map assets
 
-1. apply database/migrations/0002_sync_safety.sql
-2. apply database/migrations/0003_companion_auth.sql
-3. enable Anonymous Sign-Ins in Supabase Authentication settings
+The selected map provider is the user's installed WoW Forever client.
 
-Do NOT apply 0004_remove_legacy_ingest.sql until the companion sync has been
-validated successfully.
+Addon schema 8 exports the client-provided uiMapID, MapArtID, art-layer dimensions
+and FileDataIDs. The Companion caches that metadata locally. The current map
+preview falls back to the normalized coordinate grid until the local CASC + BLP
+extraction provider is connected.
+
+See docs/client-map-assets.md.
+
+## Supabase
+
+The public Companion API uses:
+
+- anonymous Supabase Auth for installation identity
+- an authenticated ingest RPC
+- security-invoker public RPC wrappers for aggregate search/location queries
+- deny-by-default RLS on raw installation statistics
+
+The old shared ingest-token path has been retired.
 
 ## Development build
 
@@ -38,17 +55,16 @@ Run:
 
     dotnet run --project companion/ForeverDB.Companion/ForeverDB.Companion.csproj
 
-On first launch, open Settings and configure the Supabase publishable/anon key.
-The project URL defaults to the current ForeverDB Supabase project.
+## Installer
 
-## Distribution plan
+Use the manual GitHub Actions workflow:
 
-The final release should be published as a self-contained Windows build and
-wrapped in a small installer. The installer can offer:
+    Build ForeverDB Installer
 
-- Launch with Windows
-- Start minimized
-- Desktop shortcut
+It publishes a self-contained win-x64 build and packages it as a per-user
+installer under %LOCALAPPDATA%\Programs\ForeverDB. Administrator privileges are
+not required.
 
-The companion itself keeps the startup setting under the current user's Windows
-Run registry key.
+The installer can optionally create a desktop shortcut and a Windows startup
+entry. Code signing is still required before public distribution to remove the
+unknown-publisher warning.
