@@ -687,10 +687,18 @@ public partial class MainWindow : Window
                     GridUnitType.Star)
             });
 
+        var primaryLocation = primaryGroup.First();
+        var mapMetadata =
+            MapMetadataStore.Find(primaryLocation.MapId);
+
+        var mapTitle =
+            mapMetadata is null
+                ? $"Map preview — {primaryLocation.ZoneName}"
+                : $"WoW client map — {primaryLocation.ZoneName} · art #{mapMetadata.MapArtId}";
+
         var title = new TextBlock
         {
-            Text =
-                $"Map preview — {primaryGroup.First().ZoneName}",
+            Text = mapTitle,
             FontWeight = FontWeights.SemiBold,
             Foreground =
                 (Brush)FindResource("TextBrush"),
