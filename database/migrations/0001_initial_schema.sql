@@ -14,7 +14,7 @@ revoke all on schema private from public, anon, authenticated;
 revoke all on all tables in schema private from public, anon, authenticated;
 
 create table if not exists public.sources (
-    source_type text not null check (source_type in ('creature', 'gameobject', 'fishing')),
+    source_type text not null check (source_type in ('creature', 'gameobject', 'fishing', 'item')),
     source_id bigint not null,
     source_level integer not null default 0 check (source_level >= 0),
     name text,
@@ -44,7 +44,7 @@ create table if not exists public.installation_source_stats (
     source_id bigint not null,
     source_level integer not null default 0 check (source_level >= 0),
     loot_kind text not null check (
-        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'fishing_pool', 'chest', 'gameobject', 'disenchant', 'unknown')
     ),
     observations bigint not null default 0 check (observations >= 0),
     updated_at timestamptz not null default now(),
@@ -66,7 +66,7 @@ create table if not exists public.installation_item_stats (
     source_id bigint not null,
     source_level integer not null default 0 check (source_level >= 0),
     loot_kind text not null check (
-        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'fishing_pool', 'chest', 'gameobject', 'disenchant', 'unknown')
     ),
     item_id bigint not null references public.items(item_id) on delete cascade,
     drop_count bigint not null default 0 check (drop_count >= 0),
@@ -94,7 +94,7 @@ create table if not exists public.installation_location_stats (
     source_id bigint not null,
     source_level integer not null default 0 check (source_level >= 0),
     loot_kind text not null check (
-        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'chest', 'gameobject', 'unknown')
+        loot_kind in ('mob', 'skinning', 'mining', 'herbalism', 'fishing', 'fishing_pool', 'chest', 'gameobject', 'disenchant', 'unknown')
     ),
     map_id bigint not null default 0,
     zone_name text,
