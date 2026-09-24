@@ -174,18 +174,24 @@ function FDB:GetOrCreateSource(sourceType, sourceId, name)
     return source
 end
 
-function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems)
+function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel)
     local source = self:GetOrCreateSource(sourceType, sourceId, sourceName)
     if not source or not kind then return false end
 
     local bucket = source.buckets[kind]
     if not bucket then
-        bucket = { observations = 0, items = {} }
+        bucket = { observations = 0, items = {}, levels = {} }
         source.buckets[kind] = bucket
     end
 
     bucket.observations = (bucket.observations or 0) + 1
     bucket.items = bucket.items or {}
+    bucket.levels = bucket.levels or {}
+
+    if observedLevel and observedLevel > 0 then
+        local levelKey = tostring(observedLevel)
+        bucket.levels[levelKey] = (bucket.levels[levelKey] or 0) + 1
+    end
 
     local itemKinds = 0
     local questItemKinds = 0
@@ -243,6 +249,7 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
         itemKinds = itemKinds,
         questItemKinds = questItemKinds,
         totalQuantity = totalQuantity,
+        observedLevel = observedLevel,
     }
 
     if self.BuildExportSnapshot then
