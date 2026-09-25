@@ -92,6 +92,16 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Remove obsolete legacy sync scripts/config after compatibility cleanup.
 - [ ] Remove/restrict legacy public stats view after compatibility validation.
 
+## Future — Guildbook
+
+Research note: [Guildbook API options](GUILDBOOK-API.md)
+
+- [ ] Runtime capability probe for Forever guild roster/profession APIs.
+- [ ] Guild roster SavedVariables contract.
+- [ ] Character + profession model and Supabase authorization design.
+- [ ] Companion Guildbook tab.
+- [ ] Optional Battle.net enrichment if Forever realm/profile support is verified.
+
 ## 0.9 — Farming intelligence
 
 - [ ] “Where should I farm this?” view.
