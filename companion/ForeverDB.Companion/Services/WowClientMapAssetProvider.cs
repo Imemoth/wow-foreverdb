@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "7";
+    private const string ResolverVersion = "8";
 
     private static readonly ConcurrentDictionary<
         string,
@@ -335,6 +335,7 @@ public sealed class WowClientMapAssetProvider
         IReadOnlyList<string> effectiveTextureRefs =
             layer.TextureRefs;
         var assetMode = "FileDataID";
+        var lastOnlineOpenError = 0;
 
         try
         {
@@ -367,7 +368,11 @@ public sealed class WowClientMapAssetProvider
                             online.Product,
                             online.Region,
                             online.BuildKey,
-                            $"cdn:{online.Product}:{online.Region}");
+                            $"cdn:{online.Product}:{online.Region}",
+                            out var onlineOpenError);
+
+                    lastOnlineOpenError =
+                        onlineOpenError;
 
                     if (reader is null)
                     {
@@ -437,6 +442,7 @@ public sealed class WowClientMapAssetProvider
 
                 return RawMapAsset.Failed(
                     $"No local or Blizzard CDN CASC source contains the map art. " +
+                    $"Last CDN open error: {lastOnlineOpenError}. " +
                     $"API refs: {sampleRefs}. Classic path candidates: {classicDirs}");
             }
 
@@ -785,7 +791,7 @@ public sealed class WowClientMapAssetProvider
         {
             candidates.Add(
                 (
-                    $"{cascRoot}:{expectedProduct}",
+                    $"{cascRoot}*{expectedProduct}",
                     expectedProduct
                 ));
         }
@@ -798,7 +804,7 @@ public sealed class WowClientMapAssetProvider
             {
                 candidates.Add(
                     (
-                        $"{cascRoot}:{product}",
+                        $"{cascRoot}*{product}",
                         product
                     ));
             }
