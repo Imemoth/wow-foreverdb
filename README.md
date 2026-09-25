@@ -53,7 +53,7 @@ different chest/node types can be distinguished in the database.
 - `database/migrations/` - Supabase/PostgreSQL schema
 - `installer/` - Companion installer definition
 - `scripts/` - development/build tooling
-- `docs/` - data contract, sync/map architecture, acceptance notes and [development roadmap](docs/ROADMAP.md)
+- `docs/` - data contract, sync/map architecture, acceptance notes, [development roadmap](docs/ROADMAP.md) and [Guildbook API research](docs/GUILDBOOK-API.md)
 
 ## Item tooltips
 
