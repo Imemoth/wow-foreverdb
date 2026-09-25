@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.3.5-alpha"
+FDB.VERSION = "0.3.6-alpha"
 FDB.SCHEMA_VERSION = 8
 FDB.DEBUG = true
 
@@ -89,11 +89,30 @@ local function registerSlashCommands()
             end
         elseif command == "guildapi" then
             FDB:RunGuildApiProbe()
+        elseif command:match("^guildrecipe%s+") then
+            local argument =
+                command:match("^guildrecipe%s+(.+)$")
+
+            local memberName, skillLineId =
+                argument
+                and argument:match("^(.-)%s+(%d+)$")
+
+            if memberName and skillLineId then
+                FDB:RunGuildRecipeProbe(
+                    memberName,
+                    tonumber(skillLineId)
+                )
+            else
+                print(
+                    PREFIX,
+                    "usage: /fdb guildrecipe <member name> <skillLineID>"
+                )
+            end
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guildapi, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guildapi, /fdb guildrecipe <name> <skillLineID>, /fdb debug")
         end
     end
 end
