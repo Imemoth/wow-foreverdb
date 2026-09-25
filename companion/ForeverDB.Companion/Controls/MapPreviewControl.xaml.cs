@@ -55,9 +55,20 @@ public partial class MapPreviewControl : UserControl
         SetActiveModeButton();
     }
 
-    public async Task LoadAsync(
+    public Task LoadAsync(
         CompanionSettings settings,
         IReadOnlyList<DetailLocation> locations)
+    {
+        return LoadAsync(
+            settings,
+            locations,
+            null);
+    }
+
+    public async Task LoadAsync(
+        CompanionSettings settings,
+        IReadOnlyList<DetailLocation> locations,
+        long? preferredMapId)
     {
         _settings = settings;
         _sourceLocations = locations;
@@ -92,7 +103,7 @@ public partial class MapPreviewControl : UserControl
             return;
         }
 
-        var primaryMap = _locations
+        var mapGroups = _locations
             .GroupBy(
                 location =>
                     new
@@ -105,7 +116,16 @@ public partial class MapPreviewControl : UserControl
                     group.Sum(
                         location =>
                             location.Observations))
-            .First();
+            .ToArray();
+
+        var primaryMap =
+            preferredMapId.HasValue
+                ? mapGroups.FirstOrDefault(
+                    group =>
+                        group.Key.MapId ==
+                        preferredMapId.Value)
+                  ?? mapGroups.First()
+                : mapGroups.First();
 
         var mapId =
             primaryMap.Key.MapId;
@@ -255,7 +275,8 @@ public partial class MapPreviewControl : UserControl
 
         await LoadAsync(
             _settings,
-            _sourceLocations);
+            _sourceLocations,
+            _currentMapId);
     }
 
     private void FitToViewport()
@@ -465,8 +486,9 @@ public partial class MapPreviewControl : UserControl
                     StrokeThickness = 1.2,
                     ToolTip =
                         $"{location.Area}\n" +
-                        $"{location.Coordinates}\n" +
-                        $"{FormatKind(location.LootKind)} · n={location.Observations}"
+                        $"Coords: {location.Coordinates}\n" +
+                        $"Type: {FormatKind(location.LootKind)}\n" +
+                        $"Seen: {location.Observations}"
                 };
 
             PlaceCentered(
@@ -515,8 +537,9 @@ public partial class MapPreviewControl : UserControl
                     Height = size,
                     ToolTip =
                         $"{cluster.Label}\n" +
-                        $"{cluster.X:0.0}, {cluster.Y:0.0}\n" +
-                        $"{cluster.PointCount} point(s) · n={cluster.Observations}"
+                        $"Center: {cluster.X:0.0}, {cluster.Y:0.0}\n" +
+                        $"Unique nodes: {cluster.PointCount}\n" +
+                        $"Observations: {cluster.Observations}"
                 };
 
             grid.Children.Add(
