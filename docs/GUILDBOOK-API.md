@@ -12,7 +12,7 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.11-alpha** includes diagnostic-only Guildbook probes:
+Addon **0.3.12-alpha** includes diagnostic-only Guildbook probes:
 
 `/fdb guild`
 
@@ -156,7 +156,7 @@ Alchemy and Blacksmithing members.
 That result is sufficient to mark guild-member profession discovery **PASS**.
 
 The 0.3.5 implementation expanded headers while iterating the same mutable list,
-which caused only two headers to expand. Addon 0.3.11-alpha fixes this by snapshotting
+which caused only two headers to expand. Addon 0.3.12-alpha fixes this by snapshotting
 all collapsed skillLineIDs first, then expanding them in a second pass.
 
 ### Secondary professions
@@ -171,7 +171,7 @@ Observed Forever runtime skillLineIDs:
 - Fishing: 356
 - First Aid: 129
 
-Addon 0.3.11-alpha therefore resolves those secondary professions separately. This
+Addon 0.3.12-alpha therefore resolves those secondary professions separately. This
 allows targeted recipe probes such as `/fdb recipe cooking`, even though Cooking
 does not appear in `GetNumGuildTradeSkill()` / `GetGuildTradeSkillInfo()`.
 
@@ -186,7 +186,7 @@ Runtime tests with both Cooking (185) and Fishing (356) showed the same behavior
 - the documented `TRADE_SKILL_SHOW` event does **not** arrive;
 - the probe reaches its timeout.
 
-Addon 0.3.11-alpha therefore treats the modern member-query path as present-but-not-yet
+Addon 0.3.12-alpha therefore treats the modern member-query path as present-but-not-yet
 runtime-compatible and automatically tries the legacy guild recipe path:
 
 1. `GetGuildMemberRecipes(name, skillLineID)`;
@@ -219,7 +219,7 @@ until separately disproven.
 
 ### Next acceptance gate
 
-Run a targeted member recipe query with addon **0.3.11-alpha**. For example, based on
+Run a targeted member recipe query with addon **0.3.12-alpha**. For example, based on
 the captured runtime data:
 
 `/fdb recipe Vesti alch`
