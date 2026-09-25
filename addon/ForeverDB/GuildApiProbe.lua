@@ -528,6 +528,18 @@ local function describeCallResult(label, result)
     return true
 end
 
+local SECONDARY_RECIPE_SKILL_LINES = {
+    [129] = "First Aid",
+    [185] = "Cooking",
+    [356] = "Fishing",
+}
+
+local function getSecondaryProfessionName(skillLineID)
+    return SECONDARY_RECIPE_SKILL_LINES[
+        tonumber(skillLineID)
+    ]
+end
+
 local function finishLegacyGuildRecipeFallback()
     if not legacyRecipeFallbackPending
         or not recipeTarget then
@@ -576,15 +588,37 @@ local function finishLegacyGuildRecipeFallback()
             result
         )
     else
-        print(
-            PREFIX,
-            "guildrecipe: ViewGuildRecipes skipped; guild recipe cache is not viewable for this skillLine"
-        )
+        local secondaryName =
+            getSecondaryProfessionName(
+                skillLineID
+            )
+
+        if secondaryName then
+            print(
+                PREFIX,
+                "guildrecipe: RESULT:",
+                secondaryName,
+                "is not exposed through Forever's guild recipe cache for this character/session"
+            )
+            print(
+                PREFIX,
+                "guildrecipe: character-local profession data still works, but guild-wide secondary-profession recipe discovery is not proven"
+            )
+        else
+            print(
+                PREFIX,
+                "guildrecipe: ViewGuildRecipes skipped; guild recipe cache is not viewable for this primary skillLine"
+            )
+            print(
+                PREFIX,
+                "guildrecipe: test a known crafting member/profession to distinguish cache/permission limits from API incompatibility"
+            )
+        end
     end
 
     print(
         PREFIX,
-        "guildrecipe: legacy fallback complete; send this output back for the next compatibility step"
+        "guildrecipe: legacy fallback complete"
     )
 end
 
