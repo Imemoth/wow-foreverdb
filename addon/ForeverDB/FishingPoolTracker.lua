@@ -39,6 +39,20 @@ local function isFishingSpell(spellId)
     return getSpellName(spellId) == "Fishing"
 end
 
+local function isSecretValue(value)
+    if not issecretvalue then
+        return false
+    end
+
+    local ok, secret = pcall(issecretvalue, value)
+    return ok and secret or false
+end
+
+local function isReadableString(value)
+    return type(value) == "string"
+        and not isSecretValue(value)
+end
+
 local function getTooltipFirstLine(tooltip)
     if tooltip and tooltip.GetLeftLine then
         local line = tooltip:GetLeftLine(1)
@@ -48,16 +62,23 @@ local function getTooltipFirstLine(tooltip)
     end
 
     if tooltip and tooltip.GetName then
-        local name = tooltip:GetName()
-        local line = name and _G[name .. "TextLeft1"]
-        if line and line.GetText then
-            return line:GetText()
+        local tooltipName = tooltip:GetName()
+
+        if isReadableString(tooltipName) then
+            local line = _G[tooltipName .. "TextLeft1"]
+            if line and line.GetText then
+                return line:GetText()
+            end
         end
     end
 end
 
 local function isFishingPoolName(name)
-    local lower = string.lower(name or "")
+    if not isReadableString(name) then
+        return false
+    end
+
+    local lower = string.lower(name)
 
     for _, word in ipairs(POOL_WORDS) do
         if string.find(lower, word, 1, true) then
@@ -69,10 +90,15 @@ local function isFishingPoolName(name)
 end
 
 local function syntheticPoolId(name, mapId)
+    local safeName =
+        isReadableString(name)
+        and name
+        or "unknown pool"
+
     local seed =
         tostring(mapId or 0)
         .. "|"
-        .. string.lower(name or "unknown pool")
+        .. string.lower(safeName)
 
     local h = 5381
     local mod = 2147483647
@@ -87,13 +113,22 @@ end
 
 local function getWorldCursorGuid()
     if C_TooltipInfo and C_TooltipInfo.GetWorldCursor then
-        local data = C_TooltipInfo.GetWorldCursor()
-        if data and data.guid then
+        local ok, data =
+            pcall(C_TooltipInfo.GetWorldCursor)
+
+        if ok
+            and data
+            and isReadableString(data.guid) then
             return data.guid
         end
     end
 
     local guid = UnitGUID and UnitGUID("npc")
+
+    if not isReadableString(guid) then
+        return nil
+    end
+
     local sourceType = FDB:ParseSourceGuid(guid)
 
     if sourceType == "gameobject" then
@@ -102,26 +137,48 @@ local function getWorldCursorGuid()
 end
 
 function FDB:RememberFishingPoolHover(name)
-    if not isFishingPoolName(name) then return end
+    local restrictedName =
+        type(name) == "string"
+        and isSecretValue(name)
+
+    if not restrictedName
+        and not isFishingPoolName(name) then
+        return
+    end
 
     local guid = getWorldCursorGuid()
     local sourceType, sourceId = self:ParseSourceGuid(guid)
+
+    -- Forever 1.60.1 can expose world-tooltip text as a Secret Value on a
+    -- tainted addon path. Such text cannot be compared or lowercased.
+    -- If a real GameObject GUID is available, retain it only as a short-lived
+    -- fishing-cast candidate and use a generic non-secret display name.
+    if restrictedName
+        and (sourceType ~= "gameobject" or not sourceId) then
+        return
+    end
+
     local location = self:GetProjectedInteractionLocation(15)
+    local storedName =
+        restrictedName
+        and "Fishing Pool"
+        or name
 
     if sourceType ~= "gameobject" or not sourceId then
         sourceId = syntheticPoolId(
-            name,
+            storedName,
             location and location.mapId
         )
         guid = nil
     end
 
     self.LastFishingPoolHover = {
-        name = name,
+        name = storedName,
         guid = guid,
         sourceId = sourceId,
         location = location,
         at = GetTime and GetTime() or 0,
+        restrictedName = restrictedName,
     }
 
     local now = GetTime and GetTime() or 0
@@ -129,7 +186,7 @@ function FDB:RememberFishingPoolHover(name)
 
     if castAt and now - castAt <= 35 then
         self.ActiveFishingPool = {
-            name = name,
+            name = storedName,
             guid = guid,
             sourceId = sourceId,
             location =
@@ -140,8 +197,10 @@ function FDB:RememberFishingPoolHover(name)
     end
 
     self:Debug(
-        "fishing pool hover",
-        name,
+        restrictedName
+            and "fishing pool hover (restricted tooltip name)"
+            or "fishing pool hover",
+        storedName,
         sourceId,
         location and location.x or "?",
         location and location.y or "?"
@@ -154,8 +213,13 @@ function FDB:ArmFishingPoolForCast()
 
     self.LastFishingCastAt = now
 
+    local maxHoverAge =
+        hover and hover.restrictedName
+        and 2
+        or 8
+
     if hover
-        and now - (hover.at or 0) <= 8 then
+        and now - (hover.at or 0) <= maxHoverAge then
         self.ActiveFishingPool = {
             name = hover.name,
             guid = hover.guid,
@@ -211,9 +275,7 @@ function FDB:InitializeFishingPoolTracker()
             "OnShow",
             function(tooltip)
                 local name = getTooltipFirstLine(tooltip)
-                if name and name ~= "" then
-                    FDB:RememberFishingPoolHover(name)
-                end
+                FDB:RememberFishingPoolHover(name)
             end
         )
 
@@ -233,9 +295,7 @@ function FDB:InitializeFishingPoolTracker()
                 tooltipElapsed = 0
 
                 local name = getTooltipFirstLine(tooltip)
-                if name and name ~= "" then
-                    FDB:RememberFishingPoolHover(name)
-                end
+                FDB:RememberFishingPoolHover(name)
             end
         )
     end
