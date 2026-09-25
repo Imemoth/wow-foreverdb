@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.4-alpha**
+- Addon: **0.3.5-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,14 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.5-alpha — 2026-09-25
+
+- Expanded the Guildbook capability probe to query and expand guild profession headers.
+- The probe now reports header collapse state, player counts and actual guild-member profession rows when exposed by the client.
+- It listens for `GUILD_TRADESKILL_UPDATE`, falls back to the expanded cache after two seconds, and restores headers that were collapsed before the probe.
+- Added `QueryGuildRecipes`, `ExpandGuildTradeSkillHeader` and `CollapseGuildTradeSkillHeader` capability checks.
+- Export schema remains **8**; no guild data is persisted or uploaded.
 
 ## 0.3.4-alpha — 2026-09-25
 
