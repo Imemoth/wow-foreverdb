@@ -103,15 +103,42 @@ Treat those header rows as evidence that the API is functional, **not** yet as
 evidence that guild-member profession rows are populated. That must be verified on
 a guilded character.
 
+### Guilded-character roster acceptance — PASS
+
+A guilded character test returned:
+
+- guild name: `gulp`
+- rank: `Initiate`, rank index 4
+- cached roster: 95 members, 85 online
+- refreshed roster: 95 members, 84 online
+- `GUILD_ROSTER_UPDATE`: received successfully
+- sampled members included readable name, level, class, rank, online state, zone and GUID
+
+Examples observed:
+- Bald Greenskin — level 8 Warrior — Durotar
+- Bhekron Skyward — level 8 Shaman — Orgrimmar
+- Big Hoon — level 8 Rogue — Tirisfal Glades
+
+This closes the base Guildbook roster compatibility gate.
+
+### Guild profession table — header phase PASS, member rows pending
+
+The client returned 10 guild tradeskill rows, but the sampled rows were profession
+headers such as Alchemy, Blacksmithing, Enchanting, Engineering and Herbalism.
+
+This is consistent with collapsed guild profession headers. Addon 0.3.5-alpha now
+expands those headers during `/fdb guildapi`, waits for
+`GUILD_TRADESKILL_UPDATE`, then scans for actual player rows and restores the
+original collapsed state.
+
 ### Next acceptance gate
 
 Run `/fdb guildapi` on a guilded character and confirm:
 
-1. guild member count > 0;
-2. `GetGuildRosterInfo()` returns name, rank, level, class, online state and GUID;
-3. refreshed roster arrives through `GUILD_ROSTER_UPDATE`;
-4. guild trade-skill rows include actual player/member records, not only headers;
-5. after that, add a targeted recipe-query probe using a real member GUID and
+1. run the 0.3.5-alpha expanded guild tradeskill probe;
+2. confirm actual player/member profession rows appear after header expansion;
+3. capture profession name, skillLineID, player name and skill value;
+4. after that, add a targeted recipe-query probe using a real member GUID and
    skillLineID.
 
 ## Candidate Guildbook data
