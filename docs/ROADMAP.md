@@ -38,20 +38,22 @@ Map asset pipeline acceptance status:
 
 ## 0.7.0-alpha — Map UX & location intelligence
 
+Implementation status: **complete; build/runtime acceptance pending.**
+
 Goal: turn the working map renderer into a practical Gatherer/Wowhead-style
 location browser.
 
-- [ ] Selecting a location row switches the map to that row's zone.
-- [ ] Preserve all zones for a detail result instead of silently showing only the
+- [x] Selecting a location row switches the map to that row's zone.
+- [x] Preserve all zones for a detail result instead of silently showing only the
       highest-observation zone.
-- [ ] Make the current map/zone selection obvious in the Locations UI.
-- [ ] Improve marker tooltips with area, coordinates, acquisition kind and sample.
-- [ ] Improve cluster tooltips with unique-node and observation counts.
-- [ ] Reset breadcrumb/history when the user starts from a new search result.
-- [ ] Hide synthetic fishing-pool IDs from normal UI.
-- [ ] Label synthetic fishing-pool GameObjects as Fishing Pool instead of Object.
-- [ ] Pre-warm map art for recently synced zones in the background.
-- [ ] Keep first-load work deduplicated and all subsequent map loads cache-first.
+- [x] Make the current map/zone selection obvious in the Locations UI.
+- [x] Improve marker tooltips with area, coordinates, acquisition kind and sample.
+- [x] Improve cluster tooltips with unique-node and observation counts.
+- [x] Reset breadcrumb/history when the user starts from a new search result.
+- [x] Hide synthetic fishing-pool IDs from normal UI.
+- [x] Label synthetic fishing-pool GameObjects as Fishing Pool instead of Object.
+- [x] Pre-warm map art for recently synced zones in the background.
+- [x] Keep first-load work deduplicated and all subsequent map loads cache-first.
 
 Acceptance:
 - one item/source may be browsed across multiple zones without reopening Search;
