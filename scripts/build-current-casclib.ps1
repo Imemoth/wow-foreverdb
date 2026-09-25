@@ -23,7 +23,17 @@ git clone --quiet https://github.com/ladislav-zezula/CascLib.git $sourceDir
 git -C $sourceDir checkout --quiet $CascLibCommit
 
 Write-Host "Configuring CascLib x64 shared library..."
-cmake -S $sourceDir -B $buildDir -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCASC_BUILD_SHARED_LIB=ON -DCASC_BUILD_STATIC_LIB=OFF -DCASC_BUILD_TESTS=OFF
+$cmakeArgs = @(
+    "-S", $sourceDir,
+    "-B", $buildDir,
+    "-A", "x64",
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+    "-DCASC_BUILD_SHARED_LIB=ON",
+    "-DCASC_BUILD_STATIC_LIB=OFF",
+    "-DCASC_BUILD_TESTS=OFF"
+)
+
+& cmake @cmakeArgs
 
 Write-Host "Building CascLib Release..."
 cmake --build $buildDir --config Release
