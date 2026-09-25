@@ -12,13 +12,23 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.6-alpha** includes diagnostic-only Guildbook probes:
+Addon **0.3.7-alpha** includes diagnostic-only Guildbook probes:
+
+`/fdb guild`
+
+with the legacy alias:
 
 `/fdb guildapi`
 
-and a targeted recipe/crafter probe:
+Targeted recipe/crafter probes use the simpler forms:
 
-`/fdb guildrecipe <member name> <skillLineID>`
+`/fdb recipe <profession>`
+
+or:
+
+`/fdb recipe <member> <profession>`
+
+The short alias `/fdb gr ...` is equivalent. Legacy `/fdb guildrecipe <member> <skillLineID>` remains supported.
 
 The probe:
 
@@ -146,15 +156,15 @@ Alchemy and Blacksmithing members.
 That result is sufficient to mark guild-member profession discovery **PASS**.
 
 The 0.3.5 implementation expanded headers while iterating the same mutable list,
-which caused only two headers to expand. Addon 0.3.6-alpha fixes this by snapshotting
+which caused only two headers to expand. Addon 0.3.7-alpha fixes this by snapshotting
 all collapsed skillLineIDs first, then expanding them in a second pass.
 
 ### Next acceptance gate
 
-Run a targeted member recipe query with addon **0.3.6-alpha**. For example, based on
+Run a targeted member recipe query with addon **0.3.7-alpha**. For example, based on
 the captured runtime data:
 
-`/fdb guildrecipe Vesti Stormchaser 171`
+`/fdb recipe Vesti alch`
 
 Expected sequence:
 
