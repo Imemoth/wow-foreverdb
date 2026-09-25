@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "8";
+    private const string ResolverVersion = "9";
 
     private static readonly ConcurrentDictionary<
         string,
