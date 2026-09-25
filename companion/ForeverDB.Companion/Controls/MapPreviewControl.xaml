@@ -5,66 +5,63 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="10" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <StackPanel Grid.Row="0">
+            <TextBlock x:Name="MapTitleText"
+                       Foreground="{StaticResource TextBrush}"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       Text="Map" />
+            <TextBlock x:Name="AssetStatusText"
+                       Margin="0,3,0,0"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Text="Loading WoW client map..." />
+        </StackPanel>
 
-            <StackPanel>
-                <TextBlock x:Name="MapTitleText"
-                           Foreground="{StaticResource TextBrush}"
-                           FontWeight="SemiBold"
-                           FontSize="14"
-                           Text="Map" />
-                <TextBlock x:Name="AssetStatusText"
-                           Margin="0,3,0,0"
-                           Foreground="{StaticResource MutedTextBrush}"
-                           FontSize="11"
-                           Text="Loading WoW client map..." />
-            </StackPanel>
+        <WrapPanel Grid.Row="2"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Center">
+            <Button x:Name="MarkersButton"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="0,0,6,4"
+                    Click="MarkersButton_Click"
+                    Content="Markers" />
+            <Button x:Name="ClustersButton"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="0,0,6,4"
+                    Click="ClustersButton_Click"
+                    Content="Clusters" />
+            <Button x:Name="HeatmapButton"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="0,0,10,4"
+                    Click="HeatmapButton_Click"
+                    Content="Heatmap" />
+            <Button Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="0,0,6,4"
+                    Click="FitButton_Click"
+                    Content="Fit" />
+            <Button Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="0,0,0,4"
+                    Click="RetryMapButton_Click"
+                    Content="Retry map"
+                    ToolTip="Clear this map's local resolution cache and try the WoW client again." />
+            <TextBlock x:Name="ZoomText"
+                       MinWidth="52"
+                       Margin="8,0,0,4"
+                       VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       TextAlignment="Right"
+                       Text="100%" />
+        </WrapPanel>
 
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        VerticalAlignment="Center">
-                <Button x:Name="MarkersButton"
-                        Style="{StaticResource SecondaryButtonStyle}"
-                        Margin="0,0,6,0"
-                        Click="MarkersButton_Click"
-                        Content="Markers" />
-                <Button x:Name="ClustersButton"
-                        Style="{StaticResource SecondaryButtonStyle}"
-                        Margin="0,0,6,0"
-                        Click="ClustersButton_Click"
-                        Content="Clusters" />
-                <Button x:Name="HeatmapButton"
-                        Style="{StaticResource SecondaryButtonStyle}"
-                        Margin="0,0,10,0"
-                        Click="HeatmapButton_Click"
-                        Content="Heatmap" />
-                <Button Style="{StaticResource SecondaryButtonStyle}"
-                        Margin="0,0,6,0"
-                        Click="FitButton_Click"
-                        Content="Fit" />
-                <Button Style="{StaticResource SecondaryButtonStyle}"
-                        Click="RetryMapButton_Click"
-                        Content="Retry map"
-                        ToolTip="Clear this map's local resolution cache and try the WoW client again." />
-                <TextBlock x:Name="ZoomText"
-                           Width="52"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="{StaticResource MutedTextBrush}"
-                           TextAlignment="Right"
-                           Text="100%" />
-            </StackPanel>
-        </Grid>
-
-        <Border Grid.Row="2"
+        <Border Grid.Row="4"
                 Background="#0F1822"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
@@ -94,13 +91,10 @@
                         <Image x:Name="MapImage"
                                Stretch="Fill"
                                SnapsToDevicePixels="True" />
-
                         <Canvas x:Name="FallbackGridCanvas"
                                 IsHitTestVisible="False" />
-
                         <Canvas x:Name="HeatmapCanvas"
                                 IsHitTestVisible="False" />
-
                         <Canvas x:Name="MarkerCanvas" />
                     </Grid>
                 </Grid>
