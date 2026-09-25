@@ -1279,7 +1279,6 @@ function FDB:RunGuildApiProbe()
     availability("ViewGuildRecipes", ViewGuildRecipes)
     availability("CanViewGuildRecipes", CanViewGuildRecipes)
     availability("GetGuildRecipeMember", GetGuildRecipeMember)
-    availability("CanViewGuildRecipes", CanViewGuildRecipes)
     namespaceAvailability(
         "C_GuildInfo.QueryGuildMemberRecipes",
         C_GuildInfo,
