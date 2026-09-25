@@ -41,6 +41,79 @@ separately after the base capability matrix is known.
 
 The output is the compatibility gate for the Guildbook SavedVariables schema.
 
+## Runtime probe result — 2026-09-25
+
+Tested on Forever addon **0.3.2-alpha**, schema **8**.
+
+### Confirmed present in the Forever client
+
+Guild roster:
+- `IsInGuild`
+- `GetGuildInfo`
+- `GetNumGuildMembers`
+- `GetGuildRosterInfo`
+- `GetGuildRosterLastOnline`
+- `C_GuildInfo.GuildRoster`
+
+The legacy global `GuildRoster` function is **not** present, so current code should
+prefer `C_GuildInfo.GuildRoster()`.
+
+Professions / guild profession APIs:
+- `GetProfessions`
+- `GetProfessionInfo`
+- `GetNumGuildTradeSkill`
+- `GetGuildTradeSkillInfo`
+- `GetGuildMemberRecipes`
+- `GetGuildRecipeMember`
+- `CanViewGuildRecipes`
+- `C_GuildInfo.QueryGuildMemberRecipes`
+- `C_GuildInfo.QueryGuildMembersForRecipe`
+
+### Own-character profession read: PASS
+
+The probe successfully returned live profession values, including:
+
+- Mining — 14/75, skillLine 186
+- Skinning — 64/75, skillLine 393
+- First Aid — 41/75, skillLine 129
+- Fishing — 43/75, skillLine 356
+- Cooking — 12/75, skillLine 185
+
+This proves the Forever client exposes usable own-character profession skill data.
+
+### Guild roster data: pending guilded-character test
+
+The tested character was **not in a guild**:
+
+- `player in guild=false`
+- cached guild members: 0
+- guild name/rank: unavailable
+- roster refresh was correctly skipped
+
+Therefore function availability is proven, but actual populated
+`GetGuildRosterInfo()` records still require one test on a guilded character.
+
+### Guild trade-skill cache: partial evidence
+
+`GetNumGuildTradeSkill()` returned 10 and `GetGuildTradeSkillInfo()` returned
+profession headers such as Alchemy, Blacksmithing, Enchanting, Engineering and
+Herbalism even while the player was not guilded.
+
+Treat those header rows as evidence that the API is functional, **not** yet as
+evidence that guild-member profession rows are populated. That must be verified on
+a guilded character.
+
+### Next acceptance gate
+
+Run `/fdb guildapi` on a guilded character and confirm:
+
+1. guild member count > 0;
+2. `GetGuildRosterInfo()` returns name, rank, level, class, online state and GUID;
+3. refreshed roster arrives through `GUILD_ROSTER_UPDATE`;
+4. guild trade-skill rows include actual player/member records, not only headers;
+5. after that, add a targeted recipe-query probe using a real member GUID and
+   skillLineID.
+
 ## Candidate Guildbook data
 
 A useful first version could store:
