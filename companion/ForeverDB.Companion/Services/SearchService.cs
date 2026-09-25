@@ -102,7 +102,7 @@ public sealed class SearchService
                     SourceLevel = level,
                     Name = name,
                     DisplayText =
-                        $"{name}{levelText} [{FormatSourceType(type)}]"
+                        $"{name}{levelText} [{FormatSourceType(type, id)}]"
                 });
         }
 
@@ -222,20 +222,28 @@ public sealed class SearchService
                 })
             .ToArray();
 
-        var level =
-            result.SourceType.Equals(
-                "creature",
-                StringComparison.OrdinalIgnoreCase)
-                ? result.SourceLevel > 0
-                    ? $"Level {result.SourceLevel}"
-                    : "Historical / level unknown"
-                : "No level";
+        var sourceLabel =
+            FormatSourceType(
+                result.SourceType,
+                result.SourceId);
+
+        var subtitle =
+            IsSyntheticFishingPool(
+                result.SourceType,
+                result.SourceId)
+                ? sourceLabel
+                : result.SourceType.Equals(
+                    "creature",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? result.SourceLevel > 0
+                        ? $"{sourceLabel} #{result.SourceId} · Level {result.SourceLevel}"
+                        : $"{sourceLabel} #{result.SourceId} · Historical / level unknown"
+                    : $"{sourceLabel} #{result.SourceId}";
 
         return new EntityDetail
         {
             Title = result.Name,
-            Subtitle =
-                $"{FormatSourceType(result.SourceType)} #{result.SourceId} · {level}",
+            Subtitle = subtitle,
             Groups = groups,
             Locations = locations
         };
@@ -500,8 +508,17 @@ public sealed class SearchService
         };
     }
 
-    private static string FormatSourceType(string type)
+    private static string FormatSourceType(
+        string type,
+        long sourceId)
     {
+        if (IsSyntheticFishingPool(
+                type,
+                sourceId))
+        {
+            return "Fishing Pool";
+        }
+
         return type.ToLowerInvariant() switch
         {
             "creature" => "Creature",
@@ -510,6 +527,16 @@ public sealed class SearchService
             "item" => "Item",
             _ => type
         };
+    }
+
+    private static bool IsSyntheticFishingPool(
+        string sourceType,
+        long sourceId)
+    {
+        return sourceId < 0 &&
+               sourceType.Equals(
+                   "gameobject",
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<JsonElement> GetAsync(
