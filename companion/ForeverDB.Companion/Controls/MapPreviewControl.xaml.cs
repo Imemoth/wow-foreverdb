@@ -41,7 +41,7 @@ public partial class MapPreviewControl : UserControl
         {
             DrawFallbackGrid();
 
-            Dispatcher.BeginInvoke(
+            _ = Dispatcher.BeginInvoke(
                 FitToViewport);
         };
 
