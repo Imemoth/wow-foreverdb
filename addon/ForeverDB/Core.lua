@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.3.1-alpha"
+FDB.VERSION = "0.3.2-alpha"
 FDB.SCHEMA_VERSION = 8
 FDB.DEBUG = true
 
@@ -87,11 +87,13 @@ local function registerSlashCommands()
             else
                 print(PREFIX, "usage: /fdb item <itemID or item link>")
             end
+        elseif command == "guildapi" then
+            FDB:RunGuildApiProbe()
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guildapi, /fdb debug")
         end
     end
 end
@@ -109,6 +111,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if loadedAddon ~= addonName then return end
 
         FDB:InitializeDatabase()
+        FDB:InitializeGuildApiProbe()
         FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
         FDB:InitializeFishingPoolTracker()
