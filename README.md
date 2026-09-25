@@ -4,7 +4,7 @@ Observed loot, gathering and skinning database for World of Warcraft: Forever.
 
 ## Collector alpha
 
-Current addon version: **0.2.6-alpha**  
+Current addon version: **0.3.1-alpha**  
 Forever interface target: **16001**
 
 The collector distinguishes two dimensions:
@@ -40,7 +40,7 @@ different chest/node types can be distinguished in the database.
 - `addon/ForeverDB/` - in-game collector
 - `database/migrations/` - Supabase/PostgreSQL schema
 - `scripts/` - update/sync tooling
-- `docs/` - beta test notes and data contract
+- `docs/` - beta test notes, data contract and [development roadmap](docs/ROADMAP.md)
 
 
 ## Item tooltips
