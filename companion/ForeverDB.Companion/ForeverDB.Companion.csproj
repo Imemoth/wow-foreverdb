@@ -9,7 +9,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>ForeverDB.Companion</AssemblyName>
     <RootNamespace>ForeverDB.Companion</RootNamespace>
-    <Version>0.6.7-alpha</Version>
+    <Version>0.6.8-alpha</Version>
   </PropertyGroup>
 
   <ItemGroup>
