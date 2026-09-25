@@ -8,9 +8,15 @@ version contract and release checklist are documented in
 
 - Addon: **0.3.1-alpha**
 - Export schema: **8**
-- Companion: **0.7.0-alpha**
+- Companion: **0.7.1-alpha**
 
 # Companion
+
+## 0.7.1-alpha — 2026-09-25
+
+- Fixed selected DataGrid rows becoming unreadable after focus moved to the map.
+- Made the map header controls wrap responsively instead of clipping the zoom/status area.
+- Replaced raw acquisition keys such as `fishing_pool` with user-facing location labels.
 
 ## 0.7.0-alpha — 2026-09-25
 
