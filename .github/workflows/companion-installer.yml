@@ -17,7 +17,7 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore companion/ForeverDB.Companion/ForeverDB.Companion.csproj
+        run: dotnet restore companion/ForeverDB.Companion/ForeverDB.Companion.csproj -r win-x64
 
       - name: Build current CascLib native
         shell: pwsh
