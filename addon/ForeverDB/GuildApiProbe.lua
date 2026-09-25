@@ -673,6 +673,20 @@ local PROFESSION_ALIASES = {
     mine = "mining",
     skin = "skinning",
     tailor = "tailoring",
+    cook = "cooking",
+    fish = "fishing",
+    fa = "first aid",
+    firstaid = "first aid",
+}
+
+-- Forever's guild tradeskill roster only exposes the primary/guild-visible
+-- profession headers. Secondary professions such as Cooking/Fishing/First Aid
+-- are still exposed by GetProfessions/GetProfessionInfo and can be queried
+-- directly by skillLineID.
+local FOREVER_SECONDARY_SKILL_LINES = {
+    ["cooking"] = 185,
+    ["fishing"] = 356,
+    ["first aid"] = 129,
 }
 
 local function resolveGuildSkillLine(value)
@@ -693,6 +707,48 @@ local function resolveGuildSkillLine(value)
     wanted =
         PROFESSION_ALIASES[wanted]
         or wanted
+
+    -- Prefer the live Forever client values for the logged-in character.
+    -- This is important for secondary professions because they do not appear
+    -- in the guild tradeskill header list.
+    if type(GetProfessions) == "function"
+        and type(GetProfessionInfo) == "function" then
+        local professions = { GetProfessions() }
+
+        for index = 1, 6 do
+            local professionIndex =
+                professions[index]
+
+            if professionIndex then
+                local info = { pcall(GetProfessionInfo, professionIndex) }
+                local ok = table.remove(info, 1)
+
+                if ok then
+                    local professionName = info[1]
+                    local skillLineID = info[7]
+
+                    if type(professionName) == "string"
+                        and skillLineID
+                        and string.lower(professionName) == wanted then
+                        return tonumber(skillLineID), professionName
+                    end
+                end
+            end
+        end
+    end
+
+    local secondarySkillLine =
+        FOREVER_SECONDARY_SKILL_LINES[wanted]
+
+    if secondarySkillLine then
+        local displayName =
+            wanted:gsub(
+                "^%l",
+                string.upper
+            )
+
+        return secondarySkillLine, displayName
+    end
 
     if type(GetNumGuildTradeSkill) ~= "function"
         or type(GetGuildTradeSkillInfo) ~= "function" then
@@ -725,7 +781,8 @@ function FDB:PrintGuildRecipeHelp()
     print(PREFIX, "/fdb recipe <profession>  - current character")
     print(PREFIX, "/fdb recipe <member> <profession>")
     print(PREFIX, "profession may be a name, alias or skillLineID")
-    print(PREFIX, "aliases: alch, bs, ench, eng, herb, lw, mine, skin, tailor")
+    print(PREFIX, "aliases: alch, bs, ench, eng, herb, lw, mine, skin, tailor, cook, fish, fa")
+    print(PREFIX, "secondary: Cooking=185, Fishing=356, First Aid=129")
 
     if type(GetNumGuildTradeSkill) == "function"
         and type(GetGuildTradeSkillInfo) == "function" then
