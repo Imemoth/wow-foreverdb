@@ -7,7 +7,7 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.3.1-alpha**
+- Version: **0.3.2-alpha**
 - Schema: **8**
 - Forever interface: **16001**
 - Observed pipelines:
@@ -96,7 +96,7 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 Research note: [Guildbook API options](GUILDBOOK-API.md)
 
-- [ ] Runtime capability probe for Forever guild roster/profession APIs.
+- [x] Runtime capability probe for Forever guild roster/profession APIs (`/fdb guildapi`).
 - [ ] Guild roster SavedVariables contract.
 - [ ] Character + profession model and Supabase authorization design.
 - [ ] Companion Guildbook tab.
