@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.3-alpha**
+- Addon: **0.3.4-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,13 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.4-alpha — 2026-09-25
+
+- Restricted fishing-pool tooltip scanning to structured world-object tooltips from `C_TooltipInfo.GetWorldCursor()`.
+- Quest-item, inventory-item and other non-world-object GameTooltip hovers are ignored before ForeverDB reads tooltip text.
+- Keeps the 0.3.3 Secret Value guards as a secondary safety layer for actual world-object tooltips.
+- Export schema remains **8**.
 
 ## 0.3.3-alpha — 2026-09-25
 
