@@ -23,7 +23,11 @@ client. Blizzard map textures are not redistributed with ForeverDB.
 
 The Companion currently pins:
 
-- CascLib.NET 1.50.0.206-alpha.3 for the pinned win-x64 native CascLib runtime.
+- CascLib.NET 1.50.0.206-alpha.3 as the managed/package baseline.
+- Upstream CascLib native runtime pinned to commit
+  `2a280f5a231966dc5d1b534978dd9f9f04a374cd` during CI publish.
+  The package-bundled native DLL is replaced because it predates later
+  CDN and missing-file download fixes required by current Forever builds.
 - War3Net.Drawing.Blp 6.0.2 for BLP1/BLP2 texture decoding.
 
 No online CASC fallback is enabled. Map extraction is local-only.
@@ -80,3 +84,17 @@ the Data API.
 Failed local resolutions are also cached locally, so revisiting the same map does
 not repeatedly scan CASC. Incrementing the resolver version invalidates that cache
 for the next controlled diagnostic attempt.
+
+
+## Native CascLib runtime
+
+The NuGet package currently bundles an older native CascLib DLL. ForeverDB's
+Windows build therefore compiles a pinned upstream CascLib commit and replaces
+the package native DLL before publishing the self-contained Companion.
+
+The pinned runtime is intentionally newer than the managed wrapper because
+upstream CascLib changed its default Blizzard CDN handling in late 2025 and
+added support in 2026 for downloading files that are absent from the local
+installation. Those behaviors are required for streamed Forever map art.
+
+The build step is implemented by `scripts/build-current-casclib.ps1`.
