@@ -204,7 +204,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        await NavigateToDetailAsync(result);
+        _backHistory.Clear();
+        _forwardHistory.Clear();
+        _currentDetail = null;
+
+        await NavigateToDetailAsync(
+            result,
+            recordHistory: false);
     }
 
     private async Task NavigateToDetailAsync(
@@ -601,6 +607,7 @@ public partial class MainWindow : Window
             CanUserAddRows = false,
             HeadersVisibility =
                 DataGridHeadersVisibility.Column,
+            SelectionMode = DataGridSelectionMode.Single,
             ItemsSource = locations
         };
 
@@ -661,9 +668,43 @@ public partial class MainWindow : Window
         root.Children.Add(
             mapPreview);
 
+        var defaultLocation = locations
+            .GroupBy(
+                location =>
+                    location.MapId)
+            .OrderByDescending(
+                group =>
+                    group.Sum(
+                        location =>
+                            location.Observations))
+            .First()
+            .OrderByDescending(
+                location =>
+                    location.Observations)
+            .First();
+
+        table.SelectedItem =
+            defaultLocation;
+
+        table.SelectionChanged +=
+            async (_, _) =>
+            {
+                if (table.SelectedItem is
+                    not DetailLocation selected)
+                {
+                    return;
+                }
+
+                await mapPreview.LoadAsync(
+                    _settings,
+                    locations,
+                    selected.MapId);
+            };
+
         _ = mapPreview.LoadAsync(
             _settings,
-            locations);
+            locations,
+            defaultLocation.MapId);
 
         return root;
     }
