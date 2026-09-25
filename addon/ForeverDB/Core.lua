@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.3.6-alpha"
+FDB.VERSION = "0.3.7-alpha"
 FDB.SCHEMA_VERSION = 8
 FDB.DEBUG = true
 
@@ -66,7 +66,10 @@ end
 local function registerSlashCommands()
     SLASH_FOREVERDB1 = "/fdb"
     SlashCmdList.FOREVERDB = function(message)
-        local command = (message or ""):match("^%s*(.-)%s*$"):lower()
+        local rawCommand =
+            (message or ""):match("^%s*(.-)%s*$")
+        local command =
+            rawCommand:lower()
 
         if command == "" or command == "status" then
             FDB:PrintStatus()
@@ -87,32 +90,27 @@ local function registerSlashCommands()
             else
                 print(PREFIX, "usage: /fdb item <itemID or item link>")
             end
-        elseif command == "guildapi" then
+        elseif command == "guildapi"
+            or command == "guild" then
             FDB:RunGuildApiProbe()
-        elseif command:match("^guildrecipe%s+") then
+        elseif command == "recipe"
+            or command == "guildrecipe"
+            or command == "gr" then
+            FDB:PrintGuildRecipeHelp()
+        elseif command:match("^recipe%s+")
+            or command:match("^guildrecipe%s+")
+            or command:match("^gr%s+") then
             local argument =
-                command:match("^guildrecipe%s+(.+)$")
+                rawCommand:match("^%S+%s+(.+)$")
 
-            local memberName, skillLineId =
+            FDB:RunGuildRecipeCommand(
                 argument
-                and argument:match("^(.-)%s+(%d+)$")
-
-            if memberName and skillLineId then
-                FDB:RunGuildRecipeProbe(
-                    memberName,
-                    tonumber(skillLineId)
-                )
-            else
-                print(
-                    PREFIX,
-                    "usage: /fdb guildrecipe <member name> <skillLineID>"
-                )
-            end
+            )
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guildapi, /fdb guildrecipe <name> <skillLineID>, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb debug")
         end
     end
 end
