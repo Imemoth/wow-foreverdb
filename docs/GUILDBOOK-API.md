@@ -10,6 +10,37 @@ A future Guildbook can draw from two distinct sources:
 For WoW: Forever, the in-game route should be treated as the primary design until
 Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
+## Implemented capability probe
+
+Addon **0.3.2-alpha** includes a diagnostic-only probe:
+
+`/fdb guildapi`
+
+The probe:
+
+- does **not** write Guildbook data to SavedVariables;
+- does **not** upload guild data to Supabase;
+- reports whether the relevant guild/profession/recipe functions exist;
+- prints the logged-in character's professions when available;
+- prints a small cached guild-roster sample;
+- requests a roster refresh through `C_GuildInfo.GuildRoster()` or legacy `GuildRoster()`;
+- listens for `GUILD_ROSTER_UPDATE` and prints a refreshed sample;
+- times out after 12 seconds and falls back to the current roster cache.
+
+Recipe query functions are only checked for existence. The probe intentionally does
+not invoke recipe-query APIs because some require UI/query state and should be tested
+separately after the base capability matrix is known.
+
+### Test procedure
+
+1. Log in on a character that belongs to a guild.
+2. Run `/fdb guildapi`.
+3. Wait up to 12 seconds for the refreshed section.
+4. Capture the full chat output.
+5. Repeat on a character with professions if the first character has none.
+
+The output is the compatibility gate for the Guildbook SavedVariables schema.
+
 ## Candidate Guildbook data
 
 A useful first version could store:
