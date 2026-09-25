@@ -648,8 +648,8 @@ public partial class MainWindow : Window
                 Header = "Kind",
                 Binding =
                     new Binding(
-                        nameof(DetailLocation.LootKind)),
-                Width = 88
+                        nameof(DetailLocation.KindLabel)),
+                Width = 110
             });
 
         Grid.SetColumn(table, 0);
