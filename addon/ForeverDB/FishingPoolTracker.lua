@@ -111,32 +111,53 @@ local function syntheticPoolId(name, mapId)
     return -h
 end
 
-local function getWorldCursorGuid()
-    if C_TooltipInfo and C_TooltipInfo.GetWorldCursor then
-        local ok, data =
-            pcall(C_TooltipInfo.GetWorldCursor)
+local OBJECT_TOOLTIP_TYPE =
+    Enum
+    and Enum.TooltipDataType
+    and Enum.TooltipDataType.Object
+    or 4
 
-        if ok
-            and data
-            and isReadableString(data.guid) then
-            return data.guid
+local function getWorldCursorObjectGuid()
+    if not (C_TooltipInfo and C_TooltipInfo.GetWorldCursor) then
+        return nil, false
+    end
+
+    local ok, data =
+        pcall(C_TooltipInfo.GetWorldCursor)
+
+    if not ok or not data then
+        return nil, false
+    end
+
+    local dataType = data.type
+
+    if dataType ~= nil then
+        if isSecretValue(dataType) then
+            return nil, false
+        end
+
+        if dataType ~= OBJECT_TOOLTIP_TYPE then
+            return nil, false
         end
     end
 
-    local guid = UnitGUID and UnitGUID("npc")
+    local guid = data.guid
 
-    if not isReadableString(guid) then
-        return nil
+    if isReadableString(guid) then
+        local sourceType = FDB:ParseSourceGuid(guid)
+
+        if sourceType == "gameobject" then
+            return guid, true
+        end
     end
 
-    local sourceType = FDB:ParseSourceGuid(guid)
-
-    if sourceType == "gameobject" then
-        return guid
-    end
+    -- The structured tooltip itself still identifies a world Object even
+    -- when its GUID is absent or restricted. A readable pool name may still
+    -- be used to build a short-lived synthetic source ID.
+    return nil, dataType == OBJECT_TOOLTIP_TYPE
 end
 
-function FDB:RememberFishingPoolHover(name)
+function FDB:RememberFishingPoolHover(name, worldCursorGuid)
     local restrictedName =
         type(name) == "string"
         and isSecretValue(name)
@@ -146,7 +167,7 @@ function FDB:RememberFishingPoolHover(name)
         return
     end
 
-    local guid = getWorldCursorGuid()
+    local guid = worldCursorGuid
     local sourceType, sourceId = self:ParseSourceGuid(guid)
 
     -- Forever 1.60.1 can expose world-tooltip text as a Secret Value on a
@@ -274,8 +295,15 @@ function FDB:InitializeFishingPoolTracker()
         GameTooltip:HookScript(
             "OnShow",
             function(tooltip)
+                local guid, isWorldObject =
+                    getWorldCursorObjectGuid()
+
+                if not isWorldObject then
+                    return
+                end
+
                 local name = getTooltipFirstLine(tooltip)
-                FDB:RememberFishingPoolHover(name)
+                FDB:RememberFishingPoolHover(name, guid)
             end
         )
 
@@ -294,8 +322,15 @@ function FDB:InitializeFishingPoolTracker()
 
                 tooltipElapsed = 0
 
+                local guid, isWorldObject =
+                    getWorldCursorObjectGuid()
+
+                if not isWorldObject then
+                    return
+                end
+
                 local name = getTooltipFirstLine(tooltip)
-                FDB:RememberFishingPoolHover(name)
+                FDB:RememberFishingPoolHover(name, guid)
             end
         )
     end
