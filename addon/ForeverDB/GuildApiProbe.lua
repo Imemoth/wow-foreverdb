@@ -4,6 +4,9 @@ local PREFIX = "|cff7dd3fcForeverDB|r"
 local probeFrame
 local probePending = false
 local probeGeneration = 0
+local tradeSkillProbePending = false
+local tradeSkillGeneration = 0
+local tradeSkillsToRecollapse = {}
 
 local function availability(label, value)
     local ok = type(value) == "function"
@@ -161,11 +164,11 @@ local function printRosterSnapshot(label)
     end
 end
 
-local function printGuildTradeSkillSnapshot()
+local function printGuildTradeSkillSnapshot(label, memberOnly)
     if type(GetNumGuildTradeSkill) ~= "function"
         or type(GetGuildTradeSkillInfo) ~= "function" then
-        print(PREFIX, "guildapi: guild tradeskill rows: API unavailable")
-        return
+        print(PREFIX, "guildapi:", label, "guild tradeskill rows: API unavailable")
+        return 0
     end
 
     local ok, count = safeCall(
@@ -174,43 +177,77 @@ local function printGuildTradeSkillSnapshot()
     )
 
     if not ok then
-        return
+        return 0
     end
 
     count = tonumber(count) or 0
-    print(PREFIX, "guildapi: guild tradeskill rows=" .. tostring(count))
+    print(
+        PREFIX,
+        "guildapi:",
+        label,
+        "guild tradeskill rows=" .. tostring(count)
+    )
 
     if count <= 0 then
         print(
             PREFIX,
             "guildapi: zero rows can mean unsupported API OR an unpopulated guild-profession cache"
         )
-        return
+        return 0
     end
 
     local shown = 0
+    local memberRows = 0
+    local currentHeader = "?"
 
-    for index = 1, math.min(count, 12) do
+    for index = 1, count do
         local result = { pcall(GetGuildTradeSkillInfo, index) }
         local rowOk = table.remove(result, 1)
 
         if rowOk then
             local skillId = result[1]
+            local isCollapsed = result[2]
             local headerName = result[4]
+            local numOnline = result[5]
+            local numVisible = result[6]
+            local numPlayers = result[7]
             local playerName = result[8]
             local online = result[11]
+            local zone = result[12]
             local skill = result[13]
 
-            if headerName or playerName then
-                print(
-                    PREFIX,
-                    "guildapi: tradeskill[" .. tostring(index) .. "]:",
-                    headerName and ("header=" .. tostring(headerName)) or ("player=" .. tostring(playerName)),
-                    "skillID=" .. tostring(skillId or "?"),
-                    playerName and ("skill=" .. tostring(skill or "?")) or "",
-                    playerName and ("online=" .. tostring(online and true or false)) or ""
-                )
-                shown = shown + 1
+            if headerName then
+                currentHeader = tostring(headerName)
+
+                if not memberOnly and shown < 10 then
+                    print(
+                        PREFIX,
+                        "guildapi: tradeskill[" .. tostring(index) .. "]:",
+                        "header=" .. currentHeader,
+                        "skillID=" .. tostring(skillId or "?"),
+                        "collapsed=" .. tostring(isCollapsed and true or false),
+                        "players=" .. tostring(numPlayers or "?"),
+                        "visible=" .. tostring(numVisible or "?"),
+                        "online=" .. tostring(numOnline or "?")
+                    )
+                    shown = shown + 1
+                end
+            elseif playerName then
+                memberRows = memberRows + 1
+
+                if shown < 12 then
+                    print(
+                        PREFIX,
+                        "guildapi: tradeskill-member[" .. tostring(index) .. "]:",
+                        tostring(playerName),
+                        "profession=" .. currentHeader,
+                        "skillID=" .. tostring(skillId or "?"),
+                        "skill=" .. tostring(skill or "?"),
+                        "online=" .. tostring(online and true or false),
+                        "zone=" .. tostring(zone or "?")
+                    )
+                    shown = shown + 1
+                end
             end
         else
             print(
@@ -219,10 +256,134 @@ local function printGuildTradeSkillSnapshot()
                 tostring(result[1])
             )
         end
+    end
 
-        if shown >= 5 then
-            break
+    print(
+        PREFIX,
+        "guildapi:",
+        label,
+        "guild tradeskill member rows=" .. tostring(memberRows)
+    )
+
+    return memberRows
+end
+
+local function finishGuildTradeSkillProbe(reason)
+    if not tradeSkillProbePending then
+        return
+    end
+
+    tradeSkillProbePending = false
+
+    if probeFrame then
+        probeFrame:UnregisterEvent("GUILD_TRADESKILL_UPDATE")
+    end
+
+    print(PREFIX, "guildapi: tradeskill refresh:", reason)
+    local memberRows =
+        printGuildTradeSkillSnapshot("expanded", true)
+
+    for _, skillId in ipairs(tradeSkillsToRecollapse) do
+        if type(CollapseGuildTradeSkillHeader) == "function" then
+            pcall(CollapseGuildTradeSkillHeader, skillId)
         end
+    end
+
+    tradeSkillsToRecollapse = {}
+
+    if memberRows > 0 then
+        print(
+            PREFIX,
+            "guildapi: guild member profession rows PASS; recipe probe is the next gate"
+        )
+    else
+        print(
+            PREFIX,
+            "guildapi: no member profession rows after expansion; recipe/member query needs separate probing"
+        )
+    end
+
+    print(PREFIX, "guildapi: probe complete; nothing was saved or uploaded")
+end
+
+local function startGuildTradeSkillProbe()
+    print(PREFIX, "guildapi: starting expanded guild tradeskill probe")
+
+    if type(QueryGuildRecipes) == "function" then
+        local ok, err = pcall(QueryGuildRecipes)
+        print(
+            PREFIX,
+            "guildapi: QueryGuildRecipes request=" .. tostring(ok),
+            ok and "" or tostring(err)
+        )
+    end
+
+    if type(ExpandGuildTradeSkillHeader) ~= "function"
+        or type(GetNumGuildTradeSkill) ~= "function"
+        or type(GetGuildTradeSkillInfo) ~= "function" then
+        print(PREFIX, "guildapi: header expansion API unavailable")
+        print(PREFIX, "guildapi: probe complete; nothing was saved or uploaded")
+        return
+    end
+
+    tradeSkillsToRecollapse = {}
+
+    local count = tonumber(GetNumGuildTradeSkill()) or 0
+
+    for index = 1, count do
+        local result = { pcall(GetGuildTradeSkillInfo, index) }
+        local ok = table.remove(result, 1)
+
+        if ok then
+            local skillId = result[1]
+            local isCollapsed = result[2]
+            local headerName = result[4]
+
+            if headerName
+                and skillId
+                and isCollapsed then
+                local expanded =
+                    pcall(
+                        ExpandGuildTradeSkillHeader,
+                        skillId
+                    )
+
+                if expanded then
+                    tradeSkillsToRecollapse[#tradeSkillsToRecollapse + 1] =
+                        skillId
+                end
+            end
+        end
+    end
+
+    print(
+        PREFIX,
+        "guildapi: expanded profession headers=" ..
+        tostring(#tradeSkillsToRecollapse)
+    )
+
+    tradeSkillGeneration = tradeSkillGeneration + 1
+    local generation = tradeSkillGeneration
+    tradeSkillProbePending = true
+
+    if probeFrame then
+        probeFrame:RegisterEvent("GUILD_TRADESKILL_UPDATE")
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            2,
+            function()
+                if tradeSkillProbePending
+                    and generation == tradeSkillGeneration then
+                    finishGuildTradeSkillProbe(
+                        "timeout; reading expanded cache"
+                    )
+                end
+            end
+        )
+    else
+        finishGuildTradeSkillProbe("timer API unavailable")
     end
 end
 
@@ -239,8 +400,8 @@ local function finishProbe(reason)
 
     print(PREFIX, "guildapi: roster refresh:", reason)
     printRosterSnapshot("refreshed")
-    printGuildTradeSkillSnapshot()
-    print(PREFIX, "guildapi: probe complete; nothing was saved or uploaded")
+    printGuildTradeSkillSnapshot("collapsed", false)
+    startGuildTradeSkillProbe()
 end
 
 function FDB:InitializeGuildApiProbe()
@@ -254,6 +415,11 @@ function FDB:InitializeGuildApiProbe()
         function(_, event)
             if event == "GUILD_ROSTER_UPDATE" and probePending then
                 finishProbe("GUILD_ROSTER_UPDATE received")
+            elseif event == "GUILD_TRADESKILL_UPDATE"
+                and tradeSkillProbePending then
+                finishGuildTradeSkillProbe(
+                    "GUILD_TRADESKILL_UPDATE received"
+                )
             end
         end
     )
@@ -278,6 +444,9 @@ function FDB:RunGuildApiProbe()
     availability("GetProfessionInfo", GetProfessionInfo)
     availability("GetNumGuildTradeSkill", GetNumGuildTradeSkill)
     availability("GetGuildTradeSkillInfo", GetGuildTradeSkillInfo)
+    availability("QueryGuildRecipes", QueryGuildRecipes)
+    availability("ExpandGuildTradeSkillHeader", ExpandGuildTradeSkillHeader)
+    availability("CollapseGuildTradeSkillHeader", CollapseGuildTradeSkillHeader)
     availability("GetGuildMemberRecipes", GetGuildMemberRecipes)
     availability("GetGuildRecipeMember", GetGuildRecipeMember)
     availability("CanViewGuildRecipes", CanViewGuildRecipes)
@@ -320,7 +489,7 @@ function FDB:RunGuildApiProbe()
     end
 
     printRosterSnapshot("cached")
-    printGuildTradeSkillSnapshot()
+    printGuildTradeSkillSnapshot("collapsed", false)
 
     if not inGuild then
         print(PREFIX, "guildapi: roster refresh skipped because the character is not in a guild")
