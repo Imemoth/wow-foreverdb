@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "6";
+    private const string ResolverVersion = "7";
 
     private static readonly ConcurrentDictionary<
         string,
@@ -785,7 +785,7 @@ public sealed class WowClientMapAssetProvider
         {
             candidates.Add(
                 (
-                    $"{cascRoot}*{expectedProduct}",
+                    $"{cascRoot}:{expectedProduct}",
                     expectedProduct
                 ));
         }
@@ -798,7 +798,7 @@ public sealed class WowClientMapAssetProvider
             {
                 candidates.Add(
                     (
-                        $"{cascRoot}*{product}",
+                        $"{cascRoot}:{product}",
                         product
                     ));
             }
