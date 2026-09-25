@@ -6,7 +6,7 @@ Observed loot, gathering, fishing, GameObject and disenchant database for World 
 
 | Component | Version |
 | --- | --- |
-| Addon | **0.3.1-alpha** |
+| Addon | **0.3.2-alpha** |
 | SavedVariables / export schema | **8** |
 | Forever interface target | **16001** |
 | Companion | **0.7.1-alpha** |
@@ -44,6 +44,7 @@ different chest/node types can be distinguished in the database.
 - `/fdb last`
 - `/fdb export`
 - `/fdb item <itemID or item link>`
+- `/fdb guildapi` — non-persistent Guildbook API capability probe
 - `/fdb debug`
 
 ## Repository
