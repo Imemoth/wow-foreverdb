@@ -22,7 +22,7 @@ polish and distribution work.
   - disenchant
 
 ### Companion
-- Version: **0.7.0-alpha**
+- Version: **0.7.1-alpha**
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -64,6 +64,12 @@ Acceptance:
 - navigation breadcrumb contains only the active navigation chain.
 
 Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
+
+### 0.7.1-alpha — UI polish
+
+- [x] Keep selected DataGrid rows readable after keyboard focus moves to the map.
+- [x] Prevent map toolbar / zoom text clipping at narrower widths.
+- [x] Replace raw location acquisition keys with user-facing labels.
 
 ## 0.7.x — Collector coverage closure
 
