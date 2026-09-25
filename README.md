@@ -6,7 +6,7 @@ Observed loot, gathering, fishing, GameObject and disenchant database for World 
 
 | Component | Version |
 | --- | --- |
-| Addon | **0.3.6-alpha** |
+| Addon | **0.3.7-alpha** |
 | SavedVariables / export schema | **8** |
 | Forever interface target | **16001** |
 | Companion | **0.7.1-alpha** |
@@ -44,8 +44,11 @@ different chest/node types can be distinguished in the database.
 - `/fdb last`
 - `/fdb export`
 - `/fdb item <itemID or item link>`
-- `/fdb guildapi` — non-persistent Guildbook API capability probe
-- `/fdb guildrecipe <member name> <skillLineID>` — targeted member-recipe + reverse crafter probe
+- `/fdb guild` — short alias for the non-persistent Guildbook capability probe
+- `/fdb recipe <profession>` — recipe probe for the current character
+- `/fdb recipe <member> <profession>` — targeted guild-member recipe/crafter probe
+- `/fdb gr ...` — short alias for `/fdb recipe ...`
+- legacy diagnostic aliases `/fdb guildapi` and `/fdb guildrecipe ...` remain supported
 - `/fdb debug`
 
 ## Repository
