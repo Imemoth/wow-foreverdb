@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.10-alpha**
+- Addon: **0.3.11-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -105,7 +105,7 @@ version contract and release checklist are documented in
 
 # Addon
 
-## 0.3.10-alpha — 2026-09-25
+## 0.3.11-alpha — 2026-09-25
 
 - Simplified Guildbook diagnostic commands.
 - Added `/fdb guild` as a short alias for `/fdb guildapi`.
