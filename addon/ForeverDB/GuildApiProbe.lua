@@ -1021,8 +1021,7 @@ function FDB:PrintGuildRecipeHelp()
     if type(GetNumGuildTradeSkill) == "function"
         and type(GetGuildTradeSkillInfo) == "function" then
         local count =
-            tonumber(GetNumGuildTradeSkill())
-            or 0
+            firstNumber(GetNumGuildTradeSkill)
 
         local names = {}
 
