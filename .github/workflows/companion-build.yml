@@ -19,12 +19,17 @@ jobs:
       - name: Restore
         run: dotnet restore companion/ForeverDB.Companion/ForeverDB.Companion.csproj
 
+      - name: Build current CascLib native
+        shell: pwsh
+        run: ./scripts/build-current-casclib.ps1
+
       - name: Publish x64
         run: >
           dotnet publish companion/ForeverDB.Companion/ForeverDB.Companion.csproj
           -c Release
           -r win-x64
           --self-contained true
+          --no-restore
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -o artifacts/ForeverDB-Companion-win-x64
