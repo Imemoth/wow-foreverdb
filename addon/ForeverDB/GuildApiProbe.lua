@@ -420,6 +420,7 @@ local function findGuildMemberGuid(memberName)
 
     local wanted = normalizeGuildName(memberName)
     local total = tonumber(GetNumGuildMembers()) or 0
+    local prefixMatches = {}
 
     for index = 1, total do
         local result = { pcall(GetGuildRosterInfo, index) }
@@ -430,11 +431,36 @@ local function findGuildMemberGuid(memberName)
             local guid = result[17]
 
             if type(rosterName) == "string"
-                and type(guid) == "string"
-                and normalizeGuildName(rosterName) == wanted then
-                return guid, rosterName
+                and type(guid) == "string" then
+                local normalized =
+                    normalizeGuildName(rosterName)
+
+                if normalized == wanted then
+                    return guid, rosterName
+                end
+
+                if wanted ~= ""
+                    and normalized:find(
+                        wanted,
+                        1,
+                        true
+                    ) == 1 then
+                    prefixMatches[#prefixMatches + 1] = {
+                        guid = guid,
+                        name = rosterName,
+                    }
+                end
             end
         end
+    end
+
+    if #prefixMatches == 1 then
+        return prefixMatches[1].guid,
+            prefixMatches[1].name
+    end
+
+    if #prefixMatches > 1 then
+        return nil, nil, "ambiguous"
     end
 end
 
@@ -637,6 +663,182 @@ local function handleMemberTradeSkillShow()
     end
 end
 
+local PROFESSION_ALIASES = {
+    alch = "alchemy",
+    bs = "blacksmithing",
+    ench = "enchanting",
+    eng = "engineering",
+    herb = "herbalism",
+    lw = "leatherworking",
+    mine = "mining",
+    skin = "skinning",
+    tailor = "tailoring",
+}
+
+local function resolveGuildSkillLine(value)
+    if value == nil then
+        return nil
+    end
+
+    local numeric = tonumber(value)
+    if numeric then
+        return numeric
+    end
+
+    local wanted =
+        string.lower(
+            tostring(value)
+        )
+
+    wanted =
+        PROFESSION_ALIASES[wanted]
+        or wanted
+
+    if type(GetNumGuildTradeSkill) ~= "function"
+        or type(GetGuildTradeSkillInfo) ~= "function" then
+        return nil
+    end
+
+    local count =
+        tonumber(GetNumGuildTradeSkill())
+        or 0
+
+    for index = 1, count do
+        local result = { pcall(GetGuildTradeSkillInfo, index) }
+        local ok = table.remove(result, 1)
+
+        if ok then
+            local skillId = result[1]
+            local headerName = result[4]
+
+            if skillId
+                and type(headerName) == "string"
+                and string.lower(headerName) == wanted then
+                return tonumber(skillId), headerName
+            end
+        end
+    end
+end
+
+function FDB:PrintGuildRecipeHelp()
+    print(PREFIX, "recipe usage:")
+    print(PREFIX, "/fdb recipe <profession>  - current character")
+    print(PREFIX, "/fdb recipe <member> <profession>")
+    print(PREFIX, "profession may be a name, alias or skillLineID")
+    print(PREFIX, "aliases: alch, bs, ench, eng, herb, lw, mine, skin, tailor")
+
+    if type(GetNumGuildTradeSkill) == "function"
+        and type(GetGuildTradeSkillInfo) == "function" then
+        local count =
+            tonumber(GetNumGuildTradeSkill())
+            or 0
+
+        local names = {}
+
+        for index = 1, count do
+            local result = { pcall(GetGuildTradeSkillInfo, index) }
+            local ok = table.remove(result, 1)
+
+            if ok then
+                local skillId = result[1]
+                local headerName = result[4]
+
+                if skillId
+                    and type(headerName) == "string" then
+                    names[#names + 1] =
+                        headerName ..
+                        "=" ..
+                        tostring(skillId)
+                end
+            end
+        end
+
+        if #names > 0 then
+            print(
+                PREFIX,
+                "guild professions:",
+                table.concat(
+                    names,
+                    ", "
+                )
+            )
+        end
+    end
+end
+
+function FDB:RunGuildRecipeCommand(argument)
+    argument =
+        type(argument) == "string"
+        and argument:match("^%s*(.-)%s*$")
+        or ""
+
+    if argument == "" then
+        self:PrintGuildRecipeHelp()
+        return
+    end
+
+    local memberName
+    local professionValue
+
+    -- A single argument targets the logged-in character:
+    -- /fdb recipe alch
+    -- /fdb recipe 171
+    if not argument:find("%s") then
+        memberName =
+            UnitName
+            and UnitName("player")
+            or nil
+        professionValue = argument
+    else
+        -- With multiple words, the last token is the profession and everything
+        -- before it is the member name:
+        -- /fdb recipe Vesti Stormchaser alch
+        -- /fdb recipe Vesti Stormchaser 171
+        memberName, professionValue =
+            argument:match("^(.-)%s+(%S+)$")
+    end
+
+    if not memberName
+        or memberName == ""
+        or not professionValue then
+        self:PrintGuildRecipeHelp()
+        return
+    end
+
+    local skillLineID, canonicalProfession =
+        resolveGuildSkillLine(
+            professionValue
+        )
+
+    if not skillLineID then
+        print(
+            PREFIX,
+            "guildrecipe: unknown profession:",
+            tostring(professionValue)
+        )
+        self:PrintGuildRecipeHelp()
+        return
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe:",
+        tostring(memberName),
+        "profession=" ..
+        tostring(
+            canonicalProfession
+            or professionValue
+        ),
+        "skillLine=" ..
+        tostring(skillLineID)
+    )
+
+    self:RunGuildRecipeProbe(
+        memberName,
+        skillLineID
+    )
+end
+
 function FDB:RunGuildRecipeProbe(memberName, skillLineID)
     self:InitializeGuildApiProbe()
 
@@ -656,11 +858,23 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
         return
     end
 
-    local guid, canonicalName =
+    local guid, canonicalName, lookupError =
         findGuildMemberGuid(memberName)
 
     if not guid then
-        print(PREFIX, "guildrecipe: guild member not found:", memberName)
+        if lookupError == "ambiguous" then
+            print(
+                PREFIX,
+                "guildrecipe: member prefix is ambiguous; type a few more letters:",
+                memberName
+            )
+        else
+            print(
+                PREFIX,
+                "guildrecipe: guild member not found:",
+                memberName
+            )
+        end
         return
     end
 
