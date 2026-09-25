@@ -1,11 +1,19 @@
 # WoW ForeverDB
 
-Observed loot, gathering and skinning database for World of Warcraft: Forever.
+Observed loot, gathering, fishing, GameObject and disenchant database for World of Warcraft: Forever, with an in-game collector and a Windows Companion application.
 
-## Collector alpha
+## Current versions
 
-Current addon version: **0.3.1-alpha**  
-Forever interface target: **16001**
+| Component | Version |
+| --- | --- |
+| Addon | **0.3.1-alpha** |
+| SavedVariables / export schema | **8** |
+| Forever interface target | **16001** |
+| Companion | **0.7.0-alpha** |
+
+Version sources and release rules are documented in [docs/VERSIONING.md](docs/VERSIONING.md). Release history is kept in [CHANGELOG.md](CHANGELOG.md).
+
+## Addon collector
 
 The collector distinguishes two dimensions:
 
@@ -15,7 +23,9 @@ The collector distinguishes two dimensions:
    - mining GameObject
    - herbalism GameObject
    - fishing, split by zone / uiMapID
+   - fishing pools
    - chest/container GameObject
+   - disenchant item source
    - other GameObject
 
 2. **Looted item metadata**
@@ -33,15 +43,17 @@ different chest/node types can be distinguished in the database.
 - `/fdb status`
 - `/fdb last`
 - `/fdb export`
+- `/fdb item <itemID or item link>`
 - `/fdb debug`
 
 ## Repository
 
 - `addon/ForeverDB/` - in-game collector
+- `companion/ForeverDB.Companion/` - Windows Companion
 - `database/migrations/` - Supabase/PostgreSQL schema
-- `scripts/` - update/sync tooling
-- `docs/` - beta test notes, data contract and [development roadmap](docs/ROADMAP.md)
-
+- `installer/` - Companion installer definition
+- `scripts/` - development/build tooling
+- `docs/` - data contract, sync/map architecture, acceptance notes and [development roadmap](docs/ROADMAP.md)
 
 ## Item tooltips
 
@@ -60,7 +72,6 @@ For the full local list use:
 
 `/fdb item <itemID or item link>`
 
-
 ## Creature level separation
 
 Creature loot is keyed by **NPC ID + exact creature level**. A level 6 and
@@ -70,7 +81,6 @@ their drop counts are never merged.
 Historical observations collected before schema 5 cannot be reconstructed by
 level and are retained under `Lvl ?` / source level 0. New observations never
 write into that historical bucket.
-
 
 ## Fishing zone separation
 
@@ -91,7 +101,6 @@ level 6 and level 7 Greater Duskbat can appear as separate Top-source rows.
 Historical `Lvl ?` creature rows are hidden once exact-level observations for
 that NPC/item exist, avoiding duplicate-looking aggregated legacy data.
 
-
 ## Location observations
 
 Every observed loot source can also record location metadata in the background:
@@ -103,6 +112,6 @@ Every observed loot source can also record location metadata in the background:
 
 Coordinates are quantized to a 0.5% map grid and aggregated with observation
 counts. This keeps SavedVariables compact while preserving enough resolution
-for later zone maps and heatmaps.
+for zone maps and heatmaps.
 
 Location data is not shown in normal in-game tooltips.

@@ -1,15 +1,15 @@
 # ForeverDB Roadmap
 
 ForeverDB is developed in small, testable milestones. The roadmap is intentionally
-ordered so that data correctness and local WoW-client compatibility stay ahead of
+ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
 ## Current baseline
 
 ### Addon
-- Version: 0.3.1-alpha
-- Schema: 8
-- Forever interface: 16001
+- Version: **0.3.1-alpha**
+- Schema: **8**
+- Forever interface: **16001**
 - Observed pipelines:
   - mob loot
   - skinning
@@ -22,23 +22,25 @@ polish and distribution work.
   - disenchant
 
 ### Companion
-- Version: 0.6.9-alpha
+- Version: **0.7.0-alpha**
 - Authenticated Supabase sync
 - Item/source search and detail navigation
-- Location tables
-- Native Forever map rendering from local WoW CASC FileDataIDs
+- Multi-zone location browsing
+- Native Forever map rendering from WoW CASC FileDataIDs
+- Local-first CASC with exact-build Blizzard CDN fallback for streamed tiles
 - Marker / cluster / heatmap overlays
-- Persistent local map cache
+- Persistent map metadata, resolution and PNG caches
 - Sanitized map-resolution diagnostics
+- Background map pre-warming for recently synced zones
 
 Map asset pipeline acceptance status:
 - Tirisfal Glades: PASS, 12/12 tiles
 - Silverpine Forest: PASS, 12/12 tiles
-- Source: wow_classic_beta / FileDataID
+- Validated product/source: `wow_classic_beta` / FileDataID
 
 ## 0.7.0-alpha — Map UX & location intelligence
 
-Implementation status: **complete; build/runtime acceptance pending.**
+Implementation status: **complete; current-build runtime acceptance in progress.**
 
 Goal: turn the working map renderer into a practical Gatherer/Wowhead-style
 location browser.
@@ -61,6 +63,8 @@ Acceptance:
 - normal map revisit is effectively instant from cache;
 - navigation breadcrumb contains only the active navigation chain.
 
+Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
+
 ## 0.7.x — Collector coverage closure
 
 - [ ] Herbalism E2E test and fixes.
@@ -79,14 +83,14 @@ Acceptance:
 - [ ] Startup/tray behavior final pass.
 - [ ] Code-signing plan.
 - [ ] Auto-update design.
-- [ ] Retire obsolete shared-token sync tooling.
+- [ ] Remove obsolete legacy sync scripts/config after compatibility cleanup.
 - [ ] Remove/restrict legacy public stats view after compatibility validation.
 
 ## 0.9 — Farming intelligence
 
 - [ ] “Where should I farm this?” view.
 - [ ] Combine observed rate, sample quality and location density.
-- [ ] Per-zone source comparison without arbitrary winner labels.
+- [ ] Per-zone source comparison.
 - [ ] Route-friendly node density summaries.
 - [ ] Source/location filters by acquisition type.
 - [ ] Data-quality/confidence visualization.
@@ -104,7 +108,8 @@ Acceptance:
 ## Engineering rules
 
 1. The addon never performs HTTP.
-2. Blizzard/WoW artwork is read from the user's own client and cached locally;
+2. Blizzard/WoW artwork is resolved from the user's exact WoW build. Local CASC is
+   preferred; streamed files may be fetched from Blizzard's CDN and cached locally.
    ForeverDB does not redistribute map textures through Supabase.
 3. Supabase stores observations/statistics/metadata, not copyrighted client art.
 4. New map/resolver behavior must keep structured diagnostics until the pipeline is
