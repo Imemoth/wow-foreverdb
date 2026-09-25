@@ -1,5 +1,5 @@
 #define MyAppName "ForeverDB Companion"
-#define MyAppVersion "0.6.8-alpha"
+#define MyAppVersion "0.6.9-alpha"
 #define MyAppPublisher "ForeverDB"
 #define MyAppExeName "ForeverDB.Companion.exe"
 
