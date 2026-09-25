@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.1-alpha**
+- Addon: **0.3.2-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,14 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.2-alpha — 2026-09-25
+
+- Added the non-persistent `/fdb guildapi` Guildbook capability probe.
+- Reports availability of guild roster, profession and guild-recipe APIs.
+- Samples the current character's professions and cached/refreshed guild roster without storing or uploading guild data.
+- Requests a guild roster refresh and listens for `GUILD_ROSTER_UPDATE` with a timeout fallback.
+- Export schema remains **8** because the probe does not change SavedVariables/export data.
 
 ## 0.3.1-alpha — 2026-09-24
 
