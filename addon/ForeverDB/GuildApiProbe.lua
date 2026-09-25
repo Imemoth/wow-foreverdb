@@ -11,6 +11,7 @@ local recipeProbePending = false
 local recipeProbeGeneration = 0
 local recipeTarget
 local reverseRecipeQueryPending = false
+local legacyRecipeFallbackPending = false
 
 local function availability(label, value)
     local ok = type(value) == "function"
@@ -464,6 +465,188 @@ local function findGuildMemberGuid(memberName)
     end
 end
 
+local function findGuildMemberNameByGuid(guid)
+    if type(guid) ~= "string"
+        or type(GetNumGuildMembers) ~= "function"
+        or type(GetGuildRosterInfo) ~= "function" then
+        return nil
+    end
+
+    local total = tonumber(GetNumGuildMembers()) or 0
+
+    for index = 1, total do
+        local result = { pcall(GetGuildRosterInfo, index) }
+        local ok = table.remove(result, 1)
+
+        if ok
+            and result[17] == guid
+            and type(result[1]) == "string" then
+            return result[1]
+        end
+    end
+end
+
+local function describeCallResult(label, result)
+    local ok = table.remove(result, 1)
+
+    if not ok then
+        print(
+            PREFIX,
+            "guildrecipe:",
+            label,
+            "ERROR",
+            tostring(result[1])
+        )
+        return false
+    end
+
+    if #result == 0 then
+        print(
+            PREFIX,
+            "guildrecipe:",
+            label,
+            "OK (no return values)"
+        )
+        return true
+    end
+
+    local values = {}
+
+    for index = 1, math.min(#result, 8) do
+        values[#values + 1] =
+            tostring(result[index])
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe:",
+        label,
+        "OK returns=" .. tostring(#result),
+        table.concat(values, ", ")
+    )
+
+    return true
+end
+
+local function finishLegacyGuildRecipeFallback()
+    if not legacyRecipeFallbackPending
+        or not recipeTarget then
+        return
+    end
+
+    legacyRecipeFallbackPending = false
+    recipeProbePending = false
+
+    local skillLineID = recipeTarget.skillLineID
+    local canView
+
+    if type(CanViewGuildRecipes) == "function" then
+        local result = { pcall(CanViewGuildRecipes, skillLineID) }
+        local ok = table.remove(result, 1)
+
+        if ok then
+            canView = result[1]
+            print(
+                PREFIX,
+                "guildrecipe: CanViewGuildRecipes(" ..
+                tostring(skillLineID) ..
+                ")=" ..
+                tostring(canView and true or false)
+            )
+        else
+            print(
+                PREFIX,
+                "guildrecipe: CanViewGuildRecipes ERROR",
+                tostring(result[1])
+            )
+        end
+    end
+
+    if canView
+        and type(ViewGuildRecipes) == "function" then
+        local result = {
+            pcall(
+                ViewGuildRecipes,
+                skillLineID
+            )
+        }
+
+        describeCallResult(
+            "ViewGuildRecipes",
+            result
+        )
+    else
+        print(
+            PREFIX,
+            "guildrecipe: ViewGuildRecipes skipped; guild recipe cache is not viewable for this skillLine"
+        )
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe: legacy fallback complete; send this output back for the next compatibility step"
+    )
+end
+
+local function startLegacyGuildRecipeFallback()
+    if not recipeTarget then
+        return
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe: modern member query did not raise TRADE_SKILL_SHOW; trying legacy guild recipe APIs"
+    )
+
+    legacyRecipeFallbackPending = true
+
+    local memberName =
+        recipeTarget.rosterName
+        or recipeTarget.name
+
+    if type(GetGuildMemberRecipes) == "function" then
+        local result = {
+            pcall(
+                GetGuildMemberRecipes,
+                memberName,
+                recipeTarget.skillLineID
+            )
+        }
+
+        describeCallResult(
+            "GetGuildMemberRecipes(" ..
+            tostring(memberName) ..
+            ", " ..
+            tostring(recipeTarget.skillLineID) ..
+            ")",
+            result
+        )
+    else
+        print(
+            PREFIX,
+            "guildrecipe: GetGuildMemberRecipes unavailable"
+        )
+    end
+
+    if type(QueryGuildRecipes) == "function" then
+        local result = { pcall(QueryGuildRecipes) }
+
+        describeCallResult(
+            "QueryGuildRecipes",
+            result
+        )
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            1,
+            finishLegacyGuildRecipeFallback
+        )
+    else
+        finishLegacyGuildRecipeFallback()
+    end
+end
+
 local function finishReverseRecipeQuery(reason)
     if not reverseRecipeQueryPending then
         return
@@ -471,6 +654,7 @@ local function finishReverseRecipeQuery(reason)
 
     reverseRecipeQueryPending = false
     recipeProbePending = false
+    legacyRecipeFallbackPending = false
 
     if probeFrame then
         probeFrame:UnregisterEvent("GUILD_RECIPE_KNOWN_BY_MEMBERS")
@@ -963,9 +1147,14 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
     recipeProbeGeneration = recipeProbeGeneration + 1
     recipeProbePending = true
     reverseRecipeQueryPending = false
+    legacyRecipeFallbackPending = false
+
+    local rosterName =
+        findGuildMemberNameByGuid(guid)
 
     recipeTarget = {
         name = canonicalName or memberName,
+        rosterName = rosterName,
         guid = guid,
         skillLineID = skillLineID,
     }
@@ -1009,9 +1198,9 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
                 if recipeProbePending
                     and generation == recipeProbeGeneration
                     and not reverseRecipeQueryPending then
-                    recipeProbePending = false
                     probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
                     print(PREFIX, "guildrecipe: timeout waiting for TRADE_SKILL_SHOW")
+                    startLegacyGuildRecipeFallback()
                 end
             end
         )
@@ -1087,6 +1276,8 @@ function FDB:RunGuildApiProbe()
     availability("ExpandGuildTradeSkillHeader", ExpandGuildTradeSkillHeader)
     availability("CollapseGuildTradeSkillHeader", CollapseGuildTradeSkillHeader)
     availability("GetGuildMemberRecipes", GetGuildMemberRecipes)
+    availability("ViewGuildRecipes", ViewGuildRecipes)
+    availability("CanViewGuildRecipes", CanViewGuildRecipes)
     availability("GetGuildRecipeMember", GetGuildRecipeMember)
     availability("CanViewGuildRecipes", CanViewGuildRecipes)
     namespaceAvailability(
