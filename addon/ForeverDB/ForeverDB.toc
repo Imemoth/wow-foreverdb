@@ -2,7 +2,7 @@
 ## Title: ForeverDB
 ## Notes: Observed loot, gathering, fishing pool, skinning and disenchant tracker for World of Warcraft: Forever
 ## Author: Imemoth
-## Version: 0.3.9-alpha
+## Version: 0.3.10-alpha
 ## SavedVariables: ForeverDB_Saved, ForeverDB_Export
 
 Core.lua
