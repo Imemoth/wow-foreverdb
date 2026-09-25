@@ -83,50 +83,32 @@ internal sealed class NativeCascMapReader : IDisposable
         string product,
         string region,
         string buildKey,
-        string label)
+        string label,
+        out int errorCode)
     {
+        errorCode = 0;
         Directory.CreateDirectory(cachePath);
-
-        IntPtr localPathPtr = IntPtr.Zero;
-        IntPtr productPtr = IntPtr.Zero;
-        IntPtr regionPtr = IntPtr.Zero;
-        IntPtr buildKeyPtr = IntPtr.Zero;
 
         try
         {
-            localPathPtr =
-                Marshal.StringToCoTaskMemUTF8(
-                    cachePath);
-
-            productPtr =
-                Marshal.StringToCoTaskMemUTF8(
-                    product);
-
-            regionPtr =
-                Marshal.StringToCoTaskMemUTF8(
-                    region);
-
-            buildKeyPtr =
-                Marshal.StringToCoTaskMemUTF8(
-                    buildKey);
-
             var args =
                 new CascOpenStorageArgs
                 {
                     Size =
                         (UIntPtr)Marshal.SizeOf<
                             CascOpenStorageArgs>(),
-                    LocalPath = localPathPtr,
-                    CodeName = productPtr,
-                    Region = regionPtr,
-                    LocaleMask = 0,
                     Flags =
-                        CascFeatureAllowDownload,
-                    BuildKey = buildKeyPtr
+                        CascFeatureAllowDownload
                 };
 
+            // CascLib's current parameter separator is '*'.
+            // ParseOpenParams accepts:
+            // local_cache_path*code_name*region*build_key
+            var parameters =
+                $"{cachePath}*{product}*{region}*{buildKey}";
+
             if (NativeMethods.CascOpenStorageEx(
-                    IntPtr.Zero,
+                    parameters,
                     ref args,
                     true,
                     out var storage) &&
@@ -136,6 +118,29 @@ internal sealed class NativeCascMapReader : IDisposable
                     storage,
                     label);
             }
+
+            errorCode =
+                Marshal.GetLastWin32Error();
+
+            // Fallback to CascLib's simpler online-storage entrypoint.
+            var simpleParameters =
+                $"{cachePath}*{product}*{region}";
+
+            if (NativeMethods.CascOpenOnlineStorage(
+                    simpleParameters,
+                    0,
+                    out storage) &&
+                storage != IntPtr.Zero)
+            {
+                errorCode = 0;
+
+                return new NativeCascMapReader(
+                    storage,
+                    label + ":latest");
+            }
+
+            errorCode =
+                Marshal.GetLastWin32Error();
         }
         catch (DllNotFoundException)
         {
@@ -147,32 +152,8 @@ internal sealed class NativeCascMapReader : IDisposable
         }
         catch
         {
-        }
-        finally
-        {
-            if (localPathPtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(
-                    localPathPtr);
-            }
-
-            if (productPtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(
-                    productPtr);
-            }
-
-            if (regionPtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(
-                    regionPtr);
-            }
-
-            if (buildKeyPtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(
-                    buildKeyPtr);
-            }
+            errorCode =
+                Marshal.GetLastWin32Error();
         }
 
         return null;
@@ -354,12 +335,24 @@ internal sealed class NativeCascMapReader : IDisposable
         [DllImport(
             DllName,
             EntryPoint = "CascOpenStorageEx",
-            SetLastError = true)]
+            SetLastError = true,
+            CharSet = CharSet.Ansi)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool CascOpenStorageEx(
-            IntPtr parameters,
+            string parameters,
             ref CascOpenStorageArgs args,
             [MarshalAs(UnmanagedType.I1)] bool onlineStorage,
+            out IntPtr storage);
+
+        [DllImport(
+            DllName,
+            EntryPoint = "CascOpenOnlineStorage",
+            SetLastError = true,
+            CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool CascOpenOnlineStorage(
+            string parameters,
+            uint localeMask,
             out IntPtr storage);
 
         [DllImport(
