@@ -7,6 +7,10 @@ local probeGeneration = 0
 local tradeSkillProbePending = false
 local tradeSkillGeneration = 0
 local tradeSkillsToRecollapse = {}
+local recipeProbePending = false
+local recipeProbeGeneration = 0
+local recipeTarget
+local reverseRecipeQueryPending = false
 
 local function availability(label, value)
     local ok = type(value) == "function"
@@ -329,7 +333,11 @@ local function startGuildTradeSkillProbe()
     tradeSkillsToRecollapse = {}
 
     local count = tonumber(GetNumGuildTradeSkill()) or 0
+    local collapsedSkillIds = {}
 
+    -- First snapshot the collapsed headers. Expanding a header mutates the
+    -- guild tradeskill list, so expanding while iterating its indexes skips
+    -- later headers.
     for index = 1, count do
         local result = { pcall(GetGuildTradeSkillInfo, index) }
         local ok = table.remove(result, 1)
@@ -342,17 +350,22 @@ local function startGuildTradeSkillProbe()
             if headerName
                 and skillId
                 and isCollapsed then
-                local expanded =
-                    pcall(
-                        ExpandGuildTradeSkillHeader,
-                        skillId
-                    )
-
-                if expanded then
-                    tradeSkillsToRecollapse[#tradeSkillsToRecollapse + 1] =
-                        skillId
-                end
+                collapsedSkillIds[#collapsedSkillIds + 1] =
+                    skillId
             end
+        end
+    end
+
+    for _, skillId in ipairs(collapsedSkillIds) do
+        local expanded =
+            pcall(
+                ExpandGuildTradeSkillHeader,
+                skillId
+            )
+
+        if expanded then
+            tradeSkillsToRecollapse[#tradeSkillsToRecollapse + 1] =
+                skillId
         end
     end
 
@@ -384,6 +397,328 @@ local function startGuildTradeSkillProbe()
         )
     else
         finishGuildTradeSkillProbe("timer API unavailable")
+    end
+end
+
+local function normalizeGuildName(name)
+    if type(name) ~= "string" then
+        return ""
+    end
+
+    local short =
+        name:match("^([^%-]+)")
+        or name
+
+    return string.lower(short)
+end
+
+local function findGuildMemberGuid(memberName)
+    if type(GetNumGuildMembers) ~= "function"
+        or type(GetGuildRosterInfo) ~= "function" then
+        return nil
+    end
+
+    local wanted = normalizeGuildName(memberName)
+    local total = tonumber(GetNumGuildMembers()) or 0
+
+    for index = 1, total do
+        local result = { pcall(GetGuildRosterInfo, index) }
+        local ok = table.remove(result, 1)
+
+        if ok then
+            local rosterName = result[1]
+            local guid = result[17]
+
+            if type(rosterName) == "string"
+                and type(guid) == "string"
+                and normalizeGuildName(rosterName) == wanted then
+                return guid, rosterName
+            end
+        end
+    end
+end
+
+local function finishReverseRecipeQuery(reason)
+    if not reverseRecipeQueryPending then
+        return
+    end
+
+    reverseRecipeQueryPending = false
+    recipeProbePending = false
+
+    if probeFrame then
+        probeFrame:UnregisterEvent("GUILD_RECIPE_KNOWN_BY_MEMBERS")
+        probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+    end
+
+    print(PREFIX, "guildrecipe: reverse query:", reason)
+
+    if type(GetGuildRecipeInfoPostQuery) ~= "function"
+        or type(GetGuildRecipeMember) ~= "function" then
+        print(PREFIX, "guildrecipe: post-query API unavailable")
+        return
+    end
+
+    local info = { pcall(GetGuildRecipeInfoPostQuery) }
+    local ok = table.remove(info, 1)
+
+    if not ok then
+        print(PREFIX, "guildrecipe: GetGuildRecipeInfoPostQuery ERROR", tostring(info[1]))
+        return
+    end
+
+    local professionID = info[1]
+    local recipeID = info[2]
+    local numMembers = tonumber(info[3]) or 0
+
+    print(
+        PREFIX,
+        "guildrecipe: PASS",
+        "profession=" .. tostring(professionID or "?"),
+        "recipe=" .. tostring(recipeID or "?"),
+        "crafters=" .. tostring(numMembers)
+    )
+
+    for index = 1, math.min(numMembers, 10) do
+        local member = { pcall(GetGuildRecipeMember, index) }
+        local memberOk = table.remove(member, 1)
+
+        if memberOk then
+            print(
+                PREFIX,
+                "guildrecipe: crafter[" .. tostring(index) .. "]:",
+                tostring(member[1] or "?"),
+                "online=" .. tostring(member[2] and true or false)
+            )
+        else
+            print(
+                PREFIX,
+                "guildrecipe: GetGuildRecipeMember(" .. tostring(index) .. ") ERROR",
+                tostring(member[1])
+            )
+        end
+    end
+
+    print(PREFIX, "guildrecipe: probe complete; nothing was saved or uploaded")
+end
+
+local function handleMemberTradeSkillShow()
+    if not recipeProbePending
+        or not recipeTarget then
+        return
+    end
+
+    if probeFrame then
+        probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe: TRADE_SKILL_SHOW received for",
+        recipeTarget.name,
+        "skillLine=" .. tostring(recipeTarget.skillLineID)
+    )
+
+    if not (C_TradeSkillUI
+        and type(C_TradeSkillUI.GetAllRecipeIDs) == "function"
+        and type(C_TradeSkillUI.GetRecipeInfo) == "function") then
+        print(PREFIX, "guildrecipe: C_TradeSkillUI recipe APIs unavailable")
+        recipeProbePending = false
+        return
+    end
+
+    local ok, recipeIDs =
+        pcall(C_TradeSkillUI.GetAllRecipeIDs)
+
+    if not ok or type(recipeIDs) ~= "table" then
+        print(PREFIX, "guildrecipe: GetAllRecipeIDs ERROR", tostring(recipeIDs))
+        recipeProbePending = false
+        return
+    end
+
+    local learned = {}
+    local total = 0
+
+    for _, recipeID in ipairs(recipeIDs) do
+        total = total + 1
+
+        local infoOk, info =
+            pcall(
+                C_TradeSkillUI.GetRecipeInfo,
+                recipeID
+            )
+
+        if infoOk and type(info) == "table" then
+            if info.learned then
+                learned[#learned + 1] = {
+                    id = recipeID,
+                    name = info.name or "?",
+                }
+            end
+        end
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe: recipes total=" .. tostring(total),
+        "learned-by-target=" .. tostring(#learned)
+    )
+
+    for index = 1, math.min(#learned, 5) do
+        print(
+            PREFIX,
+            "guildrecipe: learned[" .. tostring(index) .. "]:",
+            tostring(learned[index].id),
+            tostring(learned[index].name)
+        )
+    end
+
+    if #learned == 0 then
+        print(PREFIX, "guildrecipe: no learned recipe found; reverse crafter query skipped")
+        recipeProbePending = false
+        return
+    end
+
+    if not (C_GuildInfo
+        and type(C_GuildInfo.QueryGuildMembersForRecipe) == "function") then
+        print(PREFIX, "guildrecipe: QueryGuildMembersForRecipe unavailable")
+        recipeProbePending = false
+        return
+    end
+
+    local selected = learned[1]
+
+    recipeTarget.recipeID = selected.id
+    recipeTarget.recipeName = selected.name
+
+    reverseRecipeQueryPending = true
+
+    if probeFrame then
+        probeFrame:RegisterEvent("GUILD_RECIPE_KNOWN_BY_MEMBERS")
+    end
+
+    local queryOk, updatedRecipeID =
+        pcall(
+            C_GuildInfo.QueryGuildMembersForRecipe,
+            recipeTarget.skillLineID,
+            selected.id
+        )
+
+    print(
+        PREFIX,
+        "guildrecipe: reverse crafter query request=" .. tostring(queryOk),
+        "recipe=" .. tostring(selected.id),
+        "updatedRecipe=" .. tostring(updatedRecipeID or "?")
+    )
+
+    if not queryOk then
+        reverseRecipeQueryPending = false
+        recipeProbePending = false
+        if probeFrame then
+            probeFrame:UnregisterEvent("GUILD_RECIPE_KNOWN_BY_MEMBERS")
+        end
+        return
+    end
+
+    local generation = recipeProbeGeneration
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            5,
+            function()
+                if reverseRecipeQueryPending
+                    and generation == recipeProbeGeneration then
+                    finishReverseRecipeQuery(
+                        "timeout; GUILD_RECIPE_KNOWN_BY_MEMBERS not received"
+                    )
+                end
+            end
+        )
+    end
+end
+
+function FDB:RunGuildRecipeProbe(memberName, skillLineID)
+    self:InitializeGuildApiProbe()
+
+    skillLineID = tonumber(skillLineID)
+
+    if type(memberName) ~= "string"
+        or memberName == ""
+        or not skillLineID then
+        print(PREFIX, "usage: /fdb guildrecipe <member name> <skillLineID>")
+        print(PREFIX, "example: /fdb guildrecipe Vesti Stormchaser 171")
+        return
+    end
+
+    if not (C_GuildInfo
+        and type(C_GuildInfo.QueryGuildMemberRecipes) == "function") then
+        print(PREFIX, "guildrecipe: QueryGuildMemberRecipes unavailable")
+        return
+    end
+
+    local guid, canonicalName =
+        findGuildMemberGuid(memberName)
+
+    if not guid then
+        print(PREFIX, "guildrecipe: guild member not found:", memberName)
+        return
+    end
+
+    recipeProbeGeneration = recipeProbeGeneration + 1
+    recipeProbePending = true
+    reverseRecipeQueryPending = false
+
+    recipeTarget = {
+        name = canonicalName or memberName,
+        guid = guid,
+        skillLineID = skillLineID,
+    }
+
+    probeFrame:RegisterEvent("TRADE_SKILL_SHOW")
+
+    print(
+        PREFIX,
+        "guildrecipe: querying",
+        recipeTarget.name,
+        "guid=" .. tostring(guid),
+        "skillLine=" .. tostring(skillLineID)
+    )
+    print(PREFIX, "guildrecipe: this may open the TradeSkill window; nothing is persisted or uploaded")
+
+    local ok, err =
+        pcall(
+            C_GuildInfo.QueryGuildMemberRecipes,
+            guid,
+            skillLineID
+        )
+
+    print(
+        PREFIX,
+        "guildrecipe: member recipe request=" .. tostring(ok),
+        ok and "" or tostring(err)
+    )
+
+    if not ok then
+        recipeProbePending = false
+        probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+        return
+    end
+
+    local generation = recipeProbeGeneration
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            5,
+            function()
+                if recipeProbePending
+                    and generation == recipeProbeGeneration
+                    and not reverseRecipeQueryPending then
+                    recipeProbePending = false
+                    probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+                    print(PREFIX, "guildrecipe: timeout waiting for TRADE_SKILL_SHOW")
+                end
+            end
+        )
     end
 end
 
@@ -419,6 +754,14 @@ function FDB:InitializeGuildApiProbe()
                 and tradeSkillProbePending then
                 finishGuildTradeSkillProbe(
                     "GUILD_TRADESKILL_UPDATE received"
+                )
+            elseif event == "TRADE_SKILL_SHOW"
+                and recipeProbePending then
+                handleMemberTradeSkillShow()
+            elseif event == "GUILD_RECIPE_KNOWN_BY_MEMBERS"
+                and reverseRecipeQueryPending then
+                finishReverseRecipeQuery(
+                    "GUILD_RECIPE_KNOWN_BY_MEMBERS received"
                 )
             end
         end
@@ -459,6 +802,16 @@ function FDB:RunGuildApiProbe()
         "C_GuildInfo.QueryGuildMembersForRecipe",
         C_GuildInfo,
         "QueryGuildMembersForRecipe"
+    )
+    namespaceAvailability(
+        "C_TradeSkillUI.GetAllRecipeIDs",
+        C_TradeSkillUI,
+        "GetAllRecipeIDs"
+    )
+    namespaceAvailability(
+        "C_TradeSkillUI.GetRecipeInfo",
+        C_TradeSkillUI,
+        "GetRecipeInfo"
     )
 
     printOwnProfessions()
