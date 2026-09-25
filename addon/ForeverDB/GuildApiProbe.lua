@@ -858,8 +858,33 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
         return
     end
 
-    local guid, canonicalName, lookupError =
-        findGuildMemberGuid(memberName)
+    local guid
+    local canonicalName
+    local lookupError
+
+    local playerName =
+        UnitName
+        and UnitName("player")
+        or nil
+
+    -- /fdb recipe <profession> targets the logged-in character. Do not
+    -- depend on the guild-roster cache for that case: Forever can expose
+    -- a short UnitName ("Vesperix") while the guild roster contains a
+    -- display/surname form ("Vesperix Vane").
+    if playerName
+        and normalizeGuildName(memberName)
+            == normalizeGuildName(playerName) then
+        guid =
+            UnitGUID
+            and UnitGUID("player")
+            or nil
+        canonicalName = playerName
+    end
+
+    if not guid then
+        guid, canonicalName, lookupError =
+            findGuildMemberGuid(memberName)
+    end
 
     if not guid then
         if lookupError == "ambiguous" then
