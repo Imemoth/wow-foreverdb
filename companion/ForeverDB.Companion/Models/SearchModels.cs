@@ -85,4 +85,19 @@ public sealed class DetailLocation
         X < 0d || Y < 0d
             ? "—"
             : $"{X:0.0}, {Y:0.0}";
+
+    public string KindLabel =>
+        LootKind.ToLowerInvariant() switch
+        {
+            "fishing_pool" => "Fishing Pool",
+            "gameobject" => "Object",
+            "herbalism" => "Herbalism",
+            "skinning" => "Skinning",
+            "mining" => "Mining",
+            "fishing" => "Fishing",
+            "mob" => "Mob",
+            "chest" => "Chest",
+            "disenchant" => "Disenchant",
+            _ => LootKind
+        };
 }
