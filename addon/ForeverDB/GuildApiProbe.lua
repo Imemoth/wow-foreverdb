@@ -44,6 +44,23 @@ local function safeCall(label, func, ...)
     return true, unpack(result)
 end
 
+local function firstNumber(func)
+    if type(func) ~= "function" then
+        return 0
+    end
+
+    -- Some WoW APIs return multiple values. Passing such a call directly to
+    -- tonumber() forwards the second return value as tonumber's optional base,
+    -- which can produce "base out of range". Capture only the first return.
+    local ok, value = pcall(func)
+
+    if not ok then
+        return 0
+    end
+
+    return tonumber(value) or 0
+end
+
 local function printOwnProfessions()
     if type(GetProfessions) ~= "function"
         or type(GetProfessionInfo) ~= "function" then
@@ -333,7 +350,7 @@ local function startGuildTradeSkillProbe()
 
     tradeSkillsToRecollapse = {}
 
-    local count = tonumber(GetNumGuildTradeSkill()) or 0
+    local count = firstNumber(GetNumGuildTradeSkill)
     local collapsedSkillIds = {}
 
     -- First snapshot the collapsed headers. Expanding a header mutates the
@@ -420,7 +437,7 @@ local function findGuildMemberGuid(memberName)
     end
 
     local wanted = normalizeGuildName(memberName)
-    local total = tonumber(GetNumGuildMembers()) or 0
+    local total = firstNumber(GetNumGuildMembers)
     local prefixMatches = {}
 
     for index = 1, total do
@@ -472,7 +489,7 @@ local function findGuildMemberNameByGuid(guid)
         return nil
     end
 
-    local total = tonumber(GetNumGuildMembers()) or 0
+    local total = firstNumber(GetNumGuildMembers)
 
     for index = 1, total do
         local result = { pcall(GetGuildRosterInfo, index) }
@@ -974,8 +991,7 @@ local function resolveGuildSkillLine(value)
     end
 
     local count =
-        tonumber(GetNumGuildTradeSkill())
-        or 0
+        firstNumber(GetNumGuildTradeSkill)
 
     for index = 1, count do
         local result = { pcall(GetGuildTradeSkillInfo, index) }
