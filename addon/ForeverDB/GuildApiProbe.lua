@@ -43,17 +43,28 @@ local function printOwnProfessions()
         return
     end
 
-    local call = { pcall(GetProfessions) }
-    local ok = table.remove(call, 1)
+    local ok, profession1, profession2, archaeology, fishing, cooking, firstAid =
+        pcall(GetProfessions)
 
     if not ok then
-        print(PREFIX, "guildapi: own professions: ERROR", tostring(call[1]))
+        print(PREFIX, "guildapi: own professions: ERROR", tostring(profession1))
         return
     end
 
+    local professionIndexes = {
+        profession1,
+        profession2,
+        archaeology,
+        fishing,
+        cooking,
+        firstAid,
+    }
+
     local found = 0
 
-    for _, professionIndex in ipairs(call) do
+    for index = 1, 6 do
+        local professionIndex = professionIndexes[index]
+
         if professionIndex then
             local info = { pcall(GetProfessionInfo, professionIndex) }
             local infoOk = table.remove(info, 1)
