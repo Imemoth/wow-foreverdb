@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.2-alpha**
+- Addon: **0.3.3-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,14 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.3-alpha — 2026-09-25
+
+- Fixed a Forever 1.60.1 Secret Value crash in the fishing-pool tooltip tracker.
+- Fishing-pool tooltip text is now checked with `issecretvalue()` before comparison or string operations.
+- When the tooltip name is secret but a real GameObject GUID is readable, ForeverDB keeps a short-lived generic Fishing Pool candidate instead of touching the restricted text.
+- Restricted-name candidates expire after 2 seconds to reduce false-positive pool attribution.
+- Export schema remains **8**.
 
 ## 0.3.2-alpha — 2026-09-25
 
