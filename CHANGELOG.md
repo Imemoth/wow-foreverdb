@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.6-alpha**
+- Addon: **0.3.7-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,17 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.7-alpha — 2026-09-25
+
+- Simplified Guildbook diagnostic commands.
+- Added `/fdb guild` as a short alias for `/fdb guildapi`.
+- Added `/fdb recipe <profession>` to target the logged-in character automatically.
+- Added `/fdb recipe <member> <profession>` with profession-name lookup, so raw skillLineIDs are no longer required.
+- Added short `/fdb gr ...` alias plus profession aliases such as `alch`, `bs`, `ench`, `eng`, `herb`, `lw`, `mine`, `skin` and `tailor`.
+- Guild-member lookup now accepts a unique name prefix instead of always requiring the full character name.
+- Legacy `guildapi` / `guildrecipe` commands remain supported.
+- Export schema remains **8**.
 
 ## 0.3.6-alpha — 2026-09-25
 
