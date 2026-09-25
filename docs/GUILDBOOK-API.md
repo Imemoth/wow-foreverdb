@@ -12,7 +12,7 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.8-alpha** includes diagnostic-only Guildbook probes:
+Addon **0.3.9-alpha** includes diagnostic-only Guildbook probes:
 
 `/fdb guild`
 
@@ -156,12 +156,31 @@ Alchemy and Blacksmithing members.
 That result is sufficient to mark guild-member profession discovery **PASS**.
 
 The 0.3.5 implementation expanded headers while iterating the same mutable list,
-which caused only two headers to expand. Addon 0.3.8-alpha fixes this by snapshotting
+which caused only two headers to expand. Addon 0.3.9-alpha fixes this by snapshotting
 all collapsed skillLineIDs first, then expanding them in a second pass.
+
+### Secondary professions
+
+Forever's guild tradeskill header list does not include Cooking, Fishing or First Aid,
+even though the logged-in character exposes them through `GetProfessions()` /
+`GetProfessionInfo()`.
+
+Observed Forever runtime skillLineIDs:
+
+- Cooking: 185
+- Fishing: 356
+- First Aid: 129
+
+Addon 0.3.9-alpha therefore resolves those secondary professions separately. This
+allows targeted recipe probes such as `/fdb recipe cooking`, even though Cooking
+does not appear in `GetNumGuildTradeSkill()` / `GetGuildTradeSkillInfo()`.
+
+Guild-wide discovery of *which members* have a secondary profession remains a
+separate capability question because the guild tradeskill roster omits those headers.
 
 ### Next acceptance gate
 
-Run a targeted member recipe query with addon **0.3.8-alpha**. For example, based on
+Run a targeted member recipe query with addon **0.3.9-alpha**. For example, based on
 the captured runtime data:
 
 `/fdb recipe Vesti alch`
