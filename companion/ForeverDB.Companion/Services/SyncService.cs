@@ -100,5 +100,66 @@ public sealed class SyncService
         StatusChanged?.Invoke(
             this,
             $"Synced {snapshot.Sources.Count} sources at {DateTime.Now:T}");
+
+        _ = PrewarmMapCacheAsync(
+            snapshot);
+    }
+
+    private async Task PrewarmMapCacheAsync(
+        ForeverDbSnapshot snapshot)
+    {
+        try
+        {
+            var mapIds = snapshot.Sources
+                .SelectMany(
+                    source =>
+                        source.Buckets)
+                .SelectMany(
+                    bucket =>
+                        bucket.Locations)
+                .Where(
+                    location =>
+                        location.MapId > 0)
+                .GroupBy(
+                    location =>
+                        location.MapId)
+                .OrderByDescending(
+                    group =>
+                        group.Sum(
+                            location =>
+                                location.Observations))
+                .Select(
+                    group =>
+                        group.Key)
+                .Take(4)
+                .ToArray();
+
+            if (mapIds.Length == 0)
+            {
+                return;
+            }
+
+            var provider =
+                new WowClientMapAssetProvider(
+                    _settings);
+
+            foreach (var mapId in mapIds)
+            {
+                try
+                {
+                    await provider.LoadAsync(
+                        mapId,
+                        CancellationToken.None);
+                }
+                catch
+                {
+                    // Map pre-warming is opportunistic and must never make
+                    // SavedVariables sync fail.
+                }
+            }
+        }
+        catch
+        {
+        }
     }
 }
