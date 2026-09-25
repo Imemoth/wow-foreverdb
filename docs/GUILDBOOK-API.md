@@ -12,9 +12,13 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.2-alpha** includes a diagnostic-only probe:
+Addon **0.3.6-alpha** includes diagnostic-only Guildbook probes:
 
 `/fdb guildapi`
+
+and a targeted recipe/crafter probe:
+
+`/fdb guildrecipe <member name> <skillLineID>`
 
 The probe:
 
@@ -27,9 +31,7 @@ The probe:
 - listens for `GUILD_ROSTER_UPDATE` and prints a refreshed sample;
 - times out after 12 seconds and falls back to the current roster cache.
 
-Recipe query functions are only checked for existence. The probe intentionally does
-not invoke recipe-query APIs because some require UI/query state and should be tested
-separately after the base capability matrix is known.
+The base `/fdb guildapi` probe validates roster/profession capability and expanded guild-member profession rows. The separate `/fdb guildrecipe` command performs recipe queries only on explicit request and follows the required event sequence before reading recipe-crafter results.
 
 ### Test procedure
 
@@ -121,25 +123,57 @@ Examples observed:
 
 This closes the base Guildbook roster compatibility gate.
 
-### Guild profession table — header phase PASS, member rows pending
+### Guild profession table — member rows PASS
 
-The client returned 10 guild tradeskill rows, but the sampled rows were profession
-headers such as Alchemy, Blacksmithing, Enchanting, Engineering and Herbalism.
+The guilded-character test showed 10 collapsed profession headers with live
+per-profession population counts. Examples included:
 
-This is consistent with collapsed guild profession headers. Addon 0.3.5-alpha now
-expands those headers during `/fdb guildapi`, waits for
-`GUILD_TRADESKILL_UPDATE`, then scans for actual player rows and restores the
-original collapsed state.
+- Alchemy: 9 players
+- Blacksmithing: 9
+- Enchanting: 15
+- Engineering: 8
+- Herbalism: 29
+- Leatherworking: 27
+- Mining: 36
+- Skinning: 59
+- Tailoring: 15
+
+After expansion, the client returned real member rows with player name, profession,
+skillLineID, skill, online state and zone. The captured sample contained 13 member
+rows across the two headers that the 0.3.5 probe managed to expand, including
+Alchemy and Blacksmithing members.
+
+That result is sufficient to mark guild-member profession discovery **PASS**.
+
+The 0.3.5 implementation expanded headers while iterating the same mutable list,
+which caused only two headers to expand. Addon 0.3.6-alpha fixes this by snapshotting
+all collapsed skillLineIDs first, then expanding them in a second pass.
 
 ### Next acceptance gate
 
-Run `/fdb guildapi` on a guilded character and confirm:
+Run a targeted member recipe query with addon **0.3.6-alpha**. For example, based on
+the captured runtime data:
 
-1. run the 0.3.5-alpha expanded guild tradeskill probe;
-2. confirm actual player/member profession rows appear after header expansion;
-3. capture profession name, skillLineID, player name and skill value;
-4. after that, add a targeted recipe-query probe using a real member GUID and
-   skillLineID.
+`/fdb guildrecipe Vesti Stormchaser 171`
+
+Expected sequence:
+
+1. resolve the guild member to a real roster GUID;
+2. `C_GuildInfo.QueryGuildMemberRecipes(guid, 171)`;
+3. receive `TRADE_SKILL_SHOW`;
+4. read the target profession's recipe IDs with
+   `C_TradeSkillUI.GetAllRecipeIDs()` and `GetRecipeInfo()`;
+5. choose one recipe reported as learned by the target;
+6. call `C_GuildInfo.QueryGuildMembersForRecipe(skillLineID, recipeID)`;
+7. wait for `GUILD_RECIPE_KNOWN_BY_MEMBERS`;
+8. only then call `GetGuildRecipeInfoPostQuery()` and
+   `GetGuildRecipeMember()`.
+
+This closes both directions needed for a useful Guildbook:
+
+- character -> professions -> recipes;
+- recipe -> guild members who can craft it.
+
 
 ## Candidate Guildbook data
 
