@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.5-alpha**
+- Addon: **0.3.6-alpha**
 - Export schema: **8**
 - Companion: **0.7.1-alpha**
 
@@ -104,6 +104,14 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.3.6-alpha — 2026-09-25
+
+- Fixed the Guildbook tradeskill probe so all collapsed profession headers are collected before expansion; expanding while iterating had mutated the list and skipped later headers.
+- Added the targeted `/fdb guildrecipe <member name> <skillLineID>` probe.
+- The recipe probe resolves a real guild-member GUID, calls `C_GuildInfo.QueryGuildMemberRecipes`, waits for `TRADE_SKILL_SHOW`, inspects Forever-supported `C_TradeSkillUI` recipe data, then tests the reverse `QueryGuildMembersForRecipe` path.
+- `GetGuildRecipeInfoPostQuery` / `GetGuildRecipeMember` are only called after `GUILD_RECIPE_KNOWN_BY_MEMBERS`, matching the documented safe event sequence.
+- Export schema remains **8**; probe data is not persisted or uploaded.
 
 ## 0.3.5-alpha — 2026-09-25
 
