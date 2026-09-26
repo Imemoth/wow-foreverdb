@@ -10,10 +10,10 @@ ForeverDB has three version axes that move independently:
 
 | Component | Current | Source of truth |
 | --- | --- | --- |
-| Addon | **0.3.15-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
-| Export schema | **8** | `FDB.SCHEMA_VERSION` in `addon/ForeverDB/Core.lua` |
-| Companion | **0.7.1-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
-| Installer | **0.7.1-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
+| Addon | **0.4.0-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
+| Export schema | **9** | `FDB.SCHEMA_VERSION` in `addon/ForeverDB/Core.lua` |
+| Companion | **0.8.0-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
+| Installer | **0.8.0-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
 | Forever interface | **16001** | `## Interface` in `addon/ForeverDB/ForeverDB.toc` |
 
 ## Consistency rules
@@ -54,8 +54,8 @@ During alpha development use:
 
 Examples:
 
-- `0.3.15-alpha` — addon
-- `0.7.1-alpha` — Companion
+- `0.4.0-alpha` — addon
+- `0.8.0-alpha` — Companion
 
 Patch versions may be used for narrow fixes/resolver iterations. Minor versions
 represent a coherent capability milestone.
@@ -76,8 +76,8 @@ For every versioned build:
 
 For traceable release points, use component-specific tags:
 
-- `addon-v0.3.15-alpha`
-- `companion-v0.7.1-alpha`
+- `addon-v0.4.0-alpha`
+- `companion-v0.8.0-alpha`
 
 Because the addon and Companion advance independently, a single repository-wide
 version number should not replace the component versions.
