@@ -2,9 +2,9 @@
 
 ## Current contract
 
-- Addon: **0.3.1-alpha**
-- Export / SavedVariables schema: **8**
-- Companion: **0.7.0-alpha**
+- Addon: **0.4.0-alpha**
+- Export / SavedVariables schema: **9**
+- Companion: **0.8.0-alpha**
 
 ForeverDB stores **observations**, not asserted canonical drop rates. Percentages
 are always derived from explicit sample counters.
@@ -79,7 +79,7 @@ server-side GameObject coordinates.
 
 ## Map metadata
 
-Schema 8 also exports map-art metadata separately from statistical sources:
+Schema 9 retains the schema-8 map-art metadata and additionally exports Guildbook snapshots. Map-art metadata remains separate from statistical sources:
 
 - uiMapID
 - map name
@@ -120,3 +120,24 @@ canonical drop probabilities.
 
 This limitation must remain visible anywhere percentages are interpreted as
 drop-rate evidence.
+
+
+## Guildbook data
+
+Schema 9 adds Guildbook records that are independent of loot/source statistics.
+
+A guild snapshot contains:
+
+- guild key, guild name, realm and capture timestamp;
+- member GUID, name, class, level, rank, online state, zone and last-online age;
+- profession rows with skillLineID, profession name, skill/max skill, source and secondary flag.
+
+Primary guild-visible professions are collected from the expanded guild tradeskill
+cache. Secondary professions are only guaranteed for the logged-in character.
+
+Guildbook data is private per installation in Supabase V1 and is not part of the
+public searchable loot catalog. Officer notes are not collected.
+
+Guild recipe/crafter data is intentionally absent from schema 9 because the current
+Forever build exposes roster/profession data but its guild recipe cache/event path is
+runtime-limited.
