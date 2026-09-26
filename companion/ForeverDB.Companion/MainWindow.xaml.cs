@@ -74,7 +74,7 @@ public partial class MainWindow : Window
         _syncService.StatusChanged += (_, status) =>
             Dispatcher.Invoke(() => SetStatus(status));
 
-        _syncService.GuildbookChanged += (_, guilds) =>
+        _syncService.GuildbookChanged += guilds =>
             Dispatcher.Invoke(
                 () => MergeGuildbook(guilds));
 
