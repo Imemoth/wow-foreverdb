@@ -1163,6 +1163,175 @@ local function findGuildTradeSkillMember(memberName, skillLineID)
     return false
 end
 
+local function runGuildRecipeQueryAfterPreflight()
+    if not recipeTarget then
+        return
+    end
+
+    local targetName =
+        recipeTarget.rosterName
+        or recipeTarget.name
+
+    local guildPublished, publishedInfo =
+        findGuildTradeSkillMember(
+            targetName,
+            recipeTarget.skillLineID
+        )
+
+    if guildPublished then
+        print(
+            PREFIX,
+            "guildrecipe: guild tradeskill cache contains target member",
+            tostring(publishedInfo.name),
+            "skill=" .. tostring(publishedInfo.skill or "?")
+        )
+    else
+        print(
+            PREFIX,
+            "guildrecipe: WARNING: target member/profession is not present in the refreshed guild tradeskill member cache"
+        )
+        print(
+            PREFIX,
+            "guildrecipe: a later CanViewGuildRecipes=false may reflect unpublished guild profession data rather than recipe API incompatibility"
+        )
+    end
+
+    if recipeTarget.preflightExpanded
+        and type(CollapseGuildTradeSkillHeader) == "function" then
+        pcall(
+            CollapseGuildTradeSkillHeader,
+            recipeTarget.skillLineID
+        )
+        recipeTarget.preflightExpanded = false
+    end
+
+    probeFrame:RegisterEvent("TRADE_SKILL_SHOW")
+
+    print(
+        PREFIX,
+        "guildrecipe: querying",
+        recipeTarget.name,
+        "guid=" .. tostring(recipeTarget.guid),
+        "skillLine=" .. tostring(recipeTarget.skillLineID)
+    )
+    print(PREFIX, "guildrecipe: this may open the TradeSkill window; nothing is persisted or uploaded")
+
+    local ok, err =
+        pcall(
+            C_GuildInfo.QueryGuildMemberRecipes,
+            recipeTarget.guid,
+            recipeTarget.skillLineID
+        )
+
+    print(
+        PREFIX,
+        "guildrecipe: member recipe request=" .. tostring(ok),
+        ok and "" or tostring(err)
+    )
+
+    if not ok then
+        recipeProbePending = false
+        probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+        return
+    end
+
+    local generation = recipeProbeGeneration
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            5,
+            function()
+                if recipeProbePending
+                    and generation == recipeProbeGeneration
+                    and not reverseRecipeQueryPending then
+                    probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
+                    print(PREFIX, "guildrecipe: timeout waiting for TRADE_SKILL_SHOW")
+                    startLegacyGuildRecipeFallback()
+                end
+            end
+        )
+    end
+end
+
+local function startGuildRecipePublicationPreflight()
+    if not recipeTarget then
+        return
+    end
+
+    print(
+        PREFIX,
+        "guildrecipe: refreshing guild tradeskill cache before recipe test"
+    )
+
+    if type(QueryGuildRecipes) == "function" then
+        local ok, err = pcall(QueryGuildRecipes)
+
+        print(
+            PREFIX,
+            "guildrecipe: preflight QueryGuildRecipes=" .. tostring(ok),
+            ok and "" or tostring(err)
+        )
+    end
+
+    recipeTarget.preflightExpanded = false
+
+    if type(GetNumGuildTradeSkill) == "function"
+        and type(GetGuildTradeSkillInfo) == "function"
+        and type(ExpandGuildTradeSkillHeader) == "function" then
+        local count =
+            firstNumber(GetNumGuildTradeSkill)
+
+        for index = 1, count do
+            local result = { pcall(GetGuildTradeSkillInfo, index) }
+            local ok = table.remove(result, 1)
+
+            if ok then
+                local skillId = tonumber(result[1])
+                local isCollapsed = result[2]
+                local headerName = result[4]
+
+                if headerName
+                    and skillId == recipeTarget.skillLineID then
+                    if isCollapsed then
+                        local expanded =
+                            pcall(
+                                ExpandGuildTradeSkillHeader,
+                                skillId
+                            )
+
+                        recipeTarget.preflightExpanded =
+                            expanded and true or false
+
+                        print(
+                            PREFIX,
+                            "guildrecipe: preflight profession header",
+                            tostring(headerName),
+                            "expanded=" .. tostring(recipeTarget.preflightExpanded)
+                        )
+                    else
+                        print(
+                            PREFIX,
+                            "guildrecipe: preflight profession header",
+                            tostring(headerName),
+                            "already expanded"
+                        )
+                    end
+                    break
+                end
+            end
+        end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(
+            1,
+            runGuildRecipeQueryAfterPreflight
+        )
+    else
+        runGuildRecipeQueryAfterPreflight()
+    end
+end
+
 function FDB:RunGuildRecipeProbe(memberName, skillLineID)
     self:InitializeGuildApiProbe()
 
@@ -1242,76 +1411,7 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
         skillLineID = skillLineID,
     }
 
-    local guildPublished, publishedInfo =
-        findGuildTradeSkillMember(
-            rosterName or canonicalName or memberName,
-            skillLineID
-        )
-
-    if guildPublished then
-        print(
-            PREFIX,
-            "guildrecipe: guild tradeskill cache contains target member",
-            tostring(publishedInfo.name),
-            "skill=" .. tostring(publishedInfo.skill or "?")
-        )
-    else
-        print(
-            PREFIX,
-            "guildrecipe: WARNING: target member/profession is not present in the current guild tradeskill member cache"
-        )
-        print(
-            PREFIX,
-            "guildrecipe: a later CanViewGuildRecipes=false may reflect unpublished/stale guild profession data rather than recipe API incompatibility"
-        )
-    end
-
-    probeFrame:RegisterEvent("TRADE_SKILL_SHOW")
-
-    print(
-        PREFIX,
-        "guildrecipe: querying",
-        recipeTarget.name,
-        "guid=" .. tostring(guid),
-        "skillLine=" .. tostring(skillLineID)
-    )
-    print(PREFIX, "guildrecipe: this may open the TradeSkill window; nothing is persisted or uploaded")
-
-    local ok, err =
-        pcall(
-            C_GuildInfo.QueryGuildMemberRecipes,
-            guid,
-            skillLineID
-        )
-
-    print(
-        PREFIX,
-        "guildrecipe: member recipe request=" .. tostring(ok),
-        ok and "" or tostring(err)
-    )
-
-    if not ok then
-        recipeProbePending = false
-        probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
-        return
-    end
-
-    local generation = recipeProbeGeneration
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(
-            5,
-            function()
-                if recipeProbePending
-                    and generation == recipeProbeGeneration
-                    and not reverseRecipeQueryPending then
-                    probeFrame:UnregisterEvent("TRADE_SKILL_SHOW")
-                    print(PREFIX, "guildrecipe: timeout waiting for TRADE_SKILL_SHOW")
-                    startLegacyGuildRecipeFallback()
-                end
-            end
-        )
-    end
+    startGuildRecipePublicationPreflight()
 end
 
 local function finishProbe(reason)
