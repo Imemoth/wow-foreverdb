@@ -12,7 +12,7 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.14-alpha** includes diagnostic-only Guildbook probes:
+Addon **0.3.15-alpha** includes diagnostic-only Guildbook probes:
 
 `/fdb guild`
 
@@ -156,7 +156,7 @@ Alchemy and Blacksmithing members.
 That result is sufficient to mark guild-member profession discovery **PASS**.
 
 The 0.3.5 implementation expanded headers while iterating the same mutable list,
-which caused only two headers to expand. Addon 0.3.14-alpha fixes this by snapshotting
+which caused only two headers to expand. Addon 0.3.15-alpha fixes this by snapshotting
 all collapsed skillLineIDs first, then expanding them in a second pass.
 
 ### Secondary professions
@@ -171,7 +171,7 @@ Observed Forever runtime skillLineIDs:
 - Fishing: 356
 - First Aid: 129
 
-Addon 0.3.14-alpha therefore resolves those secondary professions separately. This
+Addon 0.3.15-alpha therefore resolves those secondary professions separately. This
 allows targeted recipe probes such as `/fdb recipe cooking`, even though Cooking
 does not appear in `GetNumGuildTradeSkill()` / `GetGuildTradeSkillInfo()`.
 
@@ -186,7 +186,7 @@ Runtime tests with both Cooking (185) and Fishing (356) showed the same behavior
 - the documented `TRADE_SKILL_SHOW` event does **not** arrive;
 - the probe reaches its timeout.
 
-Addon 0.3.14-alpha therefore treats the modern member-query path as present-but-not-yet
+Addon 0.3.15-alpha therefore treats the modern member-query path as present-but-not-yet
 runtime-compatible and automatically tries the legacy guild recipe path:
 
 1. `GetGuildMemberRecipes(name, skillLineID)`;
@@ -233,12 +233,12 @@ expanded guild tradeskill cache at the time of the earlier probe. Therefore this
 result alone does **not** prove the recipe API is globally incompatible; the guild may
 simply not be publishing that character/profession into the recipe cache.
 
-Addon 0.3.14-alpha now prints whether the target member/profession is present in the
+Addon 0.3.15-alpha now prints whether the target member/profession is present in the
 current guild tradeskill member cache before the recipe query. The decisive control
 remains a known published crafting member such as an Alchemy member returned by the
 expanded guild tradeskill probe.
 
-### Recipe probe preflight — 0.3.14-alpha
+### Recipe probe preflight — 0.3.15-alpha
 
 The recipe probe now performs its own publication preflight before calling the
 member-recipe API:
@@ -256,30 +256,53 @@ This makes a negative result distinguishable:
 - target member present + recipe cache still unavailable -> strong API/cache limitation;
 - target member absent -> guild publication/state issue, not a decisive recipe API failure.
 
-### Next acceptance gate
+### Primary crafting recipe gate — RUNTIME LIMITED
 
-Run a targeted member recipe query with addon **0.3.14-alpha**. For example, based on
-the captured runtime data:
+The 0.3.14-alpha Tailoring control is decisive for the current Forever build.
 
-`/fdb recipe Vesti alch`
+Observed sequence for a known published Tailoring member:
 
-Expected sequence:
+- target profession header: Tailoring / skillLine 197;
+- preflight expansion: PASS;
+- target member present in expanded guild tradeskill cache: PASS;
+- member skill value readable;
+- `C_GuildInfo.QueryGuildMemberRecipes(guid, 197)`: call accepted;
+- `TRADE_SKILL_SHOW`: not fired;
+- `GetGuildMemberRecipes(member, 197)`: callable, no direct return values;
+- `QueryGuildRecipes()`: callable;
+- `CanViewGuildRecipes(197)`: false;
+- `ViewGuildRecipes(197)`: unavailable as a consequence.
 
-1. resolve the guild member to a real roster GUID;
-2. `C_GuildInfo.QueryGuildMemberRecipes(guid, 171)`;
-3. receive `TRADE_SKILL_SHOW`;
-4. read the target profession's recipe IDs with
-   `C_TradeSkillUI.GetAllRecipeIDs()` and `GetRecipeInfo()`;
-5. choose one recipe reported as learned by the target;
-6. call `C_GuildInfo.QueryGuildMembersForRecipe(skillLineID, recipeID)`;
-7. wait for `GUILD_RECIPE_KNOWN_BY_MEMBERS`;
-8. only then call `GetGuildRecipeInfoPostQuery()` and
-   `GetGuildRecipeMember()`.
+Because the member/profession pair is demonstrably published in the guild tradeskill
+cache, this is no longer explainable as a stale/unpublished member row.
 
-This closes both directions needed for a useful Guildbook:
+**Conclusion for the current Forever build:** guild roster and guild profession
+discovery are supported, but guild member recipe discovery / recipe-to-crafter
+resolution is runtime-limited through the tested API surfaces.
 
-- character -> professions -> recipes;
-- recipe -> guild members who can craft it.
+Recommended Guildbook scope for now:
+
+- roster: PASS;
+- class/level/rank/online/zone/GUID: PASS;
+- guild-visible primary professions and skill values: PASS;
+- current-character secondary professions: PASS;
+- guild-wide recipe lists / recipe-to-crafter lookup: DEFER until the Forever client
+  exposes a working recipe cache/event path.
+
+### Next implementation gate
+
+Do not spend more runtime-probe cycles on guild recipe lookup for this Forever build.
+
+Proceed with Guildbook V1 around the verified data surface:
+
+1. guild roster snapshot;
+2. character identity/class/level/rank/online/zone;
+3. guild-visible primary profession + skill;
+4. current-character secondary professions;
+5. SavedVariables contract;
+6. Companion/Supabase sync and Guildbook UI.
+
+Keep recipe/crafter lookup behind a feature flag / future compatibility gate.
 
 
 ## Candidate Guildbook data
