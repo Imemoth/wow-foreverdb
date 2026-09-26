@@ -1129,6 +1129,40 @@ function FDB:RunGuildRecipeCommand(argument)
     )
 end
 
+local function findGuildTradeSkillMember(memberName, skillLineID)
+    if type(GetNumGuildTradeSkill) ~= "function"
+        or type(GetGuildTradeSkillInfo) ~= "function" then
+        return false
+    end
+
+    local wantedName = normalizeGuildName(memberName)
+    local wantedSkill = tonumber(skillLineID)
+    local count = firstNumber(GetNumGuildTradeSkill)
+
+    for index = 1, count do
+        local result = { pcall(GetGuildTradeSkillInfo, index) }
+        local ok = table.remove(result, 1)
+
+        if ok then
+            local skillId = tonumber(result[1])
+            local playerName = result[8]
+            local skill = result[13]
+
+            if skillId == wantedSkill
+                and type(playerName) == "string"
+                and normalizeGuildName(playerName) == wantedName then
+                return true, {
+                    name = playerName,
+                    skill = skill,
+                    index = index,
+                }
+            end
+        end
+    end
+
+    return false
+end
+
 function FDB:RunGuildRecipeProbe(memberName, skillLineID)
     self:InitializeGuildApiProbe()
 
@@ -1207,6 +1241,30 @@ function FDB:RunGuildRecipeProbe(memberName, skillLineID)
         guid = guid,
         skillLineID = skillLineID,
     }
+
+    local guildPublished, publishedInfo =
+        findGuildTradeSkillMember(
+            rosterName or canonicalName or memberName,
+            skillLineID
+        )
+
+    if guildPublished then
+        print(
+            PREFIX,
+            "guildrecipe: guild tradeskill cache contains target member",
+            tostring(publishedInfo.name),
+            "skill=" .. tostring(publishedInfo.skill or "?")
+        )
+    else
+        print(
+            PREFIX,
+            "guildrecipe: WARNING: target member/profession is not present in the current guild tradeskill member cache"
+        )
+        print(
+            PREFIX,
+            "guildrecipe: a later CanViewGuildRecipes=false may reflect unpublished/stale guild profession data rather than recipe API incompatibility"
+        )
+    end
 
     probeFrame:RegisterEvent("TRADE_SKILL_SHOW")
 
