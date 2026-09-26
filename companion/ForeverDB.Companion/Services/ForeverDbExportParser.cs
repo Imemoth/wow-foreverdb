@@ -60,6 +60,10 @@ public sealed class ForeverDbExportParser
         var sourceMap = new Dictionary<string, ForeverDbSource>();
         var bucketMap = new Dictionary<string, ForeverDbBucket>();
         var mapMap = new Dictionary<long, ForeverDbMap>();
+        var guildMap = new Dictionary<string, ForeverDbGuild>(
+            StringComparer.OrdinalIgnoreCase);
+        var guildMemberMap = new Dictionary<string, ForeverDbGuildMember>(
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var line in lines.Skip(1))
         {
@@ -106,6 +110,95 @@ public sealed class ForeverDbExportParser
                             TextureRefs =
                                 ParseStringList(
                                     DecodeField(parts[10]))
+                        });
+
+                    break;
+                }
+
+                case "G":
+                {
+                    if (parts.Length < 5)
+                    {
+                        break;
+                    }
+
+                    var guildKey = DecodeField(parts[1]);
+                    var guild = new ForeverDbGuild
+                    {
+                        GuildKey = guildKey,
+                        Name = DecodeField(parts[2]),
+                        RealmName = DecodeField(parts[3]),
+                        CapturedAt = long.Parse(parts[4])
+                    };
+
+                    guildMap[guildKey] = guild;
+                    snapshot.Guilds.Add(guild);
+                    break;
+                }
+
+                case "C":
+                {
+                    if (parts.Length < 11)
+                    {
+                        break;
+                    }
+
+                    var guildKey = DecodeField(parts[1]);
+
+                    if (!guildMap.TryGetValue(guildKey, out var guild))
+                    {
+                        break;
+                    }
+
+                    var guid = DecodeField(parts[2]);
+                    var member = new ForeverDbGuildMember
+                    {
+                        Guid = guid,
+                        Name = DecodeField(parts[3]),
+                        ClassName = DecodeField(parts[4]),
+                        ClassFile = DecodeField(parts[5]),
+                        Level = int.Parse(parts[6]),
+                        RankName = DecodeField(parts[7]),
+                        RankIndex = int.Parse(parts[8]),
+                        Online = parts[9] == "1",
+                        Zone = DecodeField(parts[10]),
+                        LastOnlineHours =
+                            parts.Length > 11
+                                ? long.Parse(parts[11])
+                                : 0
+                    };
+
+                    guild.Members.Add(member);
+                    guildMemberMap[$"{guildKey}|{guid}"] = member;
+                    break;
+                }
+
+                case "P":
+                {
+                    if (parts.Length < 9)
+                    {
+                        break;
+                    }
+
+                    var guildKey = DecodeField(parts[1]);
+                    var guid = DecodeField(parts[2]);
+
+                    if (!guildMemberMap.TryGetValue(
+                            $"{guildKey}|{guid}",
+                            out var member))
+                    {
+                        break;
+                    }
+
+                    member.Professions.Add(
+                        new ForeverDbGuildProfession
+                        {
+                            SkillLineId = int.Parse(parts[3]),
+                            Name = DecodeField(parts[4]),
+                            Skill = int.Parse(parts[5]),
+                            MaxSkill = int.Parse(parts[6]),
+                            Source = DecodeField(parts[7]),
+                            IsSecondary = parts[8] == "1"
                         });
 
                     break;
