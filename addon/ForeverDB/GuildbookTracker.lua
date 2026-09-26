@@ -182,7 +182,10 @@ local function captureOwnProfessions(guild)
         firstAid,
     }
 
-    for _, professionIndex in ipairs(professionIndexes) do
+    for index = 1, 6 do
+        local professionIndex =
+            professionIndexes[index]
+
         if professionIndex then
             local result = {
                 pcall(
