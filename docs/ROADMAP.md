@@ -7,8 +7,8 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.3.15-alpha**
-- Schema: **8**
+- Version: **0.4.0-alpha**
+- Schema: **9**
 - Forever interface: **16001**
 - Observed pipelines:
   - mob loot
@@ -22,7 +22,7 @@ polish and distribution work.
   - disenchant
 
 ### Companion
-- Version: **0.7.1-alpha**
+- Version: **0.8.0-alpha**
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -80,6 +80,25 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Fishing-pool coordinate accuracy review and calibration.
 - [ ] Validate map metadata across additional Eastern Kingdoms / Kalimdor zones.
 
+## 0.8.0-alpha — Guildbook V1
+
+Implementation status: **implemented; runtime acceptance pending.**
+
+- [x] Schema 9 addon Guildbook collector.
+- [x] Roster capture with name, GUID, class, level, rank, online state, zone and last-online age.
+- [x] Guild-visible primary profession capture.
+- [x] Current-character secondary profession capture.
+- [x] Export/parser model for Guildbook records.
+- [x] Private Supabase per-installation Guildbook tables and authenticated ingest.
+- [x] Companion Guildbook tab with filtering.
+- [x] Recipe/crafter lookup explicitly deferred because the current Forever build is runtime-limited.
+
+Acceptance gate:
+- schema 9 export contains G/C/P records;
+- Companion parses and displays the current guild;
+- authenticated sync writes private guild/member/profession rows;
+- no guild data is exposed to anon/authenticated table reads.
+
 ## 0.8 — Companion hardening & distribution
 
 - [ ] Settings polish and cache management.
@@ -99,9 +118,9 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 - [x] Runtime capability probe for Forever guild roster/profession APIs (`/fdb guildapi`) — function availability + own-character professions PASS.
 - [x] Guilded-character roster/member profession acceptance — PASS (expanded member rows returned).
 - [x] Targeted guild recipe-query acceptance completed — current Forever build is RUNTIME LIMITED for guild recipe/crafter lookup; defer to a later compatibility pass.
-- [ ] Guild roster SavedVariables contract.
-- [ ] Character + profession model and Supabase authorization design.
-- [ ] Companion Guildbook tab.
+- [x] Guild roster SavedVariables contract — schema 9.
+- [x] Character + profession model and private per-installation Supabase storage.
+- [x] Companion Guildbook tab with guild selector, filter, roster/status/profession columns.
 - [ ] Optional Battle.net enrichment if Forever realm/profile support is verified.
 
 ## 0.9 — Farming intelligence
