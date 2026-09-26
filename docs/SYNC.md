@@ -2,7 +2,7 @@
 
 ## Supported sync path
 
-ForeverDB Companion **0.7.0-alpha** owns database synchronization.
+ForeverDB Companion **0.8.0-alpha** owns database synchronization.
 
 The addon itself never performs HTTP. It writes `ForeverDB_Export` into
 SavedVariables, and the Companion watches the WoW account folders for updated
@@ -44,7 +44,7 @@ snapshot therefore does not accumulate duplicate counts.
 
 ## Map metadata and pre-warming
 
-Map metadata embedded in schema-8 exports is merged into the Companion's local
+Map metadata embedded in schema-9 exports is merged into the Companion's local
 map metadata cache before the network ingest completes.
 
 After a successful sync, the Companion opportunistically pre-warms map art for
