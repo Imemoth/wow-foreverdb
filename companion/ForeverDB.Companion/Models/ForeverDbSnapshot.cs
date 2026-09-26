@@ -8,6 +8,7 @@ public sealed class ForeverDbSnapshot
     public long UpdatedAt { get; set; }
     public List<ForeverDbSource> Sources { get; set; } = new();
     public List<ForeverDbMap> Maps { get; set; } = new();
+    public List<ForeverDbGuild> Guilds { get; set; } = new();
 }
 
 public sealed class ForeverDbSource
@@ -68,4 +69,44 @@ public sealed class ForeverDbMapLayer
     public double MaxScale { get; set; }
     public int AdditionalZoomSteps { get; set; }
     public List<string> TextureRefs { get; set; } = new();
+}
+
+
+public sealed class ForeverDbGuild
+{
+    public string GuildKey { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string RealmName { get; set; } = "";
+    public long CapturedAt { get; set; }
+    public List<ForeverDbGuildMember> Members { get; set; } = new();
+
+    public override string ToString()
+        => string.IsNullOrWhiteSpace(RealmName)
+            ? Name
+            : $"{Name} — {RealmName}";
+}
+
+public sealed class ForeverDbGuildMember
+{
+    public string Guid { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ClassName { get; set; } = "";
+    public string ClassFile { get; set; } = "";
+    public int Level { get; set; }
+    public string RankName { get; set; } = "";
+    public int RankIndex { get; set; }
+    public bool Online { get; set; }
+    public string Zone { get; set; } = "";
+    public long LastOnlineHours { get; set; }
+    public List<ForeverDbGuildProfession> Professions { get; set; } = new();
+}
+
+public sealed class ForeverDbGuildProfession
+{
+    public int SkillLineId { get; set; }
+    public string Name { get; set; } = "";
+    public int Skill { get; set; }
+    public int MaxSkill { get; set; }
+    public string Source { get; set; } = "";
+    public bool IsSecondary { get; set; }
 }
