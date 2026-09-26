@@ -12,7 +12,7 @@ Forever beta/realm exposure through Blizzard's public profile APIs is verified.
 
 ## Implemented capability probe
 
-Addon **0.3.15-alpha** includes diagnostic-only Guildbook probes:
+Addon **0.4.0-alpha** includes diagnostic-only Guildbook probes:
 
 `/fdb guild`
 
@@ -304,6 +304,32 @@ Proceed with Guildbook V1 around the verified data surface:
 
 Keep recipe/crafter lookup behind a feature flag / future compatibility gate.
 
+
+## Guildbook V1 implementation
+
+Implemented in addon **0.4.0-alpha**, export schema **9**, Companion **0.8.0-alpha**.
+
+The V1 persisted contract includes:
+
+- guild key, name, realm and capture timestamp;
+- member GUID, name, class, level, rank, online state, zone and last-online age;
+- guild-visible primary profession + skill;
+- logged-in character secondary professions;
+- no officer notes;
+- no recipe/crafter data.
+
+Export record types:
+
+- `G` — guild
+- `C` — character/member
+- `P` — profession
+
+Supabase stores these in private per-installation tables. Direct anon/authenticated
+table reads are revoked; ingestion is only through the authenticated
+`ingest_foreverdb_snapshot_auth` security-definer RPC.
+
+The Companion exposes a Guildbook tab with guild selection and filtering by character,
+class, rank, zone or profession.
 
 ## Candidate Guildbook data
 
