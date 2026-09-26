@@ -17,6 +17,7 @@ public sealed class SyncService
         new(StringComparer.OrdinalIgnoreCase);
 
     public event EventHandler<string>? StatusChanged;
+    public event EventHandler<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
 
     public SyncService(
         HttpClient httpClient,
@@ -40,6 +41,10 @@ public sealed class SyncService
         var snapshot = _parser.ParseSavedVariables(path);
 
         MapMetadataStore.Merge(snapshot.Maps);
+
+        GuildbookChanged?.Invoke(
+            this,
+            snapshot.Guilds);
 
         if (_lastSyncedSnapshot.TryGetValue(
                 snapshot.InstallationId,
@@ -99,7 +104,7 @@ public sealed class SyncService
 
         StatusChanged?.Invoke(
             this,
-            $"Synced {snapshot.Sources.Count} sources at {DateTime.Now:T}");
+            $"Synced {snapshot.Sources.Count} sources and {snapshot.Guilds.Sum(guild => guild.Members.Count)} guild members at {DateTime.Now:T}");
 
         _ = PrewarmMapCacheAsync(
             snapshot);
