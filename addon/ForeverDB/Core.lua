@@ -3,8 +3,8 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.3.15-alpha"
-FDB.SCHEMA_VERSION = 8
+FDB.VERSION = "0.4.0-alpha"
+FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
 local PREFIX = "|cff7dd3fcForeverDB|r"
@@ -129,6 +129,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 
         FDB:InitializeDatabase()
         FDB:InitializeGuildApiProbe()
+        FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
         FDB:InitializeFishingPoolTracker()
