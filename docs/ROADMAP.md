@@ -7,7 +7,7 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.3.13-alpha**
+- Version: **0.3.14-alpha**
 - Schema: **8**
 - Forever interface: **16001**
 - Observed pipelines:
