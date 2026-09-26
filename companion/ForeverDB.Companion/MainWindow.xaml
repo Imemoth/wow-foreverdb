@@ -362,6 +362,121 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="GUILDBOOK">
+                <Grid Margin="8,16,8,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource CardStyle}"
+                            Padding="14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="280" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <ComboBox x:Name="GuildSelector"
+                                      Height="38"
+                                      VerticalContentAlignment="Center"
+                                      SelectionChanged="GuildSelector_SelectionChanged"
+                                      ToolTip="Select a guild snapshot" />
+
+                            <TextBox x:Name="GuildFilterBox"
+                                     Grid.Column="2"
+                                     Height="38"
+                                     VerticalContentAlignment="Center"
+                                     TextChanged="GuildFilterBox_TextChanged"
+                                     ToolTip="Filter by character, class, rank, zone or profession" />
+
+                            <Button Grid.Column="3"
+                                    Width="120"
+                                    Height="38"
+                                    Margin="12,0,0,0"
+                                    Click="SyncNow_Click"
+                                    Content="Refresh data" />
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2"
+                            Style="{StaticResource CardStyle}"
+                            Padding="16">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="12" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock x:Name="GuildbookTitleText"
+                                               FontSize="21"
+                                               FontWeight="SemiBold"
+                                               Text="Guildbook" />
+                                    <TextBlock x:Name="GuildbookStatusText"
+                                               Margin="0,4,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="Sync a schema 9 addon snapshot to load guild data." />
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Padding="10,6"
+                                        CornerRadius="12"
+                                        Background="{StaticResource AccentSoftBrush}"
+                                        VerticalAlignment="Center">
+                                    <TextBlock x:Name="GuildbookCountText"
+                                               Foreground="{StaticResource AccentBrush}"
+                                               FontWeight="SemiBold"
+                                               Text="0 members" />
+                                </Border>
+                            </Grid>
+
+                            <DataGrid x:Name="GuildMembersGrid"
+                                      Grid.Row="2"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      HeadersVisibility="Column"
+                                      SelectionMode="Single">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Character"
+                                                        Binding="{Binding Name}"
+                                                        Width="180" />
+                                    <DataGridTextColumn Header="Class"
+                                                        Binding="{Binding ClassName}"
+                                                        Width="105" />
+                                    <DataGridTextColumn Header="Lvl"
+                                                        Binding="{Binding Level}"
+                                                        Width="55" />
+                                    <DataGridTextColumn Header="Rank"
+                                                        Binding="{Binding RankName}"
+                                                        Width="120" />
+                                    <DataGridTextColumn Header="Status"
+                                                        Binding="{Binding Status}"
+                                                        Width="90" />
+                                    <DataGridTextColumn Header="Zone"
+                                                        Binding="{Binding Zone}"
+                                                        Width="150" />
+                                    <DataGridTextColumn Header="Professions"
+                                                        Binding="{Binding Professions}"
+                                                        Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="SETTINGS">
                 <Grid Margin="8,16,8,8">
                     <Grid.ColumnDefinitions>
