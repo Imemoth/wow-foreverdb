@@ -86,6 +86,53 @@ function FDB:BuildExportSnapshot()
         end
     end
 
+    for _, guildKey in ipairs(sortedKeys(self.DB.guilds or {})) do
+        local guild = self.DB.guilds[guildKey]
+
+        lines[#lines + 1] = table.concat({
+            "G",
+            encode(guild.guildKey or guildKey),
+            encode(guild.name),
+            encode(guild.realmName),
+            tostring(guild.capturedAt or 0),
+        }, "|")
+
+        for _, memberKey in ipairs(sortedKeys(guild.members or {})) do
+            local member = guild.members[memberKey]
+
+            lines[#lines + 1] = table.concat({
+                "C",
+                encode(guild.guildKey or guildKey),
+                encode(member.guid or memberKey),
+                encode(member.name),
+                encode(member.className),
+                encode(member.classFile),
+                tostring(member.level or 0),
+                encode(member.rankName),
+                tostring(member.rankIndex or -1),
+                member.online and "1" or "0",
+                encode(member.zone),
+                tostring(member.lastOnlineHours or 0),
+            }, "|")
+
+            for _, professionKey in ipairs(sortedKeys(member.professions or {})) do
+                local profession = member.professions[professionKey]
+
+                lines[#lines + 1] = table.concat({
+                    "P",
+                    encode(guild.guildKey or guildKey),
+                    encode(member.guid or memberKey),
+                    tostring(profession.skillLineId or professionKey),
+                    encode(profession.name),
+                    tostring(profession.skill or 0),
+                    tostring(profession.maxSkill or 0),
+                    encode(profession.source or ""),
+                    profession.isSecondary and "1" or "0",
+                }, "|")
+            end
+        end
+    end
+
     for _, sourceKey in ipairs(sortedKeys(self.DB.sources)) do
         local source = self.DB.sources[sourceKey]
 
