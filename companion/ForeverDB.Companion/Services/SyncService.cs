@@ -17,7 +17,7 @@ public sealed class SyncService
         new(StringComparer.OrdinalIgnoreCase);
 
     public event EventHandler<string>? StatusChanged;
-    public event EventHandler<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
+    public event Action<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
 
     public SyncService(
         HttpClient httpClient,
@@ -43,7 +43,6 @@ public sealed class SyncService
         MapMetadataStore.Merge(snapshot.Maps);
 
         GuildbookChanged?.Invoke(
-            this,
             snapshot.Guilds);
 
         if (_lastSyncedSnapshot.TryGetValue(
