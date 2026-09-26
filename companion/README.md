@@ -4,7 +4,7 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.7.1-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.8.0-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
@@ -21,6 +21,7 @@ ForeverDB Companion **0.7.1-alpha** is a .NET 8 WPF application with:
 - markers, weighted clusters and heatmap overlays with zoom/pan
 - local cache for WoW client map-art metadata and map-resolution results
 - background pre-warming for recently observed zones
+- Guildbook V1 tab for roster/status/zone/profession browsing
 - sample-quality and quest metadata
 - manual GitHub Actions build and Inno Setup installer workflows
 
@@ -31,7 +32,7 @@ available in detail metadata where they are useful for diagnostics.
 
 The selected map source is the user's installed WoW Forever build.
 
-Addon schema 8 exports the client-provided uiMapID, MapArtID, art-layer dimensions
+Addon schema 9 exports the client-provided uiMapID, MapArtID, art-layer dimensions
 and tile texture references. The Companion caches that metadata locally.
 
 Map resolution is **local-first**. The Companion first opens the matching local
