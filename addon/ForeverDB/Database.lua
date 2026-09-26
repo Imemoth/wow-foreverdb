@@ -50,6 +50,7 @@ local function newDatabase()
         updatedAt = now(),
         sources = {},
         maps = {},
+        guilds = {},
         diagnostics = {
             unresolvedLootWindows = 0,
         },
@@ -265,6 +266,7 @@ function FDB:InitializeDatabase()
     db.updatedAt = now()
     db.sources = db.sources or {}
     db.maps = db.maps or {}
+    db.guilds = db.guilds or {}
     db.diagnostics = db.diagnostics or {}
     db.diagnostics.unresolvedLootWindows = db.diagnostics.unresolvedLootWindows or 0
 
