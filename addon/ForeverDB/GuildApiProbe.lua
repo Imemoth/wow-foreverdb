@@ -626,10 +626,22 @@ local function finishLegacyGuildRecipeFallback()
                 PREFIX,
                 "guildrecipe: ViewGuildRecipes skipped; guild recipe cache is not viewable for this primary skillLine"
             )
-            print(
-                PREFIX,
-                "guildrecipe: test a known crafting member/profession to distinguish cache/permission limits from API incompatibility"
-            )
+
+            if recipeTarget.guildPublished then
+                print(
+                    PREFIX,
+                    "guildrecipe: RESULT: published crafting member is visible in guild tradeskill cache, but guild recipe cache remains unavailable"
+                )
+                print(
+                    PREFIX,
+                    "guildrecipe: classify Forever guild member-recipe discovery as RUNTIME LIMITED for this build"
+                )
+            else
+                print(
+                    PREFIX,
+                    "guildrecipe: target profession is not published for this member; result is inconclusive for recipe API compatibility"
+                )
+            end
         end
     end
 
@@ -1178,7 +1190,15 @@ local function runGuildRecipeQueryAfterPreflight()
             recipeTarget.skillLineID
         )
 
+    recipeTarget.guildPublished =
+        guildPublished and true or false
+
     if guildPublished then
+        recipeTarget.publishedMemberName =
+            publishedInfo.name
+        recipeTarget.publishedSkill =
+            publishedInfo.skill
+
         print(
             PREFIX,
             "guildrecipe: guild tradeskill cache contains target member",
