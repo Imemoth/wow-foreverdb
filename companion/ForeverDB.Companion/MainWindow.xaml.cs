@@ -23,6 +23,9 @@ public partial class MainWindow : Window
     private readonly Stack<SearchResultItem> _forwardHistory = new();
     private SearchResultItem? _currentDetail;
 
+    private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -43,6 +46,9 @@ public partial class MainWindow : Window
     {
         _watcher?.Dispose();
         _watcher = null;
+
+        _guildbookGuilds.Clear();
+        RefreshGuildbookUi();
 
         if (string.IsNullOrWhiteSpace(_settings.WowRoot))
         {
@@ -67,6 +73,10 @@ public partial class MainWindow : Window
 
         _syncService.StatusChanged += (_, status) =>
             Dispatcher.Invoke(() => SetStatus(status));
+
+        _syncService.GuildbookChanged += (_, guilds) =>
+            Dispatcher.Invoke(
+                () => MergeGuildbook(guilds));
 
         _searchService = new SearchService(
             _httpClient,
@@ -137,6 +147,151 @@ public partial class MainWindow : Window
             SetStatus(ex.Message);
         }
     }
+
+    private void MergeGuildbook(
+        IReadOnlyList<ForeverDbGuild> guilds)
+    {
+        var selectedKey =
+            (GuildSelector.SelectedItem as ForeverDbGuild)
+                ?.GuildKey;
+
+        foreach (var guild in guilds)
+        {
+            if (string.IsNullOrWhiteSpace(guild.GuildKey))
+            {
+                continue;
+            }
+
+            if (!_guildbookGuilds.TryGetValue(
+                    guild.GuildKey,
+                    out var existing) ||
+                guild.CapturedAt >= existing.CapturedAt)
+            {
+                _guildbookGuilds[guild.GuildKey] = guild;
+            }
+        }
+
+        var available = _guildbookGuilds.Values
+            .OrderBy(guild => guild.Name)
+            .ThenBy(guild => guild.RealmName)
+            .ToList();
+
+        GuildSelector.ItemsSource = available;
+
+        var selected = available.FirstOrDefault(
+            guild =>
+                string.Equals(
+                    guild.GuildKey,
+                    selectedKey,
+                    StringComparison.OrdinalIgnoreCase));
+
+        GuildSelector.SelectedItem =
+            selected ??
+            available.FirstOrDefault();
+
+        RefreshGuildbookUi();
+    }
+
+    private void GuildSelector_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        RefreshGuildbookUi();
+    }
+
+    private void GuildFilterBox_TextChanged(
+        object sender,
+        TextChangedEventArgs e)
+    {
+        RefreshGuildbookUi();
+    }
+
+    private void RefreshGuildbookUi()
+    {
+        if (GuildMembersGrid is null ||
+            GuildSelector is null ||
+            GuildFilterBox is null)
+        {
+            return;
+        }
+
+        if (GuildSelector.SelectedItem is not ForeverDbGuild guild)
+        {
+            GuildMembersGrid.ItemsSource = null;
+            GuildbookTitleText.Text = "Guildbook";
+            GuildbookStatusText.Text =
+                _guildbookGuilds.Count == 0
+                    ? "No schema 9 guild snapshot has been loaded yet."
+                    : "Select a guild.";
+            GuildbookCountText.Text = "0 members";
+            return;
+        }
+
+        var filter =
+            GuildFilterBox.Text
+                .Trim();
+
+        var rows = guild.Members
+            .Select(GuildbookMemberRow.From)
+            .Where(
+                row =>
+                    string.IsNullOrWhiteSpace(filter) ||
+                    Contains(
+                        row.Name,
+                        filter) ||
+                    Contains(
+                        row.ClassName,
+                        filter) ||
+                    Contains(
+                        row.RankName,
+                        filter) ||
+                    Contains(
+                        row.Zone,
+                        filter) ||
+                    Contains(
+                        row.Professions,
+                        filter))
+            .OrderByDescending(row => row.Online)
+            .ThenBy(row => row.RankIndex)
+            .ThenBy(row => row.Name)
+            .ToList();
+
+        GuildMembersGrid.ItemsSource = rows;
+
+        var onlineCount =
+            guild.Members.Count(
+                member =>
+                    member.Online);
+
+        GuildbookTitleText.Text =
+            string.IsNullOrWhiteSpace(guild.RealmName)
+                ? guild.Name
+                : $"{guild.Name} — {guild.RealmName}";
+
+        var captured =
+            guild.CapturedAt > 0
+                ? DateTimeOffset
+                    .FromUnixTimeSeconds(
+                        guild.CapturedAt)
+                    .ToLocalTime()
+                    .ToString("g")
+                : "unknown";
+
+        GuildbookStatusText.Text =
+            $"Captured {captured}. Primary guild professions are shown where published by the Forever client; recipe lookup is currently runtime-limited.";
+
+        GuildbookCountText.Text =
+            rows.Count == guild.Members.Count
+                ? $"{guild.Members.Count} members • {onlineCount} online"
+                : $"{rows.Count}/{guild.Members.Count} members • {onlineCount} online";
+    }
+
+    private static bool Contains(
+        string value,
+        string query)
+        => value.Contains(
+            query,
+            StringComparison.OrdinalIgnoreCase);
 
     private async void Search_Click(
         object sender,
