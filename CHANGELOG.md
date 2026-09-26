@@ -6,11 +6,18 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.3.15-alpha**
-- Export schema: **8**
-- Companion: **0.7.1-alpha**
+- Addon: **0.4.0-alpha**
+- Export schema: **9**
+- Companion: **0.8.0-alpha**
 
 # Companion
+
+## 0.8.0-alpha — 2026-09-26
+
+- Added Guildbook V1 UI with guild selection, text filtering, member status, zone, rank and profession summaries.
+- Added schema 9 Guildbook export parsing and in-memory merge across synced SavedVariables.
+- Sync status now reports uploaded guild-member counts.
+- Guild data remains private per installation and is not exposed through public catalog reads.
 
 ## 0.7.1-alpha — 2026-09-25
 
@@ -104,6 +111,15 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.4.0-alpha — 2026-09-26
+
+- Introduced SavedVariables/export schema 9.
+- Added Guildbook V1 collector with guild roster snapshots.
+- Captures character GUID, name, class, level, rank, online/offline state, zone and last-online age.
+- Captures guild-visible primary profession/skill rows and the logged-in character's secondary professions.
+- Added G/C/P export records for guild, character and profession data.
+- Recipe/crafter discovery remains deferred because the current Forever build's guild recipe cache is runtime-limited.
 
 ## 0.3.15-alpha — 2026-09-25
 
