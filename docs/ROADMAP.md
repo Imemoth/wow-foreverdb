@@ -7,7 +7,7 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.3.14-alpha**
+- Version: **0.3.15-alpha**
 - Schema: **8**
 - Forever interface: **16001**
 - Observed pipelines:
@@ -98,7 +98,7 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 - [x] Runtime capability probe for Forever guild roster/profession APIs (`/fdb guildapi`) — function availability + own-character professions PASS.
 - [x] Guilded-character roster/member profession acceptance — PASS (expanded member rows returned).
-- [ ] Targeted guild recipe-query acceptance with real member GUID + skillLineID (`/fdb guildrecipe`).
+- [x] Targeted guild recipe-query acceptance completed — current Forever build is RUNTIME LIMITED for guild recipe/crafter lookup; defer to a later compatibility pass.
 - [ ] Guild roster SavedVariables contract.
 - [ ] Character + profession model and Supabase authorization design.
 - [ ] Companion Guildbook tab.
