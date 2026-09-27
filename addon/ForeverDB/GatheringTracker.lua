@@ -37,6 +37,7 @@ function FDB:GetPendingGathering()
 
     local current = GetTime and GetTime() or pending.at
     if current - (pending.at or 0) > 12 then
+        self:Debug(pending.kind, "pending gathering expired before loot")
         self.PendingGathering = nil
         return nil
     end
@@ -99,6 +100,9 @@ function FDB:InitializeGatheringTracker()
                 location = FDB:GetCurrentLocation(),
             }
         )
-        FDB:Debug(kind, "interaction detected")
+        FDB:Debug(
+            kind, "interaction detected", "spell", spellId,
+            "source", guid or "awaiting loot source"
+        )
     end)
 end
