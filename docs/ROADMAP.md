@@ -110,6 +110,8 @@ Validated runtime snapshot: 1 guild, 12 members, 4 online, 9 profession rows.
 
 ### 0.8.2-alpha — Guildbook visual polish
 
+Implementation status: **implemented; build/runtime UI verification pending.**
+
 - [x] Increase Guildbook roster row/header spacing for large displays.
 - [x] Add compact Members / Online / Offline / 30m refresh summary cards.
 - [x] Preserve visible/total counts while filters are active.
