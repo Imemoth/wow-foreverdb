@@ -121,3 +121,6 @@ counts. This keeps SavedVariables compact while preserving enough resolution
 for zone maps and heatmaps.
 
 Location data is not shown in normal in-game tooltips.
+
+
+Guildbook V1 runtime acceptance: [Guildbook V1 acceptance](docs/0.8-guildbook-acceptance.md).
