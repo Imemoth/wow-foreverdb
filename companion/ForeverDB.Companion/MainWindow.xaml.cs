@@ -314,7 +314,9 @@ public partial class MainWindow : Window
                 _guildbookGuilds.Count == 0
                     ? "No schema 9 guild snapshot has been loaded yet."
                     : "Select a guild.";
-            GuildbookCountText.Text = "0 members";
+            GuildbookMembersText.Text = "0";
+            GuildbookOnlineText.Text = "0";
+            GuildbookOfflineText.Text = "0";
             return;
         }
 
@@ -402,10 +404,29 @@ public partial class MainWindow : Window
                 row =>
                     row.Online);
 
-        GuildbookCountText.Text =
-            rows.Count == guild.Members.Count
-                ? $"{guild.Members.Count} members • {onlineCount} online"
-                : $"{rows.Count}/{guild.Members.Count} members • {visibleOnlineCount}/{onlineCount} online";
+        var offlineCount =
+            guild.Members.Count - onlineCount;
+
+        var visibleOfflineCount =
+            rows.Count - visibleOnlineCount;
+
+        var filtered =
+            rows.Count != guild.Members.Count;
+
+        GuildbookMembersText.Text =
+            filtered
+                ? $"{rows.Count}/{guild.Members.Count}"
+                : guild.Members.Count.ToString();
+
+        GuildbookOnlineText.Text =
+            filtered
+                ? $"{visibleOnlineCount}/{onlineCount}"
+                : onlineCount.ToString();
+
+        GuildbookOfflineText.Text =
+            filtered
+                ? $"{visibleOfflineCount}/{offlineCount}"
+                : offlineCount.ToString();
     }
 
     private static bool Contains(
