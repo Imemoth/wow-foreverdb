@@ -17,15 +17,22 @@ public sealed class GuildbookProfessionChip
         new SolidColorBrush(
             (Color)ColorConverter.ConvertFromString(
                 IsSecondary
-                    ? "#202B3A"
-                    : "#2E2719"));
+                    ? "#182B3D"
+                    : "#382D18"));
 
     public Brush BorderBrush =>
         new SolidColorBrush(
             (Color)ColorConverter.ConvertFromString(
                 IsSecondary
-                    ? "#3B526E"
-                    : "#705A2B"));
+                    ? "#4C7297"
+                    : "#A27B32"));
+
+    public Brush ForegroundBrush =>
+        new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString(
+                IsSecondary
+                    ? "#D6E5F5"
+                    : "#F1D188"));
 }
 
 public sealed class GuildbookMemberRow
