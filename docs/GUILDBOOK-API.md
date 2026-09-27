@@ -468,3 +468,22 @@ Before a public rollout define:
 - how ownership/administration of a guild dataset is established.
 
 Officer notes and other privileged guild information should be excluded by default.
+
+
+## Guildbook V1 acceptance
+
+Runtime E2E acceptance passed on 2026-09-27 with addon 0.4.0-alpha, schema 9 and
+Companion 0.8.0-alpha.
+
+Validated chain:
+
+`Forever client -> SavedVariables -> schema 9 parser -> authenticated Supabase ingest -> Companion Guildbook UI`
+
+Observed snapshot:
+
+- 1 guild
+- 12 members
+- 4 online
+- 9 profession rows
+
+See [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
