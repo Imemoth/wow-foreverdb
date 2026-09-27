@@ -7,7 +7,7 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.4.0-alpha**
+- Version: **0.4.1-alpha**
 - Schema: **9**
 - Forever interface: **16001**
 - Observed pipelines:
@@ -22,7 +22,7 @@ polish and distribution work.
   - disenchant
 
 ### Companion
-- Version: **0.8.0-alpha**
+- Version: **0.8.1-alpha**
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -96,6 +96,17 @@ Implementation status: **complete; runtime acceptance PASS.**
 Acceptance: **PASS** — see [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 
 Validated runtime snapshot: 1 guild, 12 members, 4 online, 9 profession rows.
+
+### 0.8.1-alpha — Guildbook polish
+
+- [x] Dark-theme guild/profession ComboBoxes.
+- [x] Filter placeholder text.
+- [x] Online-only toggle.
+- [x] Profession-specific filter.
+- [x] WoW class colors in the roster.
+- [x] Wrapped profession chips for denser/readable display.
+- [x] Addon Guildbook refresh every 30 minutes while logged in.
+- [x] Companion status explains the difference between in-client refresh and SavedVariables/Supabase persistence.
 
 ## 0.8 — Companion hardening & distribution
 
