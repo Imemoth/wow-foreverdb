@@ -9,7 +9,7 @@ Observed loot, gathering, fishing, GameObject and disenchant database for World 
 | Addon | **0.4.1-alpha** |
 | SavedVariables / export schema | **9** |
 | Forever interface target | **16001** |
-| Companion | **0.8.1-alpha** |
+| Companion | **0.8.2-alpha** |
 
 Version sources and release rules are documented in [docs/VERSIONING.md](docs/VERSIONING.md). Release history is kept in [CHANGELOG.md](CHANGELOG.md).
 
