@@ -22,7 +22,7 @@ polish and distribution work.
   - disenchant
 
 ### Companion
-- Version: **0.8.1-alpha**
+- Version: **0.8.2-alpha**
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -107,6 +107,13 @@ Validated runtime snapshot: 1 guild, 12 members, 4 online, 9 profession rows.
 - [x] Wrapped profession chips for denser/readable display.
 - [x] Addon Guildbook refresh every 30 minutes while logged in.
 - [x] Companion status explains the difference between in-client refresh and SavedVariables/Supabase persistence.
+
+### 0.8.2-alpha — Guildbook visual polish
+
+- [x] Increase Guildbook roster row/header spacing for large displays.
+- [x] Add compact Members / Online / Offline / 30m refresh summary cards.
+- [x] Preserve visible/total counts while filters are active.
+- [x] Increase primary vs secondary profession chip contrast.
 
 ## 0.8 — Companion hardening & distribution
 
