@@ -6,6 +6,11 @@ local professionCapturePending = false
 local professionCaptureGeneration = 0
 local expandedSkillLines = {}
 local lastRefreshAt = 0
+local refreshTicker
+local periodicFallbackStarted = false
+
+local GUILDBOOK_REFRESH_INTERVAL_SECONDS =
+    30 * 60
 
 local function now()
     if GetServerTime then
@@ -613,6 +618,50 @@ function FDB:RefreshGuildbook(reason)
     )
 end
 
+local function startPeriodicGuildbookRefresh()
+    if refreshTicker
+        or periodicFallbackStarted then
+        return
+    end
+
+    if C_Timer
+        and C_Timer.NewTicker then
+        refreshTicker =
+            C_Timer.NewTicker(
+                GUILDBOOK_REFRESH_INTERVAL_SECONDS,
+                function()
+                    FDB:RefreshGuildbook(
+                        "periodic-30m"
+                    )
+                end
+            )
+
+        return
+    end
+
+    if C_Timer
+        and C_Timer.After then
+        periodicFallbackStarted = true
+
+        local tick
+
+        tick = function()
+            C_Timer.After(
+                GUILDBOOK_REFRESH_INTERVAL_SECONDS,
+                function()
+                    FDB:RefreshGuildbook(
+                        "periodic-30m"
+                    )
+
+                    tick()
+                end
+            )
+        end
+
+        tick()
+    end
+end
+
 function FDB:InitializeGuildbookTracker()
     if trackerFrame then
         return
@@ -686,5 +735,11 @@ function FDB:InitializeGuildbookTracker()
                 )
             end
         )
+    else
+        FDB:RefreshGuildbook(
+            "startup"
+        )
     end
+
+    startPeriodicGuildbookRefresh()
 end
