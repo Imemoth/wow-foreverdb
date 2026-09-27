@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
+    private bool _updatingGuildbookFilters;
 
     public MainWindow()
     {
@@ -189,6 +190,11 @@ public partial class MainWindow : Window
             selected ??
             available.FirstOrDefault();
 
+        if (GuildSelector.SelectedItem is ForeverDbGuild selectedGuild)
+        {
+            RefreshGuildProfessionFilter(selectedGuild);
+        }
+
         RefreshGuildbookUi();
     }
 
@@ -196,6 +202,11 @@ public partial class MainWindow : Window
         object sender,
         SelectionChangedEventArgs e)
     {
+        if (GuildSelector.SelectedItem is ForeverDbGuild guild)
+        {
+            RefreshGuildProfessionFilter(guild);
+        }
+
         RefreshGuildbookUi();
     }
 
@@ -204,6 +215,69 @@ public partial class MainWindow : Window
         TextChangedEventArgs e)
     {
         RefreshGuildbookUi();
+    }
+
+    private void GuildProfessionFilter_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_updatingGuildbookFilters)
+        {
+            return;
+        }
+
+        RefreshGuildbookUi();
+    }
+
+    private void GuildOnlineOnlyCheck_Changed(
+        object sender,
+        RoutedEventArgs e)
+    {
+        RefreshGuildbookUi();
+    }
+
+    private void RefreshGuildProfessionFilter(
+        ForeverDbGuild guild)
+    {
+        if (GuildProfessionFilter is null)
+        {
+            return;
+        }
+
+        var current =
+            GuildProfessionFilter.SelectedItem as string;
+
+        var options = new List<string>
+        {
+            "All professions"
+        };
+
+        options.AddRange(
+            guild.Members
+                .SelectMany(member => member.Professions)
+                .Select(profession => profession.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name));
+
+        _updatingGuildbookFilters = true;
+
+        try
+        {
+            GuildProfessionFilter.ItemsSource = options;
+            GuildProfessionFilter.SelectedItem =
+                options.FirstOrDefault(
+                    option =>
+                        string.Equals(
+                            option,
+                            current,
+                            StringComparison.OrdinalIgnoreCase))
+                ?? options[0];
+        }
+        finally
+        {
+            _updatingGuildbookFilters = false;
+        }
     }
 
     private void RefreshGuildbookUi()
@@ -231,8 +305,34 @@ public partial class MainWindow : Window
             GuildFilterBox.Text
                 .Trim();
 
+        var professionFilter =
+            GuildProfessionFilter.SelectedItem as string;
+
+        var filterProfession =
+            !string.IsNullOrWhiteSpace(professionFilter) &&
+            !string.Equals(
+                professionFilter,
+                "All professions",
+                StringComparison.OrdinalIgnoreCase);
+
+        var onlineOnly =
+            GuildOnlineOnlyCheck.IsChecked == true;
+
         var rows = guild.Members
             .Select(GuildbookMemberRow.From)
+            .Where(
+                row =>
+                    !onlineOnly ||
+                    row.Online)
+            .Where(
+                row =>
+                    !filterProfession ||
+                    row.ProfessionNames.Any(
+                        profession =>
+                            string.Equals(
+                                profession,
+                                professionFilter,
+                                StringComparison.OrdinalIgnoreCase)))
             .Where(
                 row =>
                     string.IsNullOrWhiteSpace(filter) ||
@@ -278,7 +378,7 @@ public partial class MainWindow : Window
                 : "unknown";
 
         GuildbookStatusText.Text =
-            $"Captured {captured}. Primary guild professions are shown where published by the Forever client; recipe lookup is currently runtime-limited.";
+            $"Captured {captured}. Addon roster refresh runs every 30 minutes while logged in; disk/Supabase sync still follows SavedVariables writes. Recipe lookup is currently runtime-limited.";
 
         GuildbookCountText.Text =
             rows.Count == guild.Members.Count
