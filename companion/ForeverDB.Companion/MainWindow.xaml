@@ -465,16 +465,92 @@
                                                Text="Sync a schema 9 addon snapshot to load guild data." />
                                 </StackPanel>
 
-                                <Border Grid.Column="1"
-                                        Padding="10,6"
-                                        CornerRadius="12"
-                                        Background="{StaticResource AccentSoftBrush}"
-                                        VerticalAlignment="Center">
-                                    <TextBlock x:Name="GuildbookCountText"
-                                               Foreground="{StaticResource AccentBrush}"
-                                               FontWeight="SemiBold"
-                                               Text="0 members" />
-                                </Border>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <Border MinWidth="74"
+                                            Margin="0,0,6,0"
+                                            Padding="10,6"
+                                            CornerRadius="8"
+                                            Background="{StaticResource SurfaceAltBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="GuildbookMembersText"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Text="0" />
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="10"
+                                                       Text="Members" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border MinWidth="68"
+                                            Margin="0,0,6,0"
+                                            Padding="10,6"
+                                            CornerRadius="8"
+                                            Background="#162A24"
+                                            BorderBrush="#2F6D58"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="GuildbookOnlineText"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource SuccessBrush}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Text="0" />
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="10"
+                                                       Text="Online" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border MinWidth="68"
+                                            Margin="0,0,6,0"
+                                            Padding="10,6"
+                                            CornerRadius="8"
+                                            Background="{StaticResource SurfaceAltBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="GuildbookOfflineText"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Text="0" />
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="10"
+                                                       Text="Offline" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border MinWidth="72"
+                                            Padding="10,6"
+                                            CornerRadius="8"
+                                            Background="{StaticResource AccentSoftBrush}"
+                                            BorderBrush="#705A2B"
+                                            BorderThickness="1"
+                                            ToolTip="Addon-side Guildbook refresh interval while logged in">
+                                        <StackPanel>
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource AccentBrush}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Text="30m" />
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="10"
+                                                       Text="Refresh" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
                             </Grid>
 
                             <DataGrid x:Name="GuildMembersGrid"
@@ -483,7 +559,14 @@
                                       IsReadOnly="True"
                                       CanUserAddRows="False"
                                       HeadersVisibility="Column"
+                                      ColumnHeaderHeight="32"
                                       SelectionMode="Single">
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow"
+                                           BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                        <Setter Property="MinHeight" Value="32" />
+                                    </Style>
+                                </DataGrid.RowStyle>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Character"
                                                         Binding="{Binding Name}"
@@ -537,8 +620,9 @@
                                                                     Background="{Binding BackgroundBrush}"
                                                                     BorderBrush="{Binding BorderBrush}"
                                                                     BorderThickness="1">
-                                                                <TextBlock Foreground="{StaticResource TextBrush}"
+                                                                <TextBlock Foreground="{Binding ForegroundBrush}"
                                                                            FontSize="11"
+                                                                           FontWeight="SemiBold"
                                                                            Text="{Binding Display}" />
                                                             </Border>
                                                         </DataTemplate>
