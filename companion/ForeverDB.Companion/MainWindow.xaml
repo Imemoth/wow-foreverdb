@@ -374,10 +374,15 @@
                             Padding="14">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="280" />
+                                <ColumnDefinition Width="250" />
                                 <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="175" />
+                                <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="120" />
                             </Grid.ColumnDefinitions>
 
                             <ComboBox x:Name="GuildSelector"
@@ -386,17 +391,48 @@
                                       SelectionChanged="GuildSelector_SelectionChanged"
                                       ToolTip="Select a guild snapshot" />
 
-                            <TextBox x:Name="GuildFilterBox"
-                                     Grid.Column="2"
-                                     Height="38"
-                                     VerticalContentAlignment="Center"
-                                     TextChanged="GuildFilterBox_TextChanged"
-                                     ToolTip="Filter by character, class, rank, zone or profession" />
+                            <Grid Grid.Column="2">
+                                <TextBox x:Name="GuildFilterBox"
+                                         Height="38"
+                                         VerticalContentAlignment="Center"
+                                         TextChanged="GuildFilterBox_TextChanged"
+                                         ToolTip="Filter by character, class, rank, zone or profession" />
+                                <TextBlock Margin="12,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#667387"
+                                           IsHitTestVisible="False"
+                                           Text="Filter character, class, rank, zone or profession...">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=GuildFilterBox}"
+                                                             Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
 
-                            <Button Grid.Column="3"
+                            <ComboBox x:Name="GuildProfessionFilter"
+                                      Grid.Column="4"
+                                      Height="38"
+                                      VerticalContentAlignment="Center"
+                                      SelectionChanged="GuildProfessionFilter_SelectionChanged"
+                                      ToolTip="Filter by profession" />
+
+                            <CheckBox x:Name="GuildOnlineOnlyCheck"
+                                      Grid.Column="6"
+                                      VerticalAlignment="Center"
+                                      Checked="GuildOnlineOnlyCheck_Changed"
+                                      Unchecked="GuildOnlineOnlyCheck_Changed"
+                                      Content="Online only" />
+
+                            <Button Grid.Column="8"
                                     Width="120"
                                     Height="38"
-                                    Margin="12,0,0,0"
                                     Click="SyncNow_Click"
                                     Content="Refresh data" />
                         </Grid>
@@ -451,25 +487,66 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Character"
                                                         Binding="{Binding Name}"
-                                                        Width="180" />
-                                    <DataGridTextColumn Header="Class"
-                                                        Binding="{Binding ClassName}"
-                                                        Width="105" />
+                                                        Width="175" />
+                                    <DataGridTemplateColumn Header="Class"
+                                                            Width="105">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Foreground="{Binding ClassBrush}"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding ClassName}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Lvl"
                                                         Binding="{Binding Level}"
-                                                        Width="55" />
+                                                        Width="52" />
                                     <DataGridTextColumn Header="Rank"
                                                         Binding="{Binding RankName}"
-                                                        Width="120" />
-                                    <DataGridTextColumn Header="Status"
-                                                        Binding="{Binding Status}"
-                                                        Width="90" />
+                                                        Width="115" />
+                                    <DataGridTemplateColumn Header="Status"
+                                                            Width="90">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Foreground="{Binding StatusBrush}"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding Status}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Zone"
                                                         Binding="{Binding Zone}"
-                                                        Width="150" />
-                                    <DataGridTextColumn Header="Professions"
-                                                        Binding="{Binding Professions}"
-                                                        Width="*" />
+                                                        Width="145" />
+                                    <DataGridTemplateColumn Header="Professions"
+                                                            Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ItemsControl ItemsSource="{Binding ProfessionChips}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,1,5,1"
+                                                                    Padding="7,3"
+                                                                    CornerRadius="9"
+                                                                    Background="{Binding BackgroundBrush}"
+                                                                    BorderBrush="{Binding BorderBrush}"
+                                                                    BorderThickness="1">
+                                                                <TextBlock Foreground="{StaticResource TextBrush}"
+                                                                           FontSize="11"
+                                                                           Text="{Binding Display}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Grid>
