@@ -292,6 +292,23 @@ public partial class MainWindow : Window
         if (GuildSelector.SelectedItem is not ForeverDbGuild guild)
         {
             GuildMembersGrid.ItemsSource = null;
+
+            if (GuildProfessionFilter is not null)
+            {
+                _updatingGuildbookFilters = true;
+
+                try
+                {
+                    GuildProfessionFilter.ItemsSource =
+                        new[] { "All professions" };
+                    GuildProfessionFilter.SelectedIndex = 0;
+                }
+                finally
+                {
+                    _updatingGuildbookFilters = false;
+                }
+            }
+
             GuildbookTitleText.Text = "Guildbook";
             GuildbookStatusText.Text =
                 _guildbookGuilds.Count == 0
@@ -380,10 +397,15 @@ public partial class MainWindow : Window
         GuildbookStatusText.Text =
             $"Captured {captured}. Addon roster refresh runs every 30 minutes while logged in; disk/Supabase sync still follows SavedVariables writes. Recipe lookup is currently runtime-limited.";
 
+        var visibleOnlineCount =
+            rows.Count(
+                row =>
+                    row.Online);
+
         GuildbookCountText.Text =
             rows.Count == guild.Members.Count
                 ? $"{guild.Members.Count} members • {onlineCount} online"
-                : $"{rows.Count}/{guild.Members.Count} members • {onlineCount} online";
+                : $"{rows.Count}/{guild.Members.Count} members • {visibleOnlineCount}/{onlineCount} online";
     }
 
     private static bool Contains(
