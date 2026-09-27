@@ -82,7 +82,7 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 ## 0.8.0-alpha — Guildbook V1
 
-Implementation status: **implemented; runtime acceptance pending.**
+Implementation status: **complete; runtime acceptance PASS.**
 
 - [x] Schema 9 addon Guildbook collector.
 - [x] Roster capture with name, GUID, class, level, rank, online state, zone and last-online age.
@@ -93,11 +93,9 @@ Implementation status: **implemented; runtime acceptance pending.**
 - [x] Companion Guildbook tab with filtering.
 - [x] Recipe/crafter lookup explicitly deferred because the current Forever build is runtime-limited.
 
-Acceptance gate:
-- schema 9 export contains G/C/P records;
-- Companion parses and displays the current guild;
-- authenticated sync writes private guild/member/profession rows;
-- no guild data is exposed to anon/authenticated table reads.
+Acceptance: **PASS** — see [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
+
+Validated runtime snapshot: 1 guild, 12 members, 4 online, 9 profession rows.
 
 ## 0.8 — Companion hardening & distribution
 
