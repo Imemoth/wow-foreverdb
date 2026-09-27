@@ -4,7 +4,7 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.8.0-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.8.1-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
