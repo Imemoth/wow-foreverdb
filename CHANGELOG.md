@@ -8,9 +8,16 @@ version contract and release checklist are documented in
 
 - Addon: **0.4.1-alpha**
 - Export schema: **9**
-- Companion: **0.8.1-alpha**
+- Companion: **0.8.2-alpha**
 
 # Companion
+
+## 0.8.2-alpha — 2026-09-27
+
+- Increased Guildbook roster row/header spacing for ultrawide and high-resolution displays.
+- Added compact Members / Online / Offline / 30m refresh summary cards.
+- Summary cards preserve visible/total counts while filters are active.
+- Increased the visual contrast between primary and secondary profession chips.
 
 ## 0.8.1-alpha — 2026-09-27
 
