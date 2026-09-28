@@ -23,13 +23,71 @@ local function falsy(value, label)
     end
 end
 
+-- A widget "has layout" only if it received a real SetPoint anchor and,
+-- where the widget requires one, a positive explicit size. Checking that
+-- a field merely exists, or that GetText() returns a value, proves
+-- nothing about whether it was ever actually positioned.
+local function hasAnchor(obj)
+    return obj ~= nil and obj.points ~= nil and #obj.points > 0
+end
+
+local function hasPositiveSize(obj)
+    return obj ~= nil
+        and type(obj.width) == "number" and obj.width > 0
+        and type(obj.height) == "number" and obj.height > 0
+end
+
+-- Shared geometry mixin: real WoW Region-derived objects (frames, font
+-- strings, textures) all support SetPoint/ClearAllPoints/SetSize with the
+-- same semantics. A prior version of this mock made SetPoint/SetSize
+-- either no-ops or single-anchor-only, which let production code create
+-- widgets with no real anchor or size at all without any test noticing.
+-- This mock now records every anchor (SetPoint is cumulative until
+-- ClearAllPoints, exactly like the real API) and the last explicit size,
+-- so a missing SetPoint/SetSize call is directly observable as
+-- `#obj.points == 0` / `obj.width == nil`.
+local function addGeometry(obj)
+    obj.points = {}
+    obj.width = nil
+    obj.height = nil
+
+    function obj:SetPoint(point, relativeTo, relativePoint, x, y)
+        local anchor = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y }
+        table.insert(self.points, anchor)
+        self.point = anchor -- last-set anchor, for single-anchor call sites
+    end
+
+    function obj:GetPoint(index)
+        local anchor = self.points[index or 1]
+        if not anchor then return nil end
+        return anchor.point, anchor.relativeTo, anchor.relativePoint, anchor.x, anchor.y
+    end
+
+    function obj:GetNumPoints() return #self.points end
+
+    function obj:ClearAllPoints()
+        self.points = {}
+        self.point = nil
+    end
+
+    function obj:SetSize(width, height)
+        self.width = width
+        self.height = height
+    end
+
+    function obj:SetWidth(width) self.width = width end
+    function obj:SetHeight(height) self.height = height end
+    function obj:GetWidth() return self.width or 0 end
+    function obj:GetHeight() return self.height or 0 end
+end
+
 local function makeFontString()
     local fs = { text = "", color = { 1, 1, 1 } }
+    addGeometry(fs)
     function fs:SetText(t) self.text = t end
     function fs:GetText() return self.text end
     function fs:SetTextColor(r, g, b) self.color = { r, g, b } end
-    function fs:SetPoint() end
-    function fs:SetJustifyH() end
+    function fs:SetJustifyH(justify) self.justifyH = justify end
     function fs:SetFontObject() end
     fs.shown = true
     function fs:Show() self.shown = true end
@@ -40,30 +98,25 @@ end
 
 local function makeTexture()
     local tex = {}
-    function tex:SetAllPoints() end
+    addGeometry(tex)
+    function tex:SetAllPoints(target)
+        self.allPointsTarget = target or true
+        table.insert(self.points, { point = "ALL", relativeTo = target })
+    end
     function tex:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
-    function tex:SetTexture() end
-    function tex:SetPoint() end
+    function tex:SetTexture(path) self.texturePath = path end
     return tex
 end
 
 local function makeFrame(withBackdropMethods)
-    local frame = { point = {}, shown = true, events = {}, scripts = {}, moving = false }
+    local frame = { shown = true, events = {}, scripts = {}, moving = false }
+    addGeometry(frame)
 
-    function frame:SetSize() end
     function frame:SetMovable() end
     function frame:EnableMouse() end
     function frame:RegisterForDrag() end
     function frame:SetScript(name, handler) self.scripts[name] = handler end
     function frame:GetScript(name) return self.scripts[name] end
-    function frame:SetPoint(point, relativeTo, relativePoint, x, y)
-        self.point = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y }
-    end
-    function frame:ClearAllPoints() self.point = {} end
-    function frame:GetPoint()
-        local p = self.point
-        return p.point, p.relativeTo, p.relativePoint, p.x, p.y
-    end
     function frame:Show() self.shown = true end
     function frame:Hide() self.shown = false end
     function frame:IsShown() return self.shown end
@@ -87,7 +140,7 @@ local function makeFrame(withBackdropMethods)
     end
     function frame:SetValue(v) self.value = v end
     function frame:SetStatusBarColor() end
-    function frame:SetStatusBarTexture() end
+    function frame:SetStatusBarTexture(path) self.statusBarTexture = path end
     function frame:SetVerticalScroll() end
     function frame:GetVerticalScroll() return 0 end
 
@@ -123,6 +176,7 @@ local function setup(options)
     GetServerTime = function() return state.now end
     GetTime = function() return state.now end
     time = function() return state.now end
+    date = os.date -- WoW exposes os.date as the global `date`; the addon sandbox has no `os` table
 
     UnitGUID = function(unit) if unit == "player" then return state.guid end end
     UnitName = function(unit) if unit == "player" then return state.name end end
@@ -271,7 +325,8 @@ test("HUD drag stop persists position through tracker API", function()
     FDB:InitializeSessionUI()
 
     local frame = FDB.SessionHUDFrame
-    frame.point = { point = "BOTTOMRIGHT", relativeTo = UIParent, relativePoint = "CENTER", x = 12, y = -34 }
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMRIGHT", UIParent, "CENTER", 12, -34) -- simulates the drag having moved the frame
 
     local onDragStop = frame:GetScript("OnDragStop")
     truthy(onDragStop)
@@ -614,6 +669,7 @@ local function setupCoreIntegration()
     GetServerTime = function() return state.now end
     GetTime = function() return state.now end
     time = function() return state.now end
+    date = os.date -- WoW exposes os.date as the global `date`; the addon sandbox has no `os` table
 
     UnitGUID = function(unit) if unit == "player" then return state.guid end end
     UnitName = function(unit) if unit == "player" then return state.name end end
@@ -862,6 +918,138 @@ test("generic help mentions /fdb session", function()
         if message:find("/fdb session", 1, true) then found = true end
     end
     truthy(found)
+end)
+
+-- External review round 2: real layout, not just created widgets --------
+
+test("HUD stat label/value pairs and status/character info all have a real anchor", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    for _, widget in ipairs({
+        frame.xpHrLabel, frame.xpHrValue, frame.toLevelLabel, frame.toLevelValue,
+        frame.goldHrLabel, frame.goldHrValue, frame.netHrLabel, frame.netHrValue,
+        frame.activeLabel, frame.activeValue, frame.statusText, frame.characterText,
+    }) do
+        truthy(hasAnchor(widget), "expected a real SetPoint anchor on a HUD stat widget")
+    end
+
+    truthy(hasPositiveSize(frame), "HUD frame must have a positive size")
+end)
+
+test("detailed window KPI, timing, character, rates fields and control buttons are all positioned and sized", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for _, group in ipairs({ frame.kpi, frame.timing, frame.character, frame.rates }) do
+        for key, pair in pairs(group) do
+            if type(pair) == "table" and pair.label and pair.value then
+                truthy(hasAnchor(pair.label), "label " .. tostring(key) .. " must have a real anchor")
+                truthy(hasAnchor(pair.value), "value " .. tostring(key) .. " must have a real anchor")
+            end
+        end
+    end
+
+    for _, button in ipairs({
+        frame.pauseButton, frame.resumeButton, frame.resetButton,
+        frame.lockButton, frame.hudButton,
+    }) do
+        truthy(hasAnchor(button), "control button must have a real anchor")
+        truthy(hasPositiveSize(button), "control button must have a positive size")
+    end
+
+    truthy(hasPositiveSize(frame), "detailed window must have a positive size")
+end)
+
+test("XP progress bar has a real size, anchor, and status bar texture", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local bar = FDB.SessionDetailWindow.character.xpBar
+
+    truthy(hasAnchor(bar), "XP bar must have a real anchor")
+    truthy(hasPositiveSize(bar), "XP bar must have a positive size")
+    truthy(bar.statusBarTexture, "XP bar must have a status bar texture set")
+end)
+
+test("history scroll viewport, content child, and rows all have real, distinct geometry", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    truthy(hasAnchor(frame.historyScroll), "history scroll viewport must have a real anchor")
+    truthy(hasPositiveSize(frame.historyScroll), "history scroll viewport must have a positive size")
+    truthy(hasAnchor(frame.historyContent), "history content child must have a real anchor")
+    truthy(type(frame.historyContent.width) == "number" and frame.historyContent.width > 0,
+        "history content child must have a real width matching the viewport")
+
+    for i = 1, 3 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(#frame.historyRows >= 3)
+    truthy(hasAnchor(frame.historyRows[1]), "history row 1 must have a real anchor")
+    truthy(hasAnchor(frame.historyRows[2]), "history row 2 must have a real anchor")
+
+    local firstY = frame.historyRows[1].point and frame.historyRows[1].point.y
+    local secondY = frame.historyRows[2].point and frame.historyRows[2].point.y
+    truthy(firstY ~= nil and secondY ~= nil and firstY ~= secondY,
+        "each history row must get its own distinct vertical position")
+end)
+
+test("at 30 history records the content child height genuinely exceeds the viewport", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 30)
+    truthy(type(frame.historyContent.height) == "number" and type(frame.historyScroll.height) == "number")
+    truthy(frame.historyContent.height > frame.historyScroll.height,
+        "30 records must genuinely overflow a fixed-height viewport")
+end)
+
+test("fallback reset-confirmation frame's text and buttons all have real geometry", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    -- StaticPopupDialogs/StaticPopup_Show are undefined in this fixture's
+    -- default setup(), so this exercises the native-frame fallback path.
+
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    truthy(hasAnchor(frame), "confirmation frame must have a real anchor")
+    truthy(hasPositiveSize(frame), "confirmation frame must have a positive size")
+    truthy(hasAnchor(frame.text), "confirmation text must have a real anchor")
+    truthy(type(frame.text.width) == "number" and frame.text.width > 0,
+        "confirmation text must have a width so the message actually fits")
+
+    truthy(hasAnchor(frame.acceptButton), "accept button must have a real anchor")
+    truthy(hasPositiveSize(frame.acceptButton), "accept button must have a positive size")
+    truthy(hasAnchor(frame.cancelButton), "cancel button must have a real anchor")
+    truthy(hasPositiveSize(frame.cancelButton), "cancel button must have a positive size")
 end)
 
 consolePrint(passed .. " session UI smoke tests passed; live Forever E2E remains PENDING")

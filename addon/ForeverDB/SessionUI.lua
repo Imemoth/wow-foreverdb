@@ -6,6 +6,38 @@ local _, FDB = ...
 
 local HUD_REFRESH_INTERVAL = 1
 
+--- Layout constants ---------------------------------------------------------
+-- Approximate, not pixel-perfect against the mockup (the design spec
+-- explicitly treats it as a reference, not a pixel-exact contract). Every
+-- widget below gets a real SetPoint anchor and, where the widget type
+-- requires it, a positive explicit size.
+
+local HUD_WIDTH, HUD_HEIGHT = 230, 120
+local HUD_COL1_X, HUD_COL2_X = 14, 122
+local HUD_ROW1_Y, HUD_ROW2_Y, HUD_ROW3_Y = -30, -50, -70
+local HUD_STATUS_Y = 10 -- offset up from the bottom edge
+
+local DETAIL_WIDTH, DETAIL_HEIGHT = 420, 480
+local DETAIL_MARGIN = 16
+local DETAIL_COL_X = { 16, 156, 296 }
+local DETAIL_KPI_ROW1_Y, DETAIL_KPI_ROW2_Y = -40, -64
+local DETAIL_TIMING_ROW1_Y, DETAIL_TIMING_ROW2_Y = -100, -124
+local DETAIL_TIMING_COL_X = { 16, 216 }
+local DETAIL_CHARACTER_ROW_Y = -156
+local DETAIL_XPBAR_Y = -178
+local DETAIL_XPBAR_HEIGHT = 16
+local DETAIL_RATES_ROW_Y = -208
+local DETAIL_HISTORY_TOP_Y = -234
+local DETAIL_HISTORY_HEIGHT = 168
+local HISTORY_ROW_HEIGHT = 16
+local DETAIL_BUTTON_ROW_Y = 14 -- offset up from the bottom edge
+local BUTTON_WIDTH, BUTTON_HEIGHT = 78, 22
+local BUTTON_GAP = 4
+
+local CONFIRM_WIDTH, CONFIRM_HEIGHT = 260, 110
+local CONFIRM_TEXT_WIDTH = CONFIRM_WIDTH - 32
+local CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT = 90, 22
+
 --- Formatting helpers -----------------------------------------------------
 
 local function formatCompactNumber(n)
@@ -41,6 +73,21 @@ local function formatHM(seconds)
     local hours = math.floor(totalMinutes / 60)
     local minutes = totalMinutes % 60
     return string.format("%02d:%02d", hours, minutes)
+end
+
+-- `date()` is the WoW-exposed equivalent of Lua's os.date (the addon
+-- sandbox does not expose the `os` library at all); tests run under a
+-- plain Lua interpreter, so the test harness aliases the standard
+-- library's os.date to a global `date` to match. Falls back to "--" for
+-- a missing/invalid timestamp or an environment without `date` at all,
+-- rather than ever showing a raw UNIX epoch number to the player.
+local function formatTimestamp(epochSeconds)
+    if type(epochSeconds) ~= "number" then return "--" end
+    if type(date) == "function" then
+        local ok, formatted = pcall(date, "%Y-%m-%d %H:%M", epochSeconds)
+        if ok and type(formatted) == "string" then return formatted end
+    end
+    return "--"
 end
 
 local function formatHMS(seconds)
@@ -110,15 +157,21 @@ local function applyBackdrop(frame)
     frame.fallbackBackground = background
 end
 
-local function createLabelValue(parent, labelTemplate, valueTemplate)
+-- Creates a label/value font string pair and anchors both: the label at
+-- (x, y) relative to the parent's top-left, and the value immediately to
+-- the label's right. This is the one layout shape every stat row in both
+-- the HUD and the detailed window uses.
+local function createLabelValue(parent, labelTemplate, valueTemplate, x, y)
     local label = parent:CreateFontString(nil, "ARTWORK", labelTemplate)
     local value = parent:CreateFontString(nil, "ARTWORK", valueTemplate)
+    label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    value:SetPoint("LEFT", label, "RIGHT", 6, 0)
     return label, value
 end
 
 function FDB:BuildSessionHUDFrame()
     local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent, backdropTemplateName())
-    frame:SetSize(220, 112)
+    frame:SetSize(HUD_WIDTH, HUD_HEIGHT)
     frame:SetFrameStrata("MEDIUM")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -143,15 +196,15 @@ function FDB:BuildSessionHUDFrame()
     frame.title:SetText("ForeverDB Session")
 
     frame.xpHrLabel, frame.xpHrValue =
-        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall")
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW1_Y)
     frame.toLevelLabel, frame.toLevelValue =
-        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall")
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL2_X, HUD_ROW1_Y)
     frame.goldHrLabel, frame.goldHrValue =
-        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall")
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW2_Y)
     frame.netHrLabel, frame.netHrValue =
-        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall")
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL2_X, HUD_ROW2_Y)
     frame.activeLabel, frame.activeValue =
-        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall")
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW3_Y)
 
     frame.xpHrLabel:SetText("XP/hr")
     frame.toLevelLabel:SetText("To level")
@@ -160,7 +213,10 @@ function FDB:BuildSessionHUDFrame()
     frame.activeLabel:SetText("Active")
 
     frame.statusText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    frame.statusText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", HUD_COL1_X, HUD_STATUS_Y)
+
     frame.characterText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    frame.characterText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -HUD_COL1_X, HUD_STATUS_Y)
 
     return frame
 end
@@ -317,20 +373,26 @@ end
 
 local function buildResetConfirmFrame(FDB)
     local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, backdropTemplateName())
-    frame:SetSize(260, 100)
+    frame:SetSize(CONFIRM_WIDTH, CONFIRM_HEIGHT)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     applyBackdrop(frame)
     frame:Hide()
 
     frame.text = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     frame.text:SetPoint("TOP", frame, "TOP", 0, -16)
+    frame.text:SetWidth(CONFIRM_TEXT_WIDTH)
+    frame.text:SetJustifyH("CENTER")
     frame.text:SetText("Reset the current ForeverDB session? This cannot be undone.")
 
     frame.acceptButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.acceptButton:SetSize(CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT)
+    frame.acceptButton:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 6, 16)
     frame.acceptButton:SetText("Reset")
     frame.acceptButton:SetScript("OnClick", function() FDB:ConfirmSessionReset() end)
 
     frame.cancelButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.cancelButton:SetSize(CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT)
+    frame.cancelButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -6, 16)
     frame.cancelButton:SetText("Cancel")
     frame.cancelButton:SetScript("OnClick", function() FDB:CancelSessionResetConfirmation() end)
 
@@ -368,18 +430,21 @@ end
 
 --- Detailed session window ---------------------------------------------------
 
-local function addKeyedRow(container, keys, labelTemplate, valueTemplate)
+-- `specs` is a list of { key, x, y } tuples: every field this module
+-- displays gets an explicit position, never just a created-but-unplaced
+-- font string pair.
+local function addKeyedRow(container, specs, labelTemplate, valueTemplate)
     local rows = {}
-    for _, key in ipairs(keys) do
-        local label, value = createLabelValue(container, labelTemplate, valueTemplate)
-        rows[key] = { label = label, value = value }
+    for _, spec in ipairs(specs) do
+        local label, value = createLabelValue(container, labelTemplate, valueTemplate, spec[2], spec[3])
+        rows[spec[1]] = { label = label, value = value }
     end
     return rows
 end
 
 function FDB:BuildSessionDetailWindow()
     local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
-    frame:SetSize(420, 480)
+    frame:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -393,9 +458,14 @@ function FDB:BuildSessionDetailWindow()
     frame.title:SetPoint("TOP", frame, "TOP", 0, -12)
     frame.title:SetText("ForeverDB Session")
 
-    frame.kpi = addKeyedRow(frame,
-        { "xpPerHour", "xpGained", "toLevel", "goldEarned", "goldSpent", "netGold" },
-        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.kpi = addKeyedRow(frame, {
+        { "xpPerHour", DETAIL_COL_X[1], DETAIL_KPI_ROW1_Y },
+        { "xpGained", DETAIL_COL_X[2], DETAIL_KPI_ROW1_Y },
+        { "toLevel", DETAIL_COL_X[3], DETAIL_KPI_ROW1_Y },
+        { "goldEarned", DETAIL_COL_X[1], DETAIL_KPI_ROW2_Y },
+        { "goldSpent", DETAIL_COL_X[2], DETAIL_KPI_ROW2_Y },
+        { "netGold", DETAIL_COL_X[3], DETAIL_KPI_ROW2_Y },
+    }, "GameFontNormalSmall", "GameFontHighlightSmall")
     frame.kpi.xpPerHour.label:SetText("XP/hr")
     frame.kpi.xpGained.label:SetText("XP gained")
     frame.kpi.toLevel.label:SetText("To level")
@@ -403,67 +473,94 @@ function FDB:BuildSessionDetailWindow()
     frame.kpi.goldSpent.label:SetText("Gold spent")
     frame.kpi.netGold.label:SetText("Net gold")
 
-    frame.timing = addKeyedRow(frame,
-        { "session", "active", "status", "started" },
-        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.timing = addKeyedRow(frame, {
+        { "session", DETAIL_TIMING_COL_X[1], DETAIL_TIMING_ROW1_Y },
+        { "active", DETAIL_TIMING_COL_X[2], DETAIL_TIMING_ROW1_Y },
+        { "status", DETAIL_TIMING_COL_X[1], DETAIL_TIMING_ROW2_Y },
+        { "started", DETAIL_TIMING_COL_X[2], DETAIL_TIMING_ROW2_Y },
+    }, "GameFontNormalSmall", "GameFontHighlightSmall")
     frame.timing.session.label:SetText("Session")
     frame.timing.active.label:SetText("Active")
     frame.timing.status.label:SetText("Status")
     frame.timing.started.label:SetText("Started")
 
-    frame.character = addKeyedRow(frame,
-        { "level", "xp", "gold" },
-        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.character = addKeyedRow(frame, {
+        { "level", DETAIL_COL_X[1], DETAIL_CHARACTER_ROW_Y },
+        { "xp", DETAIL_COL_X[2], DETAIL_CHARACTER_ROW_Y },
+        { "gold", DETAIL_COL_X[3], DETAIL_CHARACTER_ROW_Y },
+    }, "GameFontNormalSmall", "GameFontHighlightSmall")
     frame.character.level.label:SetText("Level")
     frame.character.xp.label:SetText("XP")
     frame.character.gold.label:SetText("Gold")
-    frame.character.xpBar = CreateFrame("StatusBar", nil, frame)
 
-    frame.rates = addKeyedRow(frame,
-        { "earnedPerHour", "spentPerHour", "netPerHour" },
-        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.character.xpBar = CreateFrame("StatusBar", nil, frame)
+    frame.character.xpBar:SetSize(DETAIL_WIDTH - 2 * DETAIL_MARGIN, DETAIL_XPBAR_HEIGHT)
+    frame.character.xpBar:SetPoint("TOPLEFT", frame, "TOPLEFT", DETAIL_MARGIN, DETAIL_XPBAR_Y)
+    frame.character.xpBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    if frame.character.xpBar.SetStatusBarColor then
+        frame.character.xpBar:SetStatusBarColor(0.6, 0.2, 0.9, 1)
+    end
+    frame.character.xpBarBackground = frame.character.xpBar:CreateTexture(nil, "BACKGROUND")
+    frame.character.xpBarBackground:SetAllPoints(frame.character.xpBar)
+    if frame.character.xpBarBackground.SetColorTexture then
+        frame.character.xpBarBackground:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+    end
+
+    frame.rates = addKeyedRow(frame, {
+        { "earnedPerHour", DETAIL_COL_X[1], DETAIL_RATES_ROW_Y },
+        { "spentPerHour", DETAIL_COL_X[2], DETAIL_RATES_ROW_Y },
+        { "netPerHour", DETAIL_COL_X[3], DETAIL_RATES_ROW_Y },
+    }, "GameFontNormalSmall", "GameFontHighlightSmall")
     frame.rates.earnedPerHour.label:SetText("Earned/hr")
     frame.rates.spentPerHour.label:SetText("Spent/hr")
     frame.rates.netPerHour.label:SetText("Net/hr")
 
+    local historyViewportWidth = DETAIL_WIDTH - 2 * DETAIL_MARGIN
     frame.historyScroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.historyScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", DETAIL_MARGIN, DETAIL_HISTORY_TOP_Y)
+    frame.historyScroll:SetSize(historyViewportWidth, DETAIL_HISTORY_HEIGHT)
+
     frame.historyContent = CreateFrame("Frame", nil, frame.historyScroll)
+    frame.historyContent:SetPoint("TOPLEFT", frame.historyScroll, "TOPLEFT", 0, 0)
+    frame.historyContent:SetSize(historyViewportWidth, HISTORY_ROW_HEIGHT) -- grows with row count on refresh
     if frame.historyScroll.SetScrollChild then
         frame.historyScroll:SetScrollChild(frame.historyContent)
     end
     frame.historyRows = {}
 
-    frame.pauseButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.pauseButton:SetText("Pause")
-    frame.pauseButton:SetScript("OnClick", function()
-        FDB:PauseSession()
-        FDB:RefreshSessionDetailWindow()
-    end)
+    local buttons = {
+        { key = "pauseButton", text = "Pause", handler = function()
+            FDB:PauseSession()
+            FDB:RefreshSessionDetailWindow()
+        end },
+        { key = "resumeButton", text = "Resume", handler = function()
+            FDB:ResumeSession()
+            FDB:RefreshSessionDetailWindow()
+        end },
+        { key = "resetButton", text = "Reset", handler = function()
+            FDB:ShowSessionResetConfirmation()
+        end },
+        { key = "lockButton", text = "Lock HUD", handler = function()
+            FDB:ToggleSessionHUDLock()
+            FDB:RefreshSessionDetailWindow()
+        end },
+        { key = "hudButton", text = "Hide HUD", handler = function()
+            FDB:ToggleSessionHUD()
+            FDB:RefreshSessionDetailWindow()
+        end },
+    }
 
-    frame.resumeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.resumeButton:SetText("Resume")
-    frame.resumeButton:SetScript("OnClick", function()
-        FDB:ResumeSession()
-        FDB:RefreshSessionDetailWindow()
-    end)
-
-    frame.resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.resetButton:SetText("Reset")
-    frame.resetButton:SetScript("OnClick", function() FDB:ShowSessionResetConfirmation() end)
-
-    frame.lockButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.lockButton:SetText("Lock HUD")
-    frame.lockButton:SetScript("OnClick", function()
-        FDB:ToggleSessionHUDLock()
-        FDB:RefreshSessionDetailWindow()
-    end)
-
-    frame.hudButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.hudButton:SetText("Hide HUD")
-    frame.hudButton:SetScript("OnClick", function()
-        FDB:ToggleSessionHUD()
-        FDB:RefreshSessionDetailWindow()
-    end)
+    local totalButtonsWidth = (#buttons * BUTTON_WIDTH) + ((#buttons - 1) * BUTTON_GAP)
+    local buttonStartX = (DETAIL_WIDTH - totalButtonsWidth) / 2
+    for index, spec in ipairs(buttons) do
+        local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        button:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+        local x = buttonStartX + (index - 1) * (BUTTON_WIDTH + BUTTON_GAP)
+        button:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, DETAIL_BUTTON_ROW_Y)
+        button:SetText(spec.text)
+        button:SetScript("OnClick", spec.handler)
+        frame[spec.key] = button
+    end
 
     return frame
 end
@@ -473,15 +570,25 @@ function FDB:RefreshSessionHistoryRows()
     if not frame then return end
 
     local history = self:GetSessionHistory()
+    local rowWidth = frame.historyScroll.width or (DETAIL_WIDTH - 2 * DETAIL_MARGIN)
+
     for index, record in ipairs(history) do
         local row = frame.historyRows[index]
         if not row then
             row = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            row:SetWidth(rowWidth)
+            row:SetJustifyH("LEFT")
             frame.historyRows[index] = row
         end
 
+        -- Each row gets its own distinct vertical slot, newest (index 1)
+        -- at the top, so 30 rows genuinely stack past the visible
+        -- viewport rather than overlapping at a single shared position.
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", frame.historyContent, "TOPLEFT", 0, -(index - 1) * HISTORY_ROW_HEIGHT)
+
         local parts = {
-            tostring(record.endedAt or record.startedAt or "--"),
+            formatTimestamp(record.endedAt or record.startedAt),
             formatHMS(record.trackedSeconds),
             formatHMS(record.activeSeconds),
             tostring(record.startLevel or "?") .. "->" .. tostring(record.endLevel or "?"),
@@ -498,6 +605,12 @@ function FDB:RefreshSessionHistoryRows()
     for index = #history + 1, #frame.historyRows do
         frame.historyRows[index]:Hide()
     end
+
+    -- The scroll child's height must track the actual row count so 30
+    -- retained records can genuinely scroll past a fixed-height viewport
+    -- instead of being clipped or overlapping.
+    local contentHeight = math.max(#history, 1) * HISTORY_ROW_HEIGHT
+    frame.historyContent:SetSize(rowWidth, contentHeight)
 end
 
 function FDB:RefreshSessionDetailWindow()
@@ -527,7 +640,7 @@ function FDB:RefreshSessionDetailWindow()
     frame.timing.session.value:SetText(formatHMS(snapshot.trackedSeconds))
     frame.timing.active.value:SetText(formatHMS(snapshot.activeSeconds))
     frame.timing.status.value:SetText(snapshot.status or "")
-    frame.timing.started.value:SetText(snapshot.startedAt and tostring(snapshot.startedAt) or "--")
+    frame.timing.started.value:SetText(formatTimestamp(snapshot.startedAt))
 
     frame.character.level.value:SetText(tostring(snapshot.level or "--"))
     frame.character.xp.value:SetText(
