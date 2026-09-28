@@ -284,7 +284,11 @@ function FDB:ArchiveCurrentSessionIfMeaningful(char, endedAt)
         netPerHour = netPerHour,
     }
 
-    char.history = char.history or {}
+    -- Not just non-nil-or-{}: char.history can be corrupted mid-session
+    -- (after GetOrCreateSessionCharacter's own normalization already ran
+    -- for this login), so this write site needs the same defensive
+    -- normalization, not only the read sites.
+    char.history = normalizeHistoryList(char.history)
     table.insert(char.history, record)
 
     local settings = self:GetSessionSettings()

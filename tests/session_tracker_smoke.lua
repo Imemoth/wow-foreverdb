@@ -1062,4 +1062,30 @@ test("recovering one corrupted character does not affect other characters or non
     equal(FDB.DB.guilds.keep, "yes")
 end)
 
+-- Reviewer C finding: history corruption that happens mid-session (after
+-- normalization already ran once at login) is a different failure shape
+-- than corruption present in SavedVariables at login, and must be
+-- equally safe.
+test("history corrupted mid-session does not crash the archive step", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 70
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+
+    -- Corruption introduced AFTER GetOrCreateSessionCharacter's own
+    -- normalization already ran for this login -- simulating some other
+    -- code path (or a future bug) clobbering char.history in place.
+    char.history = "corrupted-string-value"
+
+    local ok, err = pcall(function() return FDB:ResetSession() end)
+    truthy(ok, "ResetSession must not error when char.history was corrupted mid-session: " .. tostring(err))
+    truthy(type(char.history) == "table")
+    equal(#char.history, 1)
+    equal(char.history[1].xpGained, 5)
+    equal(char.current.startedAt, state.now)
+end)
+
 consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")

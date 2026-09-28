@@ -570,9 +570,21 @@ function FDB:RefreshSessionHistoryRows()
     if not frame then return end
 
     local history = self:GetSessionHistory()
-    local rowWidth = frame.historyScroll.width or (DETAIL_WIDTH - 2 * DETAIL_MARGIN)
+    local count = #history
+    -- GetWidth() is the real Frame API; a bare `.width` table field only
+    -- ever existed on the test mock, so relying on it would silently do
+    -- nothing on a live client and fall through to the constant below.
+    local rowWidth = (frame.historyScroll.GetWidth and frame.historyScroll:GetWidth()) or 0
+    if rowWidth <= 0 then rowWidth = DETAIL_WIDTH - 2 * DETAIL_MARGIN end
 
-    for index, record in ipairs(history) do
+    for index = 1, count do
+        -- GetSessionHistory() returns storage order (oldest-appended-
+        -- first -- an internal detail the eviction logic relies on,
+        -- `table.remove(char.history, 1)` evicts the oldest). Newest
+        -- session must render at row 1 regardless, so read from the
+        -- reversed position.
+        local record = history[count - index + 1]
+
         local row = frame.historyRows[index]
         if not row then
             row = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")

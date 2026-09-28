@@ -27,8 +27,17 @@ end
 -- where the widget requires one, a positive explicit size. Checking that
 -- a field merely exists, or that GetText() returns a value, proves
 -- nothing about whether it was ever actually positioned.
+-- Reviewer C finding: a bare "at least one SetPoint call happened" check
+-- would still pass a degenerate `obj:SetPoint()` call with no arguments
+-- at all -- it proves a call happened, not that it anchored anywhere
+-- real. Require the most recent anchor to carry a real point, a real
+-- relativeTo, and a real relativePoint.
 local function hasAnchor(obj)
-    return obj ~= nil and obj.points ~= nil and #obj.points > 0
+    if obj == nil or obj.points == nil or #obj.points == 0 then return false end
+    local anchor = obj.points[#obj.points]
+    return type(anchor.point) == "string" and anchor.point ~= ""
+        and anchor.relativeTo ~= nil
+        and type(anchor.relativePoint) == "string" and anchor.relativePoint ~= ""
 end
 
 local function hasPositiveSize(obj)
@@ -570,6 +579,43 @@ test("detailed window renders recent session history rows", function()
     local frame = FDB.SessionDetailWindow
     truthy(frame.historyRows[1])
     truthy(frame.historyRows[1]:GetText():find("40"))
+end)
+
+local function historyRowField(text, n)
+    local fields = {}
+    for field in text:gmatch("[^|]+") do
+        fields[#fields + 1] = field:match("^%s*(.-)%s*$")
+    end
+    return fields[n]
+end
+
+test("Recent Sessions renders newest-first: row 1 is the most recently archived session", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    -- Storage order (char.history / GetSessionHistory()) is
+    -- oldest-appended-first: this is an internal detail the eviction
+    -- logic relies on (table.remove(char.history, 1) evicts the
+    -- oldest), NOT a display contract. The UI must present the most
+    -- recently archived session first regardless of storage order.
+    for _, xpTag in ipairs({ 10, 20, 30 }) do
+        state.now = state.now + 61
+        state.xp = state.xp + xpTag
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    -- Field 5 of the row is xpGained specifically (date | duration |
+    -- active | level range | xpGained | ...), so this can't collide with
+    -- a coincidentally-matching digit elsewhere in the row (e.g. a
+    -- timestamp).
+    equal(historyRowField(frame.historyRows[1]:GetText(), 5), "30")
+    equal(historyRowField(frame.historyRows[2]:GetText(), 5), "20")
+    equal(historyRowField(frame.historyRows[3]:GetText(), 5), "10")
 end)
 
 test("Started and history Date/Time show a human-readable timestamp, not a raw UNIX epoch", function()
