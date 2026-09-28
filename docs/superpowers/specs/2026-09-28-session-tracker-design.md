@@ -280,7 +280,9 @@ The UI label **Session** / **Session time** displays tracked time. Offline time 
 
 Default inactivity timeout: 5 minutes, configurable with a positive integer number of minutes.
 
-XP gain or money change counts as activity. If no XP or money activity occurs beyond the timeout, further elapsed time is not added to active time until a new activity event occurs.
+An activity event means an accepted positive XP gain or an accepted non-zero money delta. Merely receiving an XP/money event with a zero, invalid, or rejected delta does not count as activity.
+
+A new session and a manual/offline resume set `lastActivityAt = now`, so the player receives the initial inactivity window before the session becomes idle. If no accepted XP or money activity occurs beyond the timeout, further elapsed time is not added to active time until a new accepted activity occurs.
 
 Rate calculations use active time, not tracked time or wall lifetime.
 
@@ -300,6 +302,8 @@ activeDelta = max(0, min(to, activeUntil) - from)
 ```
 
 If the active window ended before `from`, `activeDelta` is zero.
+
+When a new XP/gold activity arrives, timing must first be finalized using the previous `lastActivityAt`; only then is `lastActivityAt` advanced to the new activity timestamp. This ordering prevents a new event from retroactively turning an already-idle gap into active time.
 
 On reload/relog/resume, `checkpointAt` is reset to now so offline/paused gaps cannot leak into tracked or active time.
 
@@ -465,6 +469,8 @@ Active       00:37
 Running/Idle/Paused   Character
 ```
 
+In the compact HUD, **Gold/hr** is the short label for **earned/hour**. **Net/hr** is shown separately, so gross income and net profitability are never conflated.
+
 Behavior:
 
 - movable while unlocked;
@@ -473,6 +479,7 @@ Behavior:
 - position persists per character;
 - closing/hiding the HUD does not pause the tracker;
 - clear RUNNING, IDLE, and PAUSED states;
+- status precedence is PAUSED first; otherwise IDLE when the inactivity window has expired; otherwise RUNNING;
 - values refresh without re-running accounting logic in the UI.
 
 Use existing WoW frame textures, fonts, and icons where practical. Avoid shipping unnecessary new art assets. Branding must be ForeverDB-neutral, not Alliance/Horde specific.
@@ -559,6 +566,7 @@ Rules:
 
 - timeout and idle accept positive integer minutes;
 - invalid values print concise usage and keep the previous setting;
+- `reset` invokes the same confirmation flow as the detailed-window Reset button; it never immediately discards/rotates the session without confirmation;
 - `hud` toggles visibility;
 - `lock` toggles HUD movement lock;
 - command actions must call the same tracker/UI APIs used by buttons.
