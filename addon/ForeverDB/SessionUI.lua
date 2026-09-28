@@ -74,6 +74,16 @@ end
 
 --- Frame construction ------------------------------------------------------
 
+-- "BackdropTemplate" is only a registered virtual XML template on clients
+-- that ship the BackdropTemplateMixin (Legion 7.1+). Passing that literal
+-- string to CreateFrame on a client without it errors inside CreateFrame
+-- itself, before any code can inspect the returned frame -- so the guard
+-- has to happen here, not inside applyBackdrop().
+local function backdropTemplateName()
+    if BackdropTemplateMixin then return "BackdropTemplate" end
+    return nil
+end
+
 local function applyBackdrop(frame)
     if frame.SetBackdrop then
         frame:SetBackdrop({
@@ -107,7 +117,7 @@ local function createLabelValue(parent, labelTemplate, valueTemplate)
 end
 
 function FDB:BuildSessionHUDFrame()
-    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent, backdropTemplateName())
     frame:SetSize(220, 112)
     frame:SetFrameStrata("MEDIUM")
     frame:SetMovable(true)
@@ -186,6 +196,13 @@ function FDB:ToggleSessionHUD()
     return newShown
 end
 
+function FDB:ToggleSessionHUDLock()
+    local settings = self:GetSessionHUDSettings()
+    local newLocked = not settings.hudLocked
+    self:SetSessionHUDLocked(newLocked)
+    return newLocked
+end
+
 --- Render -------------------------------------------------------------------
 
 function FDB:RefreshSessionUI()
@@ -248,11 +265,29 @@ function FDB:InitializeSessionUI()
     local frame = self:BuildSessionHUDFrame()
     self.SessionHUDFrame = frame
 
+    -- No character is active yet at this point (InitializeSessionUI runs
+    -- at ADDON_LOADED, before SessionPlayerReady has run at PLAYER_LOGIN),
+    -- so this only applies HUD-settings defaults. SyncSessionHUDForActiveCharacter
+    -- re-applies the real per-character position/visibility once a
+    -- character becomes active.
     self:ApplySessionHUDPosition()
     self:ApplySessionHUDVisibility()
     self:RefreshSessionUI()
 
     self:StartSessionUIRefreshTicker()
+end
+
+-- Re-applies this character's saved HUD position/visibility and refreshes
+-- rendered values. The HUD frame is built once at addon load (before any
+-- character is known), so this must run again once SessionPlayerReady()
+-- resolves the active character -- otherwise a returning character's
+-- saved position/visibility is silently ignored in favor of frame-build
+-- defaults, forever, until the addon reloads.
+function FDB:SyncSessionHUDForActiveCharacter()
+    if not self.SessionHUDFrame then return end
+    self:ApplySessionHUDPosition()
+    self:ApplySessionHUDVisibility()
+    self:RefreshSessionUI()
 end
 
 --- Reset confirmation -------------------------------------------------------
@@ -271,7 +306,7 @@ function FDB:CancelSessionResetConfirmation()
 end
 
 local function buildResetConfirmFrame(FDB)
-    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, backdropTemplateName())
     frame:SetSize(260, 100)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     applyBackdrop(frame)
@@ -333,7 +368,7 @@ local function addKeyedRow(container, keys, labelTemplate, valueTemplate)
 end
 
 function FDB:BuildSessionDetailWindow()
-    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
     frame:SetSize(420, 480)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     frame:SetMovable(true)
@@ -409,8 +444,7 @@ function FDB:BuildSessionDetailWindow()
     frame.lockButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.lockButton:SetText("Lock HUD")
     frame.lockButton:SetScript("OnClick", function()
-        local settings = FDB:GetSessionHUDSettings()
-        FDB:SetSessionHUDLocked(not settings.hudLocked)
+        FDB:ToggleSessionHUDLock()
         FDB:RefreshSessionDetailWindow()
     end)
 
@@ -551,8 +585,7 @@ function FDB:HandleSessionCommand(rawArgs)
         self:RefreshSessionDetailWindow()
         return true
     elseif command == "lock" then
-        local settings = self:GetSessionHUDSettings()
-        self:SetSessionHUDLocked(not settings.hudLocked)
+        self:ToggleSessionHUDLock()
         self:RefreshSessionDetailWindow()
         return true
     elseif command == "timeout" then

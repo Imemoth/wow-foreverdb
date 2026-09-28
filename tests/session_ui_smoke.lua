@@ -47,7 +47,7 @@ local function makeTexture()
     return tex
 end
 
-local function makeFrame(withBackdrop)
+local function makeFrame(withBackdropMethods)
     local frame = { point = {}, shown = true, events = {}, scripts = {}, moving = false }
 
     function frame:SetSize() end
@@ -88,7 +88,7 @@ local function makeFrame(withBackdrop)
     function frame:SetVerticalScroll() end
     function frame:GetVerticalScroll() return 0 end
 
-    if withBackdrop then
+    if withBackdropMethods then
         function frame:SetBackdrop(bd) self.backdrop = bd end
         function frame:SetBackdropColor(...) self.backdropColor = { ... } end
         function frame:SetBackdropBorderColor(...) self.backdropBorderColor = { ... } end
@@ -99,8 +99,8 @@ end
 
 local function setup(options)
     options = options or {}
-    local withBackdrop = options.withBackdrop
-    if withBackdrop == nil then withBackdrop = true end
+    local hasBackdropMixin = options.hasBackdropMixin
+    if hasBackdropMixin == nil then hasBackdropMixin = true end
 
     local state = {
         now = 1000,
@@ -131,8 +131,19 @@ local function setup(options)
 
     UIParent = { name = "UIParent" }
 
-    CreateFrame = function()
-        local frame = makeFrame(withBackdrop)
+    -- BackdropTemplateMixin is only present on clients that registered the
+    -- "BackdropTemplate" virtual XML template. Passing that template name
+    -- to CreateFrame on a client without it is exactly the real-world
+    -- failure mode (an unrecognized template errors inside CreateFrame
+    -- itself, before any code can inspect the returned frame), so the
+    -- mock reproduces that instead of silently ignoring the argument.
+    BackdropTemplateMixin = hasBackdropMixin and {} or nil
+
+    CreateFrame = function(_, _, _, template)
+        if template == "BackdropTemplate" and not BackdropTemplateMixin then
+            error("CreateFrame: template 'BackdropTemplate' is not registered on this client")
+        end
+        local frame = makeFrame(template == "BackdropTemplate")
         state.frames[#state.frames + 1] = frame
         return frame
     end
@@ -173,7 +184,7 @@ local function test(name, run)
 end
 
 test("HUD initializes without optional BackdropTemplate helpers", function()
-    local FDB = setup({ withBackdrop = false })
+    local FDB = setup({ hasBackdropMixin = false })
     truthy(FDB:SessionPlayerReady())
 
     local ok, err = pcall(function() FDB:InitializeSessionUI() end)
@@ -264,6 +275,59 @@ test("HUD drag stop persists position through tracker API", function()
     equal(settings.hudY, -34)
 end)
 
+-- Reviewer B findings: HUD position/visibility must restore for the
+-- active character (not just at UI-init time, before any character is
+-- known), and CreateFrame must never be asked for an unregistered
+-- "BackdropTemplate" when BackdropTemplateMixin is absent. -------------
+
+test("HUD position and visibility restore for the active character after login", function()
+    local FDB, state = setup()
+
+    -- Real Core.lua order: InitializeSessionTracker/InitializeSessionUI
+    -- both run at ADDON_LOADED, before any character is known;
+    -- SessionPlayerReady() only runs later, at PLAYER_LOGIN. Pre-seed this
+    -- character's saved HUD settings before SessionPlayerReady ever runs,
+    -- exactly like a returning character reading its own SavedVariables.
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters[state.guid] = {
+        ui = {
+            hudShown = false, hudLocked = true,
+            hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+            hudX = -50, hudY = 50,
+        },
+        history = {},
+    }
+
+    FDB:InitializeSessionUI() -- no active character yet
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    truthy(FDB:SessionPlayerReady()) -- character becomes active only now
+
+    -- SessionTracker.lua must not depend on SessionUI.lua (design spec
+    -- §4.1), so Core.lua -- the integration point -- is responsible for
+    -- calling this after SessionPlayerReady() on PLAYER_LOGIN; see the
+    -- Core-integration test below for proof that it actually does.
+    FDB:SyncSessionHUDForActiveCharacter()
+
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.relativePoint, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
+end)
+
+test("HUD never requests the BackdropTemplate virtual template when the mixin is absent", function()
+    local FDB = setup({ hasBackdropMixin = false })
+    truthy(FDB:SessionPlayerReady())
+
+    -- With the earlier real-CreateFrame mock, requesting "BackdropTemplate"
+    -- while BackdropTemplateMixin is nil errors inside CreateFrame itself,
+    -- exactly like an unrecognized virtual template does on a real client.
+    local ok, err = pcall(function() FDB:InitializeSessionUI() end)
+    truthy(ok, tostring(err))
+end)
+
 -- Task 5: detailed window, history UI, reset confirmation, commands -------
 
 test("session command with no args toggles detailed window", function()
@@ -316,6 +380,43 @@ test("confirmed reset delegates exactly once", function()
     FDB:ConfirmSessionReset()
     equal(resetCalls, 1)
     falsy(FDB.SessionResetConfirmationPending)
+end)
+
+test("reset confirmation uses StaticPopup when available and only resets on accept", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Unlike every other reset test in this file, define StaticPopupDialogs/
+    -- StaticPopup_Show so ShowSessionResetConfirmation takes the primary
+    -- (non-fallback) path a live client with StaticPopup support would
+    -- actually execute.
+    local shownKeys = {}
+    StaticPopupDialogs = {}
+    StaticPopup_Show = function(key) shownKeys[#shownKeys + 1] = key end
+
+    FDB:ShowSessionResetConfirmation()
+    truthy(StaticPopupDialogs["FOREVERDB_SESSION_RESET"])
+    equal(shownKeys[1], "FOREVERDB_SESSION_RESET")
+    truthy(FDB.SessionResetConfirmationPending)
+
+    local resetCalls = 0
+    local realResetSession = FDB.ResetSession
+    FDB.ResetSession = function(self, ...)
+        resetCalls = resetCalls + 1
+        return realResetSession(self, ...)
+    end
+
+    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnCancel()
+    equal(resetCalls, 0)
+    falsy(FDB.SessionResetConfirmationPending)
+
+    FDB:ShowSessionResetConfirmation()
+    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnAccept()
+    equal(resetCalls, 1)
+    falsy(FDB.SessionResetConfirmationPending)
+
+    StaticPopupDialogs = nil
+    StaticPopup_Show = nil
 end)
 
 test("timeout command accepts positive integer minutes and rejects invalid values", function()
@@ -467,9 +568,10 @@ local function setupCoreIntegration()
 
     UIParent = { name = "UIParent" }
     C_Map = nil -- absent in this fixture; Core.lua must guard this optional API
+    BackdropTemplateMixin = {}
 
-    CreateFrame = function()
-        local frame = makeFrame(true)
+    CreateFrame = function(_, _, _, template)
+        local frame = makeFrame(template == "BackdropTemplate")
         state.frames[#state.frames + 1] = frame
         return frame
     end
@@ -554,6 +656,40 @@ test("player login calls SessionPlayerReady", function()
 
     state:event("PLAYER_LOGIN")
     truthy(called)
+end)
+
+test("real ADDON_LOADED then PLAYER_LOGIN restores this character's saved HUD position, unstubbed", function()
+    local FDB, state = setupCoreIntegration()
+
+    -- Pre-seed a saved HUD position/visibility for this GUID before any
+    -- Core.lua event fires, exactly like a returning character's
+    -- SavedVariables. Nothing here is stubbed: this drives the real
+    -- InitializeSessionTracker/InitializeSessionUI/SessionPlayerReady
+    -- through Core.lua's real ADDON_LOADED -> PLAYER_LOGIN event order.
+    ForeverDB_Saved = {
+        sessions = {
+            characters = {
+                [state.guid] = {
+                    ui = {
+                        hudShown = false, hudLocked = true,
+                        hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+                        hudX = -50, hudY = 50,
+                    },
+                },
+            },
+        },
+    }
+
+    state:event("ADDON_LOADED", "ForeverDB")
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    state:event("PLAYER_LOGIN")
+
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
 end)
 
 test("player logout calls SessionBeforeLogout before PrepareForSave", function()

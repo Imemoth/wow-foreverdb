@@ -148,6 +148,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         FDB:EnsureInstallationId()
         FDB:SessionPlayerReady()
+        FDB:SyncSessionHUDForActiveCharacter()
 
         if C_Map and C_Map.GetBestMapForUnit then
             local mapId =
