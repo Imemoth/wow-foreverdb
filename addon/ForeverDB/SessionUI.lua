@@ -254,3 +254,323 @@ function FDB:InitializeSessionUI()
 
     self:StartSessionUIRefreshTicker()
 end
+
+--- Reset confirmation -------------------------------------------------------
+
+function FDB:ConfirmSessionReset()
+    self.SessionResetConfirmationPending = false
+    self:ResetSession()
+    if self.SessionResetConfirmFrame then self.SessionResetConfirmFrame:Hide() end
+    self:RefreshSessionUI()
+    self:RefreshSessionDetailWindow()
+end
+
+function FDB:CancelSessionResetConfirmation()
+    self.SessionResetConfirmationPending = false
+    if self.SessionResetConfirmFrame then self.SessionResetConfirmFrame:Hide() end
+end
+
+local function buildResetConfirmFrame(FDB)
+    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, "BackdropTemplate")
+    frame:SetSize(260, 100)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    applyBackdrop(frame)
+    frame:Hide()
+
+    frame.text = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    frame.text:SetPoint("TOP", frame, "TOP", 0, -16)
+    frame.text:SetText("Reset the current ForeverDB session? This cannot be undone.")
+
+    frame.acceptButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.acceptButton:SetText("Reset")
+    frame.acceptButton:SetScript("OnClick", function() FDB:ConfirmSessionReset() end)
+
+    frame.cancelButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.cancelButton:SetText("Cancel")
+    frame.cancelButton:SetScript("OnClick", function() FDB:CancelSessionResetConfirmation() end)
+
+    return frame
+end
+
+-- Both the Reset button and `/fdb session reset` enter this same
+-- confirmation path; only a confirmed accept ever calls ResetSession().
+function FDB:ShowSessionResetConfirmation()
+    self.SessionResetConfirmationPending = true
+
+    if StaticPopupDialogs and StaticPopup_Show then
+        StaticPopupDialogs["FOREVERDB_SESSION_RESET"] = StaticPopupDialogs["FOREVERDB_SESSION_RESET"] or {
+            text = "Reset the current ForeverDB session? This cannot be undone.",
+            button1 = "Reset",
+            button2 = "Cancel",
+            OnAccept = function() FDB:ConfirmSessionReset() end,
+            OnCancel = function() FDB:CancelSessionResetConfirmation() end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+        StaticPopup_Show("FOREVERDB_SESSION_RESET")
+        return
+    end
+
+    -- Fallback for a client without StaticPopup support: a minimal native
+    -- confirmation frame using only base widget templates.
+    if not self.SessionResetConfirmFrame then
+        self.SessionResetConfirmFrame = buildResetConfirmFrame(self)
+    end
+    self.SessionResetConfirmFrame:Show()
+end
+
+--- Detailed session window ---------------------------------------------------
+
+local function addKeyedRow(container, keys, labelTemplate, valueTemplate)
+    local rows = {}
+    for _, key in ipairs(keys) do
+        local label, value = createLabelValue(container, labelTemplate, valueTemplate)
+        rows[key] = { label = label, value = value }
+    end
+    return rows
+end
+
+function FDB:BuildSessionDetailWindow()
+    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, "BackdropTemplate")
+    frame:SetSize(420, 480)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    applyBackdrop(frame)
+    frame:Hide()
+
+    frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    frame.title:SetPoint("TOP", frame, "TOP", 0, -12)
+    frame.title:SetText("ForeverDB Session")
+
+    frame.kpi = addKeyedRow(frame,
+        { "xpPerHour", "xpGained", "toLevel", "goldEarned", "goldSpent", "netGold" },
+        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.kpi.xpPerHour.label:SetText("XP/hr")
+    frame.kpi.xpGained.label:SetText("XP gained")
+    frame.kpi.toLevel.label:SetText("To level")
+    frame.kpi.goldEarned.label:SetText("Gold earned")
+    frame.kpi.goldSpent.label:SetText("Gold spent")
+    frame.kpi.netGold.label:SetText("Net gold")
+
+    frame.timing = addKeyedRow(frame,
+        { "session", "active", "status", "started" },
+        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.timing.session.label:SetText("Session")
+    frame.timing.active.label:SetText("Active")
+    frame.timing.status.label:SetText("Status")
+    frame.timing.started.label:SetText("Started")
+
+    frame.character = addKeyedRow(frame,
+        { "level", "xp", "gold" },
+        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.character.level.label:SetText("Level")
+    frame.character.xp.label:SetText("XP")
+    frame.character.gold.label:SetText("Gold")
+    frame.character.xpBar = CreateFrame("StatusBar", nil, frame)
+
+    frame.rates = addKeyedRow(frame,
+        { "earnedPerHour", "spentPerHour", "netPerHour" },
+        "GameFontNormalSmall", "GameFontHighlightSmall")
+    frame.rates.earnedPerHour.label:SetText("Earned/hr")
+    frame.rates.spentPerHour.label:SetText("Spent/hr")
+    frame.rates.netPerHour.label:SetText("Net/hr")
+
+    frame.historyScroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.historyContent = CreateFrame("Frame", nil, frame.historyScroll)
+    if frame.historyScroll.SetScrollChild then
+        frame.historyScroll:SetScrollChild(frame.historyContent)
+    end
+    frame.historyRows = {}
+
+    frame.pauseButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.pauseButton:SetText("Pause")
+    frame.pauseButton:SetScript("OnClick", function()
+        FDB:PauseSession()
+        FDB:RefreshSessionDetailWindow()
+    end)
+
+    frame.resumeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.resumeButton:SetText("Resume")
+    frame.resumeButton:SetScript("OnClick", function()
+        FDB:ResumeSession()
+        FDB:RefreshSessionDetailWindow()
+    end)
+
+    frame.resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.resetButton:SetText("Reset")
+    frame.resetButton:SetScript("OnClick", function() FDB:ShowSessionResetConfirmation() end)
+
+    frame.lockButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.lockButton:SetText("Lock HUD")
+    frame.lockButton:SetScript("OnClick", function()
+        local settings = FDB:GetSessionHUDSettings()
+        FDB:SetSessionHUDLocked(not settings.hudLocked)
+        FDB:RefreshSessionDetailWindow()
+    end)
+
+    frame.hudButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.hudButton:SetText("Hide HUD")
+    frame.hudButton:SetScript("OnClick", function()
+        FDB:ToggleSessionHUD()
+        FDB:RefreshSessionDetailWindow()
+    end)
+
+    return frame
+end
+
+function FDB:RefreshSessionHistoryRows()
+    local frame = self.SessionDetailWindow
+    if not frame then return end
+
+    local history = self:GetSessionHistory()
+    for index, record in ipairs(history) do
+        local row = frame.historyRows[index]
+        if not row then
+            row = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            frame.historyRows[index] = row
+        end
+
+        local parts = {
+            tostring(record.endedAt or record.startedAt or "--"),
+            formatHMS(record.trackedSeconds),
+            formatHMS(record.activeSeconds),
+            tostring(record.startLevel or "?") .. "->" .. tostring(record.endLevel or "?"),
+            formatCompactNumber(record.xpGained),
+            formatCompactNumber(record.xpPerHour),
+            formatCopperShort(record.goldEarned),
+            formatCopperShort(record.goldSpent),
+            formatCopperShort(record.netGold),
+        }
+        row:SetText(table.concat(parts, " | "))
+        row:Show()
+    end
+
+    for index = #history + 1, #frame.historyRows do
+        frame.historyRows[index]:Hide()
+    end
+end
+
+function FDB:RefreshSessionDetailWindow()
+    local frame = self.SessionDetailWindow
+    if not frame then return end
+
+    local snapshot = self:GetSessionSnapshot()
+    local settings = self:GetSessionHUDSettings()
+
+    frame.lockButton:SetText(settings.hudLocked and "Unlock HUD" or "Lock HUD")
+    frame.hudButton:SetText(settings.hudShown and "Hide HUD" or "Show HUD")
+
+    if not snapshot then
+        self:RefreshSessionHistoryRows()
+        return
+    end
+
+    frame.kpi.xpPerHour.value:SetText(formatCompactNumber(snapshot.xpPerHour))
+    frame.kpi.xpGained.value:SetText(formatCompactNumber(snapshot.xpGained))
+    frame.kpi.toLevel.value:SetText(snapshot.isMaxLevel and "MAX" or formatHMS(snapshot.etaSeconds))
+    frame.kpi.goldEarned.value:SetText(formatCopperShort(snapshot.goldEarned))
+    frame.kpi.goldSpent.value:SetText(formatCopperShort(snapshot.goldSpent))
+    frame.kpi.netGold.value:SetText(formatCopperShort(snapshot.netGold))
+    local netGoldColor = netColor(snapshot.netGold)
+    frame.kpi.netGold.value:SetTextColor(netGoldColor[1], netGoldColor[2], netGoldColor[3])
+
+    frame.timing.session.value:SetText(formatHMS(snapshot.trackedSeconds))
+    frame.timing.active.value:SetText(formatHMS(snapshot.activeSeconds))
+    frame.timing.status.value:SetText(snapshot.status or "")
+    frame.timing.started.value:SetText(snapshot.startedAt and tostring(snapshot.startedAt) or "--")
+
+    frame.character.level.value:SetText(tostring(snapshot.level or "--"))
+    frame.character.xp.value:SetText(
+        tostring(snapshot.currentXP or "--") .. " / " .. tostring(snapshot.currentXPMax or "--"))
+    frame.character.gold.value:SetText(formatCopperShort(snapshot.currentMoney))
+    if frame.character.xpBar.SetMinMaxValues and type(snapshot.currentXPMax) == "number"
+        and snapshot.currentXPMax > 0 then
+        frame.character.xpBar:SetMinMaxValues(0, snapshot.currentXPMax)
+        frame.character.xpBar:SetValue(snapshot.currentXP or 0)
+    end
+
+    frame.rates.earnedPerHour.value:SetText(formatCopperShort(snapshot.earnedPerHour))
+    frame.rates.spentPerHour.value:SetText(formatCopperShort(snapshot.spentPerHour))
+    frame.rates.netPerHour.value:SetText(formatCopperShort(snapshot.netPerHour))
+    local netRateColor = netColor(snapshot.netPerHour)
+    frame.rates.netPerHour.value:SetTextColor(netRateColor[1], netRateColor[2], netRateColor[3])
+
+    self:RefreshSessionHistoryRows()
+end
+
+function FDB:ToggleSessionWindow()
+    if not self.SessionDetailWindow then
+        self.SessionDetailWindow = self:BuildSessionDetailWindow()
+    end
+
+    local frame = self.SessionDetailWindow
+    if frame:IsShown() then
+        frame:Hide()
+        return false
+    end
+
+    frame:Show()
+    self:RefreshSessionDetailWindow()
+    return true
+end
+
+--- Slash command routing -----------------------------------------------------
+
+local SESSION_COMMAND_USAGE =
+    "usage: /fdb session [pause|resume|reset|hud|lock|timeout <minutes>|idle <minutes>]"
+
+function FDB:HandleSessionCommand(rawArgs)
+    local trimmed = (rawArgs or ""):match("^%s*(.-)%s*$")
+    local command, rest = trimmed:match("^(%S*)%s*(.-)$")
+    command = (command or ""):lower()
+
+    if command == "" then
+        self:ToggleSessionWindow()
+        return true
+    elseif command == "pause" then
+        self:PauseSession()
+        self:RefreshSessionUI()
+        self:RefreshSessionDetailWindow()
+        return true
+    elseif command == "resume" then
+        self:ResumeSession()
+        self:RefreshSessionUI()
+        self:RefreshSessionDetailWindow()
+        return true
+    elseif command == "reset" then
+        self:ShowSessionResetConfirmation()
+        return true
+    elseif command == "hud" then
+        self:ToggleSessionHUD()
+        self:RefreshSessionDetailWindow()
+        return true
+    elseif command == "lock" then
+        local settings = self:GetSessionHUDSettings()
+        self:SetSessionHUDLocked(not settings.hudLocked)
+        self:RefreshSessionDetailWindow()
+        return true
+    elseif command == "timeout" then
+        local ok, err = self:SetSessionOfflineTimeout(tonumber(rest))
+        if not ok then
+            print("|cff7dd3fcForeverDB|r", err or SESSION_COMMAND_USAGE)
+            return false
+        end
+        return true
+    elseif command == "idle" then
+        local ok, err = self:SetSessionInactivityTimeout(tonumber(rest))
+        if not ok then
+            print("|cff7dd3fcForeverDB|r", err or SESSION_COMMAND_USAGE)
+            return false
+        end
+        return true
+    end
+
+    print("|cff7dd3fcForeverDB|r", SESSION_COMMAND_USAGE)
+    return false
+end
