@@ -100,6 +100,7 @@ local function setup()
 
     assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
     assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Exporter.lua"))("ForeverDB", FDB)
     assert(loadfile("addon/ForeverDB/SessionTracker.lua"))("ForeverDB", FDB)
 
     FDB:InitializeDatabase()
@@ -560,6 +561,184 @@ test("paused XP gained is not backfilled after resume", function()
     state.xp = state.xp + 10
     state:event("PLAYER_XP_UPDATE")
     equal(char.current.xp.gained, 10)
+end)
+
+-- Task 3: gold accounting, rates, snapshot, export isolation --------------
+
+test("positive money delta increments earned in integer copper", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.money = state.money + 1234
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.gold.earned, 1234)
+    equal(char.current.gold.spent, 0)
+    equal(char.current.gold.lastCopper, state.money)
+end)
+
+test("negative money delta increments spent and net equals earned minus spent", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.money = state.money + 500
+    state:event("PLAYER_MONEY")
+    state.money = state.money - 200
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.gold.earned, 500)
+    equal(char.current.gold.spent, 200)
+
+    local snapshot = FDB:GetSessionSnapshot()
+    equal(snapshot.netGold, 300)
+end)
+
+test("unchanged duplicate money notification records zero", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state:event("PLAYER_MONEY")
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.gold.earned, 0)
+    equal(char.current.gold.spent, 0)
+end)
+
+test("rapid sequential money notifications record each signed delta exactly once", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.money = state.money + 100
+    state:event("PLAYER_MONEY")
+    state.money = state.money + 50
+    state:event("PLAYER_MONEY")
+    state.money = state.money - 30
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.gold.earned, 150)
+    equal(char.current.gold.spent, 30)
+end)
+
+test("missing first money baseline only establishes baseline", function()
+    local FDB, state = setup()
+    state.money = nil
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+    equal(char.current.gold.lastCopper, nil)
+
+    state.money = 777
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.gold.earned, 0)
+    equal(char.current.gold.spent, 0)
+    equal(char.current.gold.lastCopper, 777)
+end)
+
+test("paused money changes are not backfilled after resume", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    truthy(FDB:PauseSession())
+    state.money = state.money + 9999
+    state:event("PLAYER_MONEY")
+    equal(char.current.gold.earned, 0)
+
+    truthy(FDB:ResumeSession())
+    equal(char.current.gold.earned, 0)
+    equal(char.current.gold.lastCopper, state.money)
+
+    state.money = state.money + 25
+    state:event("PLAYER_MONEY")
+    equal(char.current.gold.earned, 25)
+end)
+
+test("earned spent and net per hour use active time", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 100
+    state.money = state.money + 200
+    state:event("PLAYER_MONEY") -- activity at +100, active window now [0,400)
+
+    state.now = state.now + 50
+    state.money = state.money - 50
+    state:event("PLAYER_MONEY") -- activity at +150, still inside the window
+
+    local snapshot = FDB:GetSessionSnapshot()
+    -- Active time equals tracked time here because every checkpoint stayed
+    -- inside the rolling inactivity window.
+    equal(snapshot.activeSeconds, 150)
+    equal(snapshot.earnedPerHour, 200 / 150 * 3600)
+    equal(snapshot.spentPerHour, 50 / 150 * 3600)
+    equal(snapshot.netPerHour, 150 / 150 * 3600)
+end)
+
+test("status precedence is PAUSED then IDLE then RUNNING", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    equal(FDB:GetSessionSnapshot().status, "RUNNING")
+
+    state.now = state.now + 400 -- exceeds default 300s inactivity timeout
+    equal(FDB:GetSessionSnapshot().status, "IDLE")
+
+    truthy(FDB:PauseSession())
+    equal(FDB:GetSessionSnapshot().status, "PAUSED")
+end)
+
+test("history snapshot records close-time XP and gold rates", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 120
+    state.xp = state.xp + 60
+    state.money = state.money + 120
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+
+    truthy(FDB:ResetSession())
+
+    local history = FDB:GetSessionHistory()
+    equal(#history, 1)
+    local record = history[1]
+    equal(record.xpGained, 60)
+    equal(record.goldEarned, 120)
+    equal(record.netGold, 120)
+    truthy(record.xpPerHour ~= nil)
+    truthy(record.earnedPerHour ~= nil)
+    truthy(record.netPerHour ~= nil)
+
+    -- History rows must be copies, not live references into persisted state.
+    record.xpGained = 999999
+    equal(char.history[1].xpGained, 60)
+end)
+
+test("session SavedVariables stay local and schema 9 export has no session records", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession()) -- archive one session into history too
+
+    equal(FDB.SCHEMA_VERSION, 9)
+    truthy(FDB.DB.sessions)
+    local char = FDB.DB.sessions.characters[state.guid]
+    truthy(char)
+    equal(#char.history, 1)
+
+    local export = FDB:BuildExportSnapshot()
+    truthy(export:match("^H|9|"))
+    falsy(export:find("session", 1, true))
+    falsy(export:find(char.history[1].id, 1, true))
+    falsy(export:find(char.current.id, 1, true))
 end)
 
 consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")
