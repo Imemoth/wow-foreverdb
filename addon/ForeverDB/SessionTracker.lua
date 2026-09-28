@@ -48,6 +48,19 @@ local CURRENT_NUMERIC_FIELDS = {
     "trackedSeconds", "activeSeconds",
 }
 
+-- Inner xp/gold leaves accounting code reads with `or 0`/arithmetic. `or 0`
+-- only substitutes for nil, not for a wrong-typed truthy value (e.g. a
+-- string), so these need the same defend-or-discard treatment as the
+-- outer `current` fields above. startCopper/lastCopper may legitimately
+-- be nil (no money baseline established yet), so nil is accepted there
+-- too -- only a wrong *type* forces a full rebuild.
+local CURRENT_XP_NUMERIC_FIELDS = {
+    "startLevel", "startXP", "gained", "lastLevel", "lastXP", "lastXPMax",
+}
+local CURRENT_GOLD_NUMERIC_FIELDS = {
+    "startCopper", "lastCopper", "earned", "spent",
+}
+
 local function normalizeCurrentShell(current)
     if type(current) ~= "table" then
         return newCurrentShell()
@@ -65,9 +78,25 @@ local function normalizeCurrentShell(current)
 
     if type(current.xp) ~= "table" then current.xp = {} end
     if type(current.gold) ~= "table" then current.gold = {} end
+
+    for _, field in ipairs(CURRENT_XP_NUMERIC_FIELDS) do
+        if current.xp[field] ~= nil and type(current.xp[field]) ~= "number" then
+            return newCurrentShell()
+        end
+    end
+
+    for _, field in ipairs(CURRENT_GOLD_NUMERIC_FIELDS) do
+        if current.gold[field] ~= nil and type(current.gold[field]) ~= "number" then
+            return newCurrentShell()
+        end
+    end
+
     current.startedAt = current.startedAt or 0
     current.trackedSeconds = current.trackedSeconds or 0
     current.activeSeconds = current.activeSeconds or 0
+    current.xp.gained = current.xp.gained or 0
+    current.gold.earned = current.gold.earned or 0
+    current.gold.spent = current.gold.spent or 0
 
     return current
 end
@@ -610,7 +639,9 @@ function FDB:GetSessionSnapshot()
     local level = current.xp.lastLevel
     local currentXP = current.xp.lastXP
     local currentXPMax = current.xp.lastXPMax
-    local isMaxLevel = (type(currentXPMax) == "number" and currentXPMax <= 0)
+    -- Max level, or the client exposing no usable next-level requirement
+    -- at all (missing/non-numeric), both mean "no ETA to compute" per spec.
+    local isMaxLevel = (type(currentXPMax) ~= "number") or currentXPMax <= 0
 
     local etaSeconds = nil
     if not isMaxLevel and xpPerHour and xpPerHour > 0

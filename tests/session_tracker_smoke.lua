@@ -657,25 +657,29 @@ test("paused money changes are not backfilled after resume", function()
     equal(char.current.gold.earned, 25)
 end)
 
-test("earned spent and net per hour use active time", function()
+test("earned spent and net per hour use active time, not tracked time", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
 
-    state.now = state.now + 100
+    -- A long idle gap before any activity, deliberately making
+    -- activeSeconds and trackedSeconds diverge: a regression that computed
+    -- these rates from trackedSeconds instead of activeSeconds must fail
+    -- this test (it would not have with a scenario where the two happen
+    -- to be equal).
+    state.now = state.now + 1800
     state.money = state.money + 200
-    state:event("PLAYER_MONEY") -- activity at +100, active window now [0,400)
+    state:event("PLAYER_MONEY") -- activity at +1800; active window capped at 300s from start
 
     state.now = state.now + 50
     state.money = state.money - 50
-    state:event("PLAYER_MONEY") -- activity at +150, still inside the window
+    state:event("PLAYER_MONEY") -- activity at +1850, within the new 300s window
 
     local snapshot = FDB:GetSessionSnapshot()
-    -- Active time equals tracked time here because every checkpoint stayed
-    -- inside the rolling inactivity window.
-    equal(snapshot.activeSeconds, 150)
-    equal(snapshot.earnedPerHour, 200 / 150 * 3600)
-    equal(snapshot.spentPerHour, 50 / 150 * 3600)
-    equal(snapshot.netPerHour, 150 / 150 * 3600)
+    equal(snapshot.trackedSeconds, 1850)
+    equal(snapshot.activeSeconds, 350)
+    equal(snapshot.earnedPerHour, 200 / 350 * 3600)
+    equal(snapshot.spentPerHour, 50 / 350 * 3600)
+    equal(snapshot.netPerHour, 150 / 350 * 3600)
 end)
 
 test("status precedence is PAUSED then IDLE then RUNNING", function()
@@ -761,6 +765,52 @@ test("a wrong-typed current.startedAt does not crash and rebuilds a clean sessio
     truthy(type(char.current.startedAt) == "number")
     truthy(char.current.startedAt > 0)
     equal(char.current.trackedSeconds, 0)
+end)
+
+test("a wrong-typed current.xp.gained does not crash and rebuilds a clean session", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- current.xp itself is a well-formed table, but one inner leaf is
+    -- corrupted -- a narrower/subtler case than the whole-current
+    -- corruption above.
+    FDB.DB.sessions.characters[state.guid].current.xp.gained = "corrupted"
+    FDB.SessionState = nil
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on corrupted xp.gained: " .. tostring(result))
+    truthy(result)
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    truthy(type(char.current.xp.gained) == "number")
+
+    state.xp = state.xp + 5
+    local ok2, err2 = pcall(function() state:event("PLAYER_XP_UPDATE") end)
+    truthy(ok2, "delivering an XP event after recovery must not crash: " .. tostring(err2))
+    equal(char.current.xp.gained, 5)
+end)
+
+test("a wrong-typed current.gold.earned does not crash when checked for offline archival on login", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    char.current.trackedSeconds = 500 -- would be "meaningful" if left uncorrupted
+    char.current.gold.earned = "corrupted"
+    char.current.lastSeenAt = state.now
+    FDB.SessionState = nil
+
+    state.now = state.now + 3601 -- beyond the default 3600s offline timeout,
+                                  -- forcing the archive-on-login path that
+                                  -- reads gold.earned to decide meaningfulness
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on corrupted gold.earned: " .. tostring(result))
+    truthy(result)
+
+    local newChar = FDB.DB.sessions.characters[state.guid]
+    truthy(type(newChar.current.gold.earned) == "number")
+    equal(newChar.current.startedAt, state.now)
 end)
 
 test("history eviction discards the oldest sessions, not the newest", function()
