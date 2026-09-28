@@ -73,12 +73,18 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 ## 0.7.x — Collector coverage closure
 
-- [ ] Herbalism E2E test and fixes.
-- [ ] Disenchant E2E test and fixes.
+- [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
+      debug breadcrumbs and simulated Lua contract checks.
+- [ ] Herbalism E2E test and fixes — **PENDING live client evidence**.
+- [ ] Disenchant E2E test and fixes — **PENDING live client evidence**.
 - [ ] Open-water fishing regression test.
 - [ ] Chest/GameObject location regression test.
 - [ ] Fishing-pool coordinate accuracy review and calibration.
 - [ ] Validate map metadata across additional Eastern Kingdoms / Kalimdor zones.
+
+Procedure and evidence ledger: [beta collector acceptance](BETA_TEST_PLAN.md#07x-herbalism--disenchant-collector-acceptance).
+Repo preparation is not E2E acceptance: both collectors still require real
+addon -> SavedVariables -> Companion -> Supabase -> search/details evidence.
 
 ## 0.8.0-alpha — Guildbook V1
 

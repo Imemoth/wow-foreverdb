@@ -40,7 +40,10 @@ function FDB:RememberDisenchantTarget(bag, slot)
     local link = getContainerItemLink(bag, slot)
     local itemId = itemIdFromLink(link)
 
-    if not itemId then return end
+    if not itemId then
+        self:Debug("disenchant target missing item link", "bag", bag, "slot", slot)
+        return
+    end
 
     local name
     if GetItemInfo then
@@ -63,10 +66,14 @@ end
 
 function FDB:ArmDisenchant()
     local pending = self.PendingDisenchant
-    if not pending then return end
+    if not pending then
+        self:Debug("disenchant succeeded without captured target")
+        return
+    end
 
     local now = GetTime and GetTime() or 0
     if now - (pending.at or 0) > 12 then
+        self:Debug("disenchant target expired before success", pending.itemId)
         self.PendingDisenchant = nil
         return
     end
@@ -75,6 +82,7 @@ function FDB:ArmDisenchant()
     self.ActiveDisenchant = pending
     self.PendingDisenchant = nil
     self.DisenchantCursorActiveAt = nil
+    self:Debug("disenchant armed", pending.itemId)
 end
 
 function FDB:GetActiveDisenchant()
@@ -83,6 +91,7 @@ function FDB:GetActiveDisenchant()
 
     local now = GetTime and GetTime() or pending.at
     if now - (pending.at or 0) > 20 then
+        self:Debug("disenchant active target expired before loot", pending.itemId)
         self.ActiveDisenchant = nil
         return nil
     end
@@ -91,11 +100,15 @@ function FDB:GetActiveDisenchant()
 end
 
 function FDB:ConsumeActiveDisenchant()
+    self:Debug("disenchant consumed", self.ActiveDisenchant and self.ActiveDisenchant.itemId or "?")
     self.ActiveDisenchant = nil
 end
 
 local function hookContainerUse()
-    if not hooksecurefunc then return end
+    if not hooksecurefunc then
+        FDB:Debug("disenchant hook unavailable: hooksecurefunc missing")
+        return
+    end
 
     if C_Container and C_Container.UseContainerItem then
         hooksecurefunc(
@@ -108,6 +121,7 @@ local function hookContainerUse()
                 )
             end
         )
+        FDB:Debug("disenchant hook installed: C_Container.UseContainerItem")
         return
     end
 
@@ -121,6 +135,9 @@ local function hookContainerUse()
                 )
             end
         )
+        FDB:Debug("disenchant hook installed: UseContainerItem")
+    else
+        FDB:Debug("disenchant hook unavailable: no container use API")
     end
 end
 
@@ -140,6 +157,7 @@ function FDB:InitializeDisenchantTracker()
                 if getDisenchantCursor() then
                     FDB.DisenchantCursorActiveAt =
                         GetTime and GetTime() or 0
+                    FDB:Debug("disenchant cursor detected")
                 end
                 return
             end
@@ -152,6 +170,7 @@ function FDB:InitializeDisenchantTracker()
             if event == "UNIT_SPELLCAST_SUCCEEDED" then
                 FDB:ArmDisenchant()
             else
+                FDB:Debug("disenchant cleared", event)
                 FDB.PendingDisenchant = nil
                 FDB.ActiveDisenchant = nil
                 FDB.DisenchantCursorActiveAt = nil
@@ -159,5 +178,8 @@ function FDB:InitializeDisenchantTracker()
         end
     )
 
+    if not GetCursorInfo then
+        FDB:Debug("disenchant cursor unavailable: GetCursorInfo missing")
+    end
     hookContainerUse()
 end
