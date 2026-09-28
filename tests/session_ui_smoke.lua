@@ -434,4 +434,182 @@ test("detailed window controls call the same tracker APIs as slash commands", fu
     falsy(FDB:GetSessionHUDSettings().hudShown)
 end)
 
+-- Task 6: Core integration (load order, event wiring, slash routing) ------
+
+local function setupCoreIntegration()
+    local state = {
+        now = 1000,
+        guid = "Player-1-000001",
+        name = "Vesperix",
+        realm = "TestRealm",
+        level = 20,
+        xp = 1000,
+        xpMax = 10000,
+        money = 5000,
+        frames = {},
+        tickers = {},
+        messages = {},
+    }
+
+    local FDB = {}
+
+    GetServerTime = function() return state.now end
+    GetTime = function() return state.now end
+    time = function() return state.now end
+
+    UnitGUID = function(unit) if unit == "player" then return state.guid end end
+    UnitName = function(unit) if unit == "player" then return state.name end end
+    GetRealmName = function() return state.realm end
+    UnitLevel = function(unit) if unit == "player" then return state.level end end
+    UnitXP = function(unit) if unit == "player" then return state.xp end end
+    UnitXPMax = function(unit) if unit == "player" then return state.xpMax end end
+    GetMoney = function() return state.money end
+
+    UIParent = { name = "UIParent" }
+    C_Map = nil -- absent in this fixture; Core.lua must guard this optional API
+
+    CreateFrame = function()
+        local frame = makeFrame(true)
+        state.frames[#state.frames + 1] = frame
+        return frame
+    end
+
+    function state:event(event, ...)
+        for _, frame in ipairs(self.frames) do
+            if frame.events[event] then frame.scripts.OnEvent(frame, event, ...) end
+        end
+    end
+
+    C_Timer = {
+        NewTicker = function(interval, callback)
+            state.tickers[#state.tickers + 1] = { interval = interval, callback = callback }
+            return {}
+        end,
+        After = function() end,
+    }
+
+    SlashCmdList = {}
+    print = function(...)
+        local parts = {}
+        for i = 1, select("#", ...) do parts[i] = tostring(select(i, ...)) end
+        state.messages[#state.messages + 1] = table.concat(parts, " ")
+    end
+
+    ForeverDB_Saved = nil
+    ForeverDB_Export = nil
+
+    assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Exporter.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionTracker.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionUI.lua"))("ForeverDB", FDB)
+
+    -- Collector/UI modules this fixture does not load; Core.lua's
+    -- ADDON_LOADED handler still calls them, so stub them as no-ops. This
+    -- keeps the integration test scoped to session-tracker wiring instead
+    -- of duplicating the unrelated collector-smoke fixture.
+    for _, name in ipairs({
+        "InitializeGuildApiProbe", "InitializeGuildbookTracker",
+        "InitializeGatheringTracker", "InitializeSkinningTracker",
+        "InitializeFishingPoolTracker", "InitializeDisenchantTracker",
+        "InitializeLootTracker", "InitializeTooltip",
+    }) do
+        FDB[name] = function() end
+    end
+
+    return FDB, state
+end
+
+test("addon load initializes the session tracker and UI after the database", function()
+    local FDB, state = setupCoreIntegration()
+    local initOrder = {}
+
+    local realInitDB = FDB.InitializeDatabase
+    FDB.InitializeDatabase = function(self, ...)
+        initOrder[#initOrder + 1] = "database"
+        return realInitDB(self, ...)
+    end
+    FDB.InitializeSessionTracker = function(self, ...)
+        initOrder[#initOrder + 1] = "tracker"
+        return FDB.GetSessionsRoot(self) -- keep DB.sessions normalized without full event wiring
+    end
+    FDB.InitializeSessionUI = function() initOrder[#initOrder + 1] = "ui" end
+
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    equal(initOrder[1], "database")
+    truthy(initOrder[2] == "tracker" or initOrder[3] == "tracker")
+    truthy(initOrder[2] == "ui" or initOrder[3] == "ui")
+end)
+
+test("player login calls SessionPlayerReady", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local called = false
+    FDB.SessionPlayerReady = function(self, ...)
+        called = true
+        return true
+    end
+
+    state:event("PLAYER_LOGIN")
+    truthy(called)
+end)
+
+test("player logout calls SessionBeforeLogout before PrepareForSave", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+    truthy(FDB:SessionPlayerReady())
+
+    local order = {}
+    local realPrepareForSave = FDB.PrepareForSave
+    FDB.SessionBeforeLogout = function(self, ...)
+        order[#order + 1] = "sessionBeforeLogout"
+    end
+    FDB.PrepareForSave = function(self, ...)
+        order[#order + 1] = "prepareForSave"
+        return realPrepareForSave(self, ...)
+    end
+
+    state:event("PLAYER_LOGOUT")
+
+    equal(order[1], "sessionBeforeLogout")
+    equal(order[2], "prepareForSave")
+end)
+
+test("/fdb session delegates to HandleSessionCommand with no args", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local receivedArgs
+    FDB.HandleSessionCommand = function(self, args) receivedArgs = args; return true end
+
+    SlashCmdList.FOREVERDB("session")
+    equal(receivedArgs, "")
+end)
+
+test("/fdb session timeout 45 delegates the raw session arguments", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local receivedArgs
+    FDB.HandleSessionCommand = function(self, args) receivedArgs = args; return true end
+
+    SlashCmdList.FOREVERDB("session timeout 45")
+    equal(receivedArgs, "timeout 45")
+end)
+
+test("generic help mentions /fdb session", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    SlashCmdList.FOREVERDB("not-a-real-command")
+
+    local found = false
+    for _, message in ipairs(state.messages) do
+        if message:find("/fdb session", 1, true) then found = true end
+    end
+    truthy(found)
+end)
+
 consolePrint(passed .. " session UI smoke tests passed; live Forever E2E remains PENDING")

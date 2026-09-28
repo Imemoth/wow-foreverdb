@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.4.1-alpha"
+FDB.VERSION = "0.5.0-alpha"
 FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
@@ -109,8 +109,11 @@ local function registerSlashCommands()
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
+        elseif command == "session" or command:match("^session%s+") then
+            local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
+            FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
@@ -128,6 +131,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if loadedAddon ~= addonName then return end
 
         FDB:InitializeDatabase()
+        FDB:InitializeSessionTracker()
+        FDB:InitializeSessionUI()
         FDB:InitializeGuildApiProbe()
         FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()
@@ -142,6 +147,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:Debug("loaded", FDB.VERSION, "schema", FDB.SCHEMA_VERSION)
     elseif event == "PLAYER_LOGIN" then
         FDB:EnsureInstallationId()
+        FDB:SessionPlayerReady()
 
         if C_Map and C_Map.GetBestMapForUnit then
             local mapId =
@@ -154,6 +160,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 
         FDB:BuildExportSnapshot()
     elseif event == "PLAYER_LOGOUT" then
+        FDB:SessionBeforeLogout()
         FDB:PrepareForSave()
     end
 end)
