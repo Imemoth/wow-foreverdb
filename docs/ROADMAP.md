@@ -42,7 +42,11 @@ Map asset pipeline acceptance status:
 
 ## 0.5.0-alpha — Session Tracker
 
-Implementation status: **repo-complete; live Forever-client acceptance PENDING.**
+Implementation status: **external review round 2 fixes applied and
+repo-side re-verified; pending a fresh independent (Reviewer C) pass
+before repo-complete is reconfirmed. Live Forever-client acceptance
+PENDING regardless.** See the acceptance ledger's "Review round 2" and
+"Verification snapshot" sections.
 
 Goal: give players useful in-game leveling/farming feedback (XP/hour, time
 to level, gold earned/spent/net, active-time-based rates) without requiring
