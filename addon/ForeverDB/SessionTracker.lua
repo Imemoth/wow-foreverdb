@@ -101,6 +101,25 @@ local function normalizeCurrentShell(current)
     return current
 end
 
+-- A completed-session history entry can be corrupted independently of
+-- `current` (a hand-edited SavedVariables file, or a stray non-table
+-- value left over from an incompatible future format). SessionUI.lua's
+-- formatters already tolerate a wrong-typed *field* on an otherwise
+-- valid record (they fall back to "--"), but they cannot tolerate a
+-- record itself being a non-table: indexing it errors. Drop only the
+-- malformed entries, in place, preserving order and every valid record.
+local function normalizeHistoryList(history)
+    if type(history) ~= "table" then return {} end
+
+    local cleaned = {}
+    for _, record in ipairs(history) do
+        if type(record) == "table" then
+            cleaned[#cleaned + 1] = record
+        end
+    end
+    return cleaned
+end
+
 --- Root persistence access -------------------------------------------------
 
 function FDB:GetSessionsRoot()
@@ -143,8 +162,12 @@ function FDB:GetOrCreateSessionCharacter(guid)
     local sessions = self:GetSessionsRoot()
     if not sessions then return nil end
 
+    -- A character record must be a table to be usable at all. A stray
+    -- string/number/boolean (hand-edited or corrupted SavedVariables)
+    -- would otherwise error the moment any field on it is written, so it
+    -- is treated the same as "no record yet" and rebuilt fresh.
     local char = sessions.characters[guid]
-    if not char then
+    if type(char) ~= "table" then
         char = {
             name = UnitName and UnitName("player") or nil,
             realm = GetRealmName and GetRealmName() or nil,
@@ -158,7 +181,7 @@ function FDB:GetOrCreateSessionCharacter(guid)
         char.realm = (GetRealmName and GetRealmName()) or char.realm
         char.ui = normalizeHUDSettings(char.ui)
         char.current = normalizeCurrentShell(char.current)
-        if type(char.history) ~= "table" then char.history = {} end
+        char.history = normalizeHistoryList(char.history)
     end
 
     return char
@@ -694,25 +717,31 @@ function FDB:GetSessionHistory()
     local char = self:GetActiveSessionCharacter()
     if not char then return {} end
 
+    -- Defensive on top of the normalization GetOrCreateSessionCharacter
+    -- already applies: skip any entry that isn't a table so a record
+    -- corrupted after normalization ran (or a fixture that bypasses it)
+    -- still can't crash this copy loop by indexing a non-table value.
     local result = {}
-    for i, record in ipairs(char.history or {}) do
-        result[i] = {
-            id = record.id,
-            startedAt = record.startedAt,
-            endedAt = record.endedAt,
-            trackedSeconds = record.trackedSeconds,
-            activeSeconds = record.activeSeconds,
-            startLevel = record.startLevel,
-            endLevel = record.endLevel,
-            xpGained = record.xpGained,
-            xpPerHour = record.xpPerHour,
-            goldEarned = record.goldEarned,
-            goldSpent = record.goldSpent,
-            netGold = record.netGold,
-            earnedPerHour = record.earnedPerHour,
-            spentPerHour = record.spentPerHour,
-            netPerHour = record.netPerHour,
-        }
+    for _, record in ipairs(char.history or {}) do
+        if type(record) == "table" then
+            result[#result + 1] = {
+                id = record.id,
+                startedAt = record.startedAt,
+                endedAt = record.endedAt,
+                trackedSeconds = record.trackedSeconds,
+                activeSeconds = record.activeSeconds,
+                startLevel = record.startLevel,
+                endLevel = record.endLevel,
+                xpGained = record.xpGained,
+                xpPerHour = record.xpPerHour,
+                goldEarned = record.goldEarned,
+                goldSpent = record.goldSpent,
+                netGold = record.netGold,
+                earnedPerHour = record.earnedPerHour,
+                spentPerHour = record.spentPerHour,
+                netPerHour = record.netPerHour,
+            }
+        end
     end
     return result
 end

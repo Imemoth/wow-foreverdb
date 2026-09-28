@@ -943,4 +943,123 @@ test("invalid HUD position data normalizes to safe defaults", function()
     equal(after.hudY, 6)
 end)
 
+-- External review round 2: corrupted character records and history --------
+
+test("a non-table character record (string) recovers into a fresh valid character", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB.SessionState = nil
+
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters[state.guid] = "corrupted"
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on a non-table character record: " .. tostring(result))
+    truthy(result)
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    truthy(type(char) == "table")
+    truthy(type(char.current) == "table")
+    equal(char.current.startedAt, state.now)
+
+    state.xp = state.xp + 5
+    local ok2, err2 = pcall(function() state:event("PLAYER_XP_UPDATE") end)
+    truthy(ok2, "delivering an XP event after recovery must not crash: " .. tostring(err2))
+    equal(char.current.xp.gained, 5)
+end)
+
+test("a non-table character record (number) recovers into a fresh valid character", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB.SessionState = nil
+
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters[state.guid] = 42
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on a numeric character record: " .. tostring(result))
+    truthy(result)
+    truthy(type(FDB.DB.sessions.characters[state.guid]) == "table")
+end)
+
+test("a non-table character record (boolean) recovers into a fresh valid character", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB.SessionState = nil
+
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters[state.guid] = true
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on a boolean character record: " .. tostring(result))
+    truthy(result)
+    truthy(type(FDB.DB.sessions.characters[state.guid]) == "table")
+end)
+
+test("history list with valid and non-table records mixed returns only the valid ones", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    char.history = {
+        { id = "a", xpGained = 10, trackedSeconds = 100 },
+        "corrupted-string-entry",
+        { id = "b", xpGained = 20, trackedSeconds = 200 },
+        42,
+        false,
+    }
+
+    local history
+    local ok, err = pcall(function() history = FDB:GetSessionHistory() end)
+    truthy(ok, "GetSessionHistory must not error on mixed valid/invalid records: " .. tostring(err))
+    equal(#history, 2)
+    equal(history[1].id, "a")
+    equal(history[2].id, "b")
+end)
+
+test("a history record with a wrong-typed display field does not crash GetSessionHistory", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    char.history = {
+        { id = "a", xpGained = "not-a-number", trackedSeconds = "also-bad", goldEarned = {} },
+    }
+
+    local history
+    local ok, err = pcall(function() history = FDB:GetSessionHistory() end)
+    truthy(ok, "GetSessionHistory must not error on a wrong-typed display field: " .. tostring(err))
+    equal(#history, 1)
+    equal(history[1].id, "a")
+end)
+
+test("recovering one corrupted character does not affect other characters or non-session data", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 70
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    local goodGuid = state.guid
+    local goodHistoryCount = #FDB.DB.sessions.characters[goodGuid].history
+    truthy(goodHistoryCount > 0)
+
+    FDB.DB.sources = { keep = "yes" }
+    FDB.DB.maps = { keep = "yes" }
+    FDB.DB.guilds = { keep = "yes" }
+
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters["Player-1-000099"] = "corrupted"
+
+    FDB.SessionState = nil
+    state.guid = "Player-1-000099"
+    truthy(FDB:SessionPlayerReady())
+
+    equal(#FDB.DB.sessions.characters[goodGuid].history, goodHistoryCount)
+    equal(FDB.DB.sources.keep, "yes")
+    equal(FDB.DB.maps.keep, "yes")
+    equal(FDB.DB.guilds.keep, "yes")
+end)
+
 consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")
