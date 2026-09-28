@@ -572,6 +572,53 @@ test("detailed window renders recent session history rows", function()
     truthy(frame.historyRows[1]:GetText():find("40"))
 end)
 
+test("Started and history Date/Time show a human-readable timestamp, not a raw UNIX epoch", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local startedAt = state.now
+
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local startedText = frame.timing.started.value:GetText()
+    falsy(startedText == tostring(startedAt), "Started must not display the raw epoch number")
+    truthy(startedText:find("%d%d%d%d") ~= nil, "Started should show a real calendar date")
+
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    local rowText = frame.historyRows[1]:GetText()
+    local endedAt = FDB:GetSessionHistory()[1].endedAt
+    falsy(rowText:find(tostring(endedAt), 1, true) ~= nil,
+        "history row must not embed the raw epoch number for its date/time column")
+end)
+
+test("a missing or invalid timestamp falls back to a safe placeholder", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    -- Snapshot with no startedAt at all (nil) must not error or display
+    -- something misleading.
+    FDB.GetSessionSnapshot = function()
+        return {
+            xpPerHour = nil, etaSeconds = nil, isMaxLevel = false,
+            earnedPerHour = nil, netPerHour = nil, activeSeconds = 0,
+            status = "RUNNING", startedAt = nil,
+        }
+    end
+
+    local ok, err = pcall(function() FDB:RefreshSessionDetailWindow() end)
+    truthy(ok, "must not error on a missing startedAt: " .. tostring(err))
+    equal(frame.timing.started.value:GetText(), "--")
+end)
+
 test("detailed window controls call the same tracker APIs as slash commands", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
