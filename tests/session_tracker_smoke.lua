@@ -1,0 +1,401 @@
+-- Run from the repository root: lua5.4 tests/session_tracker_smoke.lua
+-- Simulated WoW APIs; this is NOT live Forever client acceptance.
+local consolePrint = print
+local passed = 0
+
+local function equal(actual, expected, label)
+    if actual ~= expected then
+        error((label or "value") .. ": " .. tostring(actual) .. " ~= " .. tostring(expected))
+    end
+end
+
+local function truthy(value, label)
+    if not value then
+        error((label or "value") .. " expected truthy, got " .. tostring(value))
+    end
+end
+
+local function falsy(value, label)
+    if value then
+        error((label or "value") .. " expected falsy, got " .. tostring(value))
+    end
+end
+
+-- Build a fresh simulated WoW environment plus a freshly loaded FDB module set.
+local function setup()
+    local state = {
+        now = 1000,
+        guid = "Player-1-000001",
+        name = "Vesperix",
+        realm = "TestRealm",
+        level = 20,
+        xp = 1000,
+        xpMax = 10000,
+        money = 5000,
+        frames = {},
+        tickers = {},
+    }
+
+    local FDB = {}
+
+    GetServerTime = function() return state.now end
+    GetTime = function() return state.now end
+    time = function() return state.now end
+
+    UnitGUID = function(unit)
+        if unit == "player" then return state.guid end
+        return nil
+    end
+    UnitName = function(unit)
+        if unit == "player" then return state.name end
+        return nil
+    end
+    GetRealmName = function() return state.realm end
+    UnitLevel = function(unit)
+        if unit == "player" then return state.level end
+        return nil
+    end
+    UnitXP = function(unit)
+        if unit == "player" then return state.xp end
+        return nil
+    end
+    UnitXPMax = function(unit)
+        if unit == "player" then return state.xpMax end
+        return nil
+    end
+    GetMoney = function() return state.money end
+
+    CreateFrame = function()
+        local frame = { events = {} }
+        function frame:RegisterEvent(event) self.events[event] = true end
+        function frame:UnregisterEvent(event) self.events[event] = nil end
+        function frame:SetScript(_, handler) self.handler = handler end
+        state.frames[#state.frames + 1] = frame
+        return frame
+    end
+
+    function state:event(event, ...)
+        for _, frame in ipairs(self.frames) do
+            if frame.events[event] then frame.handler(frame, event, ...) end
+        end
+    end
+
+    C_Timer = {
+        NewTicker = function(interval, callback)
+            local ticker = { interval = interval, callback = callback }
+            state.tickers[#state.tickers + 1] = ticker
+            return ticker
+        end,
+        After = function() end,
+    }
+
+    function state:fireTickers()
+        for _, ticker in ipairs(self.tickers) do
+            ticker.callback()
+        end
+    end
+
+    ForeverDB_Saved = nil
+    ForeverDB_Export = nil
+
+    assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionTracker.lua"))("ForeverDB", FDB)
+
+    FDB:InitializeDatabase()
+
+    return FDB, state
+end
+
+local function test(name, run)
+    local ok, err = pcall(run)
+    if not ok then error(name .. ": " .. tostring(err)) end
+    passed = passed + 1
+    consolePrint("PASS (simulated): " .. name)
+end
+
+test("starts a session for a valid GUID with exact defaults", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    local settings = FDB:GetSessionSettings()
+    equal(settings.offlineTimeout, 3600)
+    equal(settings.inactivityTimeout, 300)
+    equal(settings.historyLimit, 30)
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    truthy(char)
+    equal(char.name, state.name)
+    equal(char.realm, state.realm)
+    equal(char.current.startedAt, state.now)
+    equal(char.current.trackedSeconds, 0)
+    equal(char.current.activeSeconds, 0)
+    falsy(char.current.paused)
+    equal(char.current.xp.startLevel, state.level)
+    equal(char.current.xp.startXP, state.xp)
+    equal(char.current.gold.startCopper, state.money)
+    equal(char.current.gold.lastCopper, state.money)
+end)
+
+test("missing GUID defers initialization and never creates a nil character key", function()
+    local FDB, state = setup()
+    state.guid = nil
+    falsy(FDB:SessionPlayerReady())
+
+    local count = 0
+    for _ in pairs(FDB.DB.sessions.characters) do count = count + 1 end
+    equal(count, 0)
+    falsy(FDB.SessionState)
+end)
+
+test("PLAYER_ENTERING_WORLD retries a player GUID that was unavailable at login", function()
+    local FDB, state = setup()
+    state.guid = nil
+    FDB:InitializeSessionTracker()
+    falsy(FDB:SessionPlayerReady())
+
+    state.guid = "Player-1-000099"
+    state:event("PLAYER_ENTERING_WORLD")
+
+    truthy(FDB.SessionState)
+    equal(FDB.SessionState.guid, state.guid)
+    truthy(FDB.DB.sessions.characters[state.guid])
+end)
+
+test("offline gap within 60 minutes resumes and re-baselines without counting the gap", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local originalStartedAt = state.now
+
+    state.now = state.now + 100
+    FDB:CheckpointSession(state.now)
+    equal(FDB.DB.sessions.characters[state.guid].current.trackedSeconds, 100)
+
+    FDB:SessionBeforeLogout()
+    equal(FDB.DB.sessions.characters[state.guid].current.lastSeenAt, state.now)
+
+    state.now = state.now + 1800 -- 30 minutes offline, within 60 minute timeout
+    state.level = 21
+    state.xp = 500
+    state.money = 6000
+    FDB.SessionState = nil -- simulate a fresh Lua state after reload/relog
+
+    truthy(FDB:SessionPlayerReady())
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    equal(char.current.startedAt, originalStartedAt)
+    equal(char.current.trackedSeconds, 100) -- offline gap excluded
+    equal(char.current.checkpointAt, state.now)
+    equal(char.current.lastActivityAt, state.now)
+    equal(char.current.xp.lastLevel, 21)
+    equal(char.current.xp.lastXP, 500)
+    equal(char.current.gold.lastCopper, 6000)
+    equal(#char.history, 0)
+end)
+
+test("offline gap over 60 minutes archives and starts a new session", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 120
+    state.xp = state.xp + 50
+    state:event("PLAYER_XP_UPDATE")
+    FDB:SessionBeforeLogout()
+
+    local oldId = FDB.DB.sessions.characters[state.guid].current.id
+
+    state.now = state.now + 3601 -- just over the 3600s default offline timeout
+    FDB.SessionState = nil
+    truthy(FDB:SessionPlayerReady())
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    equal(#char.history, 1)
+    equal(char.history[1].id, oldId)
+    equal(char.history[1].xpGained, 50)
+    truthy(char.current.id ~= oldId)
+    equal(char.current.startedAt, state.now)
+    equal(char.current.trackedSeconds, 0)
+    equal(char.current.activeSeconds, 0)
+end)
+
+test("pause/resume excludes paused time and re-baselines XP/money", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 50
+    truthy(FDB:PauseSession())
+    equal(char.current.trackedSeconds, 50)
+    truthy(char.current.paused)
+
+    state.now = state.now + 500
+    state.xp = state.xp + 999
+    state.money = state.money + 999
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+
+    equal(char.current.trackedSeconds, 50)
+    equal(char.current.xp.gained, 0)
+    equal(char.current.gold.earned, 0)
+
+    truthy(FDB:ResumeSession())
+    falsy(char.current.paused)
+    equal(char.current.trackedSeconds, 50)
+    equal(char.current.xp.lastXP, state.xp)
+    equal(char.current.gold.lastCopper, state.money)
+
+    state.now = state.now + 10
+    state.xp = state.xp + 20
+    state:event("PLAYER_XP_UPDATE")
+    equal(char.current.xp.gained, 20)
+end)
+
+test("five-minute inactivity caps active time", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 200
+    state.xp = state.xp + 10
+    state:event("PLAYER_XP_UPDATE") -- activity at +200
+
+    state.now = state.now + 1000
+    FDB:CheckpointSession(state.now)
+
+    equal(char.current.trackedSeconds, 1200)
+    equal(char.current.activeSeconds, 500) -- 200 (to activity) + 300 (inactivity window)
+end)
+
+test("configurable inactivity timeout changes the active-time cap", function()
+    local FDB, state = setup()
+    truthy(FDB:SetSessionInactivityTimeout(10)) -- 600 seconds
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 200
+    state.xp = state.xp + 1
+    state:event("PLAYER_XP_UPDATE")
+
+    state.now = state.now + 1000
+    FDB:CheckpointSession(state.now)
+
+    equal(char.current.trackedSeconds, 1200)
+    equal(char.current.activeSeconds, 800) -- 200 + 600
+end)
+
+test("new activity after idle does not backfill the idle gap", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 1000 -- long idle, no activity
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+
+    equal(char.current.trackedSeconds, 1000)
+    equal(char.current.activeSeconds, 300) -- only the original inactivity window counts
+    equal(char.current.lastActivityAt, state.now)
+end)
+
+test("configurable offline and inactivity timeouts validate positive integer minutes", function()
+    local FDB = setup()
+
+    truthy(FDB:SetSessionOfflineTimeout(90))
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    local ok1 = FDB:SetSessionOfflineTimeout(0)
+    falsy(ok1)
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    local ok2 = FDB:SetSessionOfflineTimeout(1.5)
+    falsy(ok2)
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    local ok3 = FDB:SetSessionOfflineTimeout(-5)
+    falsy(ok3)
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    truthy(FDB:SetSessionInactivityTimeout(10))
+    equal(FDB:GetSessionSettings().inactivityTimeout, 600)
+
+    local ok4 = FDB:SetSessionInactivityTimeout(0)
+    falsy(ok4)
+    equal(FDB:GetSessionSettings().inactivityTimeout, 600)
+end)
+
+test("malformed optional session state recovers without changing sources maps or guilds", function()
+    local FDB = setup()
+    FDB.DB.sources = { keep = "yes" }
+    FDB.DB.maps = { keep = "yes" }
+    FDB.DB.guilds = { keep = "yes" }
+    FDB.DB.sessions = "not-a-table"
+
+    local sessions = FDB:GetSessionsRoot()
+    truthy(type(sessions) == "table")
+    equal(sessions.settings.offlineTimeout, 3600)
+    equal(sessions.settings.inactivityTimeout, 300)
+    equal(sessions.settings.historyLimit, 30)
+    equal(FDB.DB.sources.keep, "yes")
+    equal(FDB.DB.maps.keep, "yes")
+    equal(FDB.DB.guilds.keep, "yes")
+
+    FDB.DB.sessions.settings = "broken"
+    FDB.DB.sessions.characters = 42
+    local sessions2 = FDB:GetSessionsRoot()
+    equal(sessions2.settings.offlineTimeout, 3600)
+    truthy(type(sessions2.characters) == "table")
+    equal(FDB.DB.sources.keep, "yes")
+end)
+
+test("short empty session is discarded", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 10 -- under 60s, no XP/gold activity
+    truthy(FDB:ResetSession())
+    equal(#char.history, 0)
+end)
+
+test("history retains only the latest 30 completed sessions", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    for _ = 1, 35 do
+        state.now = state.now + 61
+        state.xp = state.xp + 1
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+
+    equal(#char.history, 30)
+end)
+
+test("two character GUIDs keep isolated current/history state", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local charA = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 70
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    FDB.SessionState = nil
+    state.guid = "Player-1-000002"
+    state.level = 5
+    state.xp = 100
+    state.xpMax = 2000
+    state.money = 0
+    truthy(FDB:SessionPlayerReady())
+    local charB = FDB.DB.sessions.characters[state.guid]
+
+    equal(#charA.history, 1)
+    equal(#charB.history, 0)
+    truthy(charA ~= charB)
+    equal(charB.current.xp.startLevel, 5)
+    equal(charB.current.gold.startCopper, 0)
+end)
+
+consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")
