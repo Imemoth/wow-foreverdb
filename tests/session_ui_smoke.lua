@@ -692,6 +692,65 @@ test("real ADDON_LOADED then PLAYER_LOGIN restores this character's saved HUD po
     falsy(frame:IsShown())
 end)
 
+test("late GUID: HUD state restores via the PLAYER_ENTERING_WORLD fallback, not only PLAYER_LOGIN", function()
+    local FDB, state = setupCoreIntegration()
+    local realGuid = state.guid
+
+    -- Pre-seed saved HUD state exactly like a returning character, but the
+    -- GUID is NOT yet available at PLAYER_LOGIN (a slow character-select
+    -- handoff), so SessionPlayerReady() only succeeds later at
+    -- PLAYER_ENTERING_WORLD, through SessionTracker.lua's own fallback
+    -- listener rather than Core.lua's PLAYER_LOGIN call. Nothing here is
+    -- stubbed: this drives the real functions through the real event order.
+    ForeverDB_Saved = {
+        sessions = {
+            characters = {
+                [realGuid] = {
+                    ui = {
+                        hudShown = false, hudLocked = true,
+                        hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+                        hudX = -50, hudY = 50,
+                    },
+                },
+            },
+        },
+    }
+
+    state:event("ADDON_LOADED", "ForeverDB")
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    state.guid = nil -- GUID unavailable at PLAYER_LOGIN
+    state:event("PLAYER_LOGIN")
+
+    falsy(FDB.SessionState, "no session should start without a GUID")
+    equal(frame.point.point, "TOPLEFT") -- still at build-time defaults
+
+    state.guid = realGuid -- GUID becomes available moments later
+    state:event("PLAYER_ENTERING_WORLD")
+
+    truthy(FDB.SessionState)
+    equal(FDB.SessionState.guid, realGuid)
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
+
+    -- A repeated PLAYER_ENTERING_WORLD (e.g. a later zone change) must be
+    -- idempotent: no new session, no timer reset, no new frames/tickers.
+    local sessionId = FDB.DB.sessions.characters[realGuid].current.id
+    local trackedBefore = FDB.DB.sessions.characters[realGuid].current.trackedSeconds
+    local frameCountBefore = #state.frames
+    local tickerCountBefore = #state.tickers
+
+    state:event("PLAYER_ENTERING_WORLD")
+
+    equal(FDB.DB.sessions.characters[realGuid].current.id, sessionId)
+    equal(FDB.DB.sessions.characters[realGuid].current.trackedSeconds, trackedBefore)
+    equal(#state.frames, frameCountBefore)
+    equal(#state.tickers, tickerCountBefore)
+end)
+
 test("player logout calls SessionBeforeLogout before PrepareForSave", function()
     local FDB, state = setupCoreIntegration()
     state:event("ADDON_LOADED", "ForeverDB")

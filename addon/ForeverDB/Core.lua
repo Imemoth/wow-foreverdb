@@ -124,6 +124,7 @@ FDB.EventFrame = frame
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 frame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -148,7 +149,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         FDB:EnsureInstallationId()
         FDB:SessionPlayerReady()
-        FDB:SyncSessionHUDForActiveCharacter()
+        if FDB.SyncSessionHUDForActiveCharacter then
+            FDB:SyncSessionHUDForActiveCharacter()
+        end
 
         if C_Map and C_Map.GetBestMapForUnit then
             local mapId =
@@ -160,6 +163,18 @@ frame:SetScript("OnEvent", function(_, event, ...)
         end
 
         FDB:BuildExportSnapshot()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- SessionPlayerReady() may not have succeeded yet at PLAYER_LOGIN
+        -- (the player GUID can be briefly unavailable during a slow
+        -- character-select handoff); SessionTracker.lua's own fallback
+        -- listener retries it here. Both calls are idempotent/safe to
+        -- repeat on every subsequent PLAYER_ENTERING_WORLD (zone change,
+        -- reload): SessionPlayerReady() no-ops once a session is active,
+        -- and this only re-applies already-persisted HUD settings.
+        FDB:SessionPlayerReady()
+        if FDB.SyncSessionHUDForActiveCharacter then
+            FDB:SyncSessionHUDForActiveCharacter()
+        end
     elseif event == "PLAYER_LOGOUT" then
         FDB:SessionBeforeLogout()
         FDB:PrepareForSave()
