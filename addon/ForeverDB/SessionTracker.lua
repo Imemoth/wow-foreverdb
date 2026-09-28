@@ -38,6 +38,40 @@ local function newCurrentShell()
     }
 end
 
+-- Leaf fields on `current` that timing/lifecycle code compares numerically
+-- or as booleans. A malformed SavedVariables file (hand-edited, corrupted,
+-- or from an incompatible future version) must not crash the tracker; if
+-- any of these are wrong-typed, the whole `current` session is discarded
+-- and rebuilt fresh rather than propagating impossible accounting state.
+local CURRENT_NUMERIC_FIELDS = {
+    "startedAt", "lastSeenAt", "checkpointAt", "lastActivityAt",
+    "trackedSeconds", "activeSeconds",
+}
+
+local function normalizeCurrentShell(current)
+    if type(current) ~= "table" then
+        return newCurrentShell()
+    end
+
+    for _, field in ipairs(CURRENT_NUMERIC_FIELDS) do
+        if current[field] ~= nil and type(current[field]) ~= "number" then
+            return newCurrentShell()
+        end
+    end
+
+    if current.paused ~= nil and type(current.paused) ~= "boolean" then
+        return newCurrentShell()
+    end
+
+    if type(current.xp) ~= "table" then current.xp = {} end
+    if type(current.gold) ~= "table" then current.gold = {} end
+    current.startedAt = current.startedAt or 0
+    current.trackedSeconds = current.trackedSeconds or 0
+    current.activeSeconds = current.activeSeconds or 0
+
+    return current
+end
+
 --- Root persistence access -------------------------------------------------
 
 function FDB:GetSessionsRoot()
@@ -94,9 +128,7 @@ function FDB:GetOrCreateSessionCharacter(guid)
         char.name = (UnitName and UnitName("player")) or char.name
         char.realm = (GetRealmName and GetRealmName()) or char.realm
         char.ui = normalizeHUDSettings(char.ui)
-        if type(char.current) ~= "table" then char.current = newCurrentShell() end
-        if type(char.current.xp) ~= "table" then char.current.xp = {} end
-        if type(char.current.gold) ~= "table" then char.current.gold = {} end
+        char.current = normalizeCurrentShell(char.current)
         if type(char.history) ~= "table" then char.history = {} end
     end
 

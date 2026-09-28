@@ -741,4 +741,156 @@ test("session SavedVariables stay local and schema 9 export has no session recor
     falsy(export:find(char.current.id, 1, true))
 end)
 
+-- Reviewer A findings: crash-safety on corrupted leaf fields, and a
+-- content-based (not count-only) history eviction assertion. ------------
+
+test("a wrong-typed current.startedAt does not crash and rebuilds a clean session", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Simulate hand-edited/corrupted SavedVariables: a non-numeric leaf
+    -- field on an otherwise well-formed `current` table.
+    FDB.DB.sessions.characters[state.guid].current.startedAt = "corrupted-string"
+    FDB.SessionState = nil
+
+    local ok, result = pcall(function() return FDB:SessionPlayerReady() end)
+    truthy(ok, "SessionPlayerReady must not error on corrupted state: " .. tostring(result))
+    truthy(result)
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    truthy(type(char.current.startedAt) == "number")
+    truthy(char.current.startedAt > 0)
+    equal(char.current.trackedSeconds, 0)
+end)
+
+test("history eviction discards the oldest sessions, not the newest", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    for i = 1, 35 do
+        state.now = state.now + 61
+        state.xp = state.xp + i -- distinct per-session xpGained tags the record
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+
+    equal(#char.history, 30)
+    -- Sessions tagged 1-5 must be evicted as oldest; 6-35 must survive,
+    -- oldest-to-newest. A reversed eviction (dropping newest) would leave
+    -- history[1]==1 and history[30]==30 instead.
+    equal(char.history[1].xpGained, 6)
+    equal(char.history[30].xpGained, 35)
+end)
+
+test("offline gap exactly at the timeout boundary resumes, not archives", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local originalStartedAt = state.now
+
+    FDB:SessionBeforeLogout()
+    state.now = state.now + 3600 -- exactly the default 3600s offline timeout
+    FDB.SessionState = nil
+    truthy(FDB:SessionPlayerReady())
+
+    local char = FDB.DB.sessions.characters[state.guid]
+    equal(char.current.startedAt, originalStartedAt) -- resumed, not archived
+    equal(#char.history, 0)
+end)
+
+test("tracked time exactly 60 seconds is meaningful and is retained", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 60 -- exactly the meaningful-session threshold
+    truthy(FDB:ResetSession())
+
+    equal(#char.history, 1)
+    equal(char.history[1].trackedSeconds, 60)
+end)
+
+test("the periodic checkpoint ticker updates timing and lastSeenAt", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    equal(#state.tickers, 1)
+    equal(state.tickers[1].interval, 30)
+
+    state.now = state.now + 30
+    state:fireTickers()
+
+    equal(char.current.trackedSeconds, 30)
+    equal(char.current.lastSeenAt, state.now)
+end)
+
+test("a transient missing money API fails safely and preserves prior totals", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.money = state.money + 100
+    state:event("PLAYER_MONEY")
+    equal(char.current.gold.earned, 100)
+
+    local realGetMoney = GetMoney
+    GetMoney = function() return nil end
+    state:event("PLAYER_MONEY")
+    GetMoney = realGetMoney
+
+    equal(char.current.gold.earned, 100)
+    equal(char.current.gold.lastCopper, state.money)
+end)
+
+test("HUD shown/locked/position settings default and persist per character", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    local defaults = FDB:GetSessionHUDSettings()
+    truthy(defaults.hudShown)
+    falsy(defaults.hudLocked)
+    equal(defaults.hudPoint, "TOPLEFT")
+    equal(defaults.hudRelativePoint, "TOPLEFT")
+    equal(defaults.hudX, 100)
+    equal(defaults.hudY, -100)
+
+    truthy(FDB:SetSessionHUDShown(false))
+    truthy(FDB:SetSessionHUDLocked(true))
+    truthy(FDB:SetSessionHUDPosition("BOTTOMRIGHT", "CENTER", 42, -17))
+
+    local settings = FDB:GetSessionHUDSettings()
+    falsy(settings.hudShown)
+    truthy(settings.hudLocked)
+    equal(settings.hudPoint, "BOTTOMRIGHT")
+    equal(settings.hudRelativePoint, "CENTER")
+    equal(settings.hudX, 42)
+    equal(settings.hudY, -17)
+end)
+
+test("invalid HUD position data normalizes to safe defaults", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    char.ui = { hudPoint = 42, hudRelativePoint = false, hudX = "left", hudY = nil }
+    local settings = FDB:GetSessionHUDSettings()
+
+    equal(settings.hudPoint, "TOPLEFT")
+    equal(settings.hudRelativePoint, "TOPLEFT")
+    equal(settings.hudX, 100)
+    equal(settings.hudY, -100)
+
+    -- A well-typed position update must not be discarded by a subsequent
+    -- normalize pass, and out-of-type arguments must be ignored rather
+    -- than corrupting the stored value.
+    truthy(FDB:SetSessionHUDPosition("BOTTOMRIGHT", "CENTER", 5, 6))
+    truthy(FDB:SetSessionHUDPosition(nil, nil, "bad", nil))
+    local after = FDB:GetSessionHUDSettings()
+    equal(after.hudPoint, "BOTTOMRIGHT")
+    equal(after.hudRelativePoint, "CENTER")
+    equal(after.hudX, 5)
+    equal(after.hudY, 6)
+end)
+
 consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")
