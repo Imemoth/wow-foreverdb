@@ -82,6 +82,9 @@ Do not build the public website around calculated percentages until:
 The 0.7.x label is the roadmap milestone, not the addon version. This procedure
 was prepared against main `7aa400582be4ad32287b4a1274ddb0db50724750`:
 addon **0.4.0-alpha**, schema **9**, Companion **0.8.0-alpha**, interface **16001**.
+Repo checks were rerun on 2026-09-28 after integrating main
+`e2a28c94a2b79ba2757e0c527d02ec00980afdf5`: addon **0.4.1-alpha**,
+schema **9**, Companion **0.8.2-alpha**, interface **16001**.
 Record the actual commit and Forever client build used for every run. Offline
 checks below do not establish compatibility with that client build.
 

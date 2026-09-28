@@ -55,3 +55,12 @@ Produces: initial conditions, exact actions and deltas, last observation, export
 - Remote main advanced during preparation; rebased onto `d543c60f4f75557492a56010126556b357dbed21`. Upstream Guildbook acceptance updates were preserved; collector contracts were unchanged.
 - Ruling: retain existing collector state transitions and add diagnostics only. Event-order, cursor semantics, partial-window reopening and cross-contamination remain live acceptance gates; guessing fixes would risk incorrect sample attribution.
 - WoW runtime, disk persistence and downstream E2E: **PENDING**, no client evidence collected.
+
+## Main synchronization verification — 2026-09-28
+
+- Integrated main `e2a28c94a2b79ba2757e0c527d02ec00980afdf5` into PR #1, whose previous head was `8616f082432cb817ccd81c6a2dc3e26845d970df` (31 upstream commits).
+- The only file changed on both sides was `docs/ROADMAP.md`; its three-way merge was conflict-free. Guildbook 0.8.1/0.8.2 changes, 30-minute refresh and upstream build/runtime UI verification pending status are preserved.
+- All upstream-only files remain byte-identical to main. Collector changes remain limited to the original diagnostics; the test plan now records the updated addon/Companion versions.
+- `texlua tests/collector_smoke.lua`: 8/8 simulated checks passed on the integrated snapshot.
+- Lua syntax compilation: all 13 addon modules and the collector smoke test passed. Diff whitespace check passed for the PR changes relative to the current main snapshot.
+- No live WoW, SavedVariables disk persistence, Companion build/UI or downstream acceptance was performed. Those pending gates remain unchanged.

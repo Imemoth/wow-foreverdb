@@ -1,4 +1,39 @@
+using System.Windows.Media;
+
 namespace ForeverDB.Companion.Models;
+
+public sealed class GuildbookProfessionChip
+{
+    public string Name { get; init; } = "";
+    public string SkillText { get; init; } = "";
+    public bool IsSecondary { get; init; }
+
+    public string Display =>
+        string.IsNullOrWhiteSpace(SkillText)
+            ? Name
+            : $"{Name} {SkillText}";
+
+    public Brush BackgroundBrush =>
+        new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString(
+                IsSecondary
+                    ? "#182B3D"
+                    : "#382D18"));
+
+    public Brush BorderBrush =>
+        new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString(
+                IsSecondary
+                    ? "#4C7297"
+                    : "#A27B32"));
+
+    public Brush ForegroundBrush =>
+        new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString(
+                IsSecondary
+                    ? "#D6E5F5"
+                    : "#F1D188"));
+}
 
 public sealed class GuildbookMemberRow
 {
@@ -13,6 +48,10 @@ public sealed class GuildbookMemberRow
     public string Zone { get; init; } = "";
     public long LastOnlineHours { get; init; }
     public string Professions { get; init; } = "";
+    public IReadOnlyList<string> ProfessionNames { get; init; } =
+        Array.Empty<string>();
+    public IReadOnlyList<GuildbookProfessionChip> ProfessionChips { get; init; } =
+        Array.Empty<GuildbookProfessionChip>();
 
     public string Status =>
         Online
@@ -20,6 +59,28 @@ public sealed class GuildbookMemberRow
             : LastOnlineHours > 0
                 ? FormatLastOnline(LastOnlineHours)
                 : "Offline";
+
+    public Brush ClassBrush =>
+        new SolidColorBrush(
+            ClassFile.ToUpperInvariant() switch
+            {
+                "WARRIOR" => Color.FromRgb(199, 156, 110),
+                "PALADIN" => Color.FromRgb(245, 140, 186),
+                "HUNTER" => Color.FromRgb(171, 212, 115),
+                "ROGUE" => Color.FromRgb(255, 245, 105),
+                "PRIEST" => Color.FromRgb(255, 255, 255),
+                "SHAMAN" => Color.FromRgb(0, 112, 222),
+                "MAGE" => Color.FromRgb(105, 204, 240),
+                "WARLOCK" => Color.FromRgb(148, 130, 201),
+                "DRUID" => Color.FromRgb(255, 125, 10),
+                _ => Color.FromRgb(216, 222, 233)
+            });
+
+    public Brush StatusBrush =>
+        new SolidColorBrush(
+            Online
+                ? Color.FromRgb(83, 199, 147)
+                : Color.FromRgb(152, 164, 181));
 
     private static string FormatLastOnline(long hours)
     {
@@ -48,21 +109,26 @@ public sealed class GuildbookMemberRow
     public static GuildbookMemberRow From(
         ForeverDbGuildMember member)
     {
-        var professions = member.Professions
+        var orderedProfessions = member.Professions
             .OrderBy(profession => profession.IsSecondary)
             .ThenBy(profession => profession.Name)
+            .ToList();
+
+        var chips = orderedProfessions
             .Select(
                 profession =>
-                {
-                    var skill =
-                        profession.MaxSkill > 0
-                            ? $"{profession.Skill}/{profession.MaxSkill}"
-                            : profession.Skill > 0
-                                ? profession.Skill.ToString()
-                                : "?";
-
-                    return $"{profession.Name} {skill}";
-                });
+                    new GuildbookProfessionChip
+                    {
+                        Name = profession.Name,
+                        SkillText =
+                            profession.MaxSkill > 0
+                                ? $"{profession.Skill}/{profession.MaxSkill}"
+                                : profession.Skill > 0
+                                    ? profession.Skill.ToString()
+                                    : "",
+                        IsSecondary = profession.IsSecondary
+                    })
+            .ToList();
 
         return new GuildbookMemberRow
         {
@@ -76,7 +142,15 @@ public sealed class GuildbookMemberRow
             Online = member.Online,
             Zone = member.Zone,
             LastOnlineHours = member.LastOnlineHours,
-            Professions = string.Join("  •  ", professions)
+            ProfessionNames = orderedProfessions
+                .Select(profession => profession.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            ProfessionChips = chips,
+            Professions = string.Join(
+                "  •  ",
+                chips.Select(chip => chip.Display))
         };
     }
 }

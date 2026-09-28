@@ -6,11 +6,26 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.4.0-alpha**
+- Addon: **0.4.1-alpha**
 - Export schema: **9**
-- Companion: **0.8.0-alpha**
+- Companion: **0.8.2-alpha**
 
 # Companion
+
+## 0.8.2-alpha — 2026-09-27
+
+- Increased Guildbook roster row/header spacing for ultrawide and high-resolution displays.
+- Added compact Members / Online / Offline / 30m refresh summary cards.
+- Summary cards preserve visible/total counts while filters are active.
+- Increased the visual contrast between primary and secondary profession chips.
+
+## 0.8.1-alpha — 2026-09-27
+
+- Added dark-theme ComboBox styling to remove the native white guild selector.
+- Added Guildbook filter placeholder text, profession filter and Online only toggle.
+- Added WoW class colors to the roster.
+- Replaced the flat profession string with wrapped profession chips for better readability.
+- Guildbook filtered counts now show visible/total members and online counts coherently.
 
 ## 0.8.0-alpha — 2026-09-26
 
@@ -111,6 +126,12 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.4.1-alpha — 2026-09-27
+
+- Added automatic Guildbook roster/profession refresh every 30 minutes while logged in.
+- The periodic refresh updates the in-memory SavedVariables snapshot; disk persistence still follows WoW SavedVariables writes (/reload, logout or client exit).
+- Export schema remains **9**.
 
 ## 0.4.0-alpha — 2026-09-26
 
