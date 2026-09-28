@@ -86,6 +86,7 @@ Add tests named:
 ```lua
 test("starts a session for a valid GUID with exact defaults", ...)
 test("missing GUID defers initialization and never creates a nil character key", ...)
+test("PLAYER_ENTERING_WORLD retries a player GUID that was unavailable at login", ...)
 test("offline gap within 60 minutes resumes and re-baselines without counting the gap", ...)
 test("offline gap over 60 minutes archives and starts a new session", ...)
 test("pause/resume excludes paused time and re-baselines XP/money", ...)
@@ -123,7 +124,8 @@ Requirements:
 - recover malformed optional session fields by replacing only the malformed session branch/field;
 - never mutate unrelated `sources`, `maps`, `guilds`;
 - use GUID as key, name/realm as metadata;
-- if GUID is unavailable, return false and wait for the next player-ready attempt.
+- if GUID is unavailable, return false and never create a placeholder key;
+- `InitializeSessionTracker()` must also register a lightweight `PLAYER_ENTERING_WORLD` fallback that calls `SessionPlayerReady()` while no character session is initialized, so a GUID that is late at `PLAYER_LOGIN` is retried automatically.
 
 - [ ] **Step 4: Implement checkpoint, inactivity, pause/resume, reset, and offline-resume semantics**
 
@@ -132,12 +134,13 @@ Implement the task interfaces above with these pinned rules:
 - every running checkpoint adds elapsed online/unpaused time to `trackedSeconds`;
 - active delta is limited by the previous `lastActivityAt + inactivityTimeout`;
 - finalize timing before advancing `lastActivityAt` on future activity;
-- `SessionPlayerReady` sets live XP/money baselines and `checkpointAt = now`;
+- a fresh session and every manual/offline resume set `lastActivityAt = now`, live XP/money baselines, and `checkpointAt = now`;
 - <= configured offline timeout resumes; > timeout archives meaningful current state and creates a fresh one;
 - pause finalizes current timing and stops accounting;
 - resume re-baselines XP/money and resets timing anchors without backfill;
 - reset archives only a meaningful session, then starts a fresh one;
-- a periodic ~30-second checkpoint uses the existing project compatibility pattern: `C_Timer.NewTicker`, else recursive `C_Timer.After`, else correctness still works through events/logout.
+- `SessionBeforeLogout()` finalizes running time and persists `lastSeenAt = now` before normal save preparation;
+- a periodic ~30-second checkpoint updates timers and `lastSeenAt` using the existing project compatibility pattern: `C_Timer.NewTicker`, else recursive `C_Timer.After`, else correctness still works through events/logout.
 
 - [ ] **Step 5: Add history retention and empty-session discard to the same lifecycle implementation**
 
