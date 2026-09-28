@@ -398,4 +398,168 @@ test("two character GUIDs keep isolated current/history state", function()
     equal(charB.current.gold.startCopper, 0)
 end)
 
+-- Task 2: XP accounting, level-up reconciliation, XP/hour, ETA ------------
+
+test("normal same-level XP gain increments once and marks activity", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 30
+    state.xp = state.xp + 400
+    state:event("PLAYER_XP_UPDATE")
+
+    equal(char.current.xp.gained, 400)
+    equal(char.current.lastActivityAt, state.now)
+end)
+
+test("XP/hour uses active seconds", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 1800 -- 30 minutes, fully active (well within inactivity window)
+    state.xp = state.xp + 900
+    state:event("PLAYER_XP_UPDATE")
+
+    local snapshot = FDB:GetSessionSnapshot()
+    -- activeSeconds is capped by the inactivity window (300s) from start,
+    -- since the only activity happened at +1800s: active = 300s.
+    equal(snapshot.activeSeconds, 300)
+    equal(snapshot.xpGained, 900)
+    equal(snapshot.xpPerHour, 900 / 300 * 3600)
+end)
+
+test("level-up XP wrap uses previous max minus previous XP plus new XP", function()
+    local FDB, state = setup()
+    state.level = 23
+    state.xp = 48000
+    state.xpMax = 50000
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.now = state.now + 10
+    state.level = 24
+    state.xp = 1200
+    state.xpMax = 54000
+    state:event("PLAYER_LEVEL_UP", 24)
+    state:event("PLAYER_XP_UPDATE")
+
+    equal(char.current.xp.gained, 3200)
+    equal(char.current.xp.lastLevel, 24)
+    equal(char.current.xp.lastXP, 1200)
+    equal(char.current.xp.lastXPMax, 54000)
+end)
+
+test("level-up event before XP event does not double-count", function()
+    local FDB, state = setup()
+    state.level = 23
+    state.xp = 48000
+    state.xpMax = 50000
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.level = 24
+    state.xp = 1200
+    state.xpMax = 54000
+    state:event("PLAYER_LEVEL_UP", 24) -- level-up arrives first
+    state:event("PLAYER_XP_UPDATE")    -- xp update arrives second, no new delta
+
+    equal(char.current.xp.gained, 3200)
+end)
+
+test("XP event before level-up event does not double-count", function()
+    local FDB, state = setup()
+    state.level = 23
+    state.xp = 48000
+    state.xpMax = 50000
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.level = 24
+    state.xp = 1200
+    state.xpMax = 54000
+    state:event("PLAYER_XP_UPDATE")    -- xp update arrives first
+    state:event("PLAYER_LEVEL_UP", 24) -- level-up arrives second, no new delta
+
+    equal(char.current.xp.gained, 3200)
+end)
+
+test("duplicate XP events with unchanged state add zero", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_XP_UPDATE")
+
+    equal(char.current.xp.gained, 0)
+end)
+
+test("same-level XP decrease re-baselines instead of subtracting gained XP", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.xp = state.xp + 200
+    state:event("PLAYER_XP_UPDATE")
+    equal(char.current.xp.gained, 200)
+
+    -- Same-level XP decrease (e.g. addon reload race / dev reset) must not
+    -- subtract from gained XP; it only re-baselines the tracked value.
+    state.xp = state.xp - 500
+    state:event("PLAYER_XP_UPDATE")
+
+    equal(char.current.xp.gained, 200)
+    equal(char.current.xp.lastXP, state.xp)
+end)
+
+test("max-level or unusable XP max returns no ETA", function()
+    local FDB, state = setup()
+    state.xpMax = 0 -- Forever client convention for max level
+    truthy(FDB:SessionPlayerReady())
+
+    local snapshot = FDB:GetSessionSnapshot()
+    truthy(snapshot.isMaxLevel)
+    equal(snapshot.etaSeconds, nil)
+end)
+
+test("missing XP APIs fail safely and preserve prior totals", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    state.xp = state.xp + 100
+    state:event("PLAYER_XP_UPDATE")
+    equal(char.current.xp.gained, 100)
+
+    local realUnitXP = UnitXP
+    UnitXP = function() return nil end
+    state:event("PLAYER_XP_UPDATE")
+    UnitXP = realUnitXP
+
+    equal(char.current.xp.gained, 100)
+    equal(char.current.xp.lastXP, state.xp)
+end)
+
+test("paused XP gained is not backfilled after resume", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    truthy(FDB:PauseSession())
+    state.xp = state.xp + 5000
+    state:event("PLAYER_XP_UPDATE")
+    equal(char.current.xp.gained, 0)
+
+    truthy(FDB:ResumeSession())
+    equal(char.current.xp.gained, 0)
+    equal(char.current.xp.lastXP, state.xp)
+
+    state.xp = state.xp + 10
+    state:event("PLAYER_XP_UPDATE")
+    equal(char.current.xp.gained, 10)
+end)
+
 consolePrint(passed .. " session tracker smoke tests passed; live Forever E2E remains PENDING")
