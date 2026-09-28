@@ -81,8 +81,11 @@ local function makeFrame(withBackdropMethods)
     function frame:SetEnabled(v) self.enabled = v end
     function frame:IsEnabled() return self.enabled end
     function frame:SetScrollChild(child) self.scrollChild = child end
-    function frame:SetMinMaxValues() end
-    function frame:SetValue() end
+    function frame:SetMinMaxValues(minValue, maxValue)
+        self.minValue = minValue
+        self.maxValue = maxValue
+    end
+    function frame:SetValue(v) self.value = v end
     function frame:SetStatusBarColor() end
     function frame:SetStatusBarTexture() end
     function frame:SetVerticalScroll() end
@@ -162,6 +165,12 @@ local function setup(options)
         end,
         After = function() end,
     }
+
+    function state:fireTickers()
+        for _, ticker in ipairs(self.tickers) do
+            ticker.callback()
+        end
+    end
 
     ForeverDB_Saved = nil
     ForeverDB_Export = nil
@@ -533,6 +542,54 @@ test("detailed window controls call the same tracker APIs as slash commands", fu
     truthy(FDB:GetSessionHUDSettings().hudShown)
     frame.hudButton.scripts.OnClick(frame.hudButton)
     falsy(FDB:GetSessionHUDSettings().hudShown)
+end)
+
+test("the registered periodic ticker also refreshes an already-open detailed window", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame:IsShown())
+
+    equal(frame.kpi.xpGained.value:GetText(), "0")
+
+    state.now = state.now + 60
+    state.xp = state.xp + 50
+    state.money = state.money + 100
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+
+    -- Deliberately do NOT call RefreshSessionDetailWindow() directly: this
+    -- must be driven by the actually-registered periodic ticker callback
+    -- (the same one a live client fires roughly once a second), which is
+    -- exactly the wiring under test.
+    truthy(#state.tickers >= 1)
+    state:fireTickers()
+
+    equal(frame.kpi.xpGained.value:GetText(), "50")
+    equal(frame.kpi.goldEarned.value:GetText(), "1s")
+    equal(frame.timing.active.value:GetText(), "00:01:00")
+    equal(frame.character.xpBar.maxValue, state.xpMax)
+    equal(frame.character.xpBar.value, state.xp)
+end)
+
+test("the periodic ticker refreshes the detailed window even while the HUD is hidden", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    falsy(FDB:ToggleSessionHUD()) -- HUD hidden; detailed window unaffected
+    falsy(FDB.SessionHUDFrame:IsShown())
+
+    state.now = state.now + 30
+    state.xp = state.xp + 15
+    state:event("PLAYER_XP_UPDATE")
+    state:fireTickers()
+
+    equal(frame.kpi.xpGained.value:GetText(), "15")
 end)
 
 -- Task 6: Core integration (load order, event wiring, slash routing) ------

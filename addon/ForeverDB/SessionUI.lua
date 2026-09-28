@@ -245,13 +245,23 @@ end
 
 --- Lifecycle -----------------------------------------------------------------
 
+-- Refreshes everything the UI ticker is responsible for: the compact HUD
+-- and, when it has been opened at least once, the detailed session
+-- window -- regardless of whether the HUD itself is currently shown.
+-- RefreshSessionDetailWindow() already no-ops when the window doesn't
+-- exist yet, so this is safe to call unconditionally on every tick.
+function FDB:RefreshSessionUIViews()
+    self:RefreshSessionUI()
+    self:RefreshSessionDetailWindow()
+end
+
 function FDB:StartSessionUIRefreshTicker()
     local interval = HUD_REFRESH_INTERVAL
     if C_Timer and C_Timer.NewTicker then
-        C_Timer.NewTicker(interval, function() self:RefreshSessionUI() end)
+        C_Timer.NewTicker(interval, function() self:RefreshSessionUIViews() end)
     elseif C_Timer and C_Timer.After then
         local function tick()
-            self:RefreshSessionUI()
+            self:RefreshSessionUIViews()
             C_Timer.After(interval, tick)
         end
         C_Timer.After(interval, tick)
