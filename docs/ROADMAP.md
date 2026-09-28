@@ -7,7 +7,7 @@ polish and distribution work.
 ## Current baseline
 
 ### Addon
-- Version: **0.4.1-alpha**
+- Version: **0.5.0-alpha**
 - Schema: **9**
 - Forever interface: **16001**
 - Observed pipelines:
@@ -20,6 +20,8 @@ polish and distribution work.
 - Experimental / pending E2E:
   - herbalism
   - disenchant
+- In-game Session Tracker (XP/hour, gold, active-time rates, compact HUD,
+  detailed window): repo-complete; live Forever acceptance PENDING.
 
 ### Companion
 - Version: **0.8.2-alpha**
@@ -37,6 +39,41 @@ Map asset pipeline acceptance status:
 - Tirisfal Glades: PASS, 12/12 tiles
 - Silverpine Forest: PASS, 12/12 tiles
 - Validated product/source: `wow_classic_beta` / FileDataID
+
+## 0.5.0-alpha — Session Tracker
+
+Implementation status: **repo-complete; live Forever-client acceptance PENDING.**
+
+Goal: give players useful in-game leveling/farming feedback (XP/hour, time
+to level, gold earned/spent/net, active-time-based rates) without requiring
+the Companion, addon-only for V1.
+
+- [x] Per-character session lifecycle: automatic start/resume, configurable
+      offline timeout (default 60m), reload/relog re-baselining without
+      backfill.
+- [x] Manual pause/resume/reset; reset requires confirmation from both the
+      detailed window and `/fdb session reset`.
+- [x] XP accounting resilient to `PLAYER_XP_UPDATE`/`PLAYER_LEVEL_UP`
+      event-order variance, with the canonical level-up wrap formula.
+- [x] Integer-copper gold accounting (earned/spent/net) from `GetMoney()`.
+- [x] Active-time-based rates with a configurable inactivity cutoff
+      (default 5m); active time never backfills an idle gap.
+- [x] Up to 30 retained completed sessions per character; short/empty
+      sessions discarded.
+- [x] Compact WoW-native HUD (movable, lockable, position/visibility
+      persisted per character) and a detailed `/fdb session` window with
+      KPI/timing/character/rates/history panels.
+- [x] `/fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>]`,
+      calling the same tracker/UI APIs as their button equivalents.
+- [x] Session state is local-only (`ForeverDB_Saved.sessions`); export
+      schema remains **9** and `ForeverDB_Export` carries no session data.
+- [x] Simulated Lua smoke coverage (`tests/session_tracker_smoke.lua`,
+      `tests/session_ui_smoke.lua`) and CI compile/test steps.
+- [ ] Live Forever client acceptance — **PENDING**, see the checklist in
+      the acceptance ledger below.
+
+Repo-side verification and the live-acceptance checklist:
+[0.5 Session Tracker acceptance](0.5-session-tracker-acceptance.md).
 
 ## 0.7.0-alpha — Map UX & location intelligence
 
