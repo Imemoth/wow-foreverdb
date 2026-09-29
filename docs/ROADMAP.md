@@ -42,13 +42,15 @@ Map asset pipeline acceptance status:
 
 ## 0.5.0-alpha — Session Tracker
 
-Implementation status: **repo-complete reconfirmed as of `1017afa`**
+Implementation status: **repo-complete reconfirmed as of `df1e27d`**
 (external review round 2's findings, independent Reviewer C's follow-up
-findings, and a subsequent UI/UX-only polish round's independent
-Reviewer D pass are all fixed where applicable and repo-side
+findings, a UI/UX-only polish round's independent Reviewer D pass, and a
+subsequent dimensioned-spec + live-scrollbar-bug-fix round's independent
+Reviewer F pass are all fixed where applicable and repo-side
 re-verified). **Live Forever-client acceptance PENDING regardless.** See
 the acceptance ledger's "Review round 2", "Review round 3 (UI/UX
-polish)", and "Verification snapshot" sections.
+polish)", "Review round 4 (dimensioned spec + scrollbar fix)", and
+"Verification snapshot" sections.
 
 Goal: give players useful in-game leveling/farming feedback (XP/hour, time
 to level, gold earned/spent/net, active-time-based rates) without requiring
