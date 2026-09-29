@@ -117,12 +117,22 @@ local DIVIDER_COLOR = { 0x6b / 255, 0x55 / 255, 0x27 / 255, 0.35 }
 -- visually belongs to XP, not Gold); Gold is the panel's last row, below
 -- the bar, per the approved order: Level, XP, XP bar, Gold.
 local XPBAR_WIDTH, XPBAR_HEIGHT = 228, 7
--- The bar sits noticeably closer to the XP row above it than to the Gold
--- row below it, so it visually reads as belonging to XP, not Gold.
-local XPBAR_GAP = 6 -- clear space between the XP row and the bar
-local XPBAR_Y = PANEL_ROW2_Y - XPBAR_GAP
-local CHARACTER_GOLD_GAP = 14 -- clear space between the bar and the Gold row below it
-local CHARACTER_GOLD_Y = XPBAR_Y - XPBAR_HEIGHT - CHARACTER_GOLD_GAP
+
+-- Live client evidence: measuring the bar's gap from the XP row's TOP
+-- anchor to the bar's TOP anchor (as a prior round did) is not the same
+-- as real clear space, since it ignores the XP row's own rendered text
+-- height -- that produced a bar that visually touched/overlapped the XP
+-- text. Gaps are now measured from the actual bottom edge of the row
+-- above (top anchor Y minus this assumed single-line text height) to the
+-- top edge of what follows, so the reported "too tight" spacing is
+-- genuinely fixed rather than just moved by an arbitrary constant.
+local CHARACTER_ROW_TEXT_HEIGHT = 14
+local XP_TEXT_BOTTOM_Y = PANEL_ROW2_Y - CHARACTER_ROW_TEXT_HEIGHT
+local XPBAR_GAP_ABOVE = 11 -- clear space between the XP text's bottom edge and the bar's top edge (target 10-12)
+local XPBAR_Y = XP_TEXT_BOTTOM_Y - XPBAR_GAP_ABOVE
+local XPBAR_BOTTOM_Y = XPBAR_Y - XPBAR_HEIGHT
+local XPBAR_GAP_BELOW = 13 -- clear space between the bar's bottom edge and Gold's top edge (target 12-14)
+local CHARACTER_GOLD_Y = XPBAR_BOTTOM_Y - XPBAR_GAP_BELOW
 local XPBAR_FILL_COLOR = { 0x6b / 255, 0x5a / 255, 0xa6 / 255 }
 local XPBAR_TRACK_COLOR = { 0.08, 0.07, 0.11, 0.85 }
 
@@ -197,8 +207,11 @@ FDB.SessionUILayout = {
     historyColumnWidth = HISTORY_COL_WIDTH,
     historyColumnLabels = HISTORY_COL_LABELS,
     panelRowHeight = PANEL_ROW_HEIGHT,
+    characterRowTextHeight = CHARACTER_ROW_TEXT_HEIGHT,
     xpBarWidth = XPBAR_WIDTH,
     xpBarHeight = XPBAR_HEIGHT,
+    xpBarGapAbove = XPBAR_GAP_ABOVE,
+    xpBarGapBelow = XPBAR_GAP_BELOW,
     actionBandHeight = DETAIL_ACTION_BAND_HEIGHT,
 }
 
@@ -1049,12 +1062,14 @@ function FDB:RefreshSessionHistoryRows()
 
         -- Level range is only meaningful across an actual level-up within
         -- the session; a same-level short session omits it entirely
-        -- rather than showing a redundant "Lvl 12->12".
+        -- rather than showing a redundant "Lvl 12->12". Net Gold (primary
+        -- column 5, derived as goldEarned - goldSpent by the tracker) is
+        -- the ONLY gold metric Recent Sessions ever shows -- goldEarned
+        -- and goldSpent are never rendered anywhere in this view, so the
+        -- secondary line's only possible content is the level transition.
         local levelChanged = record.startLevel ~= nil and record.endLevel ~= nil
             and record.startLevel ~= record.endLevel
-        local hasEarned = type(record.goldEarned) == "number" and record.goldEarned ~= 0
-        local hasSpent = type(record.goldSpent) == "number" and record.goldSpent ~= 0
-        local hasSecondary = levelChanged or hasEarned or hasSpent
+        local hasSecondary = levelChanged
         local rowHeight = hasSecondary and HISTORY_RECORD_HEIGHT or HISTORY_RECORD_HEIGHT_COLLAPSED
 
         -- Alternating tint by visible position (newest = row 1 = odd =
@@ -1093,24 +1108,14 @@ function FDB:RefreshSessionHistoryRows()
         end
         row.columns[5]:SetTextColor(netGoldColor[1], netGoldColor[2], netGoldColor[3])
 
-        -- Secondary line: level transition (only if one occurred),
-        -- earned/spent (only if nonzero) -- both stay neutral. If nothing
-        -- qualifies, the line is hidden and the row collapses to a single
-        -- compact line instead of showing an empty second line.
+        -- Secondary line: level transition only, never a gold breakdown.
+        -- If there was no level-up, the line is hidden and the row
+        -- collapses to a single compact line instead of showing an empty
+        -- second line.
         if hasSecondary then
-            local secondaryParts = {}
-            if levelChanged then
-                table.insert(secondaryParts, "Lvl " .. tostring(record.startLevel) .. "->" .. tostring(record.endLevel))
-            end
-            if hasEarned then
-                table.insert(secondaryParts, "+" .. formatCopperShort(record.goldEarned))
-            end
-            if hasSpent then
-                table.insert(secondaryParts, "-" .. formatCopperShort(record.goldSpent))
-            end
             row.secondary:ClearAllPoints()
             row.secondary:SetPoint("TOPLEFT", row.columns[1], "BOTTOMLEFT", 0, -HISTORY_LINE_GAP)
-            row.secondary:SetText(table.concat(secondaryParts, "  \226\128\162  "))
+            row.secondary:SetText("Lvl " .. tostring(record.startLevel) .. "->" .. tostring(record.endLevel))
             row.secondary:Show()
         else
             row.secondary:Hide()

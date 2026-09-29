@@ -1249,16 +1249,26 @@ test("history scroll viewport, content child, and rows all have real, distinct g
     truthy(type(frame.historyContent.width) == "number" and frame.historyContent.width > 0,
         "history content child must have a real width matching the viewport")
 
-    for i = 1, 3 do
+    -- A level-up on the first (and only, for this test) archived session
+    -- guarantees a non-empty secondary line, so this test's secondary-
+    -- anchor assertion below stays meaningful regardless of the
+    -- row-collapse behavior for a genuinely empty secondary line (Net
+    -- Gold alone, with no level change, no longer produces one).
+    state.now = state.now + 61
+    state.xpMax = 100
+    state.xp = 90
+    state:event("PLAYER_XP_UPDATE")
+    state.level = state.level + 1
+    state.xpMax = 10000
+    state.xp = 10
+    state:event("PLAYER_LEVEL_UP", state.level)
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    for i = 1, 2 do
         state.now = state.now + 61
         state.xp = state.xp + i
-        -- A nonzero money change guarantees a non-empty secondary line
-        -- (earned > 0) for every one of these records, so this test's
-        -- secondary-anchor assertion below stays meaningful regardless of
-        -- the row-collapse behavior for a genuinely empty secondary line.
-        state.money = state.money + 50
         state:event("PLAYER_XP_UPDATE")
-        state:event("PLAYER_MONEY")
         truthy(FDB:ResetSession())
     end
     FDB:RefreshSessionDetailWindow()
@@ -1270,7 +1280,9 @@ test("history scroll viewport, content child, and rows all have real, distinct g
     for _, column in ipairs(frame.historyRows[2].columns) do
         truthy(hasAnchor(column), "history row 2's columns must all have a real anchor")
     end
-    truthy(hasAnchor(frame.historyRows[1].secondary), "history row 1's secondary line must have a real anchor")
+    -- Row 3 (oldest of these three, newest-first) is the one with the
+    -- level-up, so its secondary line is the one guaranteed to exist.
+    truthy(hasAnchor(frame.historyRows[3].secondary), "history row 3's secondary line must have a real anchor")
 
     local firstY = frame.historyRows[1].columns[1].point and frame.historyRows[1].columns[1].point.y
     local secondY = frame.historyRows[2].columns[1].point and frame.historyRows[2].columns[1].point.y
@@ -1535,31 +1547,48 @@ test("Session Timing renders as four stacked single-column rows, not a 2x2 grid"
         "Session Timing must render exactly four distinct row positions")
 end)
 
-test("Character panel renders Level, XP, XP bar, then Gold in that order", function()
+test("Character panel renders Level, XP, XP bar, then Gold in strict order with no overlap", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
     FDB:InitializeSessionUI()
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
 
     local levelY = frame.character.level.label.point.y
     local xpY = frame.character.xp.label.point.y
     local barY = frame.character.xpBar.point.y
+    local barHeight = frame.character.xpBar.height
     local goldY = frame.character.gold.label.point.y
 
     -- Y offsets are negative-from-top; "below" means a more negative y.
+    -- Strict ordering: Level -> XP -> XP bar -> Gold.
     truthy(levelY > xpY, "Level must render above XP")
-    truthy(xpY > barY, "XP bar must render directly below the XP row")
+    truthy(xpY > barY, "XP bar must render below the XP row")
     truthy(barY > goldY, "Gold must render below the XP bar, not interleaved with it")
 
-    -- The bar must sit closer to XP (its own row) than Gold sits to the
-    -- bar's bottom edge is not required, but the bar must not be closer to
-    -- Gold's position than to XP's -- i.e. it visually belongs to XP.
-    local xpToBar = xpY - barY
-    local barBottom = barY - frame.character.xpBar.height
-    local barToGold = barBottom - goldY
-    truthy(xpToBar <= barToGold + 1,
-        "the XP bar must sit closer to (or as close to) the XP row above it as to the Gold row below it")
+    -- Real non-overlap, accounting for the XP row's own rendered text
+    -- height: the bar's top edge must sit at or below (more negative than)
+    -- the XP row's real bottom edge, with a genuine, measurable clear gap
+    -- in the approved 10-12 unit range -- not just a smaller Y number.
+    local xpTextBottom = xpY - layout.characterRowTextHeight
+    local gapAboveBar = xpTextBottom - barY
+    truthy(gapAboveBar > 0, "XP row and XP bar must not overlap")
+    truthy(gapAboveBar >= 10 and gapAboveBar <= 12,
+        "the XP row -> XP bar gap must be approximately 10-12 units, got " .. tostring(gapAboveBar))
+
+    -- Same real non-overlap check for the bar's bottom edge to Gold's top,
+    -- in the approved 12-14 unit range.
+    local barBottom = barY - barHeight
+    local gapBelowBar = barBottom - goldY
+    truthy(gapBelowBar > 0, "XP bar and Gold row must not overlap")
+    truthy(gapBelowBar >= 12 and gapBelowBar <= 14,
+        "the XP bar -> Gold gap must be approximately 12-14 units, got " .. tostring(gapBelowBar))
+
+    -- The bar must remain inside the Character panel, not spilling past
+    -- its bottom edge.
+    truthy(-(goldY - layout.characterRowTextHeight) <= layout.groupPanelHeight,
+        "Gold row must remain within the Character panel's height")
 end)
 
 test("the Recent Sessions viewport matches its layout-constant target, shrunk for the column header row", function()
@@ -1728,14 +1757,54 @@ test("mouse wheel scrolling moves the history viewport and clamps to the real co
     equal(frame.historyScroll:GetVerticalScroll(), 0, "scrolling up past the top must clamp to zero")
 end)
 
-test("net gold is its own colored history column; earned/spent stay neutral on the secondary line", function()
+test("history column x positions and widths never overlap", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
+
+    for i = 1, #layout.historyColumnX - 1 do
+        local thisEnd = layout.historyColumnX[i] + layout.historyColumnWidth[i]
+        local nextStart = layout.historyColumnX[i + 1]
+        truthy(thisEnd <= nextStart,
+            "column " .. i .. " (ending at " .. thisEnd .. ") must not overlap column " ..
+            (i + 1) .. " (starting at " .. nextStart .. ")")
+    end
+end)
+
+test("zero Net Gold renders neutral, not green or red", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
 
+    -- No money movement at all -> netGold is exactly zero.
     state.now = state.now + 90
     state.xp = state.xp + 40
-    state.money = state.money - 200 -- net negative
     state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local record = FDB:GetSessionHistory()[1]
+    equal(record.netGold, 0)
+
+    local netGoldColumn = frame.historyRows[1].columns[5]
+    equal(netGoldColumn.color[1], netGoldColumn.color[2], "zero net gold must not lean red (r > g)")
+    equal(netGoldColumn.color[2], netGoldColumn.color[3], "zero net gold must not lean green (g > b)")
+end)
+
+test("Net Gold is the ONLY gold metric shown in Recent Sessions; goldEarned/goldSpent never render anywhere in it", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Both earned and spent are nonzero and distinct, so if either were
+    -- rendered anywhere in this view (primary columns, secondary line, or
+    -- the Date & Time column) it would show up as a literal formatted
+    -- copper string this test can search for and must not find.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state.money = state.money + 300 -- earned
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+    state.money = state.money - 500 -- spent, net negative overall
     state:event("PLAYER_MONEY")
     truthy(FDB:ResetSession())
 
@@ -1744,27 +1813,54 @@ test("net gold is its own colored history column; earned/spent stay neutral on t
     local record = FDB:GetSessionHistory()[1]
 
     truthy(record.netGold < 0)
+    truthy(type(record.goldEarned) == "number" and record.goldEarned ~= 0)
+    truthy(type(record.goldSpent) == "number" and record.goldSpent ~= 0)
+    -- Net Gold, as the tracker defines it, is goldEarned - goldSpent.
+    equal(record.netGold, record.goldEarned - record.goldSpent)
+
+    local dateTimeColumn = frame.historyRows[1].columns[1]
     local netGoldColumn = frame.historyRows[1].columns[5]
-    truthy(netGoldColumn:GetText() ~= "", "the Net Gold column must show a value")
-    -- Negative net gold must read as the negative (red-leaning) color, and
-    -- distinctly from the neutral color used for the other columns.
+    local earnedText = FDB.SessionUIFormat.copperShort(record.goldEarned)
+    local spentText = FDB.SessionUIFormat.copperShort(record.goldSpent)
+
+    -- Date & Time contains only the timestamp -- no gold text at all.
+    falsy(dateTimeColumn:GetText():find(earnedText, 1, true) ~= nil,
+        "Date & Time must never contain the earned figure")
+    falsy(dateTimeColumn:GetText():find(spentText, 1, true) ~= nil,
+        "Date & Time must never contain the spent figure")
+
+    -- No column, and no secondary line (same-level session -> hidden),
+    -- ever renders the separate earned/spent figures.
+    for i, column in ipairs(frame.historyRows[1].columns) do
+        if i ~= 5 then
+            falsy(column:GetText():find(earnedText, 1, true) ~= nil,
+                "column " .. i .. " must never show the earned figure")
+            falsy(column:GetText():find(spentText, 1, true) ~= nil,
+                "column " .. i .. " must never show the spent figure")
+        end
+    end
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a same-level session must have no secondary line at all (Net Gold already covers gold)")
+
+    -- Net Gold's own column shows exactly the net figure and is colored
+    -- for its sign (negative here -> red-leaning), distinct from the
+    -- neutral Date & Time column.
+    equal(netGoldColumn:GetText(), FDB.SessionUIFormat.copperShort(record.netGold))
     truthy(netGoldColumn.color[1] > netGoldColumn.color[2],
         "negative net gold should read red-leaning in its own column")
-    local dateTimeColumn = frame.historyRows[1].columns[1]
     falsy(dateTimeColumn.color[1] > dateTimeColumn.color[2],
         "the Date & Time column must stay in its default neutral color")
-
-    -- Earned/spent remain neutral, on the secondary line, uncolored.
-    local secondaryText = frame.historyRows[1].secondary:GetText()
-    truthy(secondaryText:find("-", 1, true) ~= nil, "secondary line must show the spent figure")
 end)
 
-test("history: same start/end level omits the level range; an actual level-up shows it", function()
+test("history: same-level sessions stay single-line; only a real level-up shows secondary detail, and only the level range", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
 
-    -- Same-level session with a nonzero money change (so the secondary
-    -- line still renders, just without a level range).
+    -- Same-level session, even with a nonzero money change: Net Gold is
+    -- the only gold metric this view ever shows, and it already lives in
+    -- its own primary column, so a same-level session has nothing left
+    -- for a secondary line and must stay collapsed/single-line.
     state.now = state.now + 90
     state.xp = state.xp + 40
     state.money = state.money + 100
@@ -1774,12 +1870,13 @@ test("history: same start/end level omits the level range; an actual level-up sh
 
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
-    truthy(frame.historyRows[1].secondary:IsShown())
-    falsy(frame.historyRows[1].secondary:GetText():find("Lvl", 1, true),
-        "a same-level session must not show a redundant level range")
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a same-level session must remain single-line/compact with no secondary row")
+    equal(frame.historyContentHeight, layout.historyRecordHeightCollapsed)
 
-    -- Now force an actual level-up mid-session (XP wraps past xpMax) and
-    -- confirm the range appears.
+    -- Now force an actual level-up mid-session (XP wraps past xpMax) with
+    -- a nonzero money change too, and confirm the secondary line appears
+    -- containing ONLY the level transition -- never a gold breakdown.
     state.now = state.now + 90
     state.xpMax = 100
     state.xp = 90
@@ -1789,12 +1886,25 @@ test("history: same start/end level omits the level range; an actual level-up sh
     state.xp = 50
     state:event("PLAYER_LEVEL_UP", state.level)
     state:event("PLAYER_XP_UPDATE")
+    state.money = state.money - 30
+    state:event("PLAYER_MONEY")
     truthy(FDB:ResetSession())
     FDB:RefreshSessionDetailWindow()
 
     truthy(frame.historyRows[1].secondary:IsShown())
-    truthy(frame.historyRows[1].secondary:GetText():find("Lvl", 1, true) ~= nil,
-        "a session spanning a level-up must show the level range")
+    local secondaryText = frame.historyRows[1].secondary:GetText()
+    -- GetSessionHistory() is storage order (oldest-appended-first); this
+    -- level-up session was archived second, so it's the last entry, not
+    -- index 1 (which is the earlier same-level session from above).
+    local history = FDB:GetSessionHistory()
+    local record = history[#history]
+    equal(record.startLevel, 20)
+    equal(record.endLevel, 21)
+    -- Exact equality (not just a substring check) proves the secondary
+    -- line contains ONLY the level transition -- no gold breakdown
+    -- appended alongside it.
+    equal(secondaryText, "Lvl " .. tostring(record.startLevel) .. "->" .. tostring(record.endLevel),
+        "secondary line must contain only the level transition, never a gold breakdown")
 end)
 
 test("a history record with zero/absent secondary content collapses to a single-line, shorter row", function()
