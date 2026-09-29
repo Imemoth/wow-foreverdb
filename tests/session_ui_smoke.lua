@@ -1384,6 +1384,37 @@ test("detailed window section headers all have a real anchor", function()
     equal(frame.historyHeader:GetText(), "Recent Sessions")
 end)
 
+test("reset confirmation text has comfortable vertical clearance from the button row so wrapped text isn't clipped", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    local textTopOffset = -frame.text.point.y
+    local buttonBottomOffset = frame.acceptButton.point.y
+    local buttonTopFromBottom = buttonBottomOffset + frame.acceptButton.height
+    local clearance = frame.height - textTopOffset - buttonTopFromBottom
+
+    truthy(clearance >= 50,
+        "must leave enough vertical room between the text block and button row for a wrapped 2-3 line message")
+end)
+
+test("reset confirmation accept/cancel buttons are symmetric and equally sized for a tidy layout", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    equal(frame.acceptButton.width, frame.cancelButton.width)
+    equal(frame.acceptButton.height, frame.cancelButton.height)
+    truthy(math.abs(frame.acceptButton.point.x) == math.abs(frame.cancelButton.point.x),
+        "accept/cancel buttons must be placed symmetrically around center for a tidy layout")
+    truthy(frame.acceptButton.point.y == frame.cancelButton.point.y,
+        "accept/cancel buttons must sit on the same row")
+end)
+
 test("fallback reset-confirmation frame's text and buttons all have real geometry", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
