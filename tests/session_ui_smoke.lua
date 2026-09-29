@@ -98,6 +98,7 @@ local function makeFontString()
     function fs:SetTextColor(r, g, b) self.color = { r, g, b } end
     function fs:SetJustifyH(justify) self.justifyH = justify end
     function fs:SetFontObject() end
+    function fs:SetWordWrap(wrap) self.wordWrap = wrap end
     fs.shown = true
     function fs:Show() self.shown = true end
     function fs:Hide() self.shown = false end
@@ -139,8 +140,17 @@ local function makeFrame(withBackdropMethods)
     function frame:SetScale() end
     function frame:StartMoving() self.moving = true end
     function frame:StopMovingOrSizing() self.moving = false end
-    function frame:CreateFontString() return makeFontString() end
-    function frame:CreateTexture() return makeTexture() end
+    function frame:CreateFontString(_, layer, template)
+        local fs = makeFontString()
+        fs.layer = layer
+        fs.template = template
+        return fs
+    end
+    function frame:CreateTexture(_, layer)
+        local tex = makeTexture()
+        tex.layer = layer
+        return tex
+    end
     function frame:RegisterEvent(event) self.events[event] = true end
     function frame:SetText(t) self.text = t end
     function frame:GetText() return self.text end
@@ -154,8 +164,9 @@ local function makeFrame(withBackdropMethods)
     function frame:SetValue(v) self.value = v end
     function frame:SetStatusBarColor() end
     function frame:SetStatusBarTexture(path) self.statusBarTexture = path end
-    function frame:SetVerticalScroll() end
-    function frame:GetVerticalScroll() return 0 end
+    function frame:SetVerticalScroll(v) self.verticalScroll = v end
+    function frame:GetVerticalScroll() return self.verticalScroll or 0 end
+    function frame:EnableMouseWheel(v) self.mouseWheelEnabled = v end
 
     if withBackdropMethods then
         function frame:SetBackdrop(bd) self.backdrop = bd end
@@ -209,12 +220,14 @@ local function setup(options)
     -- mock reproduces that instead of silently ignoring the argument.
     BackdropTemplateMixin = hasBackdropMixin and {} or nil
 
-    CreateFrame = function(_, name, _, template)
+    CreateFrame = function(frameType, name, _, template)
         if template == "BackdropTemplate" and not BackdropTemplateMixin then
             error("CreateFrame: template 'BackdropTemplate' is not registered on this client")
         end
         local frame = makeFrame(template == "BackdropTemplate")
         frame.frameName = name
+        frame.frameType = frameType
+        frame.requestedTemplate = template
         function frame:GetName() return self.frameName end
         if name then _G[name] = frame end -- real CreateFrame registers named frames globally
         state.frames[#state.frames + 1] = frame
@@ -1240,7 +1253,13 @@ test("history scroll viewport, content child, and rows all have real, distinct g
     for i = 1, 3 do
         state.now = state.now + 61
         state.xp = state.xp + i
+        -- A nonzero money change guarantees a non-empty secondary line
+        -- (earned > 0) for every one of these records, so this test's
+        -- secondary-anchor assertion below stays meaningful regardless of
+        -- the row-collapse behavior for a genuinely empty secondary line.
+        state.money = state.money + 50
         state:event("PLAYER_XP_UPDATE")
+        state:event("PLAYER_MONEY")
         truthy(FDB:ResetSession())
     end
     FDB:RefreshSessionDetailWindow()
@@ -1346,24 +1365,56 @@ test("history empty-state text shows with zero completed sessions and hides once
         "empty-state text must hide as soon as a completed session exists")
 end)
 
-test("each KPI figure renders as its own card with a real background, anchor and positive size", function()
+test("all six KPI cards render in a single equal-width row, matching the dimensioned spec", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
     FDB:InitializeSessionUI()
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
 
+    -- Order matters: XP/hr, XP gained, To level, Gold earned, Gold spent,
+    -- Net gold, left to right, per the dimensioned spec.
     local keys = { "xpPerHour", "xpGained", "toLevel", "goldEarned", "goldSpent", "netGold" }
+    equal(#keys, layout.kpiCardCount)
+
+    local previousX
     for _, key in ipairs(keys) do
         local kpi = frame.kpi[key]
         truthy(kpi ~= nil, "missing KPI card for " .. key)
-        truthy(kpi.card ~= nil and kpi.background ~= nil and kpi.label ~= nil and kpi.value ~= nil,
-            "KPI card for " .. key .. " must have card/background/label/value widgets")
+        truthy(kpi.card ~= nil and kpi.label ~= nil and kpi.value ~= nil,
+            "KPI card for " .. key .. " must have card/label/value widgets")
         truthy(hasAnchor(kpi.card), "KPI card for " .. key .. " must have a real anchor")
         truthy(hasPositiveSize(kpi.card), "KPI card for " .. key .. " must have a real positive size")
-        truthy(kpi.background.allPointsTarget ~= nil,
-            "KPI card background for " .. key .. " must be anchored to the card via SetAllPoints")
+        equal(kpi.card.width, layout.kpiCardWidth, "KPI card for " .. key .. " must match the spec's card width")
+        equal(kpi.card.height, layout.kpiCardHeight, "KPI card for " .. key .. " must match the spec's card height")
+
+        local x = kpi.card.point and kpi.card.point.x
+        truthy(x ~= nil, "KPI card for " .. key .. " must have an x offset")
+        if previousX ~= nil then
+            truthy(x > previousX, "KPI cards must be laid out left to right in a single row")
+        end
+        previousX = x
     end
+end)
+
+test("KPI cards render a colored fill and border via backdrop, or a fallback fill without one", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local card = FDB.SessionDetailWindow.kpi.xpPerHour.card
+    truthy(card.backdrop, "KPI card must request a backdrop when the client supports it")
+    truthy(card.backdropColor, "KPI card must set a fill color")
+    truthy(card.backdropBorderColor, "KPI card must set a restrained border color")
+
+    local FDBNoBackdrop = setup({ hasBackdropMixin = false })
+    truthy(FDBNoBackdrop:SessionPlayerReady())
+    FDBNoBackdrop:InitializeSessionUI()
+    truthy(FDBNoBackdrop:ToggleSessionWindow())
+    local fallbackCard = FDBNoBackdrop.SessionDetailWindow.kpi.xpPerHour.card
+    falsy(fallbackCard.backdrop, "fallback KPI card must not have a backdrop")
+    truthy(fallbackCard.fallbackBackground, "fallback KPI card must still have a fill texture")
 end)
 
 test("detailed window section headers all have a real anchor", function()
@@ -1382,6 +1433,286 @@ test("detailed window section headers all have a real anchor", function()
     equal(frame.characterHeader:GetText(), "Character")
     equal(frame.ratesHeader:GetText(), "Rates")
     equal(frame.historyHeader:GetText(), "Recent Sessions")
+end)
+
+test("Session Timing, Character, and Rates render as three equal-width panels with a heading and divider each", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local panels = { frame.timingPanel, frame.characterPanel, frame.ratesPanel }
+    local dividers = { frame.timingDivider, frame.characterDivider, frame.ratesDivider }
+    local headers = { frame.timingHeader, frame.characterHeader, frame.ratesHeader }
+
+    local previousX
+    for i, panel in ipairs(panels) do
+        truthy(hasAnchor(panel), "group panel " .. i .. " must have a real anchor")
+        truthy(hasPositiveSize(panel), "group panel " .. i .. " must have a real positive size")
+        equal(panel.width, layout.groupPanelWidth, "group panel " .. i .. " must match the spec's panel width")
+        equal(panel.height, layout.groupPanelHeight, "group panel " .. i .. " must match the spec's panel height")
+
+        local x = panel.point and panel.point.x
+        truthy(x ~= nil, "group panel " .. i .. " must have an x offset")
+        if previousX ~= nil then
+            truthy(x > previousX, "group panels must be laid out left to right")
+        end
+        previousX = x
+
+        -- No heavy outer panel box: the panel is a plain frame, only its
+        -- heading and divider carry visible chrome.
+        falsy(panel.backdrop, "group panel " .. i .. " must not have a heavy outer backdrop box")
+
+        truthy(hasAnchor(headers[i]), "group panel " .. i .. "'s heading must have a real anchor")
+        truthy(hasAnchor(dividers[i]), "group panel " .. i .. "'s divider must have a real anchor")
+        truthy(hasPositiveSize(dividers[i]), "group panel " .. i .. "'s divider must have a real positive size")
+        truthy(dividers[i].height <= 2, "the divider must be a thin (~1px) line, not a heavy bar")
+    end
+
+    -- All three panels must fit within the detail window's content width
+    -- (three panels + two gaps + two margins == the window width).
+    truthy(previousX + layout.groupPanelWidth <= FDB.SessionDetailWindow.width,
+        "the three group panels must fit within the detail window's width")
+end)
+
+test("the XP bar is contained inside the Character panel, never spanning the full window width", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+    local bar = frame.character.xpBar
+
+    equal(bar.width, layout.xpBarWidth, "XP bar width must match the spec (228)")
+    equal(bar.height, layout.xpBarHeight, "XP bar height must match the spec (~7)")
+    truthy(bar.width < layout.groupPanelWidth, "XP bar must be narrower than its own Character panel")
+    truthy(bar.width < layout.detailWidth / 2,
+        "XP bar must not come anywhere close to spanning the full window width")
+end)
+
+test("the Recent Sessions viewport matches the dimensioned spec's 160px target", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(frame.historyScroll.height, layout.historyViewportHeight)
+end)
+
+test("the detail window matches the dimensioned spec's 800x520 nominal size", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(frame.width, layout.detailWidth)
+    equal(frame.height, layout.detailHeight)
+end)
+
+test("the compact HUD stays within the spec's 115px height ceiling", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+    local layout = FDB.SessionUILayout
+
+    equal(frame.width, layout.hudWidth)
+    truthy(frame.height <= 115, "compact HUD height must not exceed the spec's 115px ceiling")
+end)
+
+test("compact HUD's primary rate values (XP/hr, Gold/hr, Net/hr) use a bigger font step than the others", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    -- Same template used for the KPI band's headline values, one visible
+    -- step above the smaller fields -- and no new colors for this
+    -- hierarchy (that's covered by the status-color test elsewhere).
+    equal(frame.xpHrValue.template, "GameFontHighlight")
+    equal(frame.goldHrValue.template, "GameFontHighlight")
+    equal(frame.netHrValue.template, "GameFontHighlight")
+
+    truthy(frame.xpGainedValue.template ~= "GameFontHighlight",
+        "XP gained must not use the same bigger font step as the primary rate values")
+    truthy(frame.toLevelValue.template ~= "GameFontHighlight",
+        "To level must not use the same bigger font step as the primary rate values")
+    truthy(frame.activeValue.template ~= "GameFontHighlight",
+        "Active must not use the same bigger font step as the primary rate values")
+end)
+
+test("the action bar's buttons stay within the detail window's vertical budget", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for _, button in ipairs({
+        frame.pauseButton, frame.resumeButton, frame.resetButton,
+        frame.lockButton, frame.hudButton,
+    }) do
+        local y = button.point and button.point.y
+        truthy(y ~= nil, "action bar button must have a y offset")
+        local bottomFromTop = -y + button.height
+        truthy(bottomFromTop <= frame.height,
+            "action bar buttons must not extend past the bottom of the detail window")
+    end
+
+    -- Reset should sit with more clearance from its neighbors than an
+    -- ordinary button-to-button gap, without changing its own template
+    -- (still not bright red -- same UIPanelButtonTemplate as the rest).
+    local resumeRight = frame.resumeButton.point.x + frame.resumeButton.width
+    local resetGap = frame.resetButton.point.x - resumeRight
+    local pauseRight = frame.pauseButton.point.x + frame.pauseButton.width
+    local ordinaryGap = frame.resumeButton.point.x - pauseRight
+    truthy(resetGap > ordinaryGap, "Reset must have extra clearance from Resume, not an ordinary button gap")
+end)
+
+test("history scroll viewport requests no template, so no native scrollbar artifact is ever created", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(frame.historyScroll.frameType, "ScrollFrame")
+    falsy(frame.historyScroll.requestedTemplate,
+        "history scroll frame must not request UIPanelScrollFrameTemplate or any other template " ..
+        "that could create a native scrollbar/arrow-button artifact")
+    truthy(frame.historyScroll.mouseWheelEnabled, "history scroll frame must enable mouse wheel input")
+    truthy(frame.historyScroll.scripts.OnMouseWheel, "history scroll frame must handle OnMouseWheel itself")
+end)
+
+test("mouse wheel scrolling moves the history viewport and clamps to the real content range", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    local onWheel = frame.historyScroll.scripts.OnMouseWheel
+    truthy(onWheel)
+
+    equal(frame.historyScroll:GetVerticalScroll(), 0)
+    onWheel(frame.historyScroll, -1) -- scroll down
+    local afterOneScroll = frame.historyScroll:GetVerticalScroll()
+    truthy(afterOneScroll > 0, "scrolling down must increase the vertical scroll offset")
+
+    -- Scrolling far past the end must clamp to the real overflow amount,
+    -- not an arbitrary or unbounded value.
+    for _ = 1, 50 do
+        onWheel(frame.historyScroll, -1)
+    end
+    local maxScroll = frame.historyContentHeight - frame.historyViewportHeight
+    equal(frame.historyScroll:GetVerticalScroll(), maxScroll)
+
+    onWheel(frame.historyScroll, 1) -- scroll up
+    truthy(frame.historyScroll:GetVerticalScroll() < maxScroll, "scrolling up must decrease the offset")
+
+    for _ = 1, 50 do
+        onWheel(frame.historyScroll, 1)
+    end
+    equal(frame.historyScroll:GetVerticalScroll(), 0, "scrolling up past the top must clamp to zero")
+end)
+
+test("net gold is the only colored field on the history primary line; earned/spent stay neutral on the secondary line", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state.money = state.money - 200 -- net negative
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local record = FDB:GetSessionHistory()[1]
+
+    local primaryText = frame.historyRows[1].primary:GetText()
+    truthy(primaryText:find("net", 1, true) ~= nil, "primary line must include the net gold figure")
+    -- The negative net gold segment must carry an inline red color escape
+    -- sequence (|cffRRGGBB...|r) since a FontString can't hold two colors
+    -- via SetTextColor alone.
+    truthy(primaryText:find("|cff", 1, true) ~= nil,
+        "net gold must be inline-colorized since it shares a FontString with neutral text")
+    truthy(record.netGold < 0)
+end)
+
+test("history: same start/end level omits the level range; an actual level-up shows it", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Same-level session with a nonzero money change (so the secondary
+    -- line still renders, just without a level range).
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state.money = state.money + 100
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame.historyRows[1].secondary:IsShown())
+    falsy(frame.historyRows[1].secondary:GetText():find("Lvl", 1, true),
+        "a same-level session must not show a redundant level range")
+
+    -- Now force an actual level-up mid-session (XP wraps past xpMax) and
+    -- confirm the range appears.
+    state.now = state.now + 90
+    state.xpMax = 100
+    state.xp = 90
+    state:event("PLAYER_XP_UPDATE")
+    state.level = state.level + 1
+    state.xpMax = 10000
+    state.xp = 50
+    state:event("PLAYER_LEVEL_UP", state.level)
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(frame.historyRows[1].secondary:IsShown())
+    truthy(frame.historyRows[1].secondary:GetText():find("Lvl", 1, true) ~= nil,
+        "a session spanning a level-up must show the level range")
+end)
+
+test("a history record with zero/absent secondary content collapses to a single-line, shorter row", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- No level change, no money movement at all -- the secondary line has
+    -- nothing to show.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a record with nothing to show on the secondary line must hide it entirely")
+
+    -- The next record (row 2, if any) or the content height itself must
+    -- reflect the collapsed height, not the full two-line height. With
+    -- only one collapsed record, content height equals the collapsed
+    -- height exactly.
+    equal(frame.historyContentHeight, layout.historyRecordHeightCollapsed)
 end)
 
 test("reset confirmation text has comfortable vertical clearance from the button row so wrapped text isn't clipped", function()
