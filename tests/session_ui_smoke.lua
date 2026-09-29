@@ -1591,6 +1591,140 @@ test("Character panel renders Level, XP, XP bar, then Gold in strict order with 
         "Gold row must remain within the Character panel's height")
 end)
 
+test("all seven required icon textures exist on disk as valid 32-bit TGA files, actually used by the UI", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
+
+    local required = {
+        "session_timing_clock", "character_panel_helmet", "recent_sessions_clock",
+        "active_hourglass", "status_pulse", "started_flag", "gold_coin",
+    }
+    for _, name in ipairs(required) do
+        local path = "addon/ForeverDB/Textures/Session/" .. name .. ".tga"
+        local f = io.open(path, "rb")
+        truthy(f, "missing required icon file: " .. path)
+        local data = f:read("*a")
+        f:close()
+        truthy(#data > 100, name .. ".tga must be a real (non-trivial) file, not an empty placeholder")
+        -- TGA header: byte 3 (index 2) is the image type; 2 = uncompressed
+        -- truecolor. Byte 17 (index 16) is bits-per-pixel; 32 = RGBA.
+        local imageType = string.byte(data, 3)
+        local bpp = string.byte(data, 17)
+        equal(imageType, 2, name .. ".tga must be an uncompressed truecolor TGA")
+        equal(bpp, 32, name .. ".tga must be 32-bit (RGBA, with alpha)")
+    end
+
+    -- Every one of these files must actually be referenced by the running
+    -- UI code (via FDB.SessionUILayout.iconTexturePath, the one path the
+    -- production module itself uses), not just copied into the repo
+    -- unused.
+    truthy(layout.iconTexturePath:find("Textures\\Session\\", 1, true) ~= nil,
+        "icon texture path must point at the addon's own local Textures/Session folder")
+end)
+
+test("Session Timing, Character, and Recent Sessions headers show their icon before the heading text, with no overlap", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local cases = {
+        { icon = frame.timingHeaderIcon, heading = frame.timingHeader, file = "session_timing_clock" },
+        { icon = frame.characterHeaderIcon, heading = frame.characterHeader, file = "character_panel_helmet" },
+        { icon = frame.historyHeaderIcon, heading = frame.historyHeader, file = "recent_sessions_clock" },
+    }
+    for _, case in ipairs(cases) do
+        truthy(case.icon, "missing header icon for " .. case.file)
+        truthy(hasAnchor(case.icon), "header icon must have a real anchor: " .. case.file)
+        truthy(hasPositiveSize(case.icon), "header icon must have a real positive size: " .. case.file)
+        equal(case.icon.width, layout.headerIconSize)
+        equal(case.icon.height, layout.headerIconSize)
+        truthy(case.icon.texturePath:find(case.file, 1, true) ~= nil,
+            "header icon must use its own specific texture file, not a substituted one: " .. case.file)
+        truthy(case.icon.texturePath:find("Interface\\AddOns\\ForeverDB\\Textures\\Session\\", 1, true) ~= nil,
+            "header icon must be a local addon texture, never a guessed native atlas path: " .. case.file)
+
+        local iconRight = case.icon.point.x + case.icon.width
+        truthy(iconRight <= case.heading.point.x,
+            "header icon must not overlap its own heading text: " .. case.file)
+        -- Icon and heading share the same top Y (both anchored at the
+        -- panel's/band's top edge), so they read as one inline unit.
+        equal(case.icon.point.y, case.heading.point.y)
+    end
+end)
+
+test("Active/Status/Started/Gold rows show their icon before the label; icon-less rows in the same panel still align", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local rowCases = {
+        { icon = frame.timing.active.icon, label = frame.timing.active.label, file = "active_hourglass" },
+        { icon = frame.timing.status.icon, label = frame.timing.status.label, file = "status_pulse" },
+        { icon = frame.timing.started.icon, label = frame.timing.started.label, file = "started_flag" },
+        { icon = frame.character.gold.icon, label = frame.character.gold.label, file = "gold_coin" },
+    }
+    for _, case in ipairs(rowCases) do
+        truthy(case.icon, "missing row icon for " .. case.file)
+        truthy(hasAnchor(case.icon), "row icon must have a real anchor: " .. case.file)
+        truthy(hasPositiveSize(case.icon), "row icon must have a real positive size: " .. case.file)
+        equal(case.icon.width, layout.rowIconSize)
+        equal(case.icon.height, layout.rowIconSize)
+        truthy(case.icon.texturePath:find(case.file, 1, true) ~= nil,
+            "row icon must use its own specific texture file: " .. case.file)
+
+        local iconRight = case.icon.point.x + case.icon.width
+        truthy(iconRight <= case.label.point.x,
+            "row icon must not overlap its own row's label text: " .. case.file)
+        equal(case.icon.point.y, case.label.point.y, "row icon must sit on the same line as its label: " .. case.file)
+    end
+
+    -- Session (Session Timing) and Level/XP (Character) have no icon of
+    -- their own, but must still align at the same shifted column as their
+    -- icon-bearing siblings, so the panel doesn't read as ragged.
+    equal(frame.timing.session.label.point.x, frame.timing.active.label.point.x,
+        "Session must align with Active even though Session has no icon")
+    equal(frame.timing.session.label.point.x, layout.panelColXWithIcon)
+    equal(frame.character.level.label.point.x, frame.character.gold.label.point.x,
+        "Level must align with Gold even though Level has no icon")
+    equal(frame.character.xp.label.point.x, frame.character.gold.label.point.x,
+        "XP must align with Gold even though XP has no icon")
+end)
+
+test("Rates panel is unaffected by icon integration: no header icon, rows stay at the original unshifted column", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    falsy(frame.ratesHeaderIcon, "Rates header must not have an icon (not in the required target list)")
+    falsy(frame.rates.earnedPerHour.icon, "Rates rows must not have icons")
+    falsy(frame.rates.spentPerHour.icon)
+    falsy(frame.rates.netPerHour.icon)
+
+    -- Unaffected: still at the plain PANEL_SIDE_PADDING column, not the
+    -- icon-reserving one used by Session Timing/Character.
+    equal(frame.rates.earnedPerHour.label.point.x, 10)
+end)
+
+test("the XP bar's own x-anchor is untouched by icon integration (still PANEL_COL_X, not shifted)", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(frame.character.xpBar.point.x, 10,
+        "XP bar must keep its original x-anchor; only row label text shifts for the icon gutter")
+end)
+
 test("the Recent Sessions viewport matches its layout-constant target, shrunk for the column header row", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())

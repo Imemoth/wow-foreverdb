@@ -110,6 +110,24 @@ local PANEL_ROW4_Y = PANEL_CONTENT_START_Y - 3 * PANEL_ROW_HEIGHT
 -- variance than a tight 2-column grid.
 local PANEL_COL_X = PANEL_SIDE_PADDING
 
+--- Icon integration ----------------------------------------------------------
+-- Small pictogram textures shipped with the addon itself
+-- (addon/ForeverDB/Textures/Session/*.tga, converted from the approved
+-- icon pack -- never a guessed native Interface\Icons atlas name), used
+-- only as row/heading cues on Session Timing, Character, and Recent
+-- Sessions. Purely decorative: reserving their gutter never changes any
+-- row/heading Y position already validated by Reviewer G, and every row
+-- within a panel that has ANY icon shifts its label by the same fixed
+-- amount (whether or not that specific row has its own icon), so labels
+-- stay column-aligned instead of going ragged.
+local ICON_TEXTURE_PATH = "Interface\\AddOns\\ForeverDB\\Textures\\Session\\"
+local HEADER_ICON_SIZE = 18
+local HEADER_ICON_GAP = 4
+local ROW_ICON_SIZE = 16
+local ROW_ICON_GAP = 4
+local PANEL_HEADING_X_WITH_ICON = PANEL_SIDE_PADDING + HEADER_ICON_SIZE + HEADER_ICON_GAP
+local PANEL_COL_X_WITH_ICON = PANEL_SIDE_PADDING + ROW_ICON_SIZE + ROW_ICON_GAP
+
 local DIVIDER_COLOR = { 0x6b / 255, 0x55 / 255, 0x27 / 255, 0.35 }
 
 -- The XP bar lives only inside the Character panel -- it must never span
@@ -208,6 +226,11 @@ FDB.SessionUILayout = {
     historyColumnLabels = HISTORY_COL_LABELS,
     panelRowHeight = PANEL_ROW_HEIGHT,
     characterRowTextHeight = CHARACTER_ROW_TEXT_HEIGHT,
+    iconTexturePath = ICON_TEXTURE_PATH,
+    headerIconSize = HEADER_ICON_SIZE,
+    rowIconSize = ROW_ICON_SIZE,
+    panelHeadingXWithIcon = PANEL_HEADING_X_WITH_ICON,
+    panelColXWithIcon = PANEL_COL_X_WITH_ICON,
     xpBarWidth = XPBAR_WIDTH,
     xpBarHeight = XPBAR_HEIGHT,
     xpBarGapAbove = XPBAR_GAP_ABOVE,
@@ -728,17 +751,39 @@ local function addSectionHeader(parent, x, y, text)
     return header
 end
 
+-- A small pictogram icon from the addon's own local Textures/Session
+-- folder (never a guessed native atlas name). Purely decorative; callers
+-- are responsible for reserving its gutter so surrounding text never
+-- collides with it.
+local function createIcon(parent, fileBaseName, x, y, size)
+    local icon = parent:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    icon:SetSize(size, size)
+    icon:SetTexture(ICON_TEXTURE_PATH .. fileBaseName .. ".tga")
+    return icon
+end
+
 -- One of the three group-band panels (Session Timing / Character /
--- Rates): a heading, 5px clear space, a 1px restrained divider, 6px clear
--- space, then content rows -- no heavy outer panel box, per the
--- dimensioned spec.
-local function createGroupPanel(parent, x, y, width, height, headingText)
+-- Rates): an optional heading icon, a heading, 5px clear space, a 1px
+-- restrained divider, 6px clear space, then content rows -- no heavy
+-- outer panel box, per the dimensioned spec. When headingIcon is given,
+-- the icon and heading share the same top-left Y (both start at
+-- -PANEL_TOP_PADDING) and the heading shifts right by the icon's
+-- reserved gutter; the divider is untouched either way.
+local function createGroupPanel(parent, x, y, width, height, headingText, headingIcon)
     local panel = CreateFrame("Frame", nil, parent)
     panel:SetSize(width, height)
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 
+    local icon
+    local headingX = PANEL_SIDE_PADDING
+    if headingIcon then
+        icon = createIcon(panel, headingIcon, PANEL_SIDE_PADDING, -PANEL_TOP_PADDING, HEADER_ICON_SIZE)
+        headingX = PANEL_HEADING_X_WITH_ICON
+    end
+
     local heading = panel:CreateFontString(nil, "ARTWORK", FONT_SECTION_HEADING)
-    heading:SetPoint("TOPLEFT", panel, "TOPLEFT", PANEL_SIDE_PADDING, -PANEL_TOP_PADDING)
+    heading:SetPoint("TOPLEFT", panel, "TOPLEFT", headingX, -PANEL_TOP_PADDING)
     heading:SetText(headingText)
     setSingleLine(heading)
 
@@ -749,7 +794,7 @@ local function createGroupPanel(parent, x, y, width, height, headingText)
         divider:SetColorTexture(DIVIDER_COLOR[1], DIVIDER_COLOR[2], DIVIDER_COLOR[3], DIVIDER_COLOR[4])
     end
 
-    return { panel = panel, heading = heading, divider = divider }
+    return { panel = panel, heading = heading, divider = divider, icon = icon }
 end
 
 function FDB:BuildSessionDetailWindow()
@@ -814,44 +859,62 @@ function FDB:BuildSessionDetailWindow()
 
     --- Three-column group band ------------------------------------------
     local sessionPanel = createGroupPanel(frame, GROUP_PANEL_X[1], DETAIL_GROUP_TOP_Y,
-        GROUP_PANEL_WIDTH, GROUP_PANEL_HEIGHT, "Session Timing")
+        GROUP_PANEL_WIDTH, GROUP_PANEL_HEIGHT, "Session Timing", "session_timing_clock")
     frame.timingPanel = sessionPanel.panel
     frame.timingHeader = sessionPanel.heading
+    frame.timingHeaderIcon = sessionPanel.icon
     frame.timingDivider = sessionPanel.divider
     -- Four stacked single-column rows (Session, Active, Status, Started),
     -- not a 2-column grid: the live client showed the old 2x2 layout
     -- crowding/colliding, and giving every row the panel's full content
-    -- width is far more robust against real font-metric variance.
+    -- width is far more robust against real font-metric variance. All
+    -- four rows share the same icon-gutter-aware x offset (even Session,
+    -- which has no icon of its own) so labels stay column-aligned.
     frame.timing = addKeyedRow(sessionPanel.panel, {
-        { "session", PANEL_COL_X, PANEL_ROW1_Y },
-        { "active", PANEL_COL_X, PANEL_ROW2_Y },
-        { "status", PANEL_COL_X, PANEL_ROW3_Y },
-        { "started", PANEL_COL_X, PANEL_ROW4_Y },
+        { "session", PANEL_COL_X_WITH_ICON, PANEL_ROW1_Y },
+        { "active", PANEL_COL_X_WITH_ICON, PANEL_ROW2_Y },
+        { "status", PANEL_COL_X_WITH_ICON, PANEL_ROW3_Y },
+        { "started", PANEL_COL_X_WITH_ICON, PANEL_ROW4_Y },
     }, FONT_LABEL, FONT_BODY_VALUE)
     frame.timing.session.label:SetText("Session")
     frame.timing.active.label:SetText("Active")
     frame.timing.status.label:SetText("Status")
     frame.timing.started.label:SetText("Started")
 
+    frame.timing.active.icon = createIcon(sessionPanel.panel, "active_hourglass",
+        PANEL_SIDE_PADDING, PANEL_ROW2_Y, ROW_ICON_SIZE)
+    frame.timing.status.icon = createIcon(sessionPanel.panel, "status_pulse",
+        PANEL_SIDE_PADDING, PANEL_ROW3_Y, ROW_ICON_SIZE)
+    frame.timing.started.icon = createIcon(sessionPanel.panel, "started_flag",
+        PANEL_SIDE_PADDING, PANEL_ROW4_Y, ROW_ICON_SIZE)
+
     local characterPanel = createGroupPanel(frame, GROUP_PANEL_X[2], DETAIL_GROUP_TOP_Y,
-        GROUP_PANEL_WIDTH, GROUP_PANEL_HEIGHT, "Character")
+        GROUP_PANEL_WIDTH, GROUP_PANEL_HEIGHT, "Character", "character_panel_helmet")
     frame.characterPanel = characterPanel.panel
     frame.characterHeader = characterPanel.heading
+    frame.characterHeaderIcon = characterPanel.icon
     frame.characterDivider = characterPanel.divider
     -- Order per the approved layout: Level, XP, XP bar, Gold -- the bar
     -- sits directly under the XP row (it visually belongs to XP), and
-    -- Gold is the last row, below the bar, not interleaved with it.
+    -- Gold is the last row, below the bar, not interleaved with it. All
+    -- three rows share the same icon-gutter-aware x offset (even Level
+    -- and XP, which have no icon of their own) so labels stay aligned.
     frame.character = addKeyedRow(characterPanel.panel, {
-        { "level", PANEL_COL_X, PANEL_ROW1_Y },
-        { "xp", PANEL_COL_X, PANEL_ROW2_Y },
-        { "gold", PANEL_COL_X, CHARACTER_GOLD_Y },
+        { "level", PANEL_COL_X_WITH_ICON, PANEL_ROW1_Y },
+        { "xp", PANEL_COL_X_WITH_ICON, PANEL_ROW2_Y },
+        { "gold", PANEL_COL_X_WITH_ICON, CHARACTER_GOLD_Y },
     }, FONT_LABEL, FONT_BODY_VALUE)
     frame.character.level.label:SetText("Level")
     frame.character.xp.label:SetText("XP")
     frame.character.gold.label:SetText("Gold")
+    frame.character.gold.icon = createIcon(characterPanel.panel, "gold_coin",
+        PANEL_SIDE_PADDING, CHARACTER_GOLD_Y, ROW_ICON_SIZE)
 
     -- The XP bar lives only inside this panel (228 x 7), never spanning
-    -- the full window width.
+    -- the full window width. Its own x-anchor is deliberately left at
+    -- PANEL_COL_X (not shifted for the icon gutter): it's a standalone
+    -- bar, not a labeled row, and its exact Y-spacing was independently
+    -- validated by Reviewer G -- this round touches nothing about it.
     frame.character.xpBar = CreateFrame("StatusBar", nil, characterPanel.panel)
     frame.character.xpBar:SetSize(XPBAR_WIDTH, XPBAR_HEIGHT)
     frame.character.xpBar:SetPoint("TOPLEFT", characterPanel.panel, "TOPLEFT", PANEL_COL_X, XPBAR_Y)
@@ -881,7 +944,10 @@ function FDB:BuildSessionDetailWindow()
     frame.rates.netPerHour.label:SetText("Net/hr")
 
     --- Recent Sessions band ----------------------------------------------
-    frame.historyHeader = addSectionHeader(frame, DETAIL_MARGIN, DETAIL_HISTORY_TOP_Y, "Recent Sessions")
+    frame.historyHeaderIcon = createIcon(frame, "recent_sessions_clock",
+        DETAIL_MARGIN, DETAIL_HISTORY_TOP_Y, HEADER_ICON_SIZE)
+    frame.historyHeader = addSectionHeader(frame, DETAIL_MARGIN + HEADER_ICON_SIZE + HEADER_ICON_GAP,
+        DETAIL_HISTORY_TOP_Y, "Recent Sessions")
 
     -- A real, non-scrolling column-header row: labels sit at the exact
     -- same x offsets/widths as each data row's own columns below, so
