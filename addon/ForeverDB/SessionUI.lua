@@ -17,22 +17,47 @@ local HUD_COL1_X, HUD_COL2_X = 14, 128
 local HUD_ROW1_Y, HUD_ROW2_Y, HUD_ROW3_Y = -30, -50, -70
 local HUD_STATUS_Y = 10 -- offset up from the bottom edge
 
-local DETAIL_WIDTH, DETAIL_HEIGHT = 420, 480
+-- Wider and more structured than the original single-column-of-rows
+-- layout, closer to the approved mockup's card/section grouping (not a
+-- pixel-exact copy -- the spec treats the mockup as a structural
+-- reference). Vertical sections, top to bottom: KPI cards, Session
+-- Timing, Character (+ XP bar), Rates, Recent Sessions, action bar.
+local DETAIL_WIDTH, DETAIL_HEIGHT = 480, 600
 local DETAIL_MARGIN = 16
-local DETAIL_COL_X = { 16, 156, 296 }
-local DETAIL_KPI_ROW1_Y, DETAIL_KPI_ROW2_Y = -40, -64
-local DETAIL_TIMING_ROW1_Y, DETAIL_TIMING_ROW2_Y = -100, -124
-local DETAIL_TIMING_COL_X = { 16, 216 }
-local DETAIL_CHARACTER_ROW_Y = -156
-local DETAIL_XPBAR_Y = -178
+local DETAIL_COL_X = { 16, 172, 328 }
+local DETAIL_TIMING_COL_X = { 16, 248 }
+
+local KPI_CARD_GAP = 8
+local KPI_CARD_WIDTH = (DETAIL_WIDTH - 2 * DETAIL_MARGIN - 2 * KPI_CARD_GAP) / 3
+local KPI_CARD_HEIGHT = 44
+local KPI_ROW1_Y = -40
+local KPI_ROW2_Y = KPI_ROW1_Y - KPI_CARD_HEIGHT - KPI_CARD_GAP -- -92
+
+local SECTION_HEADER_GAP = 16 -- gap between a block's bottom and the next header
+local TIMING_HEADER_Y = KPI_ROW2_Y - KPI_CARD_HEIGHT - SECTION_HEADER_GAP -- -152
+local DETAIL_TIMING_ROW1_Y = TIMING_HEADER_Y - 20
+local DETAIL_TIMING_ROW2_Y = DETAIL_TIMING_ROW1_Y - 20
+
+local CHARACTER_HEADER_Y = DETAIL_TIMING_ROW2_Y - SECTION_HEADER_GAP -- -222
+local DETAIL_CHARACTER_ROW_Y = CHARACTER_HEADER_Y - 20
+local DETAIL_XPBAR_Y = DETAIL_CHARACTER_ROW_Y - 22
 local DETAIL_XPBAR_HEIGHT = 16
-local DETAIL_RATES_ROW_Y = -208
-local DETAIL_HISTORY_TOP_Y = -234
-local DETAIL_HISTORY_HEIGHT = 168
-local HISTORY_ROW_HEIGHT = 16
+
+local RATES_HEADER_Y = DETAIL_XPBAR_Y - DETAIL_XPBAR_HEIGHT - SECTION_HEADER_GAP
+local DETAIL_RATES_ROW_Y = RATES_HEADER_Y - 20
+
+local HISTORY_HEADER_Y = DETAIL_RATES_ROW_Y - SECTION_HEADER_GAP - 4
+local DETAIL_HISTORY_TOP_Y = HISTORY_HEADER_Y - 20
+local DETAIL_HISTORY_HEIGHT = 200
+-- Each retained session renders as a compact two-line block: primary
+-- (date/time, duration, XP gained, XP/hr) and secondary (level range,
+-- earned/spent/net), instead of one crowded pipe-delimited line.
+local HISTORY_RECORD_HEIGHT = 28
+local HISTORY_LINE_GAP = 13
+
 local DETAIL_BUTTON_ROW_Y = 14 -- offset up from the bottom edge
-local BUTTON_WIDTH, BUTTON_HEIGHT = 78, 22
-local BUTTON_GAP = 4
+local BUTTON_WIDTH, BUTTON_HEIGHT = 86, 22
+local BUTTON_GAP = 8
 
 local CONFIRM_WIDTH, CONFIRM_HEIGHT = 260, 110
 local CONFIRM_TEXT_WIDTH = CONFIRM_WIDTH - 32
@@ -466,6 +491,41 @@ local function addKeyedRow(container, specs, labelTemplate, valueTemplate)
     return rows
 end
 
+-- A small standalone "card" panel: its own frame with a subtle background
+-- texture (never a new bundled art asset -- just a flat color rect, safe
+-- on any client) so the six KPI figures read as distinct blocks rather
+-- than a flat row of numbers, per the approved mockup's structure.
+local function createKPICard(parent, x, y, width, height, labelText)
+    local card = CreateFrame("Frame", nil, parent)
+    card:SetSize(width, height)
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+
+    local background = card:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints(card)
+    if background.SetColorTexture then
+        background:SetColorTexture(0.09, 0.08, 0.06, 0.65)
+    end
+
+    local label = card:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    label:SetPoint("TOP", card, "TOP", 0, -5)
+    label:SetText(labelText)
+
+    local value = card:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    value:SetPoint("TOP", label, "BOTTOM", 0, -3)
+
+    return { card = card, background = background, label = label, value = value }
+end
+
+-- A small caption above a block (Session Timing / Character / Rates /
+-- Recent Sessions), purely for visual hierarchy -- adds structure without
+-- needing new art or a heavier widget.
+local function addSectionHeader(parent, x, y, text)
+    local header = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    header:SetText(text)
+    return header
+end
+
 function FDB:BuildSessionDetailWindow()
     local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
     frame:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
@@ -511,21 +571,21 @@ function FDB:BuildSessionDetailWindow()
         table.insert(UISpecialFrames, frame:GetName())
     end
 
-    frame.kpi = addKeyedRow(frame, {
-        { "xpPerHour", DETAIL_COL_X[1], DETAIL_KPI_ROW1_Y },
-        { "xpGained", DETAIL_COL_X[2], DETAIL_KPI_ROW1_Y },
-        { "toLevel", DETAIL_COL_X[3], DETAIL_KPI_ROW1_Y },
-        { "goldEarned", DETAIL_COL_X[1], DETAIL_KPI_ROW2_Y },
-        { "goldSpent", DETAIL_COL_X[2], DETAIL_KPI_ROW2_Y },
-        { "netGold", DETAIL_COL_X[3], DETAIL_KPI_ROW2_Y },
-    }, "GameFontNormalSmall", "GameFontHighlightSmall")
-    frame.kpi.xpPerHour.label:SetText("XP/hr")
-    frame.kpi.xpGained.label:SetText("XP gained")
-    frame.kpi.toLevel.label:SetText("To level")
-    frame.kpi.goldEarned.label:SetText("Gold earned")
-    frame.kpi.goldSpent.label:SetText("Gold spent")
-    frame.kpi.netGold.label:SetText("Net gold")
+    frame.kpi = {}
+    local kpiSpecs = {
+        { key = "xpPerHour", text = "XP/hr", col = 1, y = KPI_ROW1_Y },
+        { key = "xpGained", text = "XP gained", col = 2, y = KPI_ROW1_Y },
+        { key = "toLevel", text = "To level", col = 3, y = KPI_ROW1_Y },
+        { key = "goldEarned", text = "Gold earned", col = 1, y = KPI_ROW2_Y },
+        { key = "goldSpent", text = "Gold spent", col = 2, y = KPI_ROW2_Y },
+        { key = "netGold", text = "Net gold", col = 3, y = KPI_ROW2_Y },
+    }
+    for _, spec in ipairs(kpiSpecs) do
+        local x = DETAIL_MARGIN + (spec.col - 1) * (KPI_CARD_WIDTH + KPI_CARD_GAP)
+        frame.kpi[spec.key] = createKPICard(frame, x, spec.y, KPI_CARD_WIDTH, KPI_CARD_HEIGHT, spec.text)
+    end
 
+    frame.timingHeader = addSectionHeader(frame, DETAIL_MARGIN, TIMING_HEADER_Y, "Session Timing")
     frame.timing = addKeyedRow(frame, {
         { "session", DETAIL_TIMING_COL_X[1], DETAIL_TIMING_ROW1_Y },
         { "active", DETAIL_TIMING_COL_X[2], DETAIL_TIMING_ROW1_Y },
@@ -537,6 +597,7 @@ function FDB:BuildSessionDetailWindow()
     frame.timing.status.label:SetText("Status")
     frame.timing.started.label:SetText("Started")
 
+    frame.characterHeader = addSectionHeader(frame, DETAIL_MARGIN, CHARACTER_HEADER_Y, "Character")
     frame.character = addKeyedRow(frame, {
         { "level", DETAIL_COL_X[1], DETAIL_CHARACTER_ROW_Y },
         { "xp", DETAIL_COL_X[2], DETAIL_CHARACTER_ROW_Y },
@@ -559,6 +620,7 @@ function FDB:BuildSessionDetailWindow()
         frame.character.xpBarBackground:SetColorTexture(0.1, 0.1, 0.1, 0.8)
     end
 
+    frame.ratesHeader = addSectionHeader(frame, DETAIL_MARGIN, RATES_HEADER_Y, "Rates")
     frame.rates = addKeyedRow(frame, {
         { "earnedPerHour", DETAIL_COL_X[1], DETAIL_RATES_ROW_Y },
         { "spentPerHour", DETAIL_COL_X[2], DETAIL_RATES_ROW_Y },
@@ -568,6 +630,8 @@ function FDB:BuildSessionDetailWindow()
     frame.rates.spentPerHour.label:SetText("Spent/hr")
     frame.rates.netPerHour.label:SetText("Net/hr")
 
+    frame.historyHeader = addSectionHeader(frame, DETAIL_MARGIN, HISTORY_HEADER_Y, "Recent Sessions")
+
     local historyViewportWidth = DETAIL_WIDTH - 2 * DETAIL_MARGIN
     frame.historyScroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     frame.historyScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", DETAIL_MARGIN, DETAIL_HISTORY_TOP_Y)
@@ -575,11 +639,34 @@ function FDB:BuildSessionDetailWindow()
 
     frame.historyContent = CreateFrame("Frame", nil, frame.historyScroll)
     frame.historyContent:SetPoint("TOPLEFT", frame.historyScroll, "TOPLEFT", 0, 0)
-    frame.historyContent:SetSize(historyViewportWidth, HISTORY_ROW_HEIGHT) -- grows with row count on refresh
+    frame.historyContent:SetSize(historyViewportWidth, HISTORY_RECORD_HEIGHT) -- grows with row count on refresh
     if frame.historyScroll.SetScrollChild then
         frame.historyScroll:SetScrollChild(frame.historyContent)
     end
     frame.historyRows = {}
+
+    -- Shown only when there is nothing retained yet -- an empty scrollable
+    -- panel with no explanation reads as broken, not "nothing happened
+    -- yet."
+    frame.historyEmptyText = frame.historyScroll:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    frame.historyEmptyText:SetPoint("TOP", frame.historyScroll, "TOP", 0, -16)
+    frame.historyEmptyText:SetText("No completed sessions yet.")
+    frame.historyEmptyText:Hide()
+
+    -- A minimal, self-built overflow indicator: whether a live client's
+    -- UIPanelScrollFrameTemplate exposes its scrollbar as a reliably
+    -- named/typed child varies by client build, so this project does not
+    -- depend on that; a plain restrained-color bar it fully owns and
+    -- controls (shown/hidden purely from contentHeight vs viewport
+    -- height, computed in RefreshSessionHistoryRows) is safer and equally
+    -- effective at signalling "there is more below."
+    frame.historyOverflowIndicator = frame:CreateTexture(nil, "OVERLAY")
+    frame.historyOverflowIndicator:SetPoint("TOPRIGHT", frame.historyScroll, "TOPRIGHT", 2, 0)
+    frame.historyOverflowIndicator:SetSize(4, DETAIL_HISTORY_HEIGHT)
+    if frame.historyOverflowIndicator.SetColorTexture then
+        frame.historyOverflowIndicator:SetColorTexture(0.55, 0.45, 0.18, 0.6)
+    end
+    frame.historyOverflowIndicator:Hide()
 
     local buttons = {
         { key = "pauseButton", text = "Pause", handler = function()
@@ -630,6 +717,12 @@ function FDB:RefreshSessionHistoryRows()
     local rowWidth = (frame.historyScroll.GetWidth and frame.historyScroll:GetWidth()) or 0
     if rowWidth <= 0 then rowWidth = DETAIL_WIDTH - 2 * DETAIL_MARGIN end
 
+    if count == 0 then
+        frame.historyEmptyText:Show()
+    else
+        frame.historyEmptyText:Hide()
+    end
+
     for index = 1, count do
         -- GetSessionHistory() returns storage order (oldest-appended-
         -- first -- an internal detail the eviction logic relies on,
@@ -640,42 +733,73 @@ function FDB:RefreshSessionHistoryRows()
 
         local row = frame.historyRows[index]
         if not row then
-            row = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            row:SetWidth(rowWidth)
-            row:SetJustifyH("LEFT")
+            local primary = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            primary:SetWidth(rowWidth)
+            primary:SetJustifyH("LEFT")
+
+            local secondary = frame.historyContent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+            secondary:SetWidth(rowWidth)
+            secondary:SetJustifyH("LEFT")
+            secondary:SetPoint("TOPLEFT", primary, "BOTTOMLEFT", 0, -2)
+
+            row = { primary = primary, secondary = secondary }
             frame.historyRows[index] = row
         end
 
-        -- Each row gets its own distinct vertical slot, newest (index 1)
-        -- at the top, so 30 rows genuinely stack past the visible
+        -- Each record gets its own distinct vertical slot, newest (index
+        -- 1) at the top, so 30 records genuinely stack past the visible
         -- viewport rather than overlapping at a single shared position.
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", frame.historyContent, "TOPLEFT", 0, -(index - 1) * HISTORY_ROW_HEIGHT)
+        row.primary:ClearAllPoints()
+        row.primary:SetPoint("TOPLEFT", frame.historyContent, "TOPLEFT", 0, -(index - 1) * HISTORY_RECORD_HEIGHT)
 
-        local parts = {
+        -- Two compact lines instead of one long pipe-delimited row:
+        -- primary (date/time, duration, XP gained, XP/hr) is the minimum
+        -- glanceable summary; secondary (level range, earned/spent/net)
+        -- is the detail a player checks less often.
+        local primaryParts = {
             formatTimestamp(record.endedAt or record.startedAt),
             formatHMS(record.trackedSeconds),
-            formatHMS(record.activeSeconds),
-            tostring(record.startLevel or "?") .. "->" .. tostring(record.endLevel or "?"),
-            formatCompactNumber(record.xpGained),
-            formatCompactNumber(record.xpPerHour),
-            formatCopperShort(record.goldEarned),
-            formatCopperShort(record.goldSpent),
-            formatCopperShort(record.netGold),
+            "XP +" .. formatCompactNumber(record.xpGained),
+            formatCompactNumber(record.xpPerHour) .. "/hr",
         }
-        row:SetText(table.concat(parts, " | "))
-        row:Show()
+        row.primary:SetText(table.concat(primaryParts, "  \226\128\162  "))
+
+        local secondaryParts = {
+            "Lvl " .. tostring(record.startLevel or "?") .. "->" .. tostring(record.endLevel or "?"),
+            "+" .. formatCopperShort(record.goldEarned),
+            "-" .. formatCopperShort(record.goldSpent),
+            "net " .. formatCopperShort(record.netGold),
+        }
+        row.secondary:SetText(table.concat(secondaryParts, "  \226\128\162  "))
+        local netColorValue = netColor(record.netGold)
+        row.secondary:SetTextColor(netColorValue[1], netColorValue[2], netColorValue[3])
+
+        row.primary:Show()
+        row.secondary:Show()
     end
 
-    for index = #history + 1, #frame.historyRows do
-        frame.historyRows[index]:Hide()
+    for index = count + 1, #frame.historyRows do
+        frame.historyRows[index].primary:Hide()
+        frame.historyRows[index].secondary:Hide()
     end
 
     -- The scroll child's height must track the actual row count so 30
     -- retained records can genuinely scroll past a fixed-height viewport
     -- instead of being clipped or overlapping.
-    local contentHeight = math.max(#history, 1) * HISTORY_ROW_HEIGHT
+    local contentHeight = math.max(count, 1) * HISTORY_RECORD_HEIGHT
     frame.historyContent:SetSize(rowWidth, contentHeight)
+
+    -- The overflow indicator is the only thing standing in for a
+    -- scrollbar; show it only when there is genuinely more to scroll to,
+    -- computed from real geometry rather than assumed from record count
+    -- (so it stays correct if the viewport height constant ever changes).
+    local viewportHeight = (frame.historyScroll.GetHeight and frame.historyScroll:GetHeight()) or DETAIL_HISTORY_HEIGHT
+    if viewportHeight <= 0 then viewportHeight = DETAIL_HISTORY_HEIGHT end
+    if contentHeight > viewportHeight then
+        frame.historyOverflowIndicator:Show()
+    else
+        frame.historyOverflowIndicator:Hide()
+    end
 end
 
 function FDB:RefreshSessionDetailWindow()

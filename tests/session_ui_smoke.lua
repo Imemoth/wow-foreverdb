@@ -114,6 +114,10 @@ local function makeTexture()
     end
     function tex:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
     function tex:SetTexture(path) self.texturePath = path end
+    tex.shown = true
+    function tex:Show() self.shown = true end
+    function tex:Hide() self.shown = false end
+    function tex:IsShown() return self.shown end
     return tex
 end
 
@@ -624,16 +628,9 @@ test("detailed window renders recent session history rows", function()
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
     truthy(frame.historyRows[1])
-    truthy(frame.historyRows[1]:GetText():find("40"))
+    truthy(frame.historyRows[1].primary:GetText():find("40", 1, true))
 end)
 
-local function historyRowField(text, n)
-    local fields = {}
-    for field in text:gmatch("[^|]+") do
-        fields[#fields + 1] = field:match("^%s*(.-)%s*$")
-    end
-    return fields[n]
-end
 
 test("detail window position is saved on drag and restored across a simulated reload", function()
     local FDB = setup()
@@ -705,13 +702,12 @@ test("Recent Sessions renders newest-first: row 1 is the most recently archived 
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
 
-    -- Field 5 of the row is xpGained specifically (date | duration |
-    -- active | level range | xpGained | ...), so this can't collide with
-    -- a coincidentally-matching digit elsewhere in the row (e.g. a
-    -- timestamp).
-    equal(historyRowField(frame.historyRows[1]:GetText(), 5), "30")
-    equal(historyRowField(frame.historyRows[2]:GetText(), 5), "20")
-    equal(historyRowField(frame.historyRows[3]:GetText(), 5), "10")
+    -- "XP +N" is a literal, unambiguous prefix in the primary line (unlike
+    -- a bare digit, which could coincidentally match a timestamp/duration
+    -- component), so this can't collide with anything else in the row.
+    truthy(frame.historyRows[1].primary:GetText():find("XP +30", 1, true) ~= nil)
+    truthy(frame.historyRows[2].primary:GetText():find("XP +20", 1, true) ~= nil)
+    truthy(frame.historyRows[3].primary:GetText():find("XP +10", 1, true) ~= nil)
 end)
 
 test("Started and history Date/Time show a human-readable timestamp, not a raw UNIX epoch", function()
@@ -733,7 +729,7 @@ test("Started and history Date/Time show a human-readable timestamp, not a raw U
     truthy(FDB:ResetSession())
     FDB:RefreshSessionDetailWindow()
 
-    local rowText = frame.historyRows[1]:GetText()
+    local rowText = frame.historyRows[1].primary:GetText()
     local endedAt = FDB:GetSessionHistory()[1].endedAt
     falsy(rowText:find(tostring(endedAt), 1, true) ~= nil,
         "history row must not embed the raw epoch number for its date/time column")
@@ -1250,13 +1246,14 @@ test("history scroll viewport, content child, and rows all have real, distinct g
     FDB:RefreshSessionDetailWindow()
 
     truthy(#frame.historyRows >= 3)
-    truthy(hasAnchor(frame.historyRows[1]), "history row 1 must have a real anchor")
-    truthy(hasAnchor(frame.historyRows[2]), "history row 2 must have a real anchor")
+    truthy(hasAnchor(frame.historyRows[1].primary), "history row 1 must have a real anchor")
+    truthy(hasAnchor(frame.historyRows[2].primary), "history row 2 must have a real anchor")
+    truthy(hasAnchor(frame.historyRows[1].secondary), "history row 1's secondary line must have a real anchor")
 
-    local firstY = frame.historyRows[1].point and frame.historyRows[1].point.y
-    local secondY = frame.historyRows[2].point and frame.historyRows[2].point.y
+    local firstY = frame.historyRows[1].primary.point and frame.historyRows[1].primary.point.y
+    local secondY = frame.historyRows[2].primary.point and frame.historyRows[2].primary.point.y
     truthy(firstY ~= nil and secondY ~= nil and firstY ~= secondY,
-        "each history row must get its own distinct vertical position")
+        "each history record must get its own distinct vertical position")
 end)
 
 test("at 30 history records the content child height genuinely exceeds the viewport", function()
@@ -1278,6 +1275,113 @@ test("at 30 history records the content child height genuinely exceeds the viewp
     truthy(type(frame.historyContent.height) == "number" and type(frame.historyScroll.height) == "number")
     truthy(frame.historyContent.height > frame.historyScroll.height,
         "30 records must genuinely overflow a fixed-height viewport")
+end)
+
+test("history overflow indicator is shown once real content genuinely exceeds the viewport", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(frame.historyContent.height > frame.historyScroll.height)
+    truthy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must appear once content genuinely overflows the viewport")
+end)
+
+test("history overflow indicator stays hidden for a couple of short records with nothing to scroll", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 2 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 2)
+    truthy(frame.historyContent.height <= frame.historyScroll.height,
+        "2 short records must not genuinely overflow the viewport")
+    falsy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must not appear when there is nothing to scroll")
+    falsy(frame.historyEmptyText:IsShown(),
+        "empty-state text must not show once real history exists")
+end)
+
+test("history empty-state text shows with zero completed sessions and hides once one exists", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(#FDB:GetSessionHistory(), 0)
+    FDB:RefreshSessionDetailWindow()
+    truthy(frame.historyEmptyText:IsShown(),
+        "empty-state text must show when there are no completed sessions")
+    falsy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must not appear when history is empty")
+
+    state.now = state.now + 61
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 1)
+    falsy(frame.historyEmptyText:IsShown(),
+        "empty-state text must hide as soon as a completed session exists")
+end)
+
+test("each KPI figure renders as its own card with a real background, anchor and positive size", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local keys = { "xpPerHour", "xpGained", "toLevel", "goldEarned", "goldSpent", "netGold" }
+    for _, key in ipairs(keys) do
+        local kpi = frame.kpi[key]
+        truthy(kpi ~= nil, "missing KPI card for " .. key)
+        truthy(kpi.card ~= nil and kpi.background ~= nil and kpi.label ~= nil and kpi.value ~= nil,
+            "KPI card for " .. key .. " must have card/background/label/value widgets")
+        truthy(hasAnchor(kpi.card), "KPI card for " .. key .. " must have a real anchor")
+        truthy(hasPositiveSize(kpi.card), "KPI card for " .. key .. " must have a real positive size")
+        truthy(kpi.background.allPointsTarget ~= nil,
+            "KPI card background for " .. key .. " must be anchored to the card via SetAllPoints")
+    end
+end)
+
+test("detailed window section headers all have a real anchor", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    truthy(hasAnchor(frame.timingHeader), "Session Timing header must have a real anchor")
+    truthy(hasAnchor(frame.characterHeader), "Character header must have a real anchor")
+    truthy(hasAnchor(frame.ratesHeader), "Rates header must have a real anchor")
+    truthy(hasAnchor(frame.historyHeader), "Recent Sessions header must have a real anchor")
+
+    equal(frame.timingHeader:GetText(), "Session Timing")
+    equal(frame.characterHeader:GetText(), "Character")
+    equal(frame.ratesHeader:GetText(), "Rates")
+    equal(frame.historyHeader:GetText(), "Recent Sessions")
 end)
 
 test("fallback reset-confirmation frame's text and buttons all have real geometry", function()
