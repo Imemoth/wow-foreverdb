@@ -279,6 +279,7 @@ test("HUD renders Gold/hr from earnedPerHour and Net/hr separately", function()
     FDB.GetSessionSnapshot = function()
         return {
             xpPerHour = 28400,
+            xpGained = 16320,
             etaSeconds = 4440, -- 1h14m
             isMaxLevel = false,
             earnedPerHour = 74200, -- 7g 42s
@@ -293,6 +294,7 @@ test("HUD renders Gold/hr from earnedPerHour and Net/hr separately", function()
 
     local frame = FDB.SessionHUDFrame
     equal(frame.xpHrValue:GetText(), "28.4k")
+    equal(frame.xpGainedValue:GetText(), "16.3k")
     equal(frame.toLevelValue:GetText(), "01:14")
     equal(frame.goldHrValue:GetText(), "7g 42s")
     equal(frame.netHrValue:GetText(), "5g 58s")
@@ -311,6 +313,45 @@ test("HUD hide does not pause the session", function()
 
     local snapshot = FDB:GetSessionSnapshot()
     equal(snapshot.status, "RUNNING")
+end)
+
+test("HUD status text is color-coded per status, distinctly for each state", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    local function colorFor(status)
+        FDB.GetSessionSnapshot = function()
+            return { status = status, activeSeconds = 0 }
+        end
+        FDB:RefreshSessionUI()
+        return frame.statusText.color
+    end
+
+    local runningColor = colorFor("RUNNING")
+    local idleColor = colorFor("IDLE")
+    local pausedColor = colorFor("PAUSED")
+
+    -- Each state must be visually distinct from the others (restrained,
+    -- not harsh -- checked qualitatively below, not exact RGB values).
+    truthy(runningColor[1] ~= idleColor[1] or runningColor[2] ~= idleColor[2]
+        or runningColor[3] ~= idleColor[3])
+    truthy(idleColor[1] ~= pausedColor[1] or idleColor[2] ~= pausedColor[2]
+        or idleColor[3] ~= pausedColor[3])
+    truthy(runningColor[1] ~= pausedColor[1] or runningColor[2] ~= pausedColor[2]
+        or runningColor[3] ~= pausedColor[3])
+
+    -- RUNNING reads as the greenest (G channel clearly dominant), PAUSED
+    -- as the most red-leaning of the three, IDLE in between -- restrained
+    -- rather than harsh (no channel saturated to 1.0).
+    truthy(runningColor[2] > runningColor[1], "RUNNING should read greenish")
+    truthy(pausedColor[1] > pausedColor[2], "PAUSED should read orange/red-leaning")
+    for _, color in ipairs({ runningColor, idleColor, pausedColor }) do
+        for _, channel in ipairs(color) do
+            truthy(channel < 1.0, "status colors should be restrained, not fully saturated")
+        end
+    end
 end)
 
 test("HUD lock disables drag movement while unlock allows it", function()
@@ -559,6 +600,8 @@ test("detailed window creates and refreshes KPI, timing, character and rates", f
     truthy(frame.timing.session.value:GetText() ~= "")
     truthy(frame.timing.active.value:GetText() ~= "")
     equal(frame.timing.status.value:GetText(), "RUNNING")
+    truthy(frame.timing.status.value.color[2] > frame.timing.status.value.color[1],
+        "RUNNING status should read greenish, matching the HUD's status coloring")
     equal(frame.character.level.value:GetText(), tostring(state.level))
     truthy(frame.rates.earnedPerHour.value:GetText() ~= "")
 
@@ -1135,7 +1178,8 @@ test("HUD stat label/value pairs and status/character info all have a real ancho
     local frame = FDB.SessionHUDFrame
 
     for _, widget in ipairs({
-        frame.xpHrLabel, frame.xpHrValue, frame.toLevelLabel, frame.toLevelValue,
+        frame.xpHrLabel, frame.xpHrValue, frame.xpGainedLabel, frame.xpGainedValue,
+        frame.toLevelLabel, frame.toLevelValue,
         frame.goldHrLabel, frame.goldHrValue, frame.netHrLabel, frame.netHrValue,
         frame.activeLabel, frame.activeValue, frame.statusText, frame.characterText,
     }) do

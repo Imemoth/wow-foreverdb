@@ -12,8 +12,8 @@ local HUD_REFRESH_INTERVAL = 1
 -- widget below gets a real SetPoint anchor and, where the widget type
 -- requires it, a positive explicit size.
 
-local HUD_WIDTH, HUD_HEIGHT = 230, 120
-local HUD_COL1_X, HUD_COL2_X = 14, 122
+local HUD_WIDTH, HUD_HEIGHT = 240, 138
+local HUD_COL1_X, HUD_COL2_X = 14, 128
 local HUD_ROW1_Y, HUD_ROW2_Y, HUD_ROW3_Y = -30, -50, -70
 local HUD_STATUS_Y = 10 -- offset up from the bottom edge
 
@@ -121,6 +121,20 @@ local function netColor(value)
     return NEGATIVE_COLOR
 end
 
+-- Restrained, not harsh: no channel fully saturated. RUNNING reads
+-- greenish-positive, IDLE a muted neutral/sandy yellow, PAUSED a muted
+-- orange/red -- distinct from each other without being alarming.
+local STATUS_RUNNING_COLOR = { 0.45, 0.75, 0.45 }
+local STATUS_IDLE_COLOR = { 0.75, 0.7, 0.35 }
+local STATUS_PAUSED_COLOR = { 0.75, 0.45, 0.3 }
+
+local function statusColor(status)
+    if status == "RUNNING" then return STATUS_RUNNING_COLOR end
+    if status == "IDLE" then return STATUS_IDLE_COLOR end
+    if status == "PAUSED" then return STATUS_PAUSED_COLOR end
+    return NEUTRAL_COLOR
+end
+
 --- Frame construction ------------------------------------------------------
 
 -- "BackdropTemplate" is only a registered virtual XML template on clients
@@ -199,19 +213,22 @@ function FDB:BuildSessionHUDFrame()
 
     frame.xpHrLabel, frame.xpHrValue =
         createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW1_Y)
-    frame.toLevelLabel, frame.toLevelValue =
+    frame.xpGainedLabel, frame.xpGainedValue =
         createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL2_X, HUD_ROW1_Y)
     frame.goldHrLabel, frame.goldHrValue =
         createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW2_Y)
     frame.netHrLabel, frame.netHrValue =
         createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL2_X, HUD_ROW2_Y)
-    frame.activeLabel, frame.activeValue =
+    frame.toLevelLabel, frame.toLevelValue =
         createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL1_X, HUD_ROW3_Y)
+    frame.activeLabel, frame.activeValue =
+        createLabelValue(frame, "GameFontNormalSmall", "GameFontHighlightSmall", HUD_COL2_X, HUD_ROW3_Y)
 
     frame.xpHrLabel:SetText("XP/hr")
-    frame.toLevelLabel:SetText("To level")
+    frame.xpGainedLabel:SetText("XP gained")
     frame.goldHrLabel:SetText("Gold/hr")
     frame.netHrLabel:SetText("Net/hr")
+    frame.toLevelLabel:SetText("To level")
     frame.activeLabel:SetText("Active")
 
     frame.statusText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -270,6 +287,7 @@ function FDB:RefreshSessionUI()
     local snapshot = self:GetSessionSnapshot()
     if not snapshot then
         frame.xpHrValue:SetText("--")
+        frame.xpGainedValue:SetText("--")
         frame.toLevelValue:SetText("--:--")
         frame.goldHrValue:SetText("--")
         frame.netHrValue:SetText("--")
@@ -280,6 +298,7 @@ function FDB:RefreshSessionUI()
     end
 
     frame.xpHrValue:SetText(formatCompactNumber(snapshot.xpPerHour))
+    frame.xpGainedValue:SetText(formatCompactNumber(snapshot.xpGained))
 
     if snapshot.isMaxLevel then
         frame.toLevelValue:SetText("MAX")
@@ -298,6 +317,9 @@ function FDB:RefreshSessionUI()
     frame.activeValue:SetText(formatHM(snapshot.activeSeconds))
 
     frame.statusText:SetText(snapshot.status or "")
+    local sColor = statusColor(snapshot.status)
+    frame.statusText:SetTextColor(sColor[1], sColor[2], sColor[3])
+
     frame.characterText:SetText(snapshot.characterName or "")
 end
 
@@ -683,6 +705,8 @@ function FDB:RefreshSessionDetailWindow()
     frame.timing.session.value:SetText(formatHMS(snapshot.trackedSeconds))
     frame.timing.active.value:SetText(formatHMS(snapshot.activeSeconds))
     frame.timing.status.value:SetText(snapshot.status or "")
+    local statusColorValue = statusColor(snapshot.status)
+    frame.timing.status.value:SetTextColor(statusColorValue[1], statusColorValue[2], statusColorValue[3])
     frame.timing.started.value:SetText(formatTimestamp(snapshot.startedAt))
 
     frame.character.level.value:SetText(tostring(snapshot.level or "--"))
