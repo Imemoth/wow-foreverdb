@@ -205,11 +205,14 @@ local function setup(options)
     -- mock reproduces that instead of silently ignoring the argument.
     BackdropTemplateMixin = hasBackdropMixin and {} or nil
 
-    CreateFrame = function(_, _, _, template)
+    CreateFrame = function(_, name, _, template)
         if template == "BackdropTemplate" and not BackdropTemplateMixin then
             error("CreateFrame: template 'BackdropTemplate' is not registered on this client")
         end
         local frame = makeFrame(template == "BackdropTemplate")
+        frame.frameName = name
+        function frame:GetName() return self.frameName end
+        if name then _G[name] = frame end -- real CreateFrame registers named frames globally
         state.frames[#state.frames + 1] = frame
         return frame
     end
@@ -742,6 +745,63 @@ test("detailed window controls call the same tracker APIs as slash commands", fu
     falsy(FDB:GetSessionHUDSettings().hudShown)
 end)
 
+test("close button hides the window without pausing, resetting, or losing its saved position", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame:IsShown())
+    truthy(frame.closeButton)
+
+    frame.closeButton.scripts.OnClick(frame.closeButton)
+
+    falsy(frame:IsShown())
+    equal(FDB:GetSessionSnapshot().status, "RUNNING")
+    falsy(FDB.SessionResetConfirmationPending)
+
+    -- /fdb session must still toggle it back open -- closing is not a
+    -- one-way trip, and the position saved earlier (build-time default
+    -- here) must not have been reset by closing.
+    local settingsBeforeReopen = FDB:GetSessionHUDSettings()
+    truthy(FDB:HandleSessionCommand(""))
+    truthy(frame:IsShown())
+    local settingsAfterReopen = FDB:GetSessionHUDSettings()
+    equal(settingsAfterReopen.detailPoint, settingsBeforeReopen.detailPoint)
+    equal(settingsAfterReopen.detailX, settingsBeforeReopen.detailX)
+end)
+
+test("close button has a real anchor and size", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(hasAnchor(frame.closeButton))
+    truthy(hasPositiveSize(frame.closeButton))
+end)
+
+test("detail window registers for ESC-close when UISpecialFrames is available", function()
+    local FDB = setup()
+    UISpecialFrames = {}
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+
+    local found = false
+    for _, name in ipairs(UISpecialFrames) do
+        if name == FDB.SessionDetailWindow:GetName() then found = true end
+    end
+    truthy(found, "detail window frame name must be registered in UISpecialFrames for ESC-close")
+end)
+
+test("detail window does not error when UISpecialFrames is unavailable", function()
+    local FDB = setup()
+    UISpecialFrames = nil
+    local ok, err = pcall(function()
+        truthy(FDB:SessionPlayerReady())
+        return FDB:ToggleSessionWindow()
+    end)
+    truthy(ok, "must not error when UISpecialFrames is absent: " .. tostring(err))
+end)
+
 test("the registered periodic ticker also refreshes an already-open detailed window", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
@@ -826,8 +886,11 @@ local function setupCoreIntegration()
     C_Map = nil -- absent in this fixture; Core.lua must guard this optional API
     BackdropTemplateMixin = {}
 
-    CreateFrame = function(_, _, _, template)
+    CreateFrame = function(_, name, _, template)
         local frame = makeFrame(template == "BackdropTemplate")
+        frame.frameName = name
+        function frame:GetName() return self.frameName end
+        if name then _G[name] = frame end
         state.frames[#state.frames + 1] = frame
         return frame
     end

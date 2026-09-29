@@ -38,6 +38,8 @@ local CONFIRM_WIDTH, CONFIRM_HEIGHT = 260, 110
 local CONFIRM_TEXT_WIDTH = CONFIRM_WIDTH - 32
 local CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT = 90, 22
 
+local CLOSE_BUTTON_SIZE = 24
+
 --- Formatting helpers -----------------------------------------------------
 
 local function formatCompactNumber(n)
@@ -466,6 +468,26 @@ function FDB:BuildSessionDetailWindow()
     frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     frame.title:SetPoint("TOP", frame, "TOP", 0, -12)
     frame.title:SetText("ForeverDB Session")
+
+    -- "UIPanelCloseButton" is a classic-era template (present since
+    -- vanilla, unlike the Legion-only "BackdropTemplate"), so it does not
+    -- need the same registered-template guard; it is used unconditionally
+    -- exactly like the "UIPanelButtonTemplate" buttons below already are.
+    -- Closing only hides the window: it must never pause, reset, or clear
+    -- the saved position, and /fdb session must still be able to reopen
+    -- it afterward.
+    frame.closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.closeButton:SetSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+    frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    frame.closeButton:SetScript("OnClick", function() frame:Hide() end)
+
+    -- ESC-close via the standard UISpecialFrames mechanism, guarded since
+    -- its availability on this custom client is not certain; skipping it
+    -- entirely is a safe fallback (the close button and /fdb session
+    -- still work either way).
+    if UISpecialFrames and frame.GetName and frame:GetName() then
+        table.insert(UISpecialFrames, frame:GetName())
+    end
 
     frame.kpi = addKeyedRow(frame, {
         { "xpPerHour", DETAIL_COL_X[1], DETAIL_KPI_ROW1_Y },
