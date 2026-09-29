@@ -445,14 +445,23 @@ end
 function FDB:BuildSessionDetailWindow()
     local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
     frame:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local point, _, relativePoint, x, y = self:GetPoint()
+        FDB:SetSessionDetailWindowPosition(point, relativePoint, x, y)
+    end)
     applyBackdrop(frame)
     frame:Hide()
+
+    -- Open/closed state is deliberately not persisted (always starts
+    -- closed after a reload); only the last dragged-to position is, so
+    -- reopening it later doesn't jump back to the center default.
+    local settings = FDB:GetSessionHUDSettings()
+    frame:SetPoint(settings.detailPoint, UIParent, settings.detailRelativePoint, settings.detailX, settings.detailY)
 
     frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     frame.title:SetPoint("TOP", frame, "TOP", 0, -12)

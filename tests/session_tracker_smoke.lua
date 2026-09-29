@@ -943,6 +943,71 @@ test("invalid HUD position data normalizes to safe defaults", function()
     equal(after.hudY, 6)
 end)
 
+-- UI polish round: detailed window position persistence -------------------
+
+test("detail window position defaults to center and can be set and restored", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    local defaults = FDB:GetSessionHUDSettings()
+    equal(defaults.detailPoint, "CENTER")
+    equal(defaults.detailRelativePoint, "CENTER")
+    equal(defaults.detailX, 0)
+    equal(defaults.detailY, 0)
+
+    truthy(FDB:SetSessionDetailWindowPosition("BOTTOMRIGHT", "CENTER", 40, -25))
+
+    -- Simulate a reload: fresh Lua state, same persisted SavedVariables.
+    FDB.SessionState = nil
+    truthy(FDB:SessionPlayerReady())
+
+    local restored = FDB:GetSessionHUDSettings()
+    equal(restored.detailPoint, "BOTTOMRIGHT")
+    equal(restored.detailRelativePoint, "CENTER")
+    equal(restored.detailX, 40)
+    equal(restored.detailY, -25)
+end)
+
+test("invalid saved detail window position normalizes to safe center defaults", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+
+    char.ui = {
+        detailPoint = 42, detailRelativePoint = false, detailX = "left", detailY = nil,
+    }
+    local settings = FDB:GetSessionHUDSettings()
+
+    equal(settings.detailPoint, "CENTER")
+    equal(settings.detailRelativePoint, "CENTER")
+    equal(settings.detailX, 0)
+    equal(settings.detailY, 0)
+
+    -- A well-typed update must not be discarded by a later normalize
+    -- pass, and out-of-type arguments must be ignored, not corrupt state.
+    truthy(FDB:SetSessionDetailWindowPosition("TOPLEFT", "TOPLEFT", 10, -10))
+    truthy(FDB:SetSessionDetailWindowPosition(nil, nil, "bad", nil))
+    local after = FDB:GetSessionHUDSettings()
+    equal(after.detailPoint, "TOPLEFT")
+    equal(after.detailRelativePoint, "TOPLEFT")
+    equal(after.detailX, 10)
+    equal(after.detailY, -10)
+end)
+
+test("detail window position setting does not disturb HUD position settings", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    truthy(FDB:SetSessionHUDPosition("BOTTOMRIGHT", "CENTER", 5, 6))
+    truthy(FDB:SetSessionDetailWindowPosition("TOPLEFT", "TOPLEFT", 1, -1))
+
+    local settings = FDB:GetSessionHUDSettings()
+    equal(settings.hudPoint, "BOTTOMRIGHT")
+    equal(settings.hudX, 5)
+    equal(settings.detailPoint, "TOPLEFT")
+    equal(settings.detailX, 1)
+end)
+
 -- External review round 2: corrupted character records and history --------
 
 test("a non-table character record (string) recovers into a fresh valid character", function()

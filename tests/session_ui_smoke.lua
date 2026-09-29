@@ -589,6 +589,56 @@ local function historyRowField(text, n)
     return fields[n]
 end
 
+test("detail window position is saved on drag and restored across a simulated reload", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMRIGHT", UIParent, "CENTER", 30, -20) -- simulates the drag having moved the window
+
+    local onDragStop = frame:GetScript("OnDragStop")
+    truthy(onDragStop)
+    onDragStop(frame)
+
+    local settings = FDB:GetSessionHUDSettings()
+    equal(settings.detailPoint, "BOTTOMRIGHT")
+    equal(settings.detailRelativePoint, "CENTER")
+    equal(settings.detailX, 30)
+    equal(settings.detailY, -20)
+
+    -- Simulate a reload: the window's open/closed state is intentionally
+    -- not persisted (a reload always starts with it closed), so this
+    -- rebuilds a fresh window object the way a real reload would, and
+    -- only its position must be restored on the next open.
+    FDB.SessionDetailWindow = nil
+    truthy(FDB:ToggleSessionWindow())
+    local newFrame = FDB.SessionDetailWindow
+    truthy(newFrame ~= frame)
+    equal(newFrame.point.point, "BOTTOMRIGHT")
+    equal(newFrame.point.relativePoint, "CENTER")
+    equal(newFrame.point.x, 30)
+    equal(newFrame.point.y, -20)
+end)
+
+test("detail window builds safely and centers when saved detail position is corrupted", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+    char.ui.detailPoint = 42
+    char.ui.detailX = "bad"
+
+    local ok, err = pcall(function() return FDB:ToggleSessionWindow() end)
+    truthy(ok, "ToggleSessionWindow must not error on corrupted saved detail position: " .. tostring(err))
+    local frame = FDB.SessionDetailWindow
+    truthy(frame)
+    equal(frame.point.point, "CENTER")
+    equal(frame.point.relativePoint, "CENTER")
+    equal(frame.point.x, 0)
+    equal(frame.point.y, 0)
+end)
+
 test("Recent Sessions renders newest-first: row 1 is the most recently archived session", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())

@@ -25,6 +25,17 @@ local function normalizeHUDSettings(ui)
     end
     if type(ui.hudX) ~= "number" then ui.hudX = 100 end
     if type(ui.hudY) ~= "number" then ui.hudY = -100 end
+
+    -- Detailed session window position only (not open/closed state, which
+    -- is intentionally not persisted). Defaults match the window's
+    -- build-time initial position (screen center).
+    if type(ui.detailPoint) ~= "string" or ui.detailPoint == "" then ui.detailPoint = "CENTER" end
+    if type(ui.detailRelativePoint) ~= "string" or ui.detailRelativePoint == "" then
+        ui.detailRelativePoint = "CENTER"
+    end
+    if type(ui.detailX) ~= "number" then ui.detailX = 0 end
+    if type(ui.detailY) ~= "number" then ui.detailY = 0 end
+
     return ui
 end
 
@@ -621,6 +632,23 @@ function FDB:SetSessionHUDPosition(point, relativePoint, x, y)
     end
     if type(x) == "number" then char.ui.hudX = x end
     if type(y) == "number" then char.ui.hudY = y end
+    return true
+end
+
+-- The detailed window's open/closed state is deliberately NOT persisted
+-- (per design: a reload always starts with it closed); only its screen
+-- position is, so reopening it later lands where the player last left it
+-- instead of jumping back to the build-time center default.
+function FDB:SetSessionDetailWindowPosition(point, relativePoint, x, y)
+    local char = self:GetActiveSessionCharacter()
+    if not char then return false end
+    char.ui = normalizeHUDSettings(char.ui)
+    if type(point) == "string" and point ~= "" then char.ui.detailPoint = point end
+    if type(relativePoint) == "string" and relativePoint ~= "" then
+        char.ui.detailRelativePoint = relativePoint
+    end
+    if type(x) == "number" then char.ui.detailX = x end
+    if type(y) == "number" then char.ui.detailY = y end
     return true
 end
 
