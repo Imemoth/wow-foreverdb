@@ -641,7 +641,7 @@ test("detailed window renders recent session history rows", function()
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
     truthy(frame.historyRows[1])
-    truthy(frame.historyRows[1].primary:GetText():find("40", 1, true))
+    truthy(frame.historyRows[1].columns[3]:GetText():find("40", 1, true))
 end)
 
 
@@ -715,12 +715,11 @@ test("Recent Sessions renders newest-first: row 1 is the most recently archived 
     truthy(FDB:ToggleSessionWindow())
     local frame = FDB.SessionDetailWindow
 
-    -- "XP +N" is a literal, unambiguous prefix in the primary line (unlike
-    -- a bare digit, which could coincidentally match a timestamp/duration
-    -- component), so this can't collide with anything else in the row.
-    truthy(frame.historyRows[1].primary:GetText():find("XP +30", 1, true) ~= nil)
-    truthy(frame.historyRows[2].primary:GetText():find("XP +20", 1, true) ~= nil)
-    truthy(frame.historyRows[3].primary:GetText():find("XP +10", 1, true) ~= nil)
+    -- The XP Gained column is its own FontString now (real table column,
+    -- not a bullet-joined field), so checking it directly is unambiguous.
+    equal(frame.historyRows[1].columns[3]:GetText(), "+30")
+    equal(frame.historyRows[2].columns[3]:GetText(), "+20")
+    equal(frame.historyRows[3].columns[3]:GetText(), "+10")
 end)
 
 test("Started and history Date/Time show a human-readable timestamp, not a raw UNIX epoch", function()
@@ -742,7 +741,7 @@ test("Started and history Date/Time show a human-readable timestamp, not a raw U
     truthy(FDB:ResetSession())
     FDB:RefreshSessionDetailWindow()
 
-    local rowText = frame.historyRows[1].primary:GetText()
+    local rowText = frame.historyRows[1].columns[1]:GetText()
     local endedAt = FDB:GetSessionHistory()[1].endedAt
     falsy(rowText:find(tostring(endedAt), 1, true) ~= nil,
         "history row must not embed the raw epoch number for its date/time column")
@@ -1265,14 +1264,29 @@ test("history scroll viewport, content child, and rows all have real, distinct g
     FDB:RefreshSessionDetailWindow()
 
     truthy(#frame.historyRows >= 3)
-    truthy(hasAnchor(frame.historyRows[1].primary), "history row 1 must have a real anchor")
-    truthy(hasAnchor(frame.historyRows[2].primary), "history row 2 must have a real anchor")
+    for _, column in ipairs(frame.historyRows[1].columns) do
+        truthy(hasAnchor(column), "history row 1's columns must all have a real anchor")
+    end
+    for _, column in ipairs(frame.historyRows[2].columns) do
+        truthy(hasAnchor(column), "history row 2's columns must all have a real anchor")
+    end
     truthy(hasAnchor(frame.historyRows[1].secondary), "history row 1's secondary line must have a real anchor")
 
-    local firstY = frame.historyRows[1].primary.point and frame.historyRows[1].primary.point.y
-    local secondY = frame.historyRows[2].primary.point and frame.historyRows[2].primary.point.y
+    local firstY = frame.historyRows[1].columns[1].point and frame.historyRows[1].columns[1].point.y
+    local secondY = frame.historyRows[2].columns[1].point and frame.historyRows[2].columns[1].point.y
     truthy(firstY ~= nil and secondY ~= nil and firstY ~= secondY,
         "each history record must get its own distinct vertical position")
+
+    -- Each column within a single row must sit at a distinct x offset,
+    -- matching the column-header row above, so values genuinely line up
+    -- as a table instead of overlapping at the same position.
+    local xs = {}
+    for _, column in ipairs(frame.historyRows[1].columns) do
+        local x = column.point and column.point.x
+        truthy(x ~= nil, "each history column must have an x offset")
+        truthy(not xs[x], "history columns must not share an x offset")
+        xs[x] = true
+    end
 end)
 
 test("at 30 history records the content child height genuinely exceeds the viewport", function()
@@ -1493,7 +1507,62 @@ test("the XP bar is contained inside the Character panel, never spanning the ful
         "XP bar must not come anywhere close to spanning the full window width")
 end)
 
-test("the Recent Sessions viewport matches the dimensioned spec's 160px target", function()
+test("Session Timing renders as four stacked single-column rows, not a 2x2 grid", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local rows = { frame.timing.session, frame.timing.active, frame.timing.status, frame.timing.started }
+    local firstX
+    local ys = {}
+    for _, row in ipairs(rows) do
+        truthy(hasAnchor(row.label), "Session Timing row label must have a real anchor")
+        truthy(hasAnchor(row.value), "Session Timing row value must have a real anchor")
+        local x = row.label.point and row.label.point.x
+        truthy(x ~= nil, "Session Timing row must have an x offset")
+        if firstX == nil then
+            firstX = x
+        else
+            equal(x, firstX, "every Session Timing row must share the same single column x offset")
+        end
+        local y = row.label.point and row.label.point.y
+        truthy(y ~= nil and not ys[y], "every Session Timing row must have its own distinct y offset")
+        ys[y] = true
+    end
+    equal(4, (function() local n = 0 for _ in pairs(ys) do n = n + 1 end return n end)(),
+        "Session Timing must render exactly four distinct row positions")
+end)
+
+test("Character panel renders Level, XP, XP bar, then Gold in that order", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local levelY = frame.character.level.label.point.y
+    local xpY = frame.character.xp.label.point.y
+    local barY = frame.character.xpBar.point.y
+    local goldY = frame.character.gold.label.point.y
+
+    -- Y offsets are negative-from-top; "below" means a more negative y.
+    truthy(levelY > xpY, "Level must render above XP")
+    truthy(xpY > barY, "XP bar must render directly below the XP row")
+    truthy(barY > goldY, "Gold must render below the XP bar, not interleaved with it")
+
+    -- The bar must sit closer to XP (its own row) than Gold sits to the
+    -- bar's bottom edge is not required, but the bar must not be closer to
+    -- Gold's position than to XP's -- i.e. it visually belongs to XP.
+    local xpToBar = xpY - barY
+    local barBottom = barY - frame.character.xpBar.height
+    local barToGold = barBottom - goldY
+    truthy(xpToBar <= barToGold + 1,
+        "the XP bar must sit closer to (or as close to) the XP row above it as to the Gold row below it")
+end)
+
+test("the Recent Sessions viewport matches its layout-constant target, shrunk for the column header row", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
     FDB:InitializeSessionUI()
@@ -1574,6 +1643,38 @@ test("the action bar's buttons stay within the detail window's vertical budget",
     truthy(resetGap > ordinaryGap, "Reset must have extra clearance from Resume, not an ordinary button gap")
 end)
 
+test("Recent Sessions has a real non-scrolling column-header row aligned with each data row's columns", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(#frame.historyColumnHeaders, layout.historyColumnCount)
+    for i, header in ipairs(frame.historyColumnHeaders) do
+        truthy(hasAnchor(header), "history column header " .. i .. " must have a real anchor")
+        equal(header:GetText(), layout.historyColumnLabels[i])
+        equal(header.width, layout.historyColumnWidth[i])
+    end
+
+    -- Populate one data row and confirm its columns sit at the exact same
+    -- x offsets as the header row -- a real table, values aligned under
+    -- their labels.
+    state.now = state.now + 90
+    state.xp = state.xp + 10
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    for i, header in ipairs(frame.historyColumnHeaders) do
+        local headerX = header.point and header.point.x
+        local columnX = frame.historyRows[1].columns[i].point and frame.historyRows[1].columns[i].point.x
+        truthy(headerX ~= nil and columnX ~= nil, "both header and data column " .. i .. " need an x offset")
+        equal(columnX, headerX - layout.detailMargin,
+            "data column " .. i .. " must sit at the same relative x offset as its header")
+    end
+end)
+
 test("history scroll viewport requests no template, so no native scrollbar artifact is ever created", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
@@ -1627,7 +1728,7 @@ test("mouse wheel scrolling moves the history viewport and clamps to the real co
     equal(frame.historyScroll:GetVerticalScroll(), 0, "scrolling up past the top must clamp to zero")
 end)
 
-test("net gold is the only colored field on the history primary line; earned/spent stay neutral on the secondary line", function()
+test("net gold is its own colored history column; earned/spent stay neutral on the secondary line", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
 
@@ -1642,14 +1743,20 @@ test("net gold is the only colored field on the history primary line; earned/spe
     local frame = FDB.SessionDetailWindow
     local record = FDB:GetSessionHistory()[1]
 
-    local primaryText = frame.historyRows[1].primary:GetText()
-    truthy(primaryText:find("net", 1, true) ~= nil, "primary line must include the net gold figure")
-    -- The negative net gold segment must carry an inline red color escape
-    -- sequence (|cffRRGGBB...|r) since a FontString can't hold two colors
-    -- via SetTextColor alone.
-    truthy(primaryText:find("|cff", 1, true) ~= nil,
-        "net gold must be inline-colorized since it shares a FontString with neutral text")
     truthy(record.netGold < 0)
+    local netGoldColumn = frame.historyRows[1].columns[5]
+    truthy(netGoldColumn:GetText() ~= "", "the Net Gold column must show a value")
+    -- Negative net gold must read as the negative (red-leaning) color, and
+    -- distinctly from the neutral color used for the other columns.
+    truthy(netGoldColumn.color[1] > netGoldColumn.color[2],
+        "negative net gold should read red-leaning in its own column")
+    local dateTimeColumn = frame.historyRows[1].columns[1]
+    falsy(dateTimeColumn.color[1] > dateTimeColumn.color[2],
+        "the Date & Time column must stay in its default neutral color")
+
+    -- Earned/spent remain neutral, on the secondary line, uncolored.
+    local secondaryText = frame.historyRows[1].secondary:GetText()
+    truthy(secondaryText:find("-", 1, true) ~= nil, "secondary line must show the spent figure")
 end)
 
 test("history: same start/end level omits the level range; an actual level-up shows it", function()

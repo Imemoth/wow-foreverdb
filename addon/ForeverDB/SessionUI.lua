@@ -90,35 +90,69 @@ local PANEL_HEADING_LINE = 14 -- assumed single-line heading height for our own 
 local PANEL_HEADING_GAP = 5   -- clear space after the heading, before the divider
 local PANEL_DIVIDER_HEIGHT = 1
 local PANEL_DIVIDER_GAP = 6   -- clear space after the divider, before content rows
-local PANEL_ROW_HEIGHT = 20
+-- Bumped from 20: the live client reported Session Timing's rows visibly
+-- crowding/overlapping. A single stacked column at a slightly taller row
+-- height is far more robust against real (uncertain) live font metrics
+-- than a tight 2-column grid ever was.
+local PANEL_ROW_HEIGHT = 22
 
 local PANEL_DIVIDER_Y = -(PANEL_TOP_PADDING + PANEL_HEADING_LINE + PANEL_HEADING_GAP)
 local PANEL_CONTENT_START_Y = PANEL_DIVIDER_Y - PANEL_DIVIDER_HEIGHT - PANEL_DIVIDER_GAP
 local PANEL_ROW1_Y = PANEL_CONTENT_START_Y
 local PANEL_ROW2_Y = PANEL_CONTENT_START_Y - PANEL_ROW_HEIGHT
 local PANEL_ROW3_Y = PANEL_CONTENT_START_Y - 2 * PANEL_ROW_HEIGHT
+-- Only Session Timing needs a 4th stacked row (Session/Active/Status/Started).
+local PANEL_ROW4_Y = PANEL_CONTENT_START_Y - 3 * PANEL_ROW_HEIGHT
 
-local TIMING_COL_X = { PANEL_SIDE_PADDING, 130 }
-local CHARACTER_COL_X = PANEL_SIDE_PADDING
-local RATES_COL_X = PANEL_SIDE_PADDING
+-- Every group panel row is a single label+value column now -- the live
+-- client showed the old 2-column Session Timing grid crowding/colliding,
+-- and a single column is inherently more robust against real font-metric
+-- variance than a tight 2-column grid.
+local PANEL_COL_X = PANEL_SIDE_PADDING
 
 local DIVIDER_COLOR = { 0x6b / 255, 0x55 / 255, 0x27 / 255, 0.35 }
 
 -- The XP bar lives only inside the Character panel -- it must never span
--- the full detail-window width.
+-- the full detail-window width. It sits directly under the XP row (so it
+-- visually belongs to XP, not Gold); Gold is the panel's last row, below
+-- the bar, per the approved order: Level, XP, XP bar, Gold.
 local XPBAR_WIDTH, XPBAR_HEIGHT = 228, 7
-local XPBAR_GAP = 14 -- clear space between the Gold row and the bar
-local XPBAR_Y = PANEL_ROW3_Y - XPBAR_GAP
+-- The bar sits noticeably closer to the XP row above it than to the Gold
+-- row below it, so it visually reads as belonging to XP, not Gold.
+local XPBAR_GAP = 6 -- clear space between the XP row and the bar
+local XPBAR_Y = PANEL_ROW2_Y - XPBAR_GAP
+local CHARACTER_GOLD_GAP = 14 -- clear space between the bar and the Gold row below it
+local CHARACTER_GOLD_Y = XPBAR_Y - XPBAR_HEIGHT - CHARACTER_GOLD_GAP
 local XPBAR_FILL_COLOR = { 0x6b / 255, 0x5a / 255, 0xa6 / 255 }
 local XPBAR_TRACK_COLOR = { 0.08, 0.07, 0.11, 0.85 }
 
 --- Recent Sessions band ------------------------------------------------------
 local HISTORY_HEADER_HEIGHT = 14
 local HISTORY_HEADER_GAP = 12
-local HISTORY_VIEWPORT_HEIGHT = 160
-local HISTORY_VIEWPORT_Y = DETAIL_HISTORY_TOP_Y - HISTORY_HEADER_HEIGHT - HISTORY_HEADER_GAP
+-- A non-scrolling column-header row ("Date & Time | Duration | XP Gained |
+-- XP/hr | Net Gold") sits between the "Recent Sessions" title and the
+-- scrollable viewport, so each column's values line up under a label
+-- instead of running together as one bullet-joined string -- the live
+-- client reported the old single-line format reading as cramped/collapsed.
+-- The viewport shrinks by exactly the column header's height + gap so the
+-- band's total height is unchanged; the dimensioned spec explicitly calls
+-- the Recent Sessions viewport "the ONLY elastic vertical band" for this
+-- kind of internal adjustment.
+local HISTORY_COLUMN_HEADER_HEIGHT = 16
+local HISTORY_COLUMN_HEADER_GAP = 4
+local HISTORY_VIEWPORT_HEIGHT = 140
+local HISTORY_COLUMN_HEADER_Y = DETAIL_HISTORY_TOP_Y - HISTORY_HEADER_HEIGHT - HISTORY_HEADER_GAP
+local HISTORY_VIEWPORT_Y = HISTORY_COLUMN_HEADER_Y - HISTORY_COLUMN_HEADER_HEIGHT - HISTORY_COLUMN_HEADER_GAP
 assert(-(HISTORY_VIEWPORT_Y - HISTORY_VIEWPORT_HEIGHT) == -(DETAIL_HISTORY_TOP_Y - DETAIL_HISTORY_BAND_HEIGHT),
     "SessionUI Recent Sessions viewport must exactly fill its band")
+
+-- Real, fixed-width columns for the primary line -- genuine table columns
+-- anchored at these exact x offsets (shared by both the column-header row
+-- and every data row), not a single bullet-joined string whose field
+-- boundaries shifted with preceding text length.
+local HISTORY_COL_X = { 0, 180, 300, 420, 540 }
+local HISTORY_COL_WIDTH = { 170, 110, 110, 110, 180 }
+local HISTORY_COL_LABELS = { "Date & Time", "Duration", "XP Gained", "XP/hr", "Net Gold" }
 
 -- Two-line records (32px) are the default; a record whose secondary line
 -- would be entirely empty (no level change, zero earned, zero spent)
@@ -146,6 +180,7 @@ local CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT = 90, 22
 FDB.SessionUILayout = {
     detailWidth = DETAIL_WIDTH,
     detailHeight = DETAIL_HEIGHT,
+    detailMargin = DETAIL_MARGIN,
     hudWidth = HUD_WIDTH,
     hudHeight = HUD_HEIGHT,
     kpiCardCount = KPI_CARD_COUNT,
@@ -157,6 +192,11 @@ FDB.SessionUILayout = {
     historyViewportHeight = HISTORY_VIEWPORT_HEIGHT,
     historyRecordHeight = HISTORY_RECORD_HEIGHT,
     historyRecordHeightCollapsed = HISTORY_RECORD_HEIGHT_COLLAPSED,
+    historyColumnCount = #HISTORY_COL_X,
+    historyColumnX = HISTORY_COL_X,
+    historyColumnWidth = HISTORY_COL_WIDTH,
+    historyColumnLabels = HISTORY_COL_LABELS,
+    panelRowHeight = PANEL_ROW_HEIGHT,
     xpBarWidth = XPBAR_WIDTH,
     xpBarHeight = XPBAR_HEIGHT,
     actionBandHeight = DETAIL_ACTION_BAND_HEIGHT,
@@ -241,17 +281,6 @@ local function netColor(value)
     if type(value) ~= "number" or value == 0 then return NEUTRAL_COLOR end
     if value > 0 then return POSITIVE_COLOR end
     return NEGATIVE_COLOR
-end
-
--- Embeds a WoW hex color escape sequence around `text` so a single
--- FontString can mix one colored segment (net gold) with otherwise
--- neutral/default-colored text on the same line, without needing a
--- second FontString per history row.
-local function colorizeInline(text, color)
-    local r = math.floor((color[1] or 1) * 255 + 0.5)
-    local g = math.floor((color[2] or 1) * 255 + 0.5)
-    local b = math.floor((color[3] or 1) * 255 + 0.5)
-    return string.format("|cff%02x%02x%02x%s|r", r, g, b, text)
 end
 
 -- Restrained, not harsh: no channel fully saturated. RUNNING reads
@@ -776,11 +805,15 @@ function FDB:BuildSessionDetailWindow()
     frame.timingPanel = sessionPanel.panel
     frame.timingHeader = sessionPanel.heading
     frame.timingDivider = sessionPanel.divider
+    -- Four stacked single-column rows (Session, Active, Status, Started),
+    -- not a 2-column grid: the live client showed the old 2x2 layout
+    -- crowding/colliding, and giving every row the panel's full content
+    -- width is far more robust against real font-metric variance.
     frame.timing = addKeyedRow(sessionPanel.panel, {
-        { "session", TIMING_COL_X[1], PANEL_ROW1_Y },
-        { "active", TIMING_COL_X[2], PANEL_ROW1_Y },
-        { "status", TIMING_COL_X[1], PANEL_ROW2_Y },
-        { "started", TIMING_COL_X[2], PANEL_ROW2_Y },
+        { "session", PANEL_COL_X, PANEL_ROW1_Y },
+        { "active", PANEL_COL_X, PANEL_ROW2_Y },
+        { "status", PANEL_COL_X, PANEL_ROW3_Y },
+        { "started", PANEL_COL_X, PANEL_ROW4_Y },
     }, FONT_LABEL, FONT_BODY_VALUE)
     frame.timing.session.label:SetText("Session")
     frame.timing.active.label:SetText("Active")
@@ -792,10 +825,13 @@ function FDB:BuildSessionDetailWindow()
     frame.characterPanel = characterPanel.panel
     frame.characterHeader = characterPanel.heading
     frame.characterDivider = characterPanel.divider
+    -- Order per the approved layout: Level, XP, XP bar, Gold -- the bar
+    -- sits directly under the XP row (it visually belongs to XP), and
+    -- Gold is the last row, below the bar, not interleaved with it.
     frame.character = addKeyedRow(characterPanel.panel, {
-        { "level", CHARACTER_COL_X, PANEL_ROW1_Y },
-        { "xp", CHARACTER_COL_X, PANEL_ROW2_Y },
-        { "gold", CHARACTER_COL_X, PANEL_ROW3_Y },
+        { "level", PANEL_COL_X, PANEL_ROW1_Y },
+        { "xp", PANEL_COL_X, PANEL_ROW2_Y },
+        { "gold", PANEL_COL_X, CHARACTER_GOLD_Y },
     }, FONT_LABEL, FONT_BODY_VALUE)
     frame.character.level.label:SetText("Level")
     frame.character.xp.label:SetText("XP")
@@ -805,7 +841,7 @@ function FDB:BuildSessionDetailWindow()
     -- the full window width.
     frame.character.xpBar = CreateFrame("StatusBar", nil, characterPanel.panel)
     frame.character.xpBar:SetSize(XPBAR_WIDTH, XPBAR_HEIGHT)
-    frame.character.xpBar:SetPoint("TOPLEFT", characterPanel.panel, "TOPLEFT", CHARACTER_COL_X, XPBAR_Y)
+    frame.character.xpBar:SetPoint("TOPLEFT", characterPanel.panel, "TOPLEFT", PANEL_COL_X, XPBAR_Y)
     frame.character.xpBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     if frame.character.xpBar.SetStatusBarColor then
         frame.character.xpBar:SetStatusBarColor(XPBAR_FILL_COLOR[1], XPBAR_FILL_COLOR[2], XPBAR_FILL_COLOR[3], 1)
@@ -823,9 +859,9 @@ function FDB:BuildSessionDetailWindow()
     frame.ratesHeader = ratesPanel.heading
     frame.ratesDivider = ratesPanel.divider
     frame.rates = addKeyedRow(ratesPanel.panel, {
-        { "earnedPerHour", RATES_COL_X, PANEL_ROW1_Y },
-        { "spentPerHour", RATES_COL_X, PANEL_ROW2_Y },
-        { "netPerHour", RATES_COL_X, PANEL_ROW3_Y },
+        { "earnedPerHour", PANEL_COL_X, PANEL_ROW1_Y },
+        { "spentPerHour", PANEL_COL_X, PANEL_ROW2_Y },
+        { "netPerHour", PANEL_COL_X, PANEL_ROW3_Y },
     }, FONT_LABEL, FONT_BODY_VALUE)
     frame.rates.earnedPerHour.label:SetText("Earned/hr")
     frame.rates.spentPerHour.label:SetText("Spent/hr")
@@ -833,6 +869,22 @@ function FDB:BuildSessionDetailWindow()
 
     --- Recent Sessions band ----------------------------------------------
     frame.historyHeader = addSectionHeader(frame, DETAIL_MARGIN, DETAIL_HISTORY_TOP_Y, "Recent Sessions")
+
+    -- A real, non-scrolling column-header row: labels sit at the exact
+    -- same x offsets/widths as each data row's own columns below, so
+    -- values genuinely line up under a heading -- a real table, not a
+    -- single bullet-joined line, which the live client reported reading
+    -- as cramped/collapsed.
+    frame.historyColumnHeaders = {}
+    for i, label in ipairs(HISTORY_COL_LABELS) do
+        local header = frame:CreateFontString(nil, "ARTWORK", FONT_LABEL)
+        header:SetPoint("TOPLEFT", frame, "TOPLEFT", DETAIL_MARGIN + HISTORY_COL_X[i], HISTORY_COLUMN_HEADER_Y)
+        header:SetWidth(HISTORY_COL_WIDTH[i])
+        header:SetJustifyH("LEFT")
+        header:SetText(label)
+        setSingleLine(header)
+        frame.historyColumnHeaders[i] = header
+    end
 
     local historyViewportWidth = DETAIL_WIDTH - 2 * DETAIL_MARGIN
 
@@ -973,17 +1025,25 @@ function FDB:RefreshSessionHistoryRows()
         if not row then
             local background = frame.historyContent:CreateTexture(nil, "BACKGROUND")
 
-            local primary = frame.historyContent:CreateFontString(nil, "ARTWORK", FONT_BODY_VALUE)
-            primary:SetWidth(rowWidth)
-            primary:SetJustifyH("LEFT")
-            setSingleLine(primary)
+            -- Real per-field columns, anchored at the exact same x offsets
+            -- as the column-header row above, instead of one bullet-joined
+            -- string whose field boundaries shifted with preceding text
+            -- length.
+            local columns = {}
+            for i = 1, #HISTORY_COL_X do
+                local column = frame.historyContent:CreateFontString(nil, "ARTWORK", FONT_BODY_VALUE)
+                column:SetWidth(HISTORY_COL_WIDTH[i])
+                column:SetJustifyH("LEFT")
+                setSingleLine(column)
+                columns[i] = column
+            end
 
             local secondary = frame.historyContent:CreateFontString(nil, "ARTWORK", FONT_MUTED_SMALL)
             secondary:SetWidth(rowWidth)
             secondary:SetJustifyH("LEFT")
             setSingleLine(secondary)
 
-            row = { primary = primary, secondary = secondary, background = background }
+            row = { columns = columns, secondary = secondary, background = background }
             frame.historyRows[index] = row
         end
 
@@ -1012,21 +1072,26 @@ function FDB:RefreshSessionHistoryRows()
             row.background:Hide()
         end
 
-        -- Primary line: date/time, duration, XP gained, XP/hr, net gold.
-        -- Net gold is the only colored segment on this line (green/red,
-        -- inline-colorized); everything else stays the line's default
-        -- neutral color.
-        row.primary:ClearAllPoints()
-        row.primary:SetPoint("TOPLEFT", frame.historyContent, "TOPLEFT", 0, -y)
+        -- Primary line: five real columns (Date & Time, Duration, XP
+        -- Gained, XP/hr, Net Gold), each its own FontString anchored at a
+        -- fixed x offset matching the column-header row above -- a genuine
+        -- table, not one bullet-joined string. Net gold is the only
+        -- colored column (green/red).
         local netGoldColor = netColor(record.netGold)
-        local primaryParts = {
+        local primaryValues = {
             formatTimestamp(record.endedAt or record.startedAt),
             formatHMS(record.trackedSeconds),
-            "XP +" .. formatCompactNumber(record.xpGained),
+            "+" .. formatCompactNumber(record.xpGained),
             formatCompactNumber(record.xpPerHour) .. "/hr",
-            colorizeInline("net " .. formatCopperShort(record.netGold), netGoldColor),
+            formatCopperShort(record.netGold),
         }
-        row.primary:SetText(table.concat(primaryParts, "  \226\128\162  "))
+        for i, column in ipairs(row.columns) do
+            column:ClearAllPoints()
+            column:SetPoint("TOPLEFT", frame.historyContent, "TOPLEFT", HISTORY_COL_X[i], -y)
+            column:SetText(primaryValues[i])
+            column:Show()
+        end
+        row.columns[5]:SetTextColor(netGoldColor[1], netGoldColor[2], netGoldColor[3])
 
         -- Secondary line: level transition (only if one occurred),
         -- earned/spent (only if nonzero) -- both stay neutral. If nothing
@@ -1044,19 +1109,20 @@ function FDB:RefreshSessionHistoryRows()
                 table.insert(secondaryParts, "-" .. formatCopperShort(record.goldSpent))
             end
             row.secondary:ClearAllPoints()
-            row.secondary:SetPoint("TOPLEFT", row.primary, "BOTTOMLEFT", 0, -HISTORY_LINE_GAP)
+            row.secondary:SetPoint("TOPLEFT", row.columns[1], "BOTTOMLEFT", 0, -HISTORY_LINE_GAP)
             row.secondary:SetText(table.concat(secondaryParts, "  \226\128\162  "))
             row.secondary:Show()
         else
             row.secondary:Hide()
         end
 
-        row.primary:Show()
         y = y + rowHeight
     end
 
     for index = count + 1, #frame.historyRows do
-        frame.historyRows[index].primary:Hide()
+        for _, column in ipairs(frame.historyRows[index].columns) do
+            column:Hide()
+        end
         frame.historyRows[index].secondary:Hide()
         frame.historyRows[index].background:Hide()
     end
