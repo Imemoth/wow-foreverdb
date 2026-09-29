@@ -42,20 +42,22 @@ Map asset pipeline acceptance status:
 
 ## 0.5.0-alpha — Session Tracker
 
-Implementation status: **repo-complete reconfirmed as of `13ef808`**
+Implementation status: **repo-complete reconfirmed as of `bfe0e75`**
 (external review round 2's findings, independent Reviewer C's follow-up
 findings, a UI/UX-only polish round's independent Reviewer D pass, a
 dimensioned-spec + live-scrollbar-bug-fix round's independent Reviewer F
 pass, a live-client layout-fix round (Session Timing, Character panel
-order, Recent Sessions columns), and a final micro-polish round (XP bar
-spacing, Recent Sessions Net-Gold-only) with a mandatory independent
-Reviewer G gate (PASS, zero blocking findings) are all fixed where
-applicable and repo-side re-verified). **Live Forever-client acceptance
-PENDING regardless.** See the acceptance ledger's "Review round 2",
-"Review round 3 (UI/UX polish)", "Review round 4 (dimensioned spec +
-scrollbar fix)", "Round 5 (live-client layout fixes)", "Round 6 (XP bar
-spacing + Net Gold only, Reviewer G gate)", and "Verification snapshot"
-sections.
+order, Recent Sessions columns), a micro-polish round (XP bar spacing,
+Recent Sessions Net-Gold-only) with a mandatory independent Reviewer G
+gate, and an icon-pack-integration round (7 local addon-packaged TGA
+icons) with a mandatory independent Reviewer H gate — all PASS, zero
+blocking findings — are all fixed where applicable and repo-side
+re-verified). **Live Forever-client acceptance PENDING regardless.** See
+the acceptance ledger's "Review round 2", "Review round 3 (UI/UX
+polish)", "Review round 4 (dimensioned spec + scrollbar fix)", "Round 5
+(live-client layout fixes)", "Round 6 (XP bar spacing + Net Gold only,
+Reviewer G gate)", "Round 7 (icon pack integration, Reviewer H gate)",
+and "Verification snapshot" sections.
 
 Goal: give players useful in-game leveling/farming feedback (XP/hour, time
 to level, gold earned/spent/net, active-time-based rates) without requiring
