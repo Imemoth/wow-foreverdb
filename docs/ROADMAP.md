@@ -21,7 +21,7 @@ polish and distribution work.
   - herbalism
   - disenchant
 - In-game Session Tracker (XP/hour, gold, active-time rates, compact HUD,
-  detailed window): repo-complete; live Forever acceptance PENDING.
+  detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
 - Version: **0.8.2-alpha**
@@ -52,9 +52,10 @@ Recent Sessions Net-Gold-only) with a mandatory independent Reviewer G
 gate, and an icon-pack-integration round (7 local addon-packaged TGA
 icons) with a mandatory independent Reviewer H gate — all PASS, zero
 blocking findings — are all fixed where applicable and repo-side
-re-verified). **Live Forever-client acceptance PENDING regardless.** See
-the acceptance ledger's "Review round 2", "Review round 3 (UI/UX
-polish)", "Review round 4 (dimensioned spec + scrollbar fix)", "Round 5
+re-verified). **Live Forever-client acceptance: PASS** (human tester,
+full checklist — see the acceptance ledger's "Live Forever acceptance"
+section). See also "Review round 2", "Review round 3 (UI/UX polish)",
+"Review round 4 (dimensioned spec + scrollbar fix)", "Round 5
 (live-client layout fixes)", "Round 6 (XP bar spacing + Net Gold only,
 Reviewer G gate)", "Round 7 (icon pack integration, Reviewer H gate)",
 and "Verification snapshot" sections.
@@ -84,7 +85,7 @@ the Companion, addon-only for V1.
       schema remains **9** and `ForeverDB_Export` carries no session data.
 - [x] Simulated Lua smoke coverage (`tests/session_tracker_smoke.lua`,
       `tests/session_ui_smoke.lua`) and CI compile/test steps.
-- [ ] Live Forever client acceptance — **PENDING**, see the checklist in
+- [x] Live Forever client acceptance — **PASS**, see the checklist in
       the acceptance ledger below.
 
 Repo-side verification and the live-acceptance checklist:
