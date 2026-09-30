@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.4.1-alpha"
+FDB.VERSION = "0.5.0-alpha"
 FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
@@ -109,8 +109,11 @@ local function registerSlashCommands()
         elseif command == "debug" then
             FDB.DEBUG = not FDB.DEBUG
             print(PREFIX, "debug:", FDB.DEBUG and "on" or "off")
+        elseif command == "session" or command:match("^session%s+") then
+            local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
+            FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
@@ -121,6 +124,7 @@ FDB.EventFrame = frame
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 frame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -128,6 +132,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if loadedAddon ~= addonName then return end
 
         FDB:InitializeDatabase()
+        FDB:InitializeSessionTracker()
+        FDB:InitializeSessionUI()
         FDB:InitializeGuildApiProbe()
         FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()
@@ -142,6 +148,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:Debug("loaded", FDB.VERSION, "schema", FDB.SCHEMA_VERSION)
     elseif event == "PLAYER_LOGIN" then
         FDB:EnsureInstallationId()
+        FDB:SessionPlayerReady()
+        if FDB.SyncSessionHUDForActiveCharacter then
+            FDB:SyncSessionHUDForActiveCharacter()
+        end
 
         if C_Map and C_Map.GetBestMapForUnit then
             local mapId =
@@ -153,7 +163,20 @@ frame:SetScript("OnEvent", function(_, event, ...)
         end
 
         FDB:BuildExportSnapshot()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- SessionPlayerReady() may not have succeeded yet at PLAYER_LOGIN
+        -- (the player GUID can be briefly unavailable during a slow
+        -- character-select handoff); SessionTracker.lua's own fallback
+        -- listener retries it here. Both calls are idempotent/safe to
+        -- repeat on every subsequent PLAYER_ENTERING_WORLD (zone change,
+        -- reload): SessionPlayerReady() no-ops once a session is active,
+        -- and this only re-applies already-persisted HUD settings.
+        FDB:SessionPlayerReady()
+        if FDB.SyncSessionHUDForActiveCharacter then
+            FDB:SyncSessionHUDForActiveCharacter()
+        end
     elseif event == "PLAYER_LOGOUT" then
+        FDB:SessionBeforeLogout()
         FDB:PrepareForSave()
     end
 end)

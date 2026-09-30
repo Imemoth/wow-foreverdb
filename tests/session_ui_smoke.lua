@@ -1,0 +1,2122 @@
+-- Run from the repository root: lua5.4 tests/session_ui_smoke.lua
+-- Simulated WoW frame APIs; this is NOT live Forever client acceptance.
+-- SessionUI.lua must render tracker snapshots only; it must never
+-- calculate XP/gold/time itself.
+local consolePrint = print
+local passed = 0
+
+local function equal(actual, expected, label)
+    if actual ~= expected then
+        error((label or "value") .. ": " .. tostring(actual) .. " ~= " .. tostring(expected))
+    end
+end
+
+local function truthy(value, label)
+    if not value then
+        error((label or "value") .. " expected truthy, got " .. tostring(value))
+    end
+end
+
+local function falsy(value, label)
+    if value then
+        error((label or "value") .. " expected falsy, got " .. tostring(value))
+    end
+end
+
+-- A widget "has layout" only if it received a real SetPoint anchor and,
+-- where the widget requires one, a positive explicit size. Checking that
+-- a field merely exists, or that GetText() returns a value, proves
+-- nothing about whether it was ever actually positioned.
+-- Reviewer C finding: a bare "at least one SetPoint call happened" check
+-- would still pass a degenerate `obj:SetPoint()` call with no arguments
+-- at all -- it proves a call happened, not that it anchored anywhere
+-- real. Require the most recent anchor to carry a real point, a real
+-- relativeTo, and a real relativePoint.
+local function hasAnchor(obj)
+    if obj == nil or obj.points == nil or #obj.points == 0 then return false end
+    local anchor = obj.points[#obj.points]
+    return type(anchor.point) == "string" and anchor.point ~= ""
+        and anchor.relativeTo ~= nil
+        and type(anchor.relativePoint) == "string" and anchor.relativePoint ~= ""
+end
+
+local function hasPositiveSize(obj)
+    return obj ~= nil
+        and type(obj.width) == "number" and obj.width > 0
+        and type(obj.height) == "number" and obj.height > 0
+end
+
+-- Shared geometry mixin: real WoW Region-derived objects (frames, font
+-- strings, textures) all support SetPoint/ClearAllPoints/SetSize with the
+-- same semantics. A prior version of this mock made SetPoint/SetSize
+-- either no-ops or single-anchor-only, which let production code create
+-- widgets with no real anchor or size at all without any test noticing.
+-- This mock now records every anchor (SetPoint is cumulative until
+-- ClearAllPoints, exactly like the real API) and the last explicit size,
+-- so a missing SetPoint/SetSize call is directly observable as
+-- `#obj.points == 0` / `obj.width == nil`.
+local function addGeometry(obj)
+    obj.points = {}
+    obj.width = nil
+    obj.height = nil
+
+    function obj:SetPoint(point, relativeTo, relativePoint, x, y)
+        local anchor = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y }
+        table.insert(self.points, anchor)
+        self.point = anchor -- last-set anchor, for single-anchor call sites
+    end
+
+    function obj:GetPoint(index)
+        local anchor = self.points[index or 1]
+        if not anchor then return nil end
+        return anchor.point, anchor.relativeTo, anchor.relativePoint, anchor.x, anchor.y
+    end
+
+    function obj:GetNumPoints() return #self.points end
+
+    function obj:ClearAllPoints()
+        self.points = {}
+        self.point = nil
+    end
+
+    function obj:SetSize(width, height)
+        self.width = width
+        self.height = height
+    end
+
+    function obj:SetWidth(width) self.width = width end
+    function obj:SetHeight(height) self.height = height end
+    function obj:GetWidth() return self.width or 0 end
+    function obj:GetHeight() return self.height or 0 end
+end
+
+local function makeFontString()
+    local fs = { text = "", color = { 1, 1, 1 } }
+    addGeometry(fs)
+    function fs:SetText(t) self.text = t end
+    function fs:GetText() return self.text end
+    function fs:SetTextColor(r, g, b) self.color = { r, g, b } end
+    function fs:SetJustifyH(justify) self.justifyH = justify end
+    function fs:SetFontObject() end
+    function fs:SetWordWrap(wrap) self.wordWrap = wrap end
+    fs.shown = true
+    function fs:Show() self.shown = true end
+    function fs:Hide() self.shown = false end
+    function fs:IsShown() return self.shown end
+    return fs
+end
+
+local function makeTexture()
+    local tex = {}
+    addGeometry(tex)
+    function tex:SetAllPoints(target)
+        self.allPointsTarget = target or true
+        table.insert(self.points, { point = "ALL", relativeTo = target })
+    end
+    function tex:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
+    function tex:SetTexture(path) self.texturePath = path end
+    tex.shown = true
+    function tex:Show() self.shown = true end
+    function tex:Hide() self.shown = false end
+    function tex:IsShown() return self.shown end
+    return tex
+end
+
+local function makeFrame(withBackdropMethods)
+    local frame = { shown = true, events = {}, scripts = {}, moving = false }
+    addGeometry(frame)
+
+    function frame:SetMovable() end
+    function frame:EnableMouse() end
+    function frame:RegisterForDrag() end
+    function frame:SetScript(name, handler) self.scripts[name] = handler end
+    function frame:GetScript(name) return self.scripts[name] end
+    function frame:Show() self.shown = true end
+    function frame:Hide() self.shown = false end
+    function frame:IsShown() return self.shown end
+    function frame:SetFrameStrata() end
+    function frame:SetFrameLevel() end
+    function frame:SetAlpha() end
+    function frame:SetScale() end
+    function frame:StartMoving() self.moving = true end
+    function frame:StopMovingOrSizing() self.moving = false end
+    function frame:CreateFontString(_, layer, template)
+        local fs = makeFontString()
+        fs.layer = layer
+        fs.template = template
+        return fs
+    end
+    function frame:CreateTexture(_, layer)
+        local tex = makeTexture()
+        tex.layer = layer
+        return tex
+    end
+    function frame:RegisterEvent(event) self.events[event] = true end
+    function frame:SetText(t) self.text = t end
+    function frame:GetText() return self.text end
+    function frame:SetEnabled(v) self.enabled = v end
+    function frame:IsEnabled() return self.enabled end
+    function frame:SetScrollChild(child) self.scrollChild = child end
+    function frame:SetMinMaxValues(minValue, maxValue)
+        self.minValue = minValue
+        self.maxValue = maxValue
+    end
+    function frame:SetValue(v) self.value = v end
+    function frame:SetStatusBarColor() end
+    function frame:SetStatusBarTexture(path) self.statusBarTexture = path end
+    function frame:SetVerticalScroll(v) self.verticalScroll = v end
+    function frame:GetVerticalScroll() return self.verticalScroll or 0 end
+    function frame:EnableMouseWheel(v) self.mouseWheelEnabled = v end
+
+    if withBackdropMethods then
+        function frame:SetBackdrop(bd) self.backdrop = bd end
+        function frame:SetBackdropColor(...) self.backdropColor = { ... } end
+        function frame:SetBackdropBorderColor(...) self.backdropBorderColor = { ... } end
+    end
+
+    return frame
+end
+
+local function setup(options)
+    options = options or {}
+    local hasBackdropMixin = options.hasBackdropMixin
+    if hasBackdropMixin == nil then hasBackdropMixin = true end
+
+    local state = {
+        now = 1000,
+        guid = "Player-1-000001",
+        name = "Vesperix",
+        realm = "TestRealm",
+        level = 20,
+        xp = 1000,
+        xpMax = 10000,
+        money = 5000,
+        frames = {},
+        tickers = {},
+    }
+
+    local FDB = {}
+
+    GetServerTime = function() return state.now end
+    GetTime = function() return state.now end
+    time = function() return state.now end
+    date = os.date -- WoW exposes os.date as the global `date`; the addon sandbox has no `os` table
+
+    UnitGUID = function(unit) if unit == "player" then return state.guid end end
+    UnitName = function(unit) if unit == "player" then return state.name end end
+    GetRealmName = function() return state.realm end
+    UnitLevel = function(unit) if unit == "player" then return state.level end end
+    UnitXP = function(unit) if unit == "player" then return state.xp end end
+    UnitXPMax = function(unit) if unit == "player" then return state.xpMax end end
+    GetMoney = function() return state.money end
+
+    UIParent = { name = "UIParent" }
+
+    -- BackdropTemplateMixin is only present on clients that registered the
+    -- "BackdropTemplate" virtual XML template. Passing that template name
+    -- to CreateFrame on a client without it is exactly the real-world
+    -- failure mode (an unrecognized template errors inside CreateFrame
+    -- itself, before any code can inspect the returned frame), so the
+    -- mock reproduces that instead of silently ignoring the argument.
+    BackdropTemplateMixin = hasBackdropMixin and {} or nil
+
+    CreateFrame = function(frameType, name, _, template)
+        if template == "BackdropTemplate" and not BackdropTemplateMixin then
+            error("CreateFrame: template 'BackdropTemplate' is not registered on this client")
+        end
+        local frame = makeFrame(template == "BackdropTemplate")
+        frame.frameName = name
+        frame.frameType = frameType
+        frame.requestedTemplate = template
+        function frame:GetName() return self.frameName end
+        if name then _G[name] = frame end -- real CreateFrame registers named frames globally
+        state.frames[#state.frames + 1] = frame
+        return frame
+    end
+
+    function state:event(event, ...)
+        for _, frame in ipairs(self.frames) do
+            if frame.events[event] then frame.scripts.OnEvent(frame, event, ...) end
+        end
+    end
+
+    C_Timer = {
+        NewTicker = function(interval, callback)
+            local ticker = { interval = interval, callback = callback }
+            state.tickers[#state.tickers + 1] = ticker
+            return ticker
+        end,
+        After = function() end,
+    }
+
+    function state:fireTickers()
+        for _, ticker in ipairs(self.tickers) do
+            ticker.callback()
+        end
+    end
+
+    ForeverDB_Saved = nil
+    ForeverDB_Export = nil
+
+    assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionTracker.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionUI.lua"))("ForeverDB", FDB)
+
+    FDB:InitializeDatabase()
+
+    return FDB, state
+end
+
+local function test(name, run)
+    local ok, err = pcall(run)
+    if not ok then error(name .. ": " .. tostring(err)) end
+    passed = passed + 1
+    consolePrint("PASS (simulated): " .. name)
+end
+
+test("HUD initializes without optional BackdropTemplate helpers", function()
+    local FDB = setup({ hasBackdropMixin = false })
+    truthy(FDB:SessionPlayerReady())
+
+    local ok, err = pcall(function() FDB:InitializeSessionUI() end)
+    truthy(ok, tostring(err))
+    truthy(FDB.SessionHUDFrame)
+    falsy(FDB.SessionHUDFrame.backdrop)
+    truthy(FDB.SessionHUDFrame.fallbackBackground)
+end)
+
+test("HUD renders Gold/hr from earnedPerHour and Net/hr separately", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    -- Override the snapshot source directly: SessionUI must render exactly
+    -- what GetSessionSnapshot() returns, never recompute XP/gold/time.
+    FDB.GetSessionSnapshot = function()
+        return {
+            xpPerHour = 28400,
+            xpGained = 16320,
+            etaSeconds = 4440, -- 1h14m
+            isMaxLevel = false,
+            earnedPerHour = 74200, -- 7g 42s
+            netPerHour = 55800,    -- 5g 58s
+            activeSeconds = 2264,  -- 0h37m
+            status = "RUNNING",
+            characterName = state.name,
+        }
+    end
+
+    FDB:RefreshSessionUI()
+
+    local frame = FDB.SessionHUDFrame
+    equal(frame.xpHrValue:GetText(), "28.4k")
+    equal(frame.xpGainedValue:GetText(), "16.3k")
+    equal(frame.toLevelValue:GetText(), "01:14")
+    equal(frame.goldHrValue:GetText(), "7g 42s")
+    equal(frame.netHrValue:GetText(), "5g 58s")
+    equal(frame.activeValue:GetText(), "00:37")
+    truthy(frame.goldHrValue:GetText() ~= frame.netHrValue:GetText())
+end)
+
+test("HUD hide does not pause the session", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    local newShown = FDB:ToggleSessionHUD()
+    falsy(newShown)
+    falsy(FDB.SessionHUDFrame:IsShown())
+
+    local snapshot = FDB:GetSessionSnapshot()
+    equal(snapshot.status, "RUNNING")
+end)
+
+test("HUD status text is color-coded per status, distinctly for each state", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    local function colorFor(status)
+        FDB.GetSessionSnapshot = function()
+            return { status = status, activeSeconds = 0 }
+        end
+        FDB:RefreshSessionUI()
+        return frame.statusText.color
+    end
+
+    local runningColor = colorFor("RUNNING")
+    local idleColor = colorFor("IDLE")
+    local pausedColor = colorFor("PAUSED")
+
+    -- Each state must be visually distinct from the others (restrained,
+    -- not harsh -- checked qualitatively below, not exact RGB values).
+    truthy(runningColor[1] ~= idleColor[1] or runningColor[2] ~= idleColor[2]
+        or runningColor[3] ~= idleColor[3])
+    truthy(idleColor[1] ~= pausedColor[1] or idleColor[2] ~= pausedColor[2]
+        or idleColor[3] ~= pausedColor[3])
+    truthy(runningColor[1] ~= pausedColor[1] or runningColor[2] ~= pausedColor[2]
+        or runningColor[3] ~= pausedColor[3])
+
+    -- RUNNING reads as the greenest (G channel clearly dominant), PAUSED
+    -- as the most red-leaning of the three, IDLE in between -- restrained
+    -- rather than harsh (no channel saturated to 1.0).
+    truthy(runningColor[2] > runningColor[1], "RUNNING should read greenish")
+    truthy(pausedColor[1] > pausedColor[2], "PAUSED should read orange/red-leaning")
+    for _, color in ipairs({ runningColor, idleColor, pausedColor }) do
+        for _, channel in ipairs(color) do
+            truthy(channel < 1.0, "status colors should be restrained, not fully saturated")
+        end
+    end
+end)
+
+test("HUD lock disables drag movement while unlock allows it", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    local frame = FDB.SessionHUDFrame
+    local onDragStart = frame:GetScript("OnDragStart")
+    truthy(onDragStart)
+
+    truthy(FDB:SetSessionHUDLocked(true))
+    onDragStart(frame)
+    falsy(frame.moving)
+
+    truthy(FDB:SetSessionHUDLocked(false))
+    onDragStart(frame)
+    truthy(frame.moving)
+end)
+
+test("HUD drag stop persists position through tracker API", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    local frame = FDB.SessionHUDFrame
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMRIGHT", UIParent, "CENTER", 12, -34) -- simulates the drag having moved the frame
+
+    local onDragStop = frame:GetScript("OnDragStop")
+    truthy(onDragStop)
+    onDragStop(frame)
+
+    local settings = FDB:GetSessionHUDSettings()
+    equal(settings.hudPoint, "BOTTOMRIGHT")
+    equal(settings.hudRelativePoint, "CENTER")
+    equal(settings.hudX, 12)
+    equal(settings.hudY, -34)
+end)
+
+-- Reviewer B findings: HUD position/visibility must restore for the
+-- active character (not just at UI-init time, before any character is
+-- known), and CreateFrame must never be asked for an unregistered
+-- "BackdropTemplate" when BackdropTemplateMixin is absent. -------------
+
+test("HUD position and visibility restore for the active character after login", function()
+    local FDB, state = setup()
+
+    -- Real Core.lua order: InitializeSessionTracker/InitializeSessionUI
+    -- both run at ADDON_LOADED, before any character is known;
+    -- SessionPlayerReady() only runs later, at PLAYER_LOGIN. Pre-seed this
+    -- character's saved HUD settings before SessionPlayerReady ever runs,
+    -- exactly like a returning character reading its own SavedVariables.
+    local sessions = FDB:GetSessionsRoot()
+    sessions.characters[state.guid] = {
+        ui = {
+            hudShown = false, hudLocked = true,
+            hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+            hudX = -50, hudY = 50,
+        },
+        history = {},
+    }
+
+    FDB:InitializeSessionUI() -- no active character yet
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    truthy(FDB:SessionPlayerReady()) -- character becomes active only now
+
+    -- SessionTracker.lua must not depend on SessionUI.lua (design spec
+    -- §4.1), so Core.lua -- the integration point -- is responsible for
+    -- calling this after SessionPlayerReady() on PLAYER_LOGIN; see the
+    -- Core-integration test below for proof that it actually does.
+    FDB:SyncSessionHUDForActiveCharacter()
+
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.relativePoint, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
+end)
+
+test("HUD never requests the BackdropTemplate virtual template when the mixin is absent", function()
+    local FDB = setup({ hasBackdropMixin = false })
+    truthy(FDB:SessionPlayerReady())
+
+    -- With the earlier real-CreateFrame mock, requesting "BackdropTemplate"
+    -- while BackdropTemplateMixin is nil errors inside CreateFrame itself,
+    -- exactly like an unrecognized virtual template does on a real client.
+    local ok, err = pcall(function() FDB:InitializeSessionUI() end)
+    truthy(ok, tostring(err))
+end)
+
+-- Task 5: detailed window, history UI, reset confirmation, commands -------
+
+test("session command with no args toggles detailed window", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    truthy(FDB:HandleSessionCommand(""))
+    truthy(FDB.SessionDetailWindow:IsShown())
+
+    truthy(FDB:HandleSessionCommand(""))
+    falsy(FDB.SessionDetailWindow:IsShown())
+end)
+
+test("pause and resume commands delegate to tracker APIs", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    truthy(FDB:HandleSessionCommand("pause"))
+    equal(FDB:GetSessionSnapshot().status, "PAUSED")
+
+    truthy(FDB:HandleSessionCommand("resume"))
+    equal(FDB:GetSessionSnapshot().status, "RUNNING")
+end)
+
+test("reset command opens confirmation and does not reset immediately", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local originalStartedAt = FDB.DB.sessions.characters[state.guid].current.startedAt
+
+    truthy(FDB:HandleSessionCommand("reset"))
+
+    truthy(FDB.SessionResetConfirmationPending)
+    equal(FDB.DB.sessions.characters[state.guid].current.startedAt, originalStartedAt)
+end)
+
+test("confirmed reset delegates exactly once", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    local resetCalls = 0
+    local realResetSession = FDB.ResetSession
+    FDB.ResetSession = function(self, ...)
+        resetCalls = resetCalls + 1
+        return realResetSession(self, ...)
+    end
+
+    truthy(FDB:HandleSessionCommand("reset"))
+    equal(resetCalls, 0)
+
+    FDB:ConfirmSessionReset()
+    equal(resetCalls, 1)
+    falsy(FDB.SessionResetConfirmationPending)
+end)
+
+test("reset confirmation uses StaticPopup when available and only resets on accept", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Unlike every other reset test in this file, define StaticPopupDialogs/
+    -- StaticPopup_Show so ShowSessionResetConfirmation takes the primary
+    -- (non-fallback) path a live client with StaticPopup support would
+    -- actually execute.
+    local shownKeys = {}
+    StaticPopupDialogs = {}
+    StaticPopup_Show = function(key) shownKeys[#shownKeys + 1] = key end
+
+    FDB:ShowSessionResetConfirmation()
+    truthy(StaticPopupDialogs["FOREVERDB_SESSION_RESET"])
+    equal(shownKeys[1], "FOREVERDB_SESSION_RESET")
+    truthy(FDB.SessionResetConfirmationPending)
+
+    local resetCalls = 0
+    local realResetSession = FDB.ResetSession
+    FDB.ResetSession = function(self, ...)
+        resetCalls = resetCalls + 1
+        return realResetSession(self, ...)
+    end
+
+    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnCancel()
+    equal(resetCalls, 0)
+    falsy(FDB.SessionResetConfirmationPending)
+
+    FDB:ShowSessionResetConfirmation()
+    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnAccept()
+    equal(resetCalls, 1)
+    falsy(FDB.SessionResetConfirmationPending)
+
+    StaticPopupDialogs = nil
+    StaticPopup_Show = nil
+end)
+
+test("timeout command accepts positive integer minutes and rejects invalid values", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    truthy(FDB:HandleSessionCommand("timeout 90"))
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    falsy(FDB:HandleSessionCommand("timeout 0"))
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+
+    falsy(FDB:HandleSessionCommand("timeout abc"))
+    equal(FDB:GetSessionSettings().offlineTimeout, 5400)
+end)
+
+test("idle command accepts positive integer minutes and rejects invalid values", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    truthy(FDB:HandleSessionCommand("idle 10"))
+    equal(FDB:GetSessionSettings().inactivityTimeout, 600)
+
+    falsy(FDB:HandleSessionCommand("idle -3"))
+    equal(FDB:GetSessionSettings().inactivityTimeout, 600)
+end)
+
+test("hud and lock commands toggle persisted HUD state", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    truthy(FDB:GetSessionHUDSettings().hudShown)
+    truthy(FDB:HandleSessionCommand("hud"))
+    falsy(FDB:GetSessionHUDSettings().hudShown)
+
+    falsy(FDB:GetSessionHUDSettings().hudLocked)
+    truthy(FDB:HandleSessionCommand("lock"))
+    truthy(FDB:GetSessionHUDSettings().hudLocked)
+end)
+
+test("unknown session subcommand prints usage and returns false", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    falsy(FDB:HandleSessionCommand("bogus"))
+end)
+
+test("detailed window creates and refreshes KPI, timing, character and rates", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 120
+    state.xp = state.xp + 60
+    state.money = state.money + 500
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame:IsShown())
+
+    equal(frame.kpi.xpGained.value:GetText(), "60")
+    equal(frame.kpi.goldEarned.value:GetText(), "5s")
+    truthy(frame.timing.session.value:GetText() ~= "")
+    truthy(frame.timing.active.value:GetText() ~= "")
+    equal(frame.timing.status.value:GetText(), "RUNNING")
+    truthy(frame.timing.status.value.color[2] > frame.timing.status.value.color[1],
+        "RUNNING status should read greenish, matching the HUD's status coloring")
+    equal(frame.character.level.value:GetText(), tostring(state.level))
+    truthy(frame.rates.earnedPerHour.value:GetText() ~= "")
+
+    truthy(frame.pauseButton)
+    truthy(frame.resumeButton)
+    truthy(frame.resetButton)
+    truthy(frame.lockButton)
+    truthy(frame.hudButton)
+end)
+
+test("detailed window renders recent session history rows", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame.historyRows[1])
+    truthy(frame.historyRows[1].columns[3]:GetText():find("40", 1, true))
+end)
+
+
+test("detail window position is saved on drag and restored across a simulated reload", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMRIGHT", UIParent, "CENTER", 30, -20) -- simulates the drag having moved the window
+
+    local onDragStop = frame:GetScript("OnDragStop")
+    truthy(onDragStop)
+    onDragStop(frame)
+
+    local settings = FDB:GetSessionHUDSettings()
+    equal(settings.detailPoint, "BOTTOMRIGHT")
+    equal(settings.detailRelativePoint, "CENTER")
+    equal(settings.detailX, 30)
+    equal(settings.detailY, -20)
+
+    -- Simulate a reload: the window's open/closed state is intentionally
+    -- not persisted (a reload always starts with it closed), so this
+    -- rebuilds a fresh window object the way a real reload would, and
+    -- only its position must be restored on the next open.
+    FDB.SessionDetailWindow = nil
+    truthy(FDB:ToggleSessionWindow())
+    local newFrame = FDB.SessionDetailWindow
+    truthy(newFrame ~= frame)
+    equal(newFrame.point.point, "BOTTOMRIGHT")
+    equal(newFrame.point.relativePoint, "CENTER")
+    equal(newFrame.point.x, 30)
+    equal(newFrame.point.y, -20)
+end)
+
+test("detail window builds safely and centers when saved detail position is corrupted", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local char = FDB.DB.sessions.characters[state.guid]
+    char.ui.detailPoint = 42
+    char.ui.detailX = "bad"
+
+    local ok, err = pcall(function() return FDB:ToggleSessionWindow() end)
+    truthy(ok, "ToggleSessionWindow must not error on corrupted saved detail position: " .. tostring(err))
+    local frame = FDB.SessionDetailWindow
+    truthy(frame)
+    equal(frame.point.point, "CENTER")
+    equal(frame.point.relativePoint, "CENTER")
+    equal(frame.point.x, 0)
+    equal(frame.point.y, 0)
+end)
+
+test("Recent Sessions renders newest-first: row 1 is the most recently archived session", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+
+    -- Storage order (char.history / GetSessionHistory()) is
+    -- oldest-appended-first: this is an internal detail the eviction
+    -- logic relies on (table.remove(char.history, 1) evicts the
+    -- oldest), NOT a display contract. The UI must present the most
+    -- recently archived session first regardless of storage order.
+    for _, xpTag in ipairs({ 10, 20, 30 }) do
+        state.now = state.now + 61
+        state.xp = state.xp + xpTag
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    -- The XP Gained column is its own FontString now (real table column,
+    -- not a bullet-joined field), so checking it directly is unambiguous.
+    equal(frame.historyRows[1].columns[3]:GetText(), "+30")
+    equal(frame.historyRows[2].columns[3]:GetText(), "+20")
+    equal(frame.historyRows[3].columns[3]:GetText(), "+10")
+end)
+
+test("Started and history Date/Time show a human-readable timestamp, not a raw UNIX epoch", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local startedAt = state.now
+
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local startedText = frame.timing.started.value:GetText()
+    falsy(startedText == tostring(startedAt), "Started must not display the raw epoch number")
+    truthy(startedText:find("%d%d%d%d") ~= nil, "Started should show a real calendar date")
+
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    local rowText = frame.historyRows[1].columns[1]:GetText()
+    local endedAt = FDB:GetSessionHistory()[1].endedAt
+    falsy(rowText:find(tostring(endedAt), 1, true) ~= nil,
+        "history row must not embed the raw epoch number for its date/time column")
+end)
+
+test("a missing or invalid timestamp falls back to a safe placeholder", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    -- Snapshot with no startedAt at all (nil) must not error or display
+    -- something misleading.
+    FDB.GetSessionSnapshot = function()
+        return {
+            xpPerHour = nil, etaSeconds = nil, isMaxLevel = false,
+            earnedPerHour = nil, netPerHour = nil, activeSeconds = 0,
+            status = "RUNNING", startedAt = nil,
+        }
+    end
+
+    local ok, err = pcall(function() FDB:RefreshSessionDetailWindow() end)
+    truthy(ok, "must not error on a missing startedAt: " .. tostring(err))
+    equal(frame.timing.started.value:GetText(), "--")
+end)
+
+test("detailed window controls call the same tracker APIs as slash commands", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    frame.pauseButton.scripts.OnClick(frame.pauseButton)
+    equal(FDB:GetSessionSnapshot().status, "PAUSED")
+
+    frame.resumeButton.scripts.OnClick(frame.resumeButton)
+    equal(FDB:GetSessionSnapshot().status, "RUNNING")
+
+    frame.resetButton.scripts.OnClick(frame.resetButton)
+    truthy(FDB.SessionResetConfirmationPending)
+    FDB:ConfirmSessionReset()
+    falsy(FDB.SessionResetConfirmationPending)
+
+    falsy(FDB:GetSessionHUDSettings().hudLocked)
+    frame.lockButton.scripts.OnClick(frame.lockButton)
+    truthy(FDB:GetSessionHUDSettings().hudLocked)
+
+    truthy(FDB:GetSessionHUDSettings().hudShown)
+    frame.hudButton.scripts.OnClick(frame.hudButton)
+    falsy(FDB:GetSessionHUDSettings().hudShown)
+end)
+
+test("close button hides the window without pausing, resetting, or losing its saved position", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame:IsShown())
+    truthy(frame.closeButton)
+
+    frame.closeButton.scripts.OnClick(frame.closeButton)
+
+    falsy(frame:IsShown())
+    equal(FDB:GetSessionSnapshot().status, "RUNNING")
+    falsy(FDB.SessionResetConfirmationPending)
+
+    -- /fdb session must still toggle it back open -- closing is not a
+    -- one-way trip, and the position saved earlier (build-time default
+    -- here) must not have been reset by closing.
+    local settingsBeforeReopen = FDB:GetSessionHUDSettings()
+    truthy(FDB:HandleSessionCommand(""))
+    truthy(frame:IsShown())
+    local settingsAfterReopen = FDB:GetSessionHUDSettings()
+    equal(settingsAfterReopen.detailPoint, settingsBeforeReopen.detailPoint)
+    equal(settingsAfterReopen.detailX, settingsBeforeReopen.detailX)
+end)
+
+test("close button has a real anchor and size", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(hasAnchor(frame.closeButton))
+    truthy(hasPositiveSize(frame.closeButton))
+end)
+
+test("detail window registers for ESC-close when UISpecialFrames is available", function()
+    local FDB = setup()
+    UISpecialFrames = {}
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+
+    local found = false
+    for _, name in ipairs(UISpecialFrames) do
+        if name == FDB.SessionDetailWindow:GetName() then found = true end
+    end
+    truthy(found, "detail window frame name must be registered in UISpecialFrames for ESC-close")
+end)
+
+test("detail window does not error when UISpecialFrames is unavailable", function()
+    local FDB = setup()
+    UISpecialFrames = nil
+    local ok, err = pcall(function()
+        truthy(FDB:SessionPlayerReady())
+        return FDB:ToggleSessionWindow()
+    end)
+    truthy(ok, "must not error when UISpecialFrames is absent: " .. tostring(err))
+end)
+
+test("the registered periodic ticker also refreshes an already-open detailed window", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    truthy(frame:IsShown())
+
+    equal(frame.kpi.xpGained.value:GetText(), "0")
+
+    state.now = state.now + 60
+    state.xp = state.xp + 50
+    state.money = state.money + 100
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+
+    -- Deliberately do NOT call RefreshSessionDetailWindow() directly: this
+    -- must be driven by the actually-registered periodic ticker callback
+    -- (the same one a live client fires roughly once a second), which is
+    -- exactly the wiring under test.
+    truthy(#state.tickers >= 1)
+    state:fireTickers()
+
+    equal(frame.kpi.xpGained.value:GetText(), "50")
+    equal(frame.kpi.goldEarned.value:GetText(), "1s")
+    equal(frame.timing.active.value:GetText(), "00:01:00")
+    equal(frame.character.xpBar.maxValue, state.xpMax)
+    equal(frame.character.xpBar.value, state.xp)
+end)
+
+test("the periodic ticker refreshes the detailed window even while the HUD is hidden", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    falsy(FDB:ToggleSessionHUD()) -- HUD hidden; detailed window unaffected
+    falsy(FDB.SessionHUDFrame:IsShown())
+
+    state.now = state.now + 30
+    state.xp = state.xp + 15
+    state:event("PLAYER_XP_UPDATE")
+    state:fireTickers()
+
+    equal(frame.kpi.xpGained.value:GetText(), "15")
+end)
+
+-- Task 6: Core integration (load order, event wiring, slash routing) ------
+
+local function setupCoreIntegration()
+    local state = {
+        now = 1000,
+        guid = "Player-1-000001",
+        name = "Vesperix",
+        realm = "TestRealm",
+        level = 20,
+        xp = 1000,
+        xpMax = 10000,
+        money = 5000,
+        frames = {},
+        tickers = {},
+        messages = {},
+    }
+
+    local FDB = {}
+
+    GetServerTime = function() return state.now end
+    GetTime = function() return state.now end
+    time = function() return state.now end
+    date = os.date -- WoW exposes os.date as the global `date`; the addon sandbox has no `os` table
+
+    UnitGUID = function(unit) if unit == "player" then return state.guid end end
+    UnitName = function(unit) if unit == "player" then return state.name end end
+    GetRealmName = function() return state.realm end
+    UnitLevel = function(unit) if unit == "player" then return state.level end end
+    UnitXP = function(unit) if unit == "player" then return state.xp end end
+    UnitXPMax = function(unit) if unit == "player" then return state.xpMax end end
+    GetMoney = function() return state.money end
+
+    UIParent = { name = "UIParent" }
+    C_Map = nil -- absent in this fixture; Core.lua must guard this optional API
+    BackdropTemplateMixin = {}
+
+    CreateFrame = function(_, name, _, template)
+        local frame = makeFrame(template == "BackdropTemplate")
+        frame.frameName = name
+        function frame:GetName() return self.frameName end
+        if name then _G[name] = frame end
+        state.frames[#state.frames + 1] = frame
+        return frame
+    end
+
+    function state:event(event, ...)
+        for _, frame in ipairs(self.frames) do
+            if frame.events[event] then frame.scripts.OnEvent(frame, event, ...) end
+        end
+    end
+
+    C_Timer = {
+        NewTicker = function(interval, callback)
+            state.tickers[#state.tickers + 1] = { interval = interval, callback = callback }
+            return {}
+        end,
+        After = function() end,
+    }
+
+    SlashCmdList = {}
+    print = function(...)
+        local parts = {}
+        for i = 1, select("#", ...) do parts[i] = tostring(select(i, ...)) end
+        state.messages[#state.messages + 1] = table.concat(parts, " ")
+    end
+
+    ForeverDB_Saved = nil
+    ForeverDB_Export = nil
+
+    assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/Exporter.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionTracker.lua"))("ForeverDB", FDB)
+    assert(loadfile("addon/ForeverDB/SessionUI.lua"))("ForeverDB", FDB)
+
+    -- Collector/UI modules this fixture does not load; Core.lua's
+    -- ADDON_LOADED handler still calls them, so stub them as no-ops. This
+    -- keeps the integration test scoped to session-tracker wiring instead
+    -- of duplicating the unrelated collector-smoke fixture.
+    for _, name in ipairs({
+        "InitializeGuildApiProbe", "InitializeGuildbookTracker",
+        "InitializeGatheringTracker", "InitializeSkinningTracker",
+        "InitializeFishingPoolTracker", "InitializeDisenchantTracker",
+        "InitializeLootTracker", "InitializeTooltip",
+    }) do
+        FDB[name] = function() end
+    end
+
+    return FDB, state
+end
+
+test("addon load initializes the session tracker and UI after the database", function()
+    local FDB, state = setupCoreIntegration()
+    local initOrder = {}
+
+    local realInitDB = FDB.InitializeDatabase
+    FDB.InitializeDatabase = function(self, ...)
+        initOrder[#initOrder + 1] = "database"
+        return realInitDB(self, ...)
+    end
+    FDB.InitializeSessionTracker = function(self, ...)
+        initOrder[#initOrder + 1] = "tracker"
+        return FDB.GetSessionsRoot(self) -- keep DB.sessions normalized without full event wiring
+    end
+    FDB.InitializeSessionUI = function() initOrder[#initOrder + 1] = "ui" end
+
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    equal(initOrder[1], "database")
+    truthy(initOrder[2] == "tracker" or initOrder[3] == "tracker")
+    truthy(initOrder[2] == "ui" or initOrder[3] == "ui")
+end)
+
+test("player login calls SessionPlayerReady", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local called = false
+    FDB.SessionPlayerReady = function(self, ...)
+        called = true
+        return true
+    end
+
+    state:event("PLAYER_LOGIN")
+    truthy(called)
+end)
+
+test("real ADDON_LOADED then PLAYER_LOGIN restores this character's saved HUD position, unstubbed", function()
+    local FDB, state = setupCoreIntegration()
+
+    -- Pre-seed a saved HUD position/visibility for this GUID before any
+    -- Core.lua event fires, exactly like a returning character's
+    -- SavedVariables. Nothing here is stubbed: this drives the real
+    -- InitializeSessionTracker/InitializeSessionUI/SessionPlayerReady
+    -- through Core.lua's real ADDON_LOADED -> PLAYER_LOGIN event order.
+    ForeverDB_Saved = {
+        sessions = {
+            characters = {
+                [state.guid] = {
+                    ui = {
+                        hudShown = false, hudLocked = true,
+                        hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+                        hudX = -50, hudY = 50,
+                    },
+                },
+            },
+        },
+    }
+
+    state:event("ADDON_LOADED", "ForeverDB")
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    state:event("PLAYER_LOGIN")
+
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
+end)
+
+test("late GUID: HUD state restores via the PLAYER_ENTERING_WORLD fallback, not only PLAYER_LOGIN", function()
+    local FDB, state = setupCoreIntegration()
+    local realGuid = state.guid
+
+    -- Pre-seed saved HUD state exactly like a returning character, but the
+    -- GUID is NOT yet available at PLAYER_LOGIN (a slow character-select
+    -- handoff), so SessionPlayerReady() only succeeds later at
+    -- PLAYER_ENTERING_WORLD, through SessionTracker.lua's own fallback
+    -- listener rather than Core.lua's PLAYER_LOGIN call. Nothing here is
+    -- stubbed: this drives the real functions through the real event order.
+    ForeverDB_Saved = {
+        sessions = {
+            characters = {
+                [realGuid] = {
+                    ui = {
+                        hudShown = false, hudLocked = true,
+                        hudPoint = "BOTTOMRIGHT", hudRelativePoint = "BOTTOMRIGHT",
+                        hudX = -50, hudY = 50,
+                    },
+                },
+            },
+        },
+    }
+
+    state:event("ADDON_LOADED", "ForeverDB")
+    local frame = FDB.SessionHUDFrame
+    truthy(frame)
+
+    state.guid = nil -- GUID unavailable at PLAYER_LOGIN
+    state:event("PLAYER_LOGIN")
+
+    falsy(FDB.SessionState, "no session should start without a GUID")
+    equal(frame.point.point, "TOPLEFT") -- still at build-time defaults
+
+    state.guid = realGuid -- GUID becomes available moments later
+    state:event("PLAYER_ENTERING_WORLD")
+
+    truthy(FDB.SessionState)
+    equal(FDB.SessionState.guid, realGuid)
+    equal(frame.point.point, "BOTTOMRIGHT")
+    equal(frame.point.x, -50)
+    equal(frame.point.y, 50)
+    falsy(frame:IsShown())
+
+    -- A repeated PLAYER_ENTERING_WORLD (e.g. a later zone change) must be
+    -- idempotent: no new session, no timer reset, no new frames/tickers.
+    local sessionId = FDB.DB.sessions.characters[realGuid].current.id
+    local trackedBefore = FDB.DB.sessions.characters[realGuid].current.trackedSeconds
+    local frameCountBefore = #state.frames
+    local tickerCountBefore = #state.tickers
+
+    state:event("PLAYER_ENTERING_WORLD")
+
+    equal(FDB.DB.sessions.characters[realGuid].current.id, sessionId)
+    equal(FDB.DB.sessions.characters[realGuid].current.trackedSeconds, trackedBefore)
+    equal(#state.frames, frameCountBefore)
+    equal(#state.tickers, tickerCountBefore)
+end)
+
+test("player logout calls SessionBeforeLogout before PrepareForSave", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+    truthy(FDB:SessionPlayerReady())
+
+    local order = {}
+    local realPrepareForSave = FDB.PrepareForSave
+    FDB.SessionBeforeLogout = function(self, ...)
+        order[#order + 1] = "sessionBeforeLogout"
+    end
+    FDB.PrepareForSave = function(self, ...)
+        order[#order + 1] = "prepareForSave"
+        return realPrepareForSave(self, ...)
+    end
+
+    state:event("PLAYER_LOGOUT")
+
+    equal(order[1], "sessionBeforeLogout")
+    equal(order[2], "prepareForSave")
+end)
+
+test("/fdb session delegates to HandleSessionCommand with no args", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local receivedArgs
+    FDB.HandleSessionCommand = function(self, args) receivedArgs = args; return true end
+
+    SlashCmdList.FOREVERDB("session")
+    equal(receivedArgs, "")
+end)
+
+test("/fdb session timeout 45 delegates the raw session arguments", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    local receivedArgs
+    FDB.HandleSessionCommand = function(self, args) receivedArgs = args; return true end
+
+    SlashCmdList.FOREVERDB("session timeout 45")
+    equal(receivedArgs, "timeout 45")
+end)
+
+test("generic help mentions /fdb session", function()
+    local FDB, state = setupCoreIntegration()
+    state:event("ADDON_LOADED", "ForeverDB")
+
+    SlashCmdList.FOREVERDB("not-a-real-command")
+
+    local found = false
+    for _, message in ipairs(state.messages) do
+        if message:find("/fdb session", 1, true) then found = true end
+    end
+    truthy(found)
+end)
+
+-- External review round 2: real layout, not just created widgets --------
+
+test("HUD stat label/value pairs and status/character info all have a real anchor", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    for _, widget in ipairs({
+        frame.xpHrLabel, frame.xpHrValue, frame.xpGainedLabel, frame.xpGainedValue,
+        frame.toLevelLabel, frame.toLevelValue,
+        frame.goldHrLabel, frame.goldHrValue, frame.netHrLabel, frame.netHrValue,
+        frame.activeLabel, frame.activeValue, frame.statusText, frame.characterText,
+    }) do
+        truthy(hasAnchor(widget), "expected a real SetPoint anchor on a HUD stat widget")
+    end
+
+    truthy(hasPositiveSize(frame), "HUD frame must have a positive size")
+end)
+
+test("detailed window KPI, timing, character, rates fields and control buttons are all positioned and sized", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for _, group in ipairs({ frame.kpi, frame.timing, frame.character, frame.rates }) do
+        for key, pair in pairs(group) do
+            if type(pair) == "table" and pair.label and pair.value then
+                truthy(hasAnchor(pair.label), "label " .. tostring(key) .. " must have a real anchor")
+                truthy(hasAnchor(pair.value), "value " .. tostring(key) .. " must have a real anchor")
+            end
+        end
+    end
+
+    for _, button in ipairs({
+        frame.pauseButton, frame.resumeButton, frame.resetButton,
+        frame.lockButton, frame.hudButton,
+    }) do
+        truthy(hasAnchor(button), "control button must have a real anchor")
+        truthy(hasPositiveSize(button), "control button must have a positive size")
+    end
+
+    truthy(hasPositiveSize(frame), "detailed window must have a positive size")
+end)
+
+test("XP progress bar has a real size, anchor, and status bar texture", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local bar = FDB.SessionDetailWindow.character.xpBar
+
+    truthy(hasAnchor(bar), "XP bar must have a real anchor")
+    truthy(hasPositiveSize(bar), "XP bar must have a positive size")
+    truthy(bar.statusBarTexture, "XP bar must have a status bar texture set")
+end)
+
+test("history scroll viewport, content child, and rows all have real, distinct geometry", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    truthy(hasAnchor(frame.historyScroll), "history scroll viewport must have a real anchor")
+    truthy(hasPositiveSize(frame.historyScroll), "history scroll viewport must have a positive size")
+    truthy(hasAnchor(frame.historyContent), "history content child must have a real anchor")
+    truthy(type(frame.historyContent.width) == "number" and frame.historyContent.width > 0,
+        "history content child must have a real width matching the viewport")
+
+    -- A level-up on the first (and only, for this test) archived session
+    -- guarantees a non-empty secondary line, so this test's secondary-
+    -- anchor assertion below stays meaningful regardless of the
+    -- row-collapse behavior for a genuinely empty secondary line (Net
+    -- Gold alone, with no level change, no longer produces one).
+    state.now = state.now + 61
+    state.xpMax = 100
+    state.xp = 90
+    state:event("PLAYER_XP_UPDATE")
+    state.level = state.level + 1
+    state.xpMax = 10000
+    state.xp = 10
+    state:event("PLAYER_LEVEL_UP", state.level)
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    for i = 1, 2 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(#frame.historyRows >= 3)
+    for _, column in ipairs(frame.historyRows[1].columns) do
+        truthy(hasAnchor(column), "history row 1's columns must all have a real anchor")
+    end
+    for _, column in ipairs(frame.historyRows[2].columns) do
+        truthy(hasAnchor(column), "history row 2's columns must all have a real anchor")
+    end
+    -- Row 3 (oldest of these three, newest-first) is the one with the
+    -- level-up, so its secondary line is the one guaranteed to exist.
+    truthy(hasAnchor(frame.historyRows[3].secondary), "history row 3's secondary line must have a real anchor")
+
+    local firstY = frame.historyRows[1].columns[1].point and frame.historyRows[1].columns[1].point.y
+    local secondY = frame.historyRows[2].columns[1].point and frame.historyRows[2].columns[1].point.y
+    truthy(firstY ~= nil and secondY ~= nil and firstY ~= secondY,
+        "each history record must get its own distinct vertical position")
+
+    -- Each column within a single row must sit at a distinct x offset,
+    -- matching the column-header row above, so values genuinely line up
+    -- as a table instead of overlapping at the same position.
+    local xs = {}
+    for _, column in ipairs(frame.historyRows[1].columns) do
+        local x = column.point and column.point.x
+        truthy(x ~= nil, "each history column must have an x offset")
+        truthy(not xs[x], "history columns must not share an x offset")
+        xs[x] = true
+    end
+end)
+
+test("at 30 history records the content child height genuinely exceeds the viewport", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 30)
+    truthy(type(frame.historyContent.height) == "number" and type(frame.historyScroll.height) == "number")
+    truthy(frame.historyContent.height > frame.historyScroll.height,
+        "30 records must genuinely overflow a fixed-height viewport")
+end)
+
+test("history overflow indicator is shown once real content genuinely exceeds the viewport", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(frame.historyContent.height > frame.historyScroll.height)
+    truthy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must appear once content genuinely overflows the viewport")
+end)
+
+test("history overflow indicator stays hidden for a couple of short records with nothing to scroll", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 2 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 2)
+    truthy(frame.historyContent.height <= frame.historyScroll.height,
+        "2 short records must not genuinely overflow the viewport")
+    falsy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must not appear when there is nothing to scroll")
+    falsy(frame.historyEmptyText:IsShown(),
+        "empty-state text must not show once real history exists")
+end)
+
+test("history empty-state text shows with zero completed sessions and hides once one exists", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(#FDB:GetSessionHistory(), 0)
+    FDB:RefreshSessionDetailWindow()
+    truthy(frame.historyEmptyText:IsShown(),
+        "empty-state text must show when there are no completed sessions")
+    falsy(frame.historyOverflowIndicator:IsShown(),
+        "overflow indicator must not appear when history is empty")
+
+    state.now = state.now + 61
+    state.xp = state.xp + 5
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    equal(#FDB:GetSessionHistory(), 1)
+    falsy(frame.historyEmptyText:IsShown(),
+        "empty-state text must hide as soon as a completed session exists")
+end)
+
+test("all six KPI cards render in a single equal-width row, matching the dimensioned spec", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    -- Order matters: XP/hr, XP gained, To level, Gold earned, Gold spent,
+    -- Net gold, left to right, per the dimensioned spec.
+    local keys = { "xpPerHour", "xpGained", "toLevel", "goldEarned", "goldSpent", "netGold" }
+    equal(#keys, layout.kpiCardCount)
+
+    local previousX
+    for _, key in ipairs(keys) do
+        local kpi = frame.kpi[key]
+        truthy(kpi ~= nil, "missing KPI card for " .. key)
+        truthy(kpi.card ~= nil and kpi.label ~= nil and kpi.value ~= nil,
+            "KPI card for " .. key .. " must have card/label/value widgets")
+        truthy(hasAnchor(kpi.card), "KPI card for " .. key .. " must have a real anchor")
+        truthy(hasPositiveSize(kpi.card), "KPI card for " .. key .. " must have a real positive size")
+        equal(kpi.card.width, layout.kpiCardWidth, "KPI card for " .. key .. " must match the spec's card width")
+        equal(kpi.card.height, layout.kpiCardHeight, "KPI card for " .. key .. " must match the spec's card height")
+
+        local x = kpi.card.point and kpi.card.point.x
+        truthy(x ~= nil, "KPI card for " .. key .. " must have an x offset")
+        if previousX ~= nil then
+            truthy(x > previousX, "KPI cards must be laid out left to right in a single row")
+        end
+        previousX = x
+    end
+end)
+
+test("KPI cards render a colored fill and border via backdrop, or a fallback fill without one", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local card = FDB.SessionDetailWindow.kpi.xpPerHour.card
+    truthy(card.backdrop, "KPI card must request a backdrop when the client supports it")
+    truthy(card.backdropColor, "KPI card must set a fill color")
+    truthy(card.backdropBorderColor, "KPI card must set a restrained border color")
+
+    local FDBNoBackdrop = setup({ hasBackdropMixin = false })
+    truthy(FDBNoBackdrop:SessionPlayerReady())
+    FDBNoBackdrop:InitializeSessionUI()
+    truthy(FDBNoBackdrop:ToggleSessionWindow())
+    local fallbackCard = FDBNoBackdrop.SessionDetailWindow.kpi.xpPerHour.card
+    falsy(fallbackCard.backdrop, "fallback KPI card must not have a backdrop")
+    truthy(fallbackCard.fallbackBackground, "fallback KPI card must still have a fill texture")
+end)
+
+test("detailed window section headers all have a real anchor", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    truthy(hasAnchor(frame.timingHeader), "Session Timing header must have a real anchor")
+    truthy(hasAnchor(frame.characterHeader), "Character header must have a real anchor")
+    truthy(hasAnchor(frame.ratesHeader), "Rates header must have a real anchor")
+    truthy(hasAnchor(frame.historyHeader), "Recent Sessions header must have a real anchor")
+
+    equal(frame.timingHeader:GetText(), "Session Timing")
+    equal(frame.characterHeader:GetText(), "Character")
+    equal(frame.ratesHeader:GetText(), "Rates")
+    equal(frame.historyHeader:GetText(), "Recent Sessions")
+end)
+
+test("Session Timing, Character, and Rates render as three equal-width panels with a heading and divider each", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local panels = { frame.timingPanel, frame.characterPanel, frame.ratesPanel }
+    local dividers = { frame.timingDivider, frame.characterDivider, frame.ratesDivider }
+    local headers = { frame.timingHeader, frame.characterHeader, frame.ratesHeader }
+
+    local previousX
+    for i, panel in ipairs(panels) do
+        truthy(hasAnchor(panel), "group panel " .. i .. " must have a real anchor")
+        truthy(hasPositiveSize(panel), "group panel " .. i .. " must have a real positive size")
+        equal(panel.width, layout.groupPanelWidth, "group panel " .. i .. " must match the spec's panel width")
+        equal(panel.height, layout.groupPanelHeight, "group panel " .. i .. " must match the spec's panel height")
+
+        local x = panel.point and panel.point.x
+        truthy(x ~= nil, "group panel " .. i .. " must have an x offset")
+        if previousX ~= nil then
+            truthy(x > previousX, "group panels must be laid out left to right")
+        end
+        previousX = x
+
+        -- No heavy outer panel box: the panel is a plain frame, only its
+        -- heading and divider carry visible chrome.
+        falsy(panel.backdrop, "group panel " .. i .. " must not have a heavy outer backdrop box")
+
+        truthy(hasAnchor(headers[i]), "group panel " .. i .. "'s heading must have a real anchor")
+        truthy(hasAnchor(dividers[i]), "group panel " .. i .. "'s divider must have a real anchor")
+        truthy(hasPositiveSize(dividers[i]), "group panel " .. i .. "'s divider must have a real positive size")
+        truthy(dividers[i].height <= 2, "the divider must be a thin (~1px) line, not a heavy bar")
+    end
+
+    -- All three panels must fit within the detail window's content width
+    -- (three panels + two gaps + two margins == the window width).
+    truthy(previousX + layout.groupPanelWidth <= FDB.SessionDetailWindow.width,
+        "the three group panels must fit within the detail window's width")
+end)
+
+test("the XP bar is contained inside the Character panel, never spanning the full window width", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+    local bar = frame.character.xpBar
+
+    equal(bar.width, layout.xpBarWidth, "XP bar width must match the spec (228)")
+    equal(bar.height, layout.xpBarHeight, "XP bar height must match the spec (~7)")
+    truthy(bar.width < layout.groupPanelWidth, "XP bar must be narrower than its own Character panel")
+    truthy(bar.width < layout.detailWidth / 2,
+        "XP bar must not come anywhere close to spanning the full window width")
+end)
+
+test("Session Timing renders as four stacked single-column rows, not a 2x2 grid", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    local rows = { frame.timing.session, frame.timing.active, frame.timing.status, frame.timing.started }
+    local firstX
+    local ys = {}
+    for _, row in ipairs(rows) do
+        truthy(hasAnchor(row.label), "Session Timing row label must have a real anchor")
+        truthy(hasAnchor(row.value), "Session Timing row value must have a real anchor")
+        local x = row.label.point and row.label.point.x
+        truthy(x ~= nil, "Session Timing row must have an x offset")
+        if firstX == nil then
+            firstX = x
+        else
+            equal(x, firstX, "every Session Timing row must share the same single column x offset")
+        end
+        local y = row.label.point and row.label.point.y
+        truthy(y ~= nil and not ys[y], "every Session Timing row must have its own distinct y offset")
+        ys[y] = true
+    end
+    equal(4, (function() local n = 0 for _ in pairs(ys) do n = n + 1 end return n end)(),
+        "Session Timing must render exactly four distinct row positions")
+end)
+
+test("Character panel renders Level, XP, XP bar, then Gold in strict order with no overlap", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local levelY = frame.character.level.label.point.y
+    local xpY = frame.character.xp.label.point.y
+    local barY = frame.character.xpBar.point.y
+    local barHeight = frame.character.xpBar.height
+    local goldY = frame.character.gold.label.point.y
+
+    -- Y offsets are negative-from-top; "below" means a more negative y.
+    -- Strict ordering: Level -> XP -> XP bar -> Gold.
+    truthy(levelY > xpY, "Level must render above XP")
+    truthy(xpY > barY, "XP bar must render below the XP row")
+    truthy(barY > goldY, "Gold must render below the XP bar, not interleaved with it")
+
+    -- Real non-overlap, accounting for the XP row's own rendered text
+    -- height: the bar's top edge must sit at or below (more negative than)
+    -- the XP row's real bottom edge, with a genuine, measurable clear gap
+    -- in the approved 10-12 unit range -- not just a smaller Y number.
+    local xpTextBottom = xpY - layout.characterRowTextHeight
+    local gapAboveBar = xpTextBottom - barY
+    truthy(gapAboveBar > 0, "XP row and XP bar must not overlap")
+    truthy(gapAboveBar >= 10 and gapAboveBar <= 12,
+        "the XP row -> XP bar gap must be approximately 10-12 units, got " .. tostring(gapAboveBar))
+
+    -- Same real non-overlap check for the bar's bottom edge to Gold's top,
+    -- in the approved 12-14 unit range.
+    local barBottom = barY - barHeight
+    local gapBelowBar = barBottom - goldY
+    truthy(gapBelowBar > 0, "XP bar and Gold row must not overlap")
+    truthy(gapBelowBar >= 12 and gapBelowBar <= 14,
+        "the XP bar -> Gold gap must be approximately 12-14 units, got " .. tostring(gapBelowBar))
+
+    -- The bar must remain inside the Character panel, not spilling past
+    -- its bottom edge.
+    truthy(-(goldY - layout.characterRowTextHeight) <= layout.groupPanelHeight,
+        "Gold row must remain within the Character panel's height")
+end)
+
+test("all seven required icon textures exist on disk as valid 32-bit TGA files, actually used by the UI", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
+
+    local required = {
+        "session_timing_clock", "character_panel_helmet", "recent_sessions_clock",
+        "active_hourglass", "status_pulse", "started_flag", "gold_coin",
+    }
+    for _, name in ipairs(required) do
+        local path = "addon/ForeverDB/Textures/Session/" .. name .. ".tga"
+        local f = io.open(path, "rb")
+        truthy(f, "missing required icon file: " .. path)
+        local data = f:read("*a")
+        f:close()
+        truthy(#data > 100, name .. ".tga must be a real (non-trivial) file, not an empty placeholder")
+        -- TGA header: byte 3 (index 2) is the image type; 2 = uncompressed
+        -- truecolor. Byte 17 (index 16) is bits-per-pixel; 32 = RGBA.
+        local imageType = string.byte(data, 3)
+        local bpp = string.byte(data, 17)
+        equal(imageType, 2, name .. ".tga must be an uncompressed truecolor TGA")
+        equal(bpp, 32, name .. ".tga must be 32-bit (RGBA, with alpha)")
+    end
+
+    -- Every one of these files must actually be referenced by the running
+    -- UI code (via FDB.SessionUILayout.iconTexturePath, the one path the
+    -- production module itself uses), not just copied into the repo
+    -- unused.
+    truthy(layout.iconTexturePath:find("Textures\\Session\\", 1, true) ~= nil,
+        "icon texture path must point at the addon's own local Textures/Session folder")
+end)
+
+test("Session Timing, Character, and Recent Sessions headers show their icon before the heading text, with no overlap", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local cases = {
+        { icon = frame.timingHeaderIcon, heading = frame.timingHeader, file = "session_timing_clock" },
+        { icon = frame.characterHeaderIcon, heading = frame.characterHeader, file = "character_panel_helmet" },
+        { icon = frame.historyHeaderIcon, heading = frame.historyHeader, file = "recent_sessions_clock" },
+    }
+    for _, case in ipairs(cases) do
+        truthy(case.icon, "missing header icon for " .. case.file)
+        truthy(hasAnchor(case.icon), "header icon must have a real anchor: " .. case.file)
+        truthy(hasPositiveSize(case.icon), "header icon must have a real positive size: " .. case.file)
+        equal(case.icon.width, layout.headerIconSize)
+        equal(case.icon.height, layout.headerIconSize)
+        truthy(case.icon.texturePath:find(case.file, 1, true) ~= nil,
+            "header icon must use its own specific texture file, not a substituted one: " .. case.file)
+        truthy(case.icon.texturePath:find("Interface\\AddOns\\ForeverDB\\Textures\\Session\\", 1, true) ~= nil,
+            "header icon must be a local addon texture, never a guessed native atlas path: " .. case.file)
+
+        local iconRight = case.icon.point.x + case.icon.width
+        truthy(iconRight <= case.heading.point.x,
+            "header icon must not overlap its own heading text: " .. case.file)
+        -- Icon and heading share the same top Y (both anchored at the
+        -- panel's/band's top edge), so they read as one inline unit.
+        equal(case.icon.point.y, case.heading.point.y)
+    end
+end)
+
+test("Active/Status/Started/Gold rows show their icon before the label; icon-less rows in the same panel still align", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    local rowCases = {
+        { icon = frame.timing.active.icon, label = frame.timing.active.label, file = "active_hourglass" },
+        { icon = frame.timing.status.icon, label = frame.timing.status.label, file = "status_pulse" },
+        { icon = frame.timing.started.icon, label = frame.timing.started.label, file = "started_flag" },
+        { icon = frame.character.gold.icon, label = frame.character.gold.label, file = "gold_coin" },
+    }
+    for _, case in ipairs(rowCases) do
+        truthy(case.icon, "missing row icon for " .. case.file)
+        truthy(hasAnchor(case.icon), "row icon must have a real anchor: " .. case.file)
+        truthy(hasPositiveSize(case.icon), "row icon must have a real positive size: " .. case.file)
+        equal(case.icon.width, layout.rowIconSize)
+        equal(case.icon.height, layout.rowIconSize)
+        truthy(case.icon.texturePath:find(case.file, 1, true) ~= nil,
+            "row icon must use its own specific texture file: " .. case.file)
+
+        local iconRight = case.icon.point.x + case.icon.width
+        truthy(iconRight <= case.label.point.x,
+            "row icon must not overlap its own row's label text: " .. case.file)
+        equal(case.icon.point.y, case.label.point.y, "row icon must sit on the same line as its label: " .. case.file)
+    end
+
+    -- Session (Session Timing) and Level/XP (Character) have no icon of
+    -- their own, but must still align at the same shifted column as their
+    -- icon-bearing siblings, so the panel doesn't read as ragged.
+    equal(frame.timing.session.label.point.x, frame.timing.active.label.point.x,
+        "Session must align with Active even though Session has no icon")
+    equal(frame.timing.session.label.point.x, layout.panelColXWithIcon)
+    equal(frame.character.level.label.point.x, frame.character.gold.label.point.x,
+        "Level must align with Gold even though Level has no icon")
+    equal(frame.character.xp.label.point.x, frame.character.gold.label.point.x,
+        "XP must align with Gold even though XP has no icon")
+end)
+
+test("Rates panel is unaffected by icon integration: no header icon, rows stay at the original unshifted column", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    falsy(frame.ratesHeaderIcon, "Rates header must not have an icon (not in the required target list)")
+    falsy(frame.rates.earnedPerHour.icon, "Rates rows must not have icons")
+    falsy(frame.rates.spentPerHour.icon)
+    falsy(frame.rates.netPerHour.icon)
+
+    -- Unaffected: still at the plain PANEL_SIDE_PADDING column, not the
+    -- icon-reserving one used by Session Timing/Character.
+    equal(frame.rates.earnedPerHour.label.point.x, 10)
+end)
+
+test("the XP bar's own x-anchor is untouched by icon integration (still PANEL_COL_X, not shifted)", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(frame.character.xpBar.point.x, 10,
+        "XP bar must keep its original x-anchor; only row label text shifts for the icon gutter")
+end)
+
+test("the Recent Sessions viewport matches its layout-constant target, shrunk for the column header row", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(frame.historyScroll.height, layout.historyViewportHeight)
+end)
+
+test("the detail window matches the dimensioned spec's 800x520 nominal size", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(frame.width, layout.detailWidth)
+    equal(frame.height, layout.detailHeight)
+end)
+
+test("the compact HUD stays within the spec's 115px height ceiling", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+    local layout = FDB.SessionUILayout
+
+    equal(frame.width, layout.hudWidth)
+    truthy(frame.height <= 115, "compact HUD height must not exceed the spec's 115px ceiling")
+end)
+
+test("compact HUD's primary rate values (XP/hr, Gold/hr, Net/hr) use a bigger font step than the others", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    local frame = FDB.SessionHUDFrame
+
+    -- Same template used for the KPI band's headline values, one visible
+    -- step above the smaller fields -- and no new colors for this
+    -- hierarchy (that's covered by the status-color test elsewhere).
+    equal(frame.xpHrValue.template, "GameFontHighlight")
+    equal(frame.goldHrValue.template, "GameFontHighlight")
+    equal(frame.netHrValue.template, "GameFontHighlight")
+
+    truthy(frame.xpGainedValue.template ~= "GameFontHighlight",
+        "XP gained must not use the same bigger font step as the primary rate values")
+    truthy(frame.toLevelValue.template ~= "GameFontHighlight",
+        "To level must not use the same bigger font step as the primary rate values")
+    truthy(frame.activeValue.template ~= "GameFontHighlight",
+        "Active must not use the same bigger font step as the primary rate values")
+end)
+
+test("the action bar's buttons stay within the detail window's vertical budget", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for _, button in ipairs({
+        frame.pauseButton, frame.resumeButton, frame.resetButton,
+        frame.lockButton, frame.hudButton,
+    }) do
+        local y = button.point and button.point.y
+        truthy(y ~= nil, "action bar button must have a y offset")
+        local bottomFromTop = -y + button.height
+        truthy(bottomFromTop <= frame.height,
+            "action bar buttons must not extend past the bottom of the detail window")
+    end
+
+    -- Reset should sit with more clearance from its neighbors than an
+    -- ordinary button-to-button gap, without changing its own template
+    -- (still not bright red -- same UIPanelButtonTemplate as the rest).
+    local resumeRight = frame.resumeButton.point.x + frame.resumeButton.width
+    local resetGap = frame.resetButton.point.x - resumeRight
+    local pauseRight = frame.pauseButton.point.x + frame.pauseButton.width
+    local ordinaryGap = frame.resumeButton.point.x - pauseRight
+    truthy(resetGap > ordinaryGap, "Reset must have extra clearance from Resume, not an ordinary button gap")
+end)
+
+test("Recent Sessions has a real non-scrolling column-header row aligned with each data row's columns", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    equal(#frame.historyColumnHeaders, layout.historyColumnCount)
+    for i, header in ipairs(frame.historyColumnHeaders) do
+        truthy(hasAnchor(header), "history column header " .. i .. " must have a real anchor")
+        equal(header:GetText(), layout.historyColumnLabels[i])
+        equal(header.width, layout.historyColumnWidth[i])
+    end
+
+    -- Populate one data row and confirm its columns sit at the exact same
+    -- x offsets as the header row -- a real table, values aligned under
+    -- their labels.
+    state.now = state.now + 90
+    state.xp = state.xp + 10
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    for i, header in ipairs(frame.historyColumnHeaders) do
+        local headerX = header.point and header.point.x
+        local columnX = frame.historyRows[1].columns[i].point and frame.historyRows[1].columns[i].point.x
+        truthy(headerX ~= nil and columnX ~= nil, "both header and data column " .. i .. " need an x offset")
+        equal(columnX, headerX - layout.detailMargin,
+            "data column " .. i .. " must sit at the same relative x offset as its header")
+    end
+end)
+
+test("history scroll viewport requests no template, so no native scrollbar artifact is ever created", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    equal(frame.historyScroll.frameType, "ScrollFrame")
+    falsy(frame.historyScroll.requestedTemplate,
+        "history scroll frame must not request UIPanelScrollFrameTemplate or any other template " ..
+        "that could create a native scrollbar/arrow-button artifact")
+    truthy(frame.historyScroll.mouseWheelEnabled, "history scroll frame must enable mouse wheel input")
+    truthy(frame.historyScroll.scripts.OnMouseWheel, "history scroll frame must handle OnMouseWheel itself")
+end)
+
+test("mouse wheel scrolling moves the history viewport and clamps to the real content range", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+
+    for i = 1, 30 do
+        state.now = state.now + 61
+        state.xp = state.xp + i
+        state:event("PLAYER_XP_UPDATE")
+        truthy(FDB:ResetSession())
+    end
+    FDB:RefreshSessionDetailWindow()
+
+    local onWheel = frame.historyScroll.scripts.OnMouseWheel
+    truthy(onWheel)
+
+    equal(frame.historyScroll:GetVerticalScroll(), 0)
+    onWheel(frame.historyScroll, -1) -- scroll down
+    local afterOneScroll = frame.historyScroll:GetVerticalScroll()
+    truthy(afterOneScroll > 0, "scrolling down must increase the vertical scroll offset")
+
+    -- Scrolling far past the end must clamp to the real overflow amount,
+    -- not an arbitrary or unbounded value.
+    for _ = 1, 50 do
+        onWheel(frame.historyScroll, -1)
+    end
+    local maxScroll = frame.historyContentHeight - frame.historyViewportHeight
+    equal(frame.historyScroll:GetVerticalScroll(), maxScroll)
+
+    onWheel(frame.historyScroll, 1) -- scroll up
+    truthy(frame.historyScroll:GetVerticalScroll() < maxScroll, "scrolling up must decrease the offset")
+
+    for _ = 1, 50 do
+        onWheel(frame.historyScroll, 1)
+    end
+    equal(frame.historyScroll:GetVerticalScroll(), 0, "scrolling up past the top must clamp to zero")
+end)
+
+test("history column x positions and widths never overlap", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
+
+    for i = 1, #layout.historyColumnX - 1 do
+        local thisEnd = layout.historyColumnX[i] + layout.historyColumnWidth[i]
+        local nextStart = layout.historyColumnX[i + 1]
+        truthy(thisEnd <= nextStart,
+            "column " .. i .. " (ending at " .. thisEnd .. ") must not overlap column " ..
+            (i + 1) .. " (starting at " .. nextStart .. ")")
+    end
+end)
+
+test("zero Net Gold renders neutral, not green or red", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- No money movement at all -> netGold is exactly zero.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local record = FDB:GetSessionHistory()[1]
+    equal(record.netGold, 0)
+
+    local netGoldColumn = frame.historyRows[1].columns[5]
+    equal(netGoldColumn.color[1], netGoldColumn.color[2], "zero net gold must not lean red (r > g)")
+    equal(netGoldColumn.color[2], netGoldColumn.color[3], "zero net gold must not lean green (g > b)")
+end)
+
+test("Net Gold is the ONLY gold metric shown in Recent Sessions; goldEarned/goldSpent never render anywhere in it", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- Both earned and spent are nonzero and distinct, so if either were
+    -- rendered anywhere in this view (primary columns, secondary line, or
+    -- the Date & Time column) it would show up as a literal formatted
+    -- copper string this test can search for and must not find.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state.money = state.money + 300 -- earned
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+    state.money = state.money - 500 -- spent, net negative overall
+    state:event("PLAYER_MONEY")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local record = FDB:GetSessionHistory()[1]
+
+    truthy(record.netGold < 0)
+    truthy(type(record.goldEarned) == "number" and record.goldEarned ~= 0)
+    truthy(type(record.goldSpent) == "number" and record.goldSpent ~= 0)
+    -- Net Gold, as the tracker defines it, is goldEarned - goldSpent.
+    equal(record.netGold, record.goldEarned - record.goldSpent)
+
+    local dateTimeColumn = frame.historyRows[1].columns[1]
+    local netGoldColumn = frame.historyRows[1].columns[5]
+    local earnedText = FDB.SessionUIFormat.copperShort(record.goldEarned)
+    local spentText = FDB.SessionUIFormat.copperShort(record.goldSpent)
+
+    -- Date & Time contains only the timestamp -- no gold text at all.
+    falsy(dateTimeColumn:GetText():find(earnedText, 1, true) ~= nil,
+        "Date & Time must never contain the earned figure")
+    falsy(dateTimeColumn:GetText():find(spentText, 1, true) ~= nil,
+        "Date & Time must never contain the spent figure")
+
+    -- No column, and no secondary line (same-level session -> hidden),
+    -- ever renders the separate earned/spent figures.
+    for i, column in ipairs(frame.historyRows[1].columns) do
+        if i ~= 5 then
+            falsy(column:GetText():find(earnedText, 1, true) ~= nil,
+                "column " .. i .. " must never show the earned figure")
+            falsy(column:GetText():find(spentText, 1, true) ~= nil,
+                "column " .. i .. " must never show the spent figure")
+        end
+    end
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a same-level session must have no secondary line at all (Net Gold already covers gold)")
+
+    -- Net Gold's own column shows exactly the net figure and is colored
+    -- for its sign (negative here -> red-leaning), distinct from the
+    -- neutral Date & Time column.
+    equal(netGoldColumn:GetText(), FDB.SessionUIFormat.copperShort(record.netGold))
+    truthy(netGoldColumn.color[1] > netGoldColumn.color[2],
+        "negative net gold should read red-leaning in its own column")
+    falsy(dateTimeColumn.color[1] > dateTimeColumn.color[2],
+        "the Date & Time column must stay in its default neutral color")
+end)
+
+test("history: same-level sessions stay single-line; only a real level-up shows secondary detail, and only the level range", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+    local layout = FDB.SessionUILayout
+
+    -- Same-level session, even with a nonzero money change: Net Gold is
+    -- the only gold metric this view ever shows, and it already lives in
+    -- its own primary column, so a same-level session has nothing left
+    -- for a secondary line and must stay collapsed/single-line.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state.money = state.money + 100
+    state:event("PLAYER_XP_UPDATE")
+    state:event("PLAYER_MONEY")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a same-level session must remain single-line/compact with no secondary row")
+    equal(frame.historyContentHeight, layout.historyRecordHeightCollapsed)
+
+    -- Now force an actual level-up mid-session (XP wraps past xpMax) with
+    -- a nonzero money change too, and confirm the secondary line appears
+    -- containing ONLY the level transition -- never a gold breakdown.
+    state.now = state.now + 90
+    state.xpMax = 100
+    state.xp = 90
+    state:event("PLAYER_XP_UPDATE")
+    state.level = state.level + 1
+    state.xpMax = 10000
+    state.xp = 50
+    state:event("PLAYER_LEVEL_UP", state.level)
+    state:event("PLAYER_XP_UPDATE")
+    state.money = state.money - 30
+    state:event("PLAYER_MONEY")
+    truthy(FDB:ResetSession())
+    FDB:RefreshSessionDetailWindow()
+
+    truthy(frame.historyRows[1].secondary:IsShown())
+    local secondaryText = frame.historyRows[1].secondary:GetText()
+    -- GetSessionHistory() is storage order (oldest-appended-first); this
+    -- level-up session was archived second, so it's the last entry, not
+    -- index 1 (which is the earlier same-level session from above).
+    local history = FDB:GetSessionHistory()
+    local record = history[#history]
+    equal(record.startLevel, 20)
+    equal(record.endLevel, 21)
+    -- Exact equality (not just a substring check) proves the secondary
+    -- line contains ONLY the level transition -- no gold breakdown
+    -- appended alongside it.
+    equal(secondaryText, "Lvl " .. tostring(record.startLevel) .. "->" .. tostring(record.endLevel),
+        "secondary line must contain only the level transition, never a gold breakdown")
+end)
+
+test("a history record with zero/absent secondary content collapses to a single-line, shorter row", function()
+    local FDB, state = setup()
+    truthy(FDB:SessionPlayerReady())
+
+    -- No level change, no money movement at all -- the secondary line has
+    -- nothing to show.
+    state.now = state.now + 90
+    state.xp = state.xp + 40
+    state:event("PLAYER_XP_UPDATE")
+    truthy(FDB:ResetSession())
+
+    truthy(FDB:ToggleSessionWindow())
+    local frame = FDB.SessionDetailWindow
+    local layout = FDB.SessionUILayout
+
+    falsy(frame.historyRows[1].secondary:IsShown(),
+        "a record with nothing to show on the secondary line must hide it entirely")
+
+    -- The next record (row 2, if any) or the content height itself must
+    -- reflect the collapsed height, not the full two-line height. With
+    -- only one collapsed record, content height equals the collapsed
+    -- height exactly.
+    equal(frame.historyContentHeight, layout.historyRecordHeightCollapsed)
+end)
+
+test("reset confirmation text has comfortable vertical clearance from the button row so wrapped text isn't clipped", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    local textTopOffset = -frame.text.point.y
+    local buttonBottomOffset = frame.acceptButton.point.y
+    local buttonTopFromBottom = buttonBottomOffset + frame.acceptButton.height
+    local clearance = frame.height - textTopOffset - buttonTopFromBottom
+
+    truthy(clearance >= 50,
+        "must leave enough vertical room between the text block and button row for a wrapped 2-3 line message")
+end)
+
+test("reset confirmation accept/cancel buttons are symmetric and equally sized for a tidy layout", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    equal(frame.acceptButton.width, frame.cancelButton.width)
+    equal(frame.acceptButton.height, frame.cancelButton.height)
+    truthy(math.abs(frame.acceptButton.point.x) == math.abs(frame.cancelButton.point.x),
+        "accept/cancel buttons must be placed symmetrically around center for a tidy layout")
+    truthy(frame.acceptButton.point.y == frame.cancelButton.point.y,
+        "accept/cancel buttons must sit on the same row")
+end)
+
+test("fallback reset-confirmation frame's text and buttons all have real geometry", function()
+    local FDB = setup()
+    truthy(FDB:SessionPlayerReady())
+    -- StaticPopupDialogs/StaticPopup_Show are undefined in this fixture's
+    -- default setup(), so this exercises the native-frame fallback path.
+
+    FDB:ShowSessionResetConfirmation()
+    local frame = FDB.SessionResetConfirmFrame
+    truthy(frame)
+
+    truthy(hasAnchor(frame), "confirmation frame must have a real anchor")
+    truthy(hasPositiveSize(frame), "confirmation frame must have a positive size")
+    truthy(hasAnchor(frame.text), "confirmation text must have a real anchor")
+    truthy(type(frame.text.width) == "number" and frame.text.width > 0,
+        "confirmation text must have a width so the message actually fits")
+
+    truthy(hasAnchor(frame.acceptButton), "accept button must have a real anchor")
+    truthy(hasPositiveSize(frame.acceptButton), "accept button must have a positive size")
+    truthy(hasAnchor(frame.cancelButton), "cancel button must have a real anchor")
+    truthy(hasPositiveSize(frame.cancelButton), "cancel button must have a positive size")
+end)
+
+consolePrint(passed .. " session UI smoke tests passed; live Forever E2E remains PENDING")

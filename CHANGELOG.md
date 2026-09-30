@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.4.1-alpha**
+- Addon: **0.5.0-alpha**
 - Export schema: **9**
 - Companion: **0.8.2-alpha**
 
@@ -126,6 +126,30 @@ version contract and release checklist are documented in
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.5.0-alpha — 2026-09-28
+
+- Added the ForeverDB Session Tracker: per-character XP/hour, time-to-level,
+  gold earned/spent/net, and active-time-based rates.
+- Added a compact movable/lockable WoW-native HUD and a detailed
+  `/fdb session` window with KPI, timing, character, rates and a scrollable
+  30-session history panel.
+- Added `/fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>]`.
+  Reset requires confirmation from both the detailed-window button and the
+  slash command.
+- Session state is local-only, stored under `ForeverDB_Saved.sessions`, and
+  is not part of the schema-9 export contract: `ForeverDB_Export` carries no
+  session records. Export schema remains **9**.
+- No Companion, Supabase, or account-wide aggregation changes; V1 is
+  addon-only. Companion/installer versions are unchanged.
+- Refined the detailed window to an 800x520 layout (six-card KPI row,
+  three-panel Session Timing/Character/Rates group band, a real
+  multi-column Recent Sessions table with Net Gold as the only gold
+  metric shown), fixed a live-client native-scrollbar artifact, and added
+  seven local addon-packaged icon textures (`addon/ForeverDB/Textures/Session/`)
+  to the section headers and select rows.
+- Repo-side verification: [0.5 Session Tracker acceptance](docs/0.5-session-tracker-acceptance.md).
+  Live Forever-client acceptance: **PASS** (full checklist, human tester).
 
 ## 0.4.1-alpha — 2026-09-27
 

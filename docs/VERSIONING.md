@@ -10,7 +10,7 @@ ForeverDB has three version axes that move independently:
 
 | Component | Current | Source of truth |
 | --- | --- | --- |
-| Addon | **0.4.1-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
+| Addon | **0.5.0-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
 | Export schema | **9** | `FDB.SCHEMA_VERSION` in `addon/ForeverDB/Core.lua` |
 | Companion | **0.8.2-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
 | Installer | **0.8.2-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
