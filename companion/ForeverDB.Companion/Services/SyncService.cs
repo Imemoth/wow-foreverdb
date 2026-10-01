@@ -16,6 +16,7 @@ public sealed class SyncService
     private readonly Dictionary<string, long> _lastSyncedSnapshot =
         new(StringComparer.OrdinalIgnoreCase);
 
+    public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
     public event Action<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
 
@@ -55,6 +56,8 @@ public sealed class SyncService
 
         var accessToken = await _authService.GetAccessTokenAsync(
             cancellationToken);
+
+        Authenticated?.Invoke();
 
         var url =
             $"{_settings.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/ingest_foreverdb_snapshot_auth";
