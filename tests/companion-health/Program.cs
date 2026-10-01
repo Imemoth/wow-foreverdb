@@ -2,9 +2,12 @@ using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
 
 var failures = new List<string>();
+var assertionCount = 0;
 
 void Check(bool condition, string name)
 {
+    assertionCount++;
+
     if (!condition)
     {
         failures.Add(name);
@@ -87,5 +90,5 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Companion sync-health checks PASS (16 assertions).");
+Console.WriteLine($"Companion sync-health checks PASS ({assertionCount} assertions).");
 return 0;
