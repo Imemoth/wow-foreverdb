@@ -77,6 +77,14 @@ public partial class MainWindow : Window
             _settings,
             auth);
 
+        _syncService.Authenticated += () =>
+            Dispatcher.Invoke(
+                () =>
+                {
+                    _syncHealth.SetAuthReady(true);
+                    RefreshSyncHealthUi();
+                });
+
         _syncService.SyncCompleted += (_, completed) =>
             Dispatcher.Invoke(
                 () =>
@@ -522,7 +530,6 @@ public partial class MainWindow : Window
         {
             SearchResults.ItemsSource = null;
             SearchStatusText.Text = ex.Message;
-            RecordSyncError(ex.Message);
         }
     }
 
@@ -589,7 +596,6 @@ public partial class MainWindow : Window
             DetailTitleText.Text = result.Name;
             DetailSubtitleText.Text = ex.Message;
             DetailTabs.Items.Clear();
-            RecordSyncError(ex.Message);
         }
     }
 
