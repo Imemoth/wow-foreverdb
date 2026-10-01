@@ -179,7 +179,7 @@ Implementation status: **implemented; build/runtime UI verification pending.**
 ## 0.8 — Companion hardening & distribution
 
 - [ ] Settings polish and cache management.
-- [ ] Sync-health/status panel.
+- [x] Sync-health/status panel — real auto-sync/watcher/config/auth readiness, last successful sync counts/time, and sanitized last error.
 - [ ] Diagnostic controls and retention policy.
 - [ ] Installer validation.
 - [ ] Startup/tray behavior final pass.
