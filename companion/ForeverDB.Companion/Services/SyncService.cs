@@ -16,7 +16,7 @@ public sealed class SyncService
     private readonly Dictionary<string, long> _lastSyncedSnapshot =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public event EventHandler<string>? StatusChanged;
+    public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
     public event Action<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
 
     public SyncService(
@@ -101,9 +101,14 @@ public sealed class SyncService
         _lastSyncedSnapshot[snapshot.InstallationId] =
             snapshot.UpdatedAt;
 
-        StatusChanged?.Invoke(
+        SyncCompleted?.Invoke(
             this,
-            $"Synced {snapshot.Sources.Count} sources and {snapshot.Guilds.Sum(guild => guild.Members.Count)} guild members at {DateTime.Now:T}");
+            new SyncCompletedEventArgs(
+                DateTimeOffset.Now,
+                snapshot.Sources.Count,
+                snapshot.Guilds.Sum(
+                    guild =>
+                        guild.Members.Count)));
 
         _ = PrewarmMapCacheAsync(
             snapshot);
@@ -167,3 +172,9 @@ public sealed class SyncService
         }
     }
 }
+
+
+public sealed record SyncCompletedEventArgs(
+    DateTimeOffset CompletedAt,
+    int SourceCount,
+    int GuildMemberCount);
