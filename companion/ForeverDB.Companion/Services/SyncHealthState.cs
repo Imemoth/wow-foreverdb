@@ -3,6 +3,13 @@ using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
 
+public enum SyncTrigger
+{
+    Startup,
+    Auto,
+    Manual
+}
+
 public sealed class SyncHealthState
 {
     private const int MaxErrorLength = 180;
