@@ -138,7 +138,7 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 - [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
       debug breadcrumbs and simulated Lua contract checks.
-- [ ] Herbalism E2E test and fixes — **PENDING live client evidence**.
+- [ ] Herbalism E2E test and fixes — **live capture, Auto Loot, Companion search/details and Mulgore map-location path PASS; full exit/relaunch, repeated-sync no-double-count and negative/reopen edge cases still pending**.
 - [ ] Disenchant E2E test and fixes — **PENDING live client evidence**.
 - [ ] Open-water fishing regression test.
 - [ ] Chest/GameObject location regression test.
