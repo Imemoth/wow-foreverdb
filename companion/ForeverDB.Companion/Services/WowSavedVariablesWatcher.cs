@@ -5,7 +5,6 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 {
     private readonly string _wowRoot;
     private readonly Func<string, CancellationToken, Task> _onChanged;
-    private readonly CancellationTokenSource _lifetimeCts = new();
     private FileSystemWatcher? _watcher;
 
     private readonly Dictionary<string, CancellationTokenSource> _debounce =
@@ -80,7 +79,6 @@ public sealed class WowSavedVariablesWatcher : IDisposable
             }
 
             var cts = new CancellationTokenSource();
-            var lifetimeToken = _lifetimeCts.Token;
             _debounce[path] = cts;
 
             _ = Task.Run(
@@ -94,7 +92,7 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 
                         await _onChanged(
                             path,
-                            lifetimeToken);
+                            cts.Token);
                     }
                     catch (OperationCanceledException)
                     {
@@ -118,7 +116,6 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 
     public void Dispose()
     {
-        _lifetimeCts.Cancel();
         _watcher?.Dispose();
 
         lock (_debounce)
@@ -132,6 +129,5 @@ public sealed class WowSavedVariablesWatcher : IDisposable
             _debounce.Clear();
         }
 
-        _lifetimeCts.Dispose();
     }
 }
