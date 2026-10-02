@@ -93,6 +93,9 @@ local function registerSlashCommands()
         elseif command == "guildapi"
             or command == "guild" then
             FDB:RunGuildApiProbe()
+        elseif command == "questapi"
+            or command == "quests" then
+            FDB:RunQuestApiProbe()
         elseif command == "recipe"
             or command == "guildrecipe"
             or command == "gr" then
@@ -113,7 +116,7 @@ local function registerSlashCommands()
             local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
             FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb questapi, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
@@ -135,6 +138,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:InitializeSessionTracker()
         FDB:InitializeSessionUI()
         FDB:InitializeGuildApiProbe()
+        FDB:InitializeQuestApiProbe()
         FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
