@@ -226,7 +226,7 @@ Implementation status: **implemented; build/runtime UI verification pending.**
 ## 0.8 — Companion hardening & distribution
 
 - [ ] Settings polish and cache management.
-- [x] Sync-health/status panel — real auto-sync/watcher/config/auth readiness, last successful sync counts/time, sanitized last error, and visible sync trigger provenance. Manual sync runtime PASS; auto /reload/logout trigger follow-up pending on the cancellation/force-sync fix.
+- [x] Sync-health/status panel — real auto-sync/watcher/config/auth readiness, last successful sync counts/time, sanitized last error, and visible sync trigger provenance. **Live runtime PASS (2026-10-02):** Manual sync reports `via Manual`; Auto Sync ON reports `via Auto` after reload/relog/logout; Auto Sync OFF suppresses watcher sync while manual sync remains available.
 - [ ] Diagnostic controls and retention policy.
 - [ ] Installer validation.
 - [ ] Startup/tray behavior final pass.
