@@ -181,13 +181,6 @@ public sealed class SyncService
 }
 
 
-public enum SyncTrigger
-{
-    Startup,
-    Auto,
-    Manual
-}
-
 public sealed record SyncCompletedEventArgs(
     DateTimeOffset CompletedAt,
     int SourceCount,
