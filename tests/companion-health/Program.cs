@@ -55,7 +55,8 @@ var completedAt = new DateTimeOffset(
 health.MarkSyncSuccess(
     completedAt,
     sourceCount: 123,
-    guildMemberCount: 45);
+    guildMemberCount: 45,
+    SyncTrigger.Manual);
 
 Check(health.LastSuccessfulSyncAt == completedAt,
     "last successful sync timestamp is tracked");
@@ -63,6 +64,8 @@ Check(health.LastSourceCount == 123,
     "source count is tracked");
 Check(health.LastGuildMemberCount == 45,
     "guild member count is tracked");
+Check(health.LastTrigger == SyncTrigger.Manual,
+    "last successful sync trigger is tracked");
 Check(health.AuthReady,
     "successful sync marks auth ready");
 Check(string.IsNullOrEmpty(health.LastError),
