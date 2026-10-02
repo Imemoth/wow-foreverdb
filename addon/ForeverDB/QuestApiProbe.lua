@@ -10,6 +10,7 @@ local PREFIX = "|cff7dd3fcForeverDB|r"
 local probeFrame
 local completedQueryPending = false
 local completedQueryGeneration = 0
+local unpackResults = unpack or table.unpack
 
 local function availability(label, value)
     local ok = type(value) == "function"
@@ -36,7 +37,7 @@ local function safeCall(label, func, ...)
         return false
     end
 
-    return true, unpack(result)
+    return true, unpackResults(result)
 end
 
 local function countTruthyKeys(tbl)
