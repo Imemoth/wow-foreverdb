@@ -156,8 +156,9 @@ assistant without assuming Retail-only quest APIs on the Forever client.
 
 - [x] Add a read-only quest API capability probe (`/fdb questapi`, alias
       `/fdb quests`) that reports modern/legacy API availability, current quest-log
-      rows/objectives and completed-quest enumeration capability. **Repo implemented;
-      live Forever runtime probe still required.**
+      rows/objectives and completed-quest enumeration capability. **Live Forever
+      runtime probe PASS on 2026-10-02:** modern `C_QuestLog` path available,
+      active objectives readable and 97 completed quest IDs enumerated.
 - [ ] Per-character Quest Tracker for accepted / active / ready-to-turn-in /
       completed / turned-in / abandoned states.
 - [ ] Track quest objective progress and completion transitions.

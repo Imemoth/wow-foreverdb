@@ -32,7 +32,8 @@ public sealed class SyncService
 
     public async Task SyncFileAsync(
         string path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool force = false)
     {
         if (!File.Exists(path))
         {
@@ -46,7 +47,8 @@ public sealed class SyncService
         GuildbookChanged?.Invoke(
             snapshot.Guilds);
 
-        if (_lastSyncedSnapshot.TryGetValue(
+        if (!force &&
+            _lastSyncedSnapshot.TryGetValue(
                 snapshot.InstallationId,
                 out var lastTimestamp) &&
             snapshot.UpdatedAt <= lastTimestamp)

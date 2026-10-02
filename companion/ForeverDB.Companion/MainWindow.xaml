@@ -675,6 +675,7 @@
 
                             <CheckBox x:Name="AutoSyncCheck"
                                       Margin="0,5"
+                                      Click="AutoSyncCheck_Click"
                                       Content="Automatically sync after /reload, logout or exit" />
 
                             <CheckBox x:Name="LaunchWithWindowsCheck"

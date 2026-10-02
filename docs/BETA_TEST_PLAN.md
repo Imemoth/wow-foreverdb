@@ -374,6 +374,27 @@ that stage PENDING; a successful UI sync message alone is insufficient evidence.
 | Counts correct, herb location absent / D has no marker | Verify map API availability for herbs. Disenchant intentionally has no location. Do not fabricate node coordinates. |
 | Any Lua error | Record full error/stack, build/locale, input/source ID, bag/loot addons, Auto Loot and exact action. Stop that case and mark FAIL. |
 
+### Live evidence update — 2026-10-02
+
+Herbalism live capture was exercised on Forever with Auto Loot off. The observed
+sequence and counters were:
+
+- Peacebloom: `gameobject:1618`, one output item, quantity 1; herbalism counter
+  increased **9 -> 10**, unresolved loot windows stayed **0**.
+- Silverleaf: `gameobject:1617`, one output item, quantity 2; herbalism counter
+  increased **10 -> 11** and then **11 -> 12** on a second fresh node, unresolved
+  loot windows stayed **0**.
+- `/fdb last` reported the expected herbalism GameObject source/name and per-window
+  item/quantity values for both node types.
+- After `/reload`, the herbalism total remained **12** and the Silverleaf
+  `lastObservation` remained available. This establishes reload persistence for
+  the observed live snapshot.
+- Auto Loot, full client exit/relaunch, interrupted/expiry/reopen variants, direct
+  on-disk SavedVariables inspection, and Companion search/details verification
+  remain pending.
+- Disenchant live acceptance remains pending because the fresh test character did
+  not yet have a suitable expendable disenchantable item.
+
 ### Evidence ledger and closure rule
 
 Initial state on **2026-09-27**; no WoW client run was performed during preparation:
@@ -381,11 +402,11 @@ Initial state on **2026-09-27**; no WoW client run was performed during preparat
 | Case / stage | Herbalism | Disenchant | Evidence required |
 |---|---|---|---|
 | Repo source/bucket/export review | COMPLETE | COMPLETE | Source review + offline command below; not E2E PASS |
-| H1 / D1 manual success | PENDING | PENDING | Before/after status, last, debug, input/output IDs and quantities |
-| H2 / D2 repeat, multi-output, Auto Loot | PENDING | PENDING | Per-variant deltas and settings |
+| H1 / D1 manual success | PASS (live capture) | PENDING | Peacebloom 1618: H 9->10, qty 1, U 0; D still needs a suitable input item |
+| H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot + multi-item output still pending |
 | H3 / D3 negative cases and reopen | PENDING | PENDING | Per-subcase trace, export deltas and limitations |
 | Export + on-disk SavedVariables | PENDING | PENDING | Matching B/I/L records and Lua table paths |
-| Reload + full exit/relaunch | PENDING | PENDING | Stable counts, installation ID and last |
+| Reload + full exit/relaunch | RELOAD PASS / RELAUNCH PENDING | PENDING | H stayed 12 and last Silverleaf survived /reload; full client exit/relaunch still required |
 | Companion authenticated ingest / repeated sync | PENDING | PENDING | Real snapshot and per-installation counts |
 | Search/details and applicable locations | PENDING | PENDING | Correct groups, identities, outputs and navigation |
 | Full collector E2E closure | PENDING | PENDING | All preceding live stages have evidence |
