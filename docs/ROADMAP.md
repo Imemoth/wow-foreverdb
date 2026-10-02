@@ -124,6 +124,16 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [x] Prevent map toolbar / zoom text clipping at narrower widths.
 - [x] Replace raw location acquisition keys with user-facing labels.
 
+### 0.7.2-alpha — Search & map usability (planned)
+
+- [ ] Add an area/zone selector to Companion Search so results can be scoped to a
+      chosen zone instead of relying only on the currently-observed location set.
+- [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
+      revealed map variants, while keeping exact-build/local-CASC resolution and
+      the existing Blizzard-CDN fallback rules.
+- [ ] Preserve marker / cluster / heatmap overlays and current location navigation
+      behavior when changing the underlying map-art variant.
+
 ## 0.7.x — Collector coverage closure
 
 - [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
@@ -138,6 +148,17 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 Procedure and evidence ledger: [beta collector acceptance](BETA_TEST_PLAN.md#07x-herbalism--disenchant-collector-acceptance).
 Repo preparation is not E2E acceptance: both collectors still require real
 addon -> SavedVariables -> Companion -> Supabase -> search/details evidence.
+
+## Future — Questing & field data
+
+- [ ] Quest auto-accept / auto-complete convenience flow — requirements and safety
+      rules to be specified later before implementation.
+- [ ] Log world position for quest items obtained from non-mob world loot sources
+      (for example containers/GameObjects or other interactable world objects),
+      so the item can later be mapped back to where it was actually collected.
+- [ ] Define the data contract that distinguishes quest-item world-loot observations
+      from mob drops, normal chest/GameObject loot, and quest reward records before
+      adding them to search/map presentation.
 
 ## 0.8.0-alpha — Guildbook V1
 
