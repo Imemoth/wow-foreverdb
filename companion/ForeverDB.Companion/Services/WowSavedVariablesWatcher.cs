@@ -4,7 +4,7 @@ namespace ForeverDB.Companion.Services;
 public sealed class WowSavedVariablesWatcher : IDisposable
 {
     private readonly string _wowRoot;
-    private readonly Func<string, Task> _onChanged;
+    private readonly Func<string, CancellationToken, Task> _onChanged;
     private FileSystemWatcher? _watcher;
 
     private readonly Dictionary<string, CancellationTokenSource> _debounce =
@@ -12,7 +12,7 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 
     public WowSavedVariablesWatcher(
         string wowRoot,
-        Func<string, Task> onChanged)
+        Func<string, CancellationToken, Task> onChanged)
     {
         _wowRoot = wowRoot;
         _onChanged = onChanged;
@@ -90,7 +90,9 @@ public sealed class WowSavedVariablesWatcher : IDisposable
                             1500,
                             cts.Token);
 
-                        await _onChanged(path);
+                        await _onChanged(
+                            path,
+                            cts.Token);
                     }
                     catch (OperationCanceledException)
                     {
@@ -126,5 +128,6 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 
             _debounce.Clear();
         }
+
     }
 }

@@ -33,7 +33,8 @@ public sealed class SyncService
     public async Task SyncFileAsync(
         string path,
         CancellationToken cancellationToken = default,
-        bool force = false)
+        bool force = false,
+        SyncTrigger trigger = SyncTrigger.Auto)
     {
         if (!File.Exists(path))
         {
@@ -113,7 +114,8 @@ public sealed class SyncService
                 snapshot.Sources.Count,
                 snapshot.Guilds.Sum(
                     guild =>
-                        guild.Members.Count)));
+                        guild.Members.Count),
+                trigger));
 
         _ = PrewarmMapCacheAsync(
             snapshot);
@@ -182,4 +184,5 @@ public sealed class SyncService
 public sealed record SyncCompletedEventArgs(
     DateTimeOffset CompletedAt,
     int SourceCount,
-    int GuildMemberCount);
+    int GuildMemberCount,
+    SyncTrigger Trigger);

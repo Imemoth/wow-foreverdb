@@ -3,6 +3,13 @@ using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
 
+public enum SyncTrigger
+{
+    Startup,
+    Auto,
+    Manual
+}
+
 public sealed class SyncHealthState
 {
     private const int MaxErrorLength = 180;
@@ -35,6 +42,7 @@ public sealed class SyncHealthState
     public DateTimeOffset? LastSuccessfulSyncAt { get; private set; }
     public int LastSourceCount { get; private set; }
     public int LastGuildMemberCount { get; private set; }
+    public SyncTrigger? LastTrigger { get; private set; }
     public string LastError { get; private set; } = "";
 
     public void Configure(CompanionSettings settings)
@@ -83,11 +91,13 @@ public sealed class SyncHealthState
     public void MarkSyncSuccess(
         DateTimeOffset completedAt,
         int sourceCount,
-        int guildMemberCount)
+        int guildMemberCount,
+        SyncTrigger trigger)
     {
         LastSuccessfulSyncAt = completedAt;
         LastSourceCount = Math.Max(0, sourceCount);
         LastGuildMemberCount = Math.Max(0, guildMemberCount);
+        LastTrigger = trigger;
         AuthReady = SupabaseReady;
         LastError = "";
     }
