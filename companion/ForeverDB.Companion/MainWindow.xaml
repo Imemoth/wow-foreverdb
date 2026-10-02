@@ -154,8 +154,9 @@
                                 <TextBlock Text="Database sync"
                                            FontSize="20"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="ForeverDB watches your SavedVariables and uploads fresh observations automatically."
+                                <TextBlock Text="Auto Sync uploads SavedVariables after /reload, logout or exit. Sync now uploads the latest snapshot already written to disk."
                                            Foreground="{StaticResource MutedTextBrush}"
+                                           TextWrapping="Wrap"
                                            Margin="0,5,0,16" />
                                 <TextBlock Text="Current status"
                                            Foreground="{StaticResource MutedTextBrush}"
@@ -167,12 +168,20 @@
                                            Text="Starting..." />
                             </StackPanel>
 
-                            <Button Grid.Column="1"
-                                    Width="150"
-                                    Height="40"
-                                    VerticalAlignment="Center"
-                                    Click="SyncNow_Click"
-                                    Content="Sync now" />
+                            <StackPanel Grid.Column="1"
+                                        Width="180"
+                                        VerticalAlignment="Center">
+                                <Button Height="40"
+                                        Click="SyncNow_Click"
+                                        Content="Sync now"
+                                        ToolTip="Fresh in-game observations reach SavedVariables when WoW writes the file on /reload, logout or exit." />
+                                <TextBlock Margin="0,7,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="10"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           Text="Uploads the latest saved snapshot" />
+                            </StackPanel>
                         </Grid>
                     </Border>
 
