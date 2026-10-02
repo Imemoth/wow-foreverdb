@@ -92,7 +92,8 @@ public partial class MainWindow : Window
                     _syncHealth.MarkSyncSuccess(
                         completed.CompletedAt,
                         completed.SourceCount,
-                        completed.GuildMemberCount);
+                        completed.GuildMemberCount,
+                        completed.Trigger);
                     RefreshSyncHealthUi();
                 });
 
@@ -110,7 +111,7 @@ public partial class MainWindow : Window
             {
                 _watcher = new WowSavedVariablesWatcher(
                     _settings.WowRoot,
-                    async path =>
+                    async (path, cancellationToken) =>
                     {
                         if (!_settings.AutoSync ||
                             _syncService is null)
@@ -120,7 +121,14 @@ public partial class MainWindow : Window
 
                         try
                         {
-                            await _syncService.SyncFileAsync(path);
+                            await _syncService.SyncFileAsync(
+                                path,
+                                cancellationToken,
+                                force: true,
+                                trigger: SyncTrigger.Auto);
+                        }
+                        catch (OperationCanceledException)
+                        {
                         }
                         catch (Exception ex)
                         {
@@ -149,7 +157,9 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    await _syncService.SyncFileAsync(file);
+                    await _syncService.SyncFileAsync(
+                        file,
+                        trigger: SyncTrigger.Startup);
                 }
                 catch (Exception ex)
                 {
@@ -173,13 +183,14 @@ public partial class MainWindow : Window
             var watcher = _watcher ??
                 new WowSavedVariablesWatcher(
                     _settings.WowRoot,
-                    _ => Task.CompletedTask);
+                    (_, _) => Task.CompletedTask);
 
             foreach (var file in watcher.FindExistingFiles())
             {
                 await _syncService.SyncFileAsync(
                     file,
-                    force: true);
+                    force: true,
+                    trigger: SyncTrigger.Manual);
             }
 
             if (_watcher is null)
@@ -1186,7 +1197,7 @@ public partial class MainWindow : Window
         LastSyncCountsText.Text =
             _syncHealth.LastSuccessfulSyncAt is null
                 ? "Sources — · Guild members —"
-                : $"Sources {_syncHealth.LastSourceCount} · Guild members {_syncHealth.LastGuildMemberCount}";
+                : $"Sources {_syncHealth.LastSourceCount} · Guild members {_syncHealth.LastGuildMemberCount} · via {_syncHealth.LastTrigger}";
 
         LastErrorHealthText.Text =
             string.IsNullOrWhiteSpace(_syncHealth.LastError)
@@ -1199,7 +1210,7 @@ public partial class MainWindow : Window
                 : !_syncHealth.ConfigurationReady
                     ? "Configuration required."
                     : _syncHealth.LastSuccessfulSyncAt is not null
-                        ? $"Last sync {_syncHealth.LastSuccessfulSyncAt.Value.ToLocalTime():g}"
+                        ? $"Last sync {_syncHealth.LastSuccessfulSyncAt.Value.ToLocalTime():g} via {_syncHealth.LastTrigger}"
                         : _syncHealth.AutoSyncEnabled && _syncHealth.WatcherReady
                             ? "Ready. Watching SavedVariables."
                             : "Ready for manual sync.";
