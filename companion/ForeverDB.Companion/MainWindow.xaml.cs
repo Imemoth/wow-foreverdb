@@ -112,7 +112,8 @@ public partial class MainWindow : Window
                     _settings.WowRoot,
                     async path =>
                     {
-                        if (_syncService is null)
+                        if (!_settings.AutoSync ||
+                            _syncService is null)
                         {
                             return;
                         }
@@ -148,7 +149,9 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    await _syncService.SyncFileAsync(file);
+                    await _syncService.SyncFileAsync(
+                    file,
+                    force: true);
                 }
                 catch (Exception ex)
                 {
@@ -1091,6 +1094,17 @@ public partial class MainWindow : Window
             WindowState == WindowState.Maximized
                 ? WindowState.Normal
                 : WindowState.Maximized;
+    }
+
+    private async void AutoSyncCheck_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        _settings.AutoSync =
+            AutoSyncCheck.IsChecked == true;
+
+        SettingsService.Save(_settings);
+        await RebuildServicesAsync();
     }
 
     private async void SaveSettings_Click(
