@@ -389,8 +389,14 @@ sequence and counters were:
 - After `/reload`, the herbalism total remained **12** and the Silverleaf
   `lastObservation` remained available. This establishes reload persistence for
   the observed live snapshot.
-- Auto Loot, full client exit/relaunch, interrupted/expiry/reopen variants, direct
-  on-disk SavedVariables inspection, and Companion search/details verification
+- Auto Loot was exercised successfully on live herbalism and preserved the same
+  collector classification without unresolved loot windows.
+- Companion authenticated sync and search/details presentation were verified live:
+  Peacebloom and Silverleaf are searchable, herb items show **Gathered from**,
+  source details show **Herbalism**, Mulgore location rows/coordinates are present,
+  and the corresponding map markers render.
+- Full client exit/relaunch, interrupted/expiry/reopen variants, direct on-disk
+  SavedVariables inspection, and an explicit repeated-sync no-double-count check
   remain pending.
 - Disenchant live acceptance remains pending because the fresh test character did
   not yet have a suitable expendable disenchantable item.
@@ -403,12 +409,12 @@ Initial state on **2026-09-27**; no WoW client run was performed during preparat
 |---|---|---|---|
 | Repo source/bucket/export review | COMPLETE | COMPLETE | Source review + offline command below; not E2E PASS |
 | H1 / D1 manual success | PASS (live capture) | PENDING | Peacebloom 1618: H 9->10, qty 1, U 0; D still needs a suitable input item |
-| H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot + multi-item output still pending |
+| H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot PASS; multiple distinct output-item variant still pending |
 | H3 / D3 negative cases and reopen | PENDING | PENDING | Per-subcase trace, export deltas and limitations |
 | Export + on-disk SavedVariables | PENDING | PENDING | Matching B/I/L records and Lua table paths |
 | Reload + full exit/relaunch | RELOAD PASS / RELAUNCH PENDING | PENDING | H stayed 12 and last Silverleaf survived /reload; full client exit/relaunch still required |
-| Companion authenticated ingest / repeated sync | PENDING | PENDING | Real snapshot and per-installation counts |
-| Search/details and applicable locations | PENDING | PENDING | Correct groups, identities, outputs and navigation |
+| Companion authenticated ingest / repeated sync | INGEST PASS / REPEAT CHECK PENDING | PENDING | Live herb snapshot reached Companion/Supabase; explicit no-double-count comparison after repeat sync still pending |
+| Search/details and applicable locations | PASS | PENDING | Peacebloom/Silverleaf searchable; Gathered from + Herbalism groups, Mulgore coords and map markers verified |
 | Full collector E2E closure | PENDING | PENDING | All preceding live stages have evidence |
 
 For every execution record: case/subcase, date/tester, commit/build/locale,
