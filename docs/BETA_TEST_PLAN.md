@@ -399,8 +399,14 @@ sequence and counters were:
   identity survived a full client exit and relaunch.
 - Interrupted gathering PASS: canceling a gather before loot did not increment
   herbalism and did not contaminate the next unrelated loot classification.
-- Partial-loot/reopen remains PENDING because a suitable multi-slot herb loot
-  window has not yet been reproduced.
+- Partial-loot/reopen was reproduced live with Earthroot `gameobject:1619`
+  yielding Earthroot + Frilled Lichen. Before the fix, reopening the same physical
+  node caused duplicate observations (**herbalism 22 -> 23 -> 24**) for the same
+  GameObject instance. This is a confirmed live FAIL of the old behavior.
+- Repo fix now deduplicates reopened gathering windows by the full physical source
+  GUID (not only source type ID), while a distinct node with the same GameObject
+  type ID remains a fresh observation. Simulated regression coverage PASS; live
+  post-fix retest remains required.
 - Direct on-disk SavedVariables inspection and an explicit repeated-sync
   no-double-count check remain pending.
 - Disenchant live acceptance remains pending because the fresh test character did
@@ -415,7 +421,7 @@ Initial state on **2026-09-27**; no WoW client run was performed during preparat
 | Repo source/bucket/export review | COMPLETE | COMPLETE | Source review + offline command below; not E2E PASS |
 | H1 / D1 manual success | PASS (live capture) | PENDING | Peacebloom 1618: H 9->10, qty 1, U 0; D still needs a suitable input item |
 | H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot PASS; multiple distinct output-item variant still pending |
-| H3 / D3 negative cases and reopen | INTERRUPT PASS / REOPEN PENDING | PENDING | Interrupted gather left H unchanged and did not contaminate following loot; partial-loot/reopen not yet reproduced |
+| H3 / D3 negative cases and reopen | INTERRUPT PASS / REOPEN FIX NEEDS LIVE RETEST | PENDING | Interrupted gather PASS. Earthroot 1619 partial reopen reproduced duplicate H 22->23->24 on old build; full-GUID dedup fix + simulated regression added |
 | Export + on-disk SavedVariables | PENDING | PENDING | Matching B/I/L records and Lua table paths |
 | Reload + full exit/relaunch | PASS | PENDING | Herbalism totals/installation identity survived /reload and full exit/relaunch |
 | Companion authenticated ingest / repeated sync | INGEST PASS / REPEAT CHECK PENDING | PENDING | Live herb snapshot reached Companion/Supabase; explicit no-double-count comparison after repeat sync still pending |

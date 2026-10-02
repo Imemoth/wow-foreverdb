@@ -129,12 +129,32 @@ test("herbalism identity, item aggregation, status/last and export", function()
         "L|gameobject|1618|0|herbalism|42|Test Zone|Test Subzone|([^|]+)|([^|]+)|1")
     equal(tonumber(x), 42)
     equal(tonumber(y), 33.5)
+    -- Reopening the same physical GameObject instance must not create
+    -- another observation or duplicate already-seen outputs.
     s:event("LOOT_CLOSED")
+    s.slots = { { id = 765, qty = 1 } }
     s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "cast2", 2366)
+    s:event("LOOT_READY")
+    equal(b.observations, 1)
+    equal(b.items["2447"].drops, 1)
+    equal(b.items["2447"].quantity, 3)
+    equal(b.items["765"].drops, 1)
+    equal(b.items["765"].quantity, 1)
+    contains(
+        table.concat(s.messages, "\n"),
+        "duplicate gathering source skipped GameObject-0-0-0-0-1618-0001"
+    )
+
+    -- A different physical node with the same GameObject type ID must still
+    -- count as a fresh observation.
+    s:event("LOOT_CLOSED")
+    s.guid = "GameObject-0-0-0-0-1618-0002"
+    s.slots = { { id = 2447, qty = 2 } }
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "cast3", 2366)
     s:event("LOOT_READY")
     equal(b.observations, 2)
     equal(b.items["2447"].drops, 2)
-    equal(b.items["2447"].quantity, 6)
+    equal(b.items["2447"].quantity, 5)
 end)
 
 test("herbalism expires; unrelated object is not an herb", function()

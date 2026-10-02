@@ -2,6 +2,8 @@ local _, FDB = ...
 
 local lootFrame
 local lootWindowCaptured = false
+local recentGatheringSources = {}
+local GATHERING_INSTANCE_DEDUP_SECONDS = 600
 
 local CHEST_WORDS = {
     "chest",
@@ -13,6 +15,44 @@ local CHEST_WORDS = {
     "crate",
     "trunk",
 }
+
+
+local function isGatheringKind(kind)
+    return kind == "herbalism"
+        or kind == "mining"
+        or kind == "skinning"
+end
+
+local function pruneRecentGatheringSources(current)
+    for guid, capturedAt in pairs(recentGatheringSources) do
+        if current - capturedAt > GATHERING_INSTANCE_DEDUP_SECONDS then
+            recentGatheringSources[guid] = nil
+        end
+    end
+end
+
+local function wasGatheringSourceCaptured(sourceGuid, kind)
+    if not sourceGuid or not isGatheringKind(kind) then
+        return false
+    end
+
+    local current = GetTime and GetTime() or 0
+    pruneRecentGatheringSources(current)
+
+    local capturedAt = recentGatheringSources[sourceGuid]
+    return capturedAt ~= nil
+        and current - capturedAt <= GATHERING_INSTANCE_DEDUP_SECONDS
+end
+
+local function markGatheringSourceCaptured(sourceGuid, kind)
+    if not sourceGuid or not isGatheringKind(kind) then
+        return
+    end
+
+    local current = GetTime and GetTime() or 0
+    pruneRecentGatheringSources(current)
+    recentGatheringSources[sourceGuid] = current
+end
 
 local function itemIdFromLink(link)
     if type(link) ~= "string" then return nil end
@@ -364,6 +404,16 @@ function FDB:CaptureLootWindow()
         end
     end
 
+    if wasGatheringSourceCaptured(sourceGuid, kind) then
+        self:Debug(
+            kind,
+            "duplicate gathering source skipped",
+            sourceGuid
+        )
+        self:ConsumePendingGatheringKind(kind)
+        return
+    end
+
     local items = collectItems()
 
     self:RecordObservation(
@@ -400,6 +450,7 @@ function FDB:CaptureLootWindow()
         observedLevel or "?"
     )
 
+    markGatheringSourceCaptured(sourceGuid, kind)
     self:ConsumePendingGatheringKind(kind)
 
     if kind == "fishing_pool"
