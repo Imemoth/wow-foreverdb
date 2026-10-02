@@ -138,7 +138,7 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 - [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
       debug breadcrumbs and simulated Lua contract checks.
-- [ ] Herbalism E2E test and fixes — **live capture, Auto Loot, reload/full-exit persistence, interrupted-gather isolation, Companion search/details and Mulgore map-location path PASS; repeated-sync no-double-count, direct disk inspection and partial-loot/reopen still pending**.
+- [ ] Herbalism E2E test and fixes — **live capture, Auto Loot, reload/full-exit persistence, interrupted-gather isolation, Companion search/details and Mulgore map-location path PASS. Partial-loot/reopen duplicate was reproduced live (Earthroot 1619, H 22->23->24) and fixed repo-side with full-GameObject-GUID dedup; live post-fix retest, repeated-sync no-double-count and direct disk inspection remain pending**.
 - [ ] Disenchant E2E test and fixes — **PENDING live client evidence**.
 - [ ] Open-water fishing regression test.
 - [ ] Chest/GameObject location regression test.
