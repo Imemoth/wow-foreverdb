@@ -18,7 +18,6 @@ public partial class MainWindow : Window
     private SyncService? _syncService;
     private SearchService? _searchService;
     private WowSavedVariablesWatcher? _watcher;
-    private readonly SyncHealthState _syncHealth = new();
 
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
@@ -48,23 +47,19 @@ public partial class MainWindow : Window
     {
         _watcher?.Dispose();
         _watcher = null;
-        _syncService = null;
-        _searchService = null;
-
-        _syncHealth.Configure(_settings);
-        RefreshSyncHealthUi();
 
         _guildbookGuilds.Clear();
         RefreshGuildbookUi();
 
-        if (!_syncHealth.ConfigurationReady)
+        if (string.IsNullOrWhiteSpace(_settings.WowRoot))
         {
-            var message =
-                string.IsNullOrWhiteSpace(_settings.WowRoot)
-                    ? "WoW Forever path is not configured."
-                    : "Supabase connection is not configured.";
+            SetStatus("WoW Forever path is not configured.");
+            return;
+        }
 
-            RecordSyncError(message);
+        if (string.IsNullOrWhiteSpace(_settings.SupabaseKey))
+        {
+            SetStatus("Supabase key is not configured.");
             return;
         }
 
@@ -77,24 +72,8 @@ public partial class MainWindow : Window
             _settings,
             auth);
 
-        _syncService.Authenticated += () =>
-            Dispatcher.Invoke(
-                () =>
-                {
-                    _syncHealth.SetAuthReady(true);
-                    RefreshSyncHealthUi();
-                });
-
-        _syncService.SyncCompleted += (_, completed) =>
-            Dispatcher.Invoke(
-                () =>
-                {
-                    _syncHealth.MarkSyncSuccess(
-                        completed.CompletedAt,
-                        completed.SourceCount,
-                        completed.GuildMemberCount);
-                    RefreshSyncHealthUi();
-                });
+        _syncService.StatusChanged += (_, status) =>
+            Dispatcher.Invoke(() => SetStatus(status));
 
         _syncService.GuildbookChanged += guilds =>
             Dispatcher.Invoke(
@@ -106,45 +85,25 @@ public partial class MainWindow : Window
 
         if (_settings.AutoSync)
         {
-            try
-            {
-                _watcher = new WowSavedVariablesWatcher(
-                    _settings.WowRoot,
-                    async path =>
+            _watcher = new WowSavedVariablesWatcher(
+                _settings.WowRoot,
+                async path =>
+                {
+                    if (_syncService is not null)
                     {
-                        if (_syncService is null)
-                        {
-                            return;
-                        }
+                        await _syncService.SyncFileAsync(path);
+                    }
+                });
 
-                        try
-                        {
-                            await _syncService.SyncFileAsync(path);
-                        }
-                        catch (Exception ex)
-                        {
-                            Dispatcher.Invoke(
-                                () => RecordSyncError(ex.Message));
-                        }
-                    });
-
-                _watcher.Start();
-                _syncHealth.SetWatcherReady(true);
-            }
-            catch (Exception ex)
-            {
-                _watcher?.Dispose();
-                _watcher = null;
-                RecordSyncError(ex.Message);
-            }
+            _watcher.Start();
         }
 
-        RefreshSyncHealthUi();
+        SetStatus("Ready.");
 
-        if (_settings.AutoSync &&
-            _watcher is not null)
+        if (_settings.AutoSync)
         {
-            foreach (var file in _watcher.FindExistingFiles())
+            foreach (var file in _watcher?.FindExistingFiles()
+                         ?? Array.Empty<string>())
             {
                 try
                 {
@@ -152,7 +111,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    RecordSyncError(ex.Message);
+                    SetStatus(ex.Message);
                 }
             }
         }
@@ -186,7 +145,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            RecordSyncError(ex.Message);
+            SetStatus(ex.Message);
         }
     }
 
@@ -530,6 +489,7 @@ public partial class MainWindow : Window
         {
             SearchResults.ItemsSource = null;
             SearchStatusText.Text = ex.Message;
+            SetStatus(ex.Message);
         }
     }
 
@@ -596,6 +556,7 @@ public partial class MainWindow : Window
             DetailTitleText.Text = result.Name;
             DetailSubtitleText.Text = ex.Message;
             DetailTabs.Items.Clear();
+            SetStatus(ex.Message);
         }
     }
 
@@ -1112,6 +1073,7 @@ public partial class MainWindow : Window
             _settings.StartMinimized);
 
         await RebuildServicesAsync();
+        SetStatus("Settings saved.");
     }
 
     private void PopulateSettings()
@@ -1126,69 +1088,9 @@ public partial class MainWindow : Window
             _settings.StartMinimized;
     }
 
-    private void RecordSyncError(string? message)
+    private void SetStatus(string text)
     {
-        _syncHealth.MarkError(
-            message,
-            _settings);
-        RefreshSyncHealthUi();
-    }
-
-    private void RefreshSyncHealthUi()
-    {
-        if (StatusText is null)
-        {
-            return;
-        }
-
-        AutoSyncHealthText.Text =
-            _syncHealth.AutoSyncEnabled
-                ? "Enabled"
-                : "Disabled";
-
-        WatcherHealthText.Text =
-            !_syncHealth.ConfigurationReady
-                ? "Configuration required"
-                : !_syncHealth.AutoSyncEnabled
-                    ? "Watcher off"
-                    : _syncHealth.WatcherReady
-                        ? "Watcher ready"
-                        : "Watcher unavailable";
-
-        CentralDbHealthText.Text =
-            !_syncHealth.SupabaseReady
-                ? "Not configured"
-                : _syncHealth.AuthReady
-                    ? "Auth ready"
-                    : "Auth pending";
-
-        LastSyncHealthText.Text =
-            _syncHealth.LastSuccessfulSyncAt is null
-                ? "No successful sync yet"
-                : _syncHealth.LastSuccessfulSyncAt.Value
-                    .ToLocalTime()
-                    .ToString("g");
-
-        LastSyncCountsText.Text =
-            _syncHealth.LastSuccessfulSyncAt is null
-                ? "Sources — · Guild members —"
-                : $"Sources {_syncHealth.LastSourceCount} · Guild members {_syncHealth.LastGuildMemberCount}";
-
-        LastErrorHealthText.Text =
-            string.IsNullOrWhiteSpace(_syncHealth.LastError)
-                ? "None"
-                : _syncHealth.LastError;
-
-        StatusText.Text =
-            !string.IsNullOrWhiteSpace(_syncHealth.LastError)
-                ? $"Attention: {_syncHealth.LastError}"
-                : !_syncHealth.ConfigurationReady
-                    ? "Configuration required."
-                    : _syncHealth.LastSuccessfulSyncAt is not null
-                        ? $"Last sync {_syncHealth.LastSuccessfulSyncAt.Value.ToLocalTime():g}"
-                        : _syncHealth.AutoSyncEnabled && _syncHealth.WatcherReady
-                            ? "Ready. Watching SavedVariables."
-                            : "Ready for manual sync.";
+        StatusText.Text = text;
     }
 
     private void Window_Closing(

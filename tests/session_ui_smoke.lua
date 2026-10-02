@@ -981,7 +981,7 @@ local function setupCoreIntegration()
     -- keeps the integration test scoped to session-tracker wiring instead
     -- of duplicating the unrelated collector-smoke fixture.
     for _, name in ipairs({
-        "InitializeGuildApiProbe", "InitializeGuildbookTracker",
+        "InitializeGuildApiProbe", "InitializeQuestApiProbe", "InitializeGuildbookTracker",
         "InitializeGatheringTracker", "InitializeSkinningTracker",
         "InitializeFishingPoolTracker", "InitializeDisenchantTracker",
         "InitializeLootTracker", "InitializeTooltip",

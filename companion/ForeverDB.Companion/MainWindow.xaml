@@ -193,13 +193,11 @@
                                            Foreground="{StaticResource AccentBrush}"
                                            FontWeight="Bold"
                                            FontSize="12" />
-                                <TextBlock x:Name="AutoSyncHealthText"
-                                           Text="Checking..."
+                                <TextBlock Text="Enabled"
                                            FontSize="24"
                                            FontWeight="SemiBold"
                                            Margin="0,12,0,4" />
-                                <TextBlock x:Name="WatcherHealthText"
-                                           Text="Watcher pending"
+                                <TextBlock Text="/reload, logout and client exit"
                                            Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
                         </Border>
@@ -208,17 +206,15 @@
                                 Style="{StaticResource CardStyle}"
                                 Padding="20">
                             <StackPanel>
-                                <TextBlock Text="LAST SUCCESS"
+                                <TextBlock Text="LOCAL DATA"
                                            Foreground="{StaticResource AccentBrush}"
                                            FontWeight="Bold"
                                            FontSize="12" />
-                                <TextBlock x:Name="LastSyncHealthText"
-                                           Text="No successful sync yet"
-                                           FontSize="18"
+                                <TextBlock Text="SavedVariables"
+                                           FontSize="24"
                                            FontWeight="SemiBold"
                                            Margin="0,12,0,4" />
-                                <TextBlock x:Name="LastSyncCountsText"
-                                           Text="Sources — · Guild members —"
+                                <TextBlock Text="Addon database remains available in-game"
                                            Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
                         </Border>
@@ -231,23 +227,11 @@
                                            Foreground="{StaticResource AccentBrush}"
                                            FontWeight="Bold"
                                            FontSize="12" />
-                                <TextBlock x:Name="CentralDbHealthText"
-                                           Text="Checking..."
+                                <TextBlock Text="Supabase"
                                            FontSize="24"
                                            FontWeight="SemiBold"
                                            Margin="0,12,0,4" />
-                                <TextBlock Text="Supabase / anonymous auth"
-                                           Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="LAST ERROR"
-                                           Foreground="{StaticResource AccentBrush}"
-                                           FontWeight="Bold"
-                                           FontSize="11"
-                                           Margin="0,14,0,3" />
-                                <TextBlock x:Name="LastErrorHealthText"
-                                           Text="None"
-                                           TextWrapping="Wrap"
-                                           MaxHeight="48"
-                                           ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"
+                                <TextBlock Text="Authenticated community snapshots"
                                            Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
                         </Border>

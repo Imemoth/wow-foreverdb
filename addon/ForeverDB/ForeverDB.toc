@@ -13,6 +13,7 @@ SessionUI.lua
 LocationTracker.lua
 MapTracker.lua
 GuildApiProbe.lua
+QuestApiProbe.lua
 GuildbookTracker.lua
 GatheringTracker.lua
 SkinningTracker.lua

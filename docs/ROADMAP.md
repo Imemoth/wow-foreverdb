@@ -149,8 +149,29 @@ Procedure and evidence ledger: [beta collector acceptance](BETA_TEST_PLAN.md#07x
 Repo preparation is not E2E acceptance: both collectors still require real
 addon -> SavedVariables -> Companion -> Supabase -> search/details evidence.
 
-## Future — Questing & field data
+## Future — Quest intelligence & field data
 
+Goal: evolve ForeverDB from source/location tracking into a character-aware quest
+assistant without assuming Retail-only quest APIs on the Forever client.
+
+- [x] Add a read-only quest API capability probe (`/fdb questapi`, alias
+      `/fdb quests`) that reports modern/legacy API availability, current quest-log
+      rows/objectives and completed-quest enumeration capability. **Repo implemented;
+      live Forever runtime probe still required.**
+- [ ] Per-character Quest Tracker for accepted / active / ready-to-turn-in /
+      completed / turned-in / abandoned states.
+- [ ] Track quest objective progress and completion transitions.
+- [ ] Record accept / objective-complete / turn-in zone, subzone and coordinates
+      where the client exposes enough context to do so safely.
+- [ ] Maintain per-character completed quest history without changing the public
+      source/export contract until the quest data model is explicitly versioned.
+- [ ] Build a zone quest catalog so ForeverDB can answer "which quests exist in this
+      area?" rather than only "which quests are currently in my quest log?".
+- [ ] Add zone completion summaries (for example completed / active / remaining)
+      once the catalog and prerequisite rules are trustworthy.
+- [ ] Add a Companion quest browser with zone and status filters.
+- [ ] Model quest chains / prerequisites / faction / level gates before labeling a
+      quest as actually available to the current character.
 - [ ] Quest auto-accept / auto-complete convenience flow — requirements and safety
       rules to be specified later before implementation.
 - [ ] Log world position for quest items obtained from non-mob world loot sources
@@ -159,6 +180,10 @@ addon -> SavedVariables -> Companion -> Supabase -> search/details evidence.
 - [ ] Define the data contract that distinguishes quest-item world-loot observations
       from mob drops, normal chest/GameObject loot, and quest reward records before
       adding them to search/map presentation.
+- [ ] Add quest objective locations from ForeverDB observations (mob drops,
+      GameObjects/world loot and other proven sources).
+- [ ] Capture / resolve quest giver and turn-in NPC locations where the client/API
+      provides reliable identifiers and coordinates.
 
 ## 0.8.0-alpha — Guildbook V1
 
