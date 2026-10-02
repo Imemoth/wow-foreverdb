@@ -80,6 +80,7 @@ public sealed class WowSavedVariablesWatcher : IDisposable
             }
 
             var cts = new CancellationTokenSource();
+            var lifetimeToken = _lifetimeCts.Token;
             _debounce[path] = cts;
 
             _ = Task.Run(
@@ -93,7 +94,7 @@ public sealed class WowSavedVariablesWatcher : IDisposable
 
                         await _onChanged(
                             path,
-                            _lifetimeCts.Token);
+                            lifetimeToken);
                     }
                     catch (OperationCanceledException)
                     {
