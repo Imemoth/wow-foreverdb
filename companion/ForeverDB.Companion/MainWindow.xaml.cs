@@ -149,9 +149,7 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    await _syncService.SyncFileAsync(
-                    file,
-                    force: true);
+                    await _syncService.SyncFileAsync(file);
                 }
                 catch (Exception ex)
                 {
@@ -179,7 +177,9 @@ public partial class MainWindow : Window
 
             foreach (var file in watcher.FindExistingFiles())
             {
-                await _syncService.SyncFileAsync(file);
+                await _syncService.SyncFileAsync(
+                    file,
+                    force: true);
             }
 
             if (_watcher is null)
