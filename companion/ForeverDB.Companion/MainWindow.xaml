@@ -675,7 +675,6 @@
 
                             <CheckBox x:Name="AutoSyncCheck"
                                       Margin="0,5"
-                                      Click="AutoSyncCheck_Click"
                                       Content="Automatically sync after /reload, logout or exit" />
 
                             <CheckBox x:Name="LaunchWithWindowsCheck"
@@ -690,6 +689,13 @@
                                     HorizontalAlignment="Left"
                                     Click="SaveSettings_Click"
                                     Content="Save settings" />
+
+                            <TextBlock x:Name="SettingsSaveStatusText"
+                                       Margin="0,10,0,0"
+                                       Foreground="{StaticResource SuccessBrush}"
+                                       FontWeight="SemiBold"
+                                       Text="Settings saved."
+                                       Visibility="Collapsed" />
                         </StackPanel>
                     </Border>
 

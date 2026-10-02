@@ -1107,17 +1107,6 @@ public partial class MainWindow : Window
                 : WindowState.Maximized;
     }
 
-    private async void AutoSyncCheck_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        _settings.AutoSync =
-            AutoSyncCheck.IsChecked == true;
-
-        SettingsService.Save(_settings);
-        await RebuildServicesAsync();
-    }
-
     private async void SaveSettings_Click(
         object sender,
         RoutedEventArgs e)
@@ -1137,6 +1126,12 @@ public partial class MainWindow : Window
             _settings.StartMinimized);
 
         await RebuildServicesAsync();
+
+        SettingsSaveStatusText.Text = "Settings saved.";
+        SettingsSaveStatusText.Foreground =
+            (System.Windows.Media.Brush)FindResource("SuccessBrush");
+        SettingsSaveStatusText.Visibility =
+            Visibility.Visible;
     }
 
     private void PopulateSettings()
