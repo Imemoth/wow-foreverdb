@@ -25,11 +25,27 @@ local function getDisenchantCursor()
     local cursorType, _, _, spellId =
         GetCursorInfo()
 
-    return cursorType == "spell"
-        and tonumber(spellId) == DISENCHANT_SPELL_ID
+    if cursorType ~= "spell" then
+        return false
+    end
+
+    if tonumber(spellId) == DISENCHANT_SPELL_ID then
+        return true, "spell-id"
+    end
+
+    -- Forever's Combined Backpack path may expose an item-targeting spell
+    -- cursor without returning the spell ID in GetCursorInfo(). Treat that
+    -- only as a candidate; the source is not committed as disenchant until
+    -- UNIT_SPELLCAST_SUCCEEDED confirms spell 13262.
+    if SpellCanTargetItem
+        and SpellCanTargetItem() then
+        return true, "item-target"
+    end
+
+    return false
 end
 
-function FDB:RememberDisenchantTarget(bag, slot)
+function FDB:RememberDisenchantTarget(bag, slot, origin)
     local now = GetTime and GetTime() or 0
     local activeAt = self.DisenchantCursorActiveAt
 
@@ -60,7 +76,9 @@ function FDB:RememberDisenchantTarget(bag, slot)
     self:Debug(
         "disenchant target",
         itemId,
-        name or ""
+        name or "",
+        "via",
+        origin or "container-use"
     )
 end
 
@@ -117,7 +135,8 @@ local function hookContainerUse()
             function(bag, slot)
                 FDB:RememberDisenchantTarget(
                     bag,
-                    slot
+                    slot,
+                    "container-use"
                 )
             end
         )
@@ -131,7 +150,8 @@ local function hookContainerUse()
             function(bag, slot)
                 FDB:RememberDisenchantTarget(
                     bag,
-                    slot
+                    slot,
+                    "container-use"
                 )
             end
         )
@@ -146,19 +166,35 @@ function FDB:InitializeDisenchantTracker()
 
     disenchantFrame = CreateFrame("Frame")
     disenchantFrame:RegisterEvent("CURSOR_CHANGED")
+    disenchantFrame:RegisterEvent("ITEM_LOCK_CHANGED")
     disenchantFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     disenchantFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
     disenchantFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
 
     disenchantFrame:SetScript(
         "OnEvent",
-        function(_, event, unitTarget, _, spellId)
+        function(_, event, unitTarget, arg2, spellId)
             if event == "CURSOR_CHANGED" then
-                if getDisenchantCursor() then
+                local active, mode =
+                    getDisenchantCursor()
+
+                if active then
                     FDB.DisenchantCursorActiveAt =
                         GetTime and GetTime() or 0
-                    FDB:Debug("disenchant cursor detected")
+                    FDB:Debug(
+                        "disenchant cursor detected",
+                        mode or "unknown"
+                    )
                 end
+                return
+            end
+
+            if event == "ITEM_LOCK_CHANGED" then
+                FDB:RememberDisenchantTarget(
+                    unitTarget,
+                    arg2,
+                    "item-lock"
+                )
                 return
             end
 
