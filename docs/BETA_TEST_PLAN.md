@@ -409,8 +409,14 @@ sequence and counters were:
   post-fix retest remains required.
 - Direct on-disk SavedVariables inspection and an explicit repeated-sync
   no-double-count check remain pending.
-- Disenchant live acceptance remains pending because the fresh test character did
-  not yet have a suitable expendable disenchantable item.
+- Disenchant live testing is now reproducible, but the pre-fix Combined Backpack
+  path failed to capture the input item. The live trace showed
+  `disenchant succeeded without captured target` followed by
+  `loot unresolved; slots: 1`; no disenchant observation was recorded.
+- Repo fix adds an item-target cursor fallback plus `ITEM_LOCK_CHANGED(bag, slot)`
+  capture so the source item can be identified even when the Combined Backpack
+  bypasses the observed `C_Container.UseContainerItem` hook path. Simulated
+  Combined Backpack regression coverage PASS; live post-fix retest remains required.
 
 ### Evidence ledger and closure rule
 
@@ -419,7 +425,7 @@ Initial state on **2026-09-27**; no WoW client run was performed during preparat
 | Case / stage | Herbalism | Disenchant | Evidence required |
 |---|---|---|---|
 | Repo source/bucket/export review | COMPLETE | COMPLETE | Source review + offline command below; not E2E PASS |
-| H1 / D1 manual success | PASS (live capture) | PENDING | Peacebloom 1618: H 9->10, qty 1, U 0; D still needs a suitable input item |
+| H1 / D1 manual success | PASS (live capture) | FIX NEEDS LIVE RETEST | Peacebloom 1618 PASS. Disenchant pre-fix live trace reached spell success/loot but failed target capture; Combined Backpack item-lock fallback added repo-side |
 | H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot PASS; multiple distinct output-item variant still pending |
 | H3 / D3 negative cases and reopen | INTERRUPT PASS / REOPEN FIX NEEDS LIVE RETEST | PENDING | Interrupted gather PASS. Earthroot 1619 partial reopen reproduced duplicate H 22->23->24 on old build; full-GUID dedup fix + simulated regression added |
 | Export + on-disk SavedVariables | PENDING | PENDING | Matching B/I/L records and Lua table paths |

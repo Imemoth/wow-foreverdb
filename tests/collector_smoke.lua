@@ -13,7 +13,15 @@ local function contains(text, fragment)
 end
 
 local function setup(api)
-    local state = { now = 100, frames = {}, messages = {}, slots = {}, hooks = {} }
+    local state = {
+        now = 100,
+        frames = {},
+        messages = {},
+        slots = {},
+        hooks = {},
+        cursorSpellId = 13262,
+        spellCanTargetItem = false,
+    }
     local FDB = {}
     print = function(...)
         local parts = {}
@@ -55,7 +63,15 @@ local function setup(api)
         GetPlayerMapPosition = function() return { x = 0.421, y = 0.337 } end,
     }
     C_Spell = { GetSpellName = function() return "Localized gathering spell" end }
-    GetCursorInfo = function() return "spell", nil, nil, 13262 end
+    GetCursorInfo = function()
+        return "spell", nil, nil, state.cursorSpellId
+    end
+    SpellCanTargetItem = function()
+        return state.spellCanTargetItem
+    end
+    SpellCanTargetItemID = function()
+        return false
+    end
     GetItemInfo = function() return "Test Input" end
     local container = {
         UseContainerItem = function() end,
@@ -176,6 +192,35 @@ test("unresolved herb loot increments diagnostics, not observations", function()
     equal(f:GetDatabaseStats().unresolvedLootWindows, 1)
     equal(f:GetDatabaseStats().sourceCount, 0)
     equal(f.DB.lastObservation, nil)
+end)
+
+test("disenchant combined-bag path captures target from item lock without cursor spell ID", function()
+    local f, s = setup("modern")
+    s.cursorSpellId = nil
+    s.spellCanTargetItem = true
+    s.slots = { { id = 10940, qty = 2 } }
+
+    s:event("CURSOR_CHANGED")
+    s:event("ITEM_LOCK_CHANGED", 0, 1)
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 13262)
+    s:event("LOOT_READY")
+
+    local b = f.DB.sources["item:9001"].buckets.disenchant
+    equal(b.observations, 1)
+    equal(b.items["10940"].quantity, 2)
+    equal(f.ActiveDisenchant, nil)
+    contains(
+        table.concat(s.messages, "\n"),
+        "disenchant cursor detected item-target"
+    )
+    contains(
+        table.concat(s.messages, "\n"),
+        "disenchant target 9001 Test Input via item-lock"
+    )
+    contains(
+        table.concat(s.messages, "\n"),
+        "disenchant armed 9001"
+    )
 end)
 
 for _, api in ipairs({ "modern", "legacy" }) do
