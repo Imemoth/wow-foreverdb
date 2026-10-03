@@ -37,8 +37,14 @@ local function getDisenchantCursor()
     -- cursor without returning the spell ID in GetCursorInfo(). Treat that
     -- only as a candidate; the source is not committed as disenchant until
     -- UNIT_SPELLCAST_SUCCEEDED confirms spell 13262.
-    if SpellCanTargetItem
-        and SpellCanTargetItem() then
+    local canTargetItem =
+        SpellCanTargetItem
+        and SpellCanTargetItem()
+    local canTargetItemId =
+        SpellCanTargetItemID
+        and SpellCanTargetItemID()
+
+    if canTargetItem or canTargetItemId then
         return true, "item-target"
     end
 
@@ -46,6 +52,11 @@ local function getDisenchantCursor()
 end
 
 function FDB:RememberDisenchantTarget(bag, slot, origin)
+    if type(bag) ~= "number"
+        or type(slot) ~= "number" then
+        return
+    end
+
     local now = GetTime and GetTime() or 0
     local activeAt = self.DisenchantCursorActiveAt
 
