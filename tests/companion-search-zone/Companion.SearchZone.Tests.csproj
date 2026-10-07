@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../companion/ForeverDB.Companion/Models/CompanionSettings.cs"
+             Link="CompanionSettings.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Models/SearchModels.cs"
+             Link="SearchModels.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/LocationService.cs"
+             Link="LocationService.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/StatsService.cs"
+             Link="StatsService.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchService.cs"
+             Link="SearchService.cs" />
+  </ItemGroup>
+
+</Project>
