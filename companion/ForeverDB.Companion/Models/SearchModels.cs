@@ -6,6 +6,25 @@ public enum SearchEntityKind
     Source
 }
 
+public sealed class SearchZoneOption
+{
+    public long? MapId { get; init; }
+    public string ZoneName { get; init; } = "";
+
+    public bool IsAllZones =>
+        !MapId.HasValue ||
+        string.IsNullOrWhiteSpace(ZoneName);
+
+    public string DisplayText =>
+        IsAllZones
+            ? "All zones"
+            : ZoneName;
+
+    public static SearchZoneOption AllZones { get; } = new();
+
+    public override string ToString() => DisplayText;
+}
+
 public sealed class SearchResultItem
 {
     public SearchEntityKind Kind { get; init; }
