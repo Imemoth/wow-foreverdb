@@ -128,9 +128,12 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 - [x] Add an area/zone selector to Companion Search so results can be scoped to a
       chosen zone instead of relying only on the currently-observed location set.
-      **Repo/backend complete:** selector is populated from observed zones, defaults
-      to `All zones`, preserves name/ID search, and scopes only the result list so
-      existing multi-zone detail/navigation and map overlays remain unchanged.
+      **Repo/backend + Windows/WPF runtime acceptance PASS (2026-10-07):** selector
+      is populated from observed zones, defaults to `All zones`, preserves name/ID
+      search, and scopes only the result list so existing multi-zone
+      detail/navigation and map overlays remain unchanged. Live follow-up also
+      verified automatic re-search on zone change and clearing stale detail/
+      navigation state when the new scope returns zero results.
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
