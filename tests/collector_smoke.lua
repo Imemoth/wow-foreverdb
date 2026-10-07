@@ -223,6 +223,53 @@ test("disenchant combined-bag path captures target from item lock without cursor
     )
 end)
 
+test("disenchant stale item-target candidate cannot leak into later disenchant", function()
+    local f, s = setup("modern")
+    s.cursorSpellId = nil
+    s.spellCanTargetItem = true
+
+    -- Generic item-target fallback captures a candidate for another spell.
+    s:event("CURSOR_CHANGED")
+    s:event("ITEM_LOCK_CHANGED", 0, 1)
+    equal(f.PendingDisenchant.itemId, 9001)
+
+    -- Cursor end must invalidate that candidate before a later Disenchant.
+    s.spellCanTargetItem = false
+    s:event("CURSOR_CHANGED")
+    equal(f.PendingDisenchant, nil)
+    equal(f.DisenchantCursorActiveAt, nil)
+
+    s.cursorSpellId = 13262
+    s:event("CURSOR_CHANGED")
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "disenchant-cast", 13262)
+    equal(f:GetActiveDisenchant(), nil)
+
+    -- Also cover a non-Disenchant item-target flow that completes while the
+    -- generic cursor is still active.
+    f, s = setup("modern")
+    s.cursorSpellId = nil
+    s.spellCanTargetItem = true
+    s:event("CURSOR_CHANGED")
+    s:event("ITEM_LOCK_CHANGED", 0, 1)
+    equal(f.PendingDisenchant.itemId, 9001)
+
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "enchant-cast", 7418)
+    equal(f.PendingDisenchant, nil)
+    equal(f.DisenchantCursorActiveAt, nil)
+
+    s.cursorSpellId = 13262
+    s.spellCanTargetItem = false
+    s:event("CURSOR_CHANGED")
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "disenchant-cast", 13262)
+    equal(f:GetActiveDisenchant(), nil)
+    equal(f:GetDatabaseStats().sourceCount, 0)
+
+    contains(
+        table.concat(s.messages, "\n"),
+        "disenchant item-target candidate cleared"
+    )
+end)
+
 for _, api in ipairs({ "modern", "legacy" }) do
     test("disenchant " .. api .. " hook to item source/export", function()
         local f, s = setup(api)

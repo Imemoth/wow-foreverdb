@@ -59,6 +59,7 @@ function FDB:RememberDisenchantTarget(bag, slot, origin)
 
     local now = GetTime and GetTime() or 0
     local activeAt = self.DisenchantCursorActiveAt
+    local cursorMode = self.DisenchantCursorMode
 
     if not activeAt or now - activeAt > 10 then
         return
@@ -82,6 +83,7 @@ function FDB:RememberDisenchantTarget(bag, slot, origin)
         name = name,
         link = link,
         at = now,
+        cursorMode = cursorMode,
     }
 
     self:Debug(
@@ -111,6 +113,7 @@ function FDB:ArmDisenchant()
     self.ActiveDisenchant = pending
     self.PendingDisenchant = nil
     self.DisenchantCursorActiveAt = nil
+    self.DisenchantCursorMode = nil
     self:Debug("disenchant armed", pending.itemId)
 end
 
@@ -192,10 +195,24 @@ function FDB:InitializeDisenchantTracker()
                 if active then
                     FDB.DisenchantCursorActiveAt =
                         GetTime and GetTime() or 0
+                    FDB.DisenchantCursorMode = mode
                     FDB:Debug(
                         "disenchant cursor detected",
                         mode or "unknown"
                     )
+                else
+                    local pending = FDB.PendingDisenchant
+                    if pending
+                        and pending.cursorMode == "item-target" then
+                        FDB:Debug(
+                            "disenchant item-target candidate cleared",
+                            "cursor-ended",
+                            pending.itemId
+                        )
+                        FDB.PendingDisenchant = nil
+                    end
+                    FDB.DisenchantCursorActiveAt = nil
+                    FDB.DisenchantCursorMode = nil
                 end
                 return
             end
@@ -209,8 +226,24 @@ function FDB:InitializeDisenchantTracker()
                 return
             end
 
-            if unitTarget ~= "player"
-                or tonumber(spellId) ~= DISENCHANT_SPELL_ID then
+            if unitTarget ~= "player" then
+                return
+            end
+
+            local completedSpellId = tonumber(spellId)
+            if completedSpellId ~= DISENCHANT_SPELL_ID then
+                local pending = FDB.PendingDisenchant
+                if pending
+                    and pending.cursorMode == "item-target" then
+                    FDB:Debug(
+                        "disenchant item-target candidate cleared",
+                        event,
+                        completedSpellId or "?"
+                    )
+                    FDB.PendingDisenchant = nil
+                    FDB.DisenchantCursorActiveAt = nil
+                    FDB.DisenchantCursorMode = nil
+                end
                 return
             end
 
@@ -221,6 +254,7 @@ function FDB:InitializeDisenchantTracker()
                 FDB.PendingDisenchant = nil
                 FDB.ActiveDisenchant = nil
                 FDB.DisenchantCursorActiveAt = nil
+                FDB.DisenchantCursorMode = nil
             end
         end
     )
