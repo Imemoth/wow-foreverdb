@@ -40,6 +40,22 @@ version contract and release checklist are documented in
 - Sync status now reports uploaded guild-member counts.
 - Guild data remains private per installation and is not exposed through public catalog reads.
 
+## 0.7.2-alpha — 2026-10-07
+
+- Added an observed-zone selector to Companion Search with explicit `All zones`
+  default behavior.
+- Zone-scoped Search preserves item/source name lookup and numeric ID lookup while
+  leaving multi-zone detail navigation and map overlays unchanged.
+- Distinguishes zones by `map_id + zone_name`, including separate zones that
+  share the same map ID.
+- Changing the selected zone now automatically reruns a non-empty search.
+- New searches clear stale result/detail/breadcrumb/history state; a zero-result
+  zone no longer leaves detail from the previous zone visible.
+- Added request-version guarding so an older asynchronous search cannot overwrite
+  a newer zone selection.
+- Added focused Search-zone regressions and Windows/WPF live acceptance; build,
+  Search-zone regression suite and `git diff --check` PASS.
+
 ## 0.7.1-alpha — 2026-09-25
 
 - Fixed selected DataGrid rows becoming unreadable after focus moved to the map.
