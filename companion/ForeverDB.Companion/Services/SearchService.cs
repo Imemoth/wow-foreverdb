@@ -157,7 +157,7 @@ public sealed class SearchService
                     GetInt64(
                         element,
                         "item_id");
-                var name =
+                var itemName =
                     GetString(
                         element,
                         "name",
@@ -168,8 +168,8 @@ public sealed class SearchService
                     {
                         Kind = SearchEntityKind.Item,
                         ItemId = itemId,
-                        Name = name,
-                        DisplayText = name
+                        Name = itemName,
+                        DisplayText = itemName
                     });
 
                 continue;
