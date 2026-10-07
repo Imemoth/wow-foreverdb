@@ -17,7 +17,13 @@ version contract and release checklist are documented in
 - Increased Guildbook roster row/header spacing for ultrawide and high-resolution displays.
 - Added compact Members / Online / Offline / 30m refresh summary cards.
 - Summary cards preserve visible/total counts while filters are active.
+- Fixed active-filter count semantics so visible/total remains explicit even when
+  a filter matches the full visible set or produces zero rows.
+- Added deterministic regression coverage for text, profession, Online only and
+  combined Guildbook filtering/count behavior.
 - Increased the visual contrast between primary and secondary profession chips.
+- Manual Windows/WPF visual acceptance PASS on 2026-10-07 for the 0.8.2-alpha
+  Guildbook polish.
 
 ## 0.8.1-alpha — 2026-09-27
 

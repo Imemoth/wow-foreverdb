@@ -7,11 +7,15 @@ on:
     paths:
       - 'companion/**'
       - 'tests/companion-health/**'
+      - 'tests/companion-guildbook/**'
+      - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   pull_request:
     paths:
       - 'companion/**'
       - 'tests/companion-health/**'
+      - 'tests/companion-guildbook/**'
+      - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   workflow_dispatch:
 
@@ -38,6 +42,9 @@ jobs:
 
       - name: Sync health regression checks
         run: dotnet run --project tests/companion-health/Companion.Health.Tests.csproj -c Release
+
+      - name: Guildbook filter regression checks
+        run: dotnet run --project tests/companion-guildbook/Companion.Guildbook.Tests.csproj -c Release
 
       - name: git diff --check
         shell: pwsh

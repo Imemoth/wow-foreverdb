@@ -375,67 +375,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        var filter =
-            GuildFilterBox.Text
-                .Trim();
+        var roster =
+            GuildbookRosterFilter.Apply(
+                guild.Members,
+                GuildFilterBox.Text,
+                GuildProfessionFilter.SelectedItem as string,
+                GuildOnlineOnlyCheck.IsChecked == true);
 
-        var professionFilter =
-            GuildProfessionFilter.SelectedItem as string;
-
-        var filterProfession =
-            !string.IsNullOrWhiteSpace(professionFilter) &&
-            !string.Equals(
-                professionFilter,
-                "All professions",
-                StringComparison.OrdinalIgnoreCase);
-
-        var onlineOnly =
-            GuildOnlineOnlyCheck.IsChecked == true;
-
-        var rows = guild.Members
+        var rows = roster.Members
             .Select(GuildbookMemberRow.From)
-            .Where(
-                row =>
-                    !onlineOnly ||
-                    row.Online)
-            .Where(
-                row =>
-                    !filterProfession ||
-                    row.ProfessionNames.Any(
-                        profession =>
-                            string.Equals(
-                                profession,
-                                professionFilter,
-                                StringComparison.OrdinalIgnoreCase)))
-            .Where(
-                row =>
-                    string.IsNullOrWhiteSpace(filter) ||
-                    Contains(
-                        row.Name,
-                        filter) ||
-                    Contains(
-                        row.ClassName,
-                        filter) ||
-                    Contains(
-                        row.RankName,
-                        filter) ||
-                    Contains(
-                        row.Zone,
-                        filter) ||
-                    Contains(
-                        row.Professions,
-                        filter))
             .OrderByDescending(row => row.Online)
             .ThenBy(row => row.RankIndex)
             .ThenBy(row => row.Name)
             .ToList();
 
         GuildMembersGrid.ItemsSource = rows;
-
-        var onlineCount =
-            guild.Members.Count(
-                member =>
-                    member.Online);
 
         GuildbookTitleText.Text =
             string.IsNullOrWhiteSpace(guild.RealmName)
@@ -454,42 +408,15 @@ public partial class MainWindow : Window
         GuildbookStatusText.Text =
             $"Captured {captured}. Addon roster refresh runs every 30 minutes while logged in; disk/Supabase sync still follows SavedVariables writes. Recipe lookup is currently runtime-limited.";
 
-        var visibleOnlineCount =
-            rows.Count(
-                row =>
-                    row.Online);
-
-        var offlineCount =
-            guild.Members.Count - onlineCount;
-
-        var visibleOfflineCount =
-            rows.Count - visibleOnlineCount;
-
-        var filtered =
-            rows.Count != guild.Members.Count;
-
         GuildbookMembersText.Text =
-            filtered
-                ? $"{rows.Count}/{guild.Members.Count}"
-                : guild.Members.Count.ToString();
+            roster.MembersCountText;
 
         GuildbookOnlineText.Text =
-            filtered
-                ? $"{visibleOnlineCount}/{onlineCount}"
-                : onlineCount.ToString();
+            roster.OnlineCountText;
 
         GuildbookOfflineText.Text =
-            filtered
-                ? $"{visibleOfflineCount}/{offlineCount}"
-                : offlineCount.ToString();
+            roster.OfflineCountText;
     }
-
-    private static bool Contains(
-        string value,
-        string query)
-        => value.Contains(
-            query,
-            StringComparison.OrdinalIgnoreCase);
 
     private async void Search_Click(
         object sender,

@@ -216,12 +216,17 @@ Validated runtime snapshot: 1 guild, 12 members, 4 online, 9 profession rows.
 
 ### 0.8.2-alpha — Guildbook visual polish
 
-Implementation status: **implemented; build/runtime UI verification pending.**
+Implementation status: **complete; repo/build verification and manual Windows/WPF visual acceptance PASS (2026-10-07).**
 
 - [x] Increase Guildbook roster row/header spacing for large displays.
 - [x] Add compact Members / Online / Offline / 30m refresh summary cards.
-- [x] Preserve visible/total counts while filters are active.
+- [x] Preserve visible/total counts while filters are active, including active-filter
+      all-match and zero-result edge cases.
 - [x] Increase primary vs secondary profession chip contrast.
+- [x] Add deterministic Companion regression coverage for Guildbook text,
+      profession and online-only filtering plus visible/total counter semantics.
+
+Acceptance evidence: [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 
 ## 0.8 — Companion hardening & distribution
 
