@@ -8,6 +8,8 @@ on:
       - 'companion/**'
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
+      - 'tests/companion-search-zone/**'
+      - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   pull_request:
@@ -15,6 +17,8 @@ on:
       - 'companion/**'
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
+      - 'tests/companion-search-zone/**'
+      - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   workflow_dispatch:
@@ -45,6 +49,9 @@ jobs:
 
       - name: Guildbook filter regression checks
         run: dotnet run --project tests/companion-guildbook/Companion.Guildbook.Tests.csproj -c Release
+
+      - name: Search zone regression checks
+        run: dotnet run --project tests/companion-search-zone/Companion.SearchZone.Tests.csproj -c Release
 
       - name: git diff --check
         shell: pwsh
