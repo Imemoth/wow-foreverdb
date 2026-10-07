@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
     private SearchResultItem? _currentDetail;
+    private bool _updatingSearchZoneSelector;
+    private int _searchVersion;
 
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
@@ -431,6 +433,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        _updatingSearchZoneSelector = true;
+
         try
         {
             var zones =
@@ -447,6 +451,24 @@ public partial class MainWindow : Window
                 new[] { SearchZoneOption.AllZones };
             SearchZoneSelector.SelectedIndex = 0;
         }
+        finally
+        {
+            _updatingSearchZoneSelector = false;
+        }
+    }
+
+    private async void SearchZoneSelector_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_updatingSearchZoneSelector ||
+            _searchService is null ||
+            string.IsNullOrWhiteSpace(SearchBox.Text))
+        {
+            return;
+        }
+
+        await RunSearchAsync();
     }
 
     private async void Search_Click(
@@ -478,11 +500,15 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(query))
         {
-            SearchResults.ItemsSource = null;
+            _searchVersion++;
+            ResetSearchState();
             SearchStatusText.Text =
                 "Type an item or source name and press Search.";
             return;
         }
+
+        var searchVersion = ++_searchVersion;
+        ResetSearchState();
 
         try
         {
@@ -496,6 +522,11 @@ public partial class MainWindow : Window
                 await _searchService.SearchAsync(
                     query,
                     selectedZone);
+
+            if (searchVersion != _searchVersion)
+            {
+                return;
+            }
 
             SearchResults.ItemsSource = results;
 
@@ -511,9 +542,31 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SearchResults.ItemsSource = null;
+            if (searchVersion != _searchVersion)
+            {
+                return;
+            }
+
+            ResetSearchState();
             SearchStatusText.Text = ex.Message;
         }
+    }
+
+    private void ResetSearchState()
+    {
+        SearchResults.ItemsSource = null;
+        SearchResults.SelectedItem = null;
+
+        _backHistory.Clear();
+        _forwardHistory.Clear();
+        _currentDetail = null;
+
+        UpdateNavigationUi();
+
+        DetailTitleText.Text = "Select a result";
+        DetailSubtitleText.Text =
+            "Item and source details will appear here.";
+        DetailTabs.Items.Clear();
     }
 
     private async void SearchResults_SelectionChanged(
