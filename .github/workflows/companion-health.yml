@@ -8,12 +8,14 @@ on:
       - 'companion/**'
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
+      - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   pull_request:
     paths:
       - 'companion/**'
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
+      - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
   workflow_dispatch:
 
