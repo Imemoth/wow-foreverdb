@@ -282,6 +282,13 @@
                                     Margin="10,0,0,0"
                                     Click="Search_Click"
                                     Content="Search" />
+                            <ComboBox x:Name="SearchZoneSelector"
+                                      DockPanel.Dock="Right"
+                                      Width="220"
+                                      Height="40"
+                                      Margin="10,0,0,0"
+                                      VerticalContentAlignment="Center"
+                                      ToolTip="Limit search results to an observed zone" />
                             <TextBox x:Name="SearchBox"
                                      Height="40"
                                      FontSize="14"

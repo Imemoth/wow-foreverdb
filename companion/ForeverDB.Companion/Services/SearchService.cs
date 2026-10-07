@@ -26,8 +26,54 @@ public sealed class SearchService
             settings);
     }
 
+    public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var data = await PostAsync(
+            "get_foreverdb_search_zones",
+            new Dictionary<string, object?>(),
+            cancellationToken);
+
+        var zones = new List<SearchZoneOption>
+        {
+            SearchZoneOption.AllZones
+        };
+
+        foreach (var element in data.EnumerateArray())
+        {
+            var mapId = GetInt64(element, "map_id");
+            var zoneName = GetString(element, "zone_name", "");
+
+            if (mapId <= 0 ||
+                string.IsNullOrWhiteSpace(zoneName))
+            {
+                continue;
+            }
+
+            zones.Add(
+                new SearchZoneOption
+                {
+                    MapId = mapId,
+                    ZoneName = zoneName
+                });
+        }
+
+        return zones
+            .GroupBy(
+                zone => zone.IsAllZones
+                    ? "all"
+                    : $"{zone.MapId}|{zone.ZoneName}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(zone => zone.IsAllZones ? 0 : 1)
+            .ThenBy(zone => zone.ZoneName)
+            .ThenBy(zone => zone.MapId)
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string query,
+        SearchZoneOption? zone = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -36,6 +82,25 @@ public sealed class SearchService
         }
 
         var trimmed = query.Trim();
+
+        if (zone is not null &&
+            !zone.IsAllZones)
+        {
+            var data = await PostAsync(
+                "get_foreverdb_search_in_zone",
+                new
+                {
+                    p_query = trimmed,
+                    p_map_id = zone.MapId!.Value,
+                    p_zone_name = zone.ZoneName
+                },
+                cancellationToken);
+
+            return BuildZoneSearchResults(
+                data,
+                trimmed);
+        }
+
         var encoded = Uri.EscapeDataString($"*{trimmed}*");
 
         var itemPath =
@@ -53,14 +118,120 @@ public sealed class SearchService
                 $"/rest/v1/sources?select=source_type,source_id,source_level,name&or=(source_id.eq.{numericId},name.ilike.{encoded})&limit=20";
         }
 
-        var itemsTask = GetAsync(itemPath, cancellationToken);
-        var sourcesTask = GetAsync(sourcePath, cancellationToken);
+        var itemsTask = GetAsync(
+            itemPath,
+            cancellationToken);
+        var sourcesTask = GetAsync(
+            sourcePath,
+            cancellationToken);
 
-        await Task.WhenAll(itemsTask, sourcesTask);
+        await Task.WhenAll(
+            itemsTask,
+            sourcesTask);
 
-        var items = await itemsTask;
-        var sources = await sourcesTask;
+        return BuildSearchResults(
+            await itemsTask,
+            await sourcesTask,
+            trimmed);
+    }
 
+    private static IReadOnlyList<SearchResultItem> BuildZoneSearchResults(
+        JsonElement data,
+        string trimmed)
+    {
+        var results = new List<SearchResultItem>();
+
+        foreach (var element in data.EnumerateArray())
+        {
+            var entityKind =
+                GetString(
+                    element,
+                    "entity_kind",
+                    "");
+
+            if (entityKind.Equals(
+                    "item",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var itemId =
+                    GetInt64(
+                        element,
+                        "item_id");
+                var itemName =
+                    GetString(
+                        element,
+                        "name",
+                        $"Item #{itemId}");
+
+                results.Add(
+                    new SearchResultItem
+                    {
+                        Kind = SearchEntityKind.Item,
+                        ItemId = itemId,
+                        Name = itemName,
+                        DisplayText = itemName
+                    });
+
+                continue;
+            }
+
+            if (!entityKind.Equals(
+                    "source",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var type =
+                GetString(
+                    element,
+                    "source_type",
+                    "source");
+            var id =
+                GetInt64(
+                    element,
+                    "source_id");
+            var level =
+                GetInt32(
+                    element,
+                    "source_level");
+            var name =
+                GetString(
+                    element,
+                    "name",
+                    $"{type} #{id}");
+            var levelText =
+                type.Equals(
+                    "creature",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? level > 0
+                        ? $" (Lvl {level})"
+                        : " (Historical)"
+                    : "";
+
+            results.Add(
+                new SearchResultItem
+                {
+                    Kind = SearchEntityKind.Source,
+                    SourceType = type,
+                    SourceId = id,
+                    SourceLevel = level,
+                    Name = name,
+                    DisplayText =
+                        $"{name}{levelText} [{FormatSourceType(type, id)}]"
+                });
+        }
+
+        return SortSearchResults(
+            results,
+            trimmed);
+    }
+
+    private static IReadOnlyList<SearchResultItem> BuildSearchResults(
+        JsonElement items,
+        JsonElement sources,
+        string trimmed)
+    {
         var results = new List<SearchResultItem>();
 
         foreach (var item in items.EnumerateArray())
@@ -106,6 +277,15 @@ public sealed class SearchService
                 });
         }
 
+        return SortSearchResults(
+            results,
+            trimmed);
+    }
+
+    private static IReadOnlyList<SearchResultItem> SortSearchResults(
+        IEnumerable<SearchResultItem> results,
+        string trimmed)
+    {
         return results
             .OrderBy(
                 result => string.Equals(
@@ -537,6 +717,46 @@ public sealed class SearchService
                sourceType.Equals(
                    "gameobject",
                    StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<JsonElement> PostAsync(
+        string functionName,
+        object body,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{_settings.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/{functionName}");
+
+        request.Headers.TryAddWithoutValidation(
+            "apikey",
+            _settings.SupabaseKey);
+
+        request.Headers.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                _settings.SupabaseKey);
+
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(body),
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        using var response = await _httpClient.SendAsync(
+            request,
+            cancellationToken);
+
+        var bodyJson = await response.Content.ReadAsStringAsync(
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Search failed: {(int)response.StatusCode} {bodyJson}");
+        }
+
+        using var document = JsonDocument.Parse(bodyJson);
+        return document.RootElement.Clone();
     }
 
     private async Task<JsonElement> GetAsync(

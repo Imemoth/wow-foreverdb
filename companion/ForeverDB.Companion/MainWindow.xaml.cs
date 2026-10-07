@@ -51,6 +51,10 @@ public partial class MainWindow : Window
         _syncService = null;
         _searchService = null;
 
+        SearchZoneSelector.ItemsSource =
+            new[] { SearchZoneOption.AllZones };
+        SearchZoneSelector.SelectedIndex = 0;
+
         _syncHealth.Configure(_settings);
         RefreshSyncHealthUi();
 
@@ -104,6 +108,8 @@ public partial class MainWindow : Window
         _searchService = new SearchService(
             _httpClient,
             _settings);
+
+        await LoadSearchZonesAsync();
 
         if (_settings.AutoSync)
         {
@@ -418,6 +424,31 @@ public partial class MainWindow : Window
             roster.OfflineCountText;
     }
 
+    private async Task LoadSearchZonesAsync()
+    {
+        if (_searchService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var zones =
+                await _searchService.GetAvailableZonesAsync();
+
+            SearchZoneSelector.ItemsSource = zones;
+            SearchZoneSelector.SelectedItem =
+                zones.FirstOrDefault(zone => zone.IsAllZones)
+                ?? zones.FirstOrDefault();
+        }
+        catch
+        {
+            SearchZoneSelector.ItemsSource =
+                new[] { SearchZoneOption.AllZones };
+            SearchZoneSelector.SelectedIndex = 0;
+        }
+    }
+
     private async void Search_Click(
         object sender,
         RoutedEventArgs e)
@@ -457,15 +488,26 @@ public partial class MainWindow : Window
         {
             SearchStatusText.Text = "Searching...";
 
+            var selectedZone =
+                SearchZoneSelector.SelectedItem as SearchZoneOption
+                ?? SearchZoneOption.AllZones;
+
             var results =
-                await _searchService.SearchAsync(query);
+                await _searchService.SearchAsync(
+                    query,
+                    selectedZone);
 
             SearchResults.ItemsSource = results;
 
+            var scopeText =
+                selectedZone.IsAllZones
+                    ? ""
+                    : $" in {selectedZone.ZoneName}";
+
             SearchStatusText.Text =
                 results.Count == 0
-                    ? "No matching items or sources."
-                    : $"{results.Count} result(s).";
+                    ? $"No matching items or sources{scopeText}."
+                    : $"{results.Count} result(s){scopeText}.";
         }
         catch (Exception ex)
         {

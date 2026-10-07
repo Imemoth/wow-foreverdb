@@ -126,8 +126,11 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 
 ### 0.7.2-alpha — Search & map usability (planned)
 
-- [ ] Add an area/zone selector to Companion Search so results can be scoped to a
+- [x] Add an area/zone selector to Companion Search so results can be scoped to a
       chosen zone instead of relying only on the currently-observed location set.
+      **Repo/backend complete:** selector is populated from observed zones, defaults
+      to `All zones`, preserves name/ID search, and scopes only the result list so
+      existing multi-zone detail/navigation and map overlays remain unchanged.
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
