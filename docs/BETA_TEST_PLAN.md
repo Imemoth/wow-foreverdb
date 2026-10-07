@@ -254,8 +254,14 @@ Starting state: shared setup separately for each subcase; fresh baseline/last.
 
 - Activate then cancel the Disenchant cursor without selecting an item. Open/use
   an ordinary bag item or loot an unrelated source within 10 seconds. No D sample
-  may be recorded. This specifically probes stale cursor timestamps after cancel;
-  current code only stamps positive cursor detection, so client behavior matters.
+  may be recorded. The tracker now clears spell-ID-less item-target candidates when
+  the cursor ends; verify the live client delivers the cursor transition and that
+  no stale target survives into later loot.
+- Exercise another item-target spell such as Enchant on a bag item, then complete or
+  cancel that flow before starting Disenchant. The generic spell-ID-less candidate
+  must be cleared either on cursor end or on the non-13262 player spell completion.
+  A Disenchant started within the former 12-second stale-target window must not arm
+  the earlier enchant target without a fresh Disenchant target signal.
 - Start Disenchant on an expendable item and interrupt before success; also record
   an invalid/failed target attempt if the client allows it. No loot means counters,
   U and last unchanged. A delivered failed/interrupted event for spell 13262 should
@@ -417,6 +423,12 @@ sequence and counters were:
   capture so the source item can be identified even when the Combined Backpack
   bypasses the observed `C_Container.UseContainerItem` hook path. Simulated
   Combined Backpack regression coverage PASS; live post-fix retest remains required.
+- Follow-up hardening merged on **2026-10-07** in PR #14: spell-ID-less
+  `item-target` candidates are now cleared on cursor end and on non-Disenchant
+  player spell completion. A targeted simulated stale enchant-target -> later
+  Disenchant regression PASS confirms the old candidate cannot be armed without a
+  fresh target. Exact spell-ID detection and the Combined Backpack fallback remain
+  covered and PASS repo-side; live D3 isolation retest is still required.
 
 ### Evidence ledger and closure rule
 
@@ -427,7 +439,7 @@ Initial state on **2026-09-27**; no WoW client run was performed during preparat
 | Repo source/bucket/export review | COMPLETE | COMPLETE | Source review + offline command below; not E2E PASS |
 | H1 / D1 manual success | PASS (live capture) | FIX NEEDS LIVE RETEST | Peacebloom 1618 PASS. Disenchant pre-fix live trace reached spell success/loot but failed target capture; Combined Backpack item-lock fallback added repo-side |
 | H2 / D2 repeat, multi-output, Auto Loot | PARTIAL PASS | PENDING | Silverleaf 1617 repeated twice, qty 2, H 10->11->12, U 0; Auto Loot PASS; multiple distinct output-item variant still pending |
-| H3 / D3 negative cases and reopen | INTERRUPT PASS / REOPEN FIX NEEDS LIVE RETEST | PENDING | Interrupted gather PASS. Earthroot 1619 partial reopen reproduced duplicate H 22->23->24 on old build; full-GUID dedup fix + simulated regression added |
+| H3 / D3 negative cases and reopen | INTERRUPT PASS / REOPEN FIX NEEDS LIVE RETEST | LIFECYCLE FIX NEEDS LIVE RETEST | Interrupted gather PASS. Earthroot 1619 partial reopen reproduced duplicate H 22->23->24 on old build; full-GUID dedup fix + simulated regression added. Disenchant stale item-target lifecycle cleanup + targeted simulated regression PASS repo-side; live isolation/reopen evidence still pending |
 | Export + on-disk SavedVariables | PENDING | PENDING | Matching B/I/L records and Lua table paths |
 | Reload + full exit/relaunch | PASS | PENDING | Herbalism totals/installation identity survived /reload and full exit/relaunch |
 | Companion authenticated ingest / repeated sync | INGEST PASS / REPEAT CHECK PENDING | PENDING | Live herb snapshot reached Companion/Supabase; explicit no-double-count comparison after repeat sync still pending |

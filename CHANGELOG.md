@@ -150,6 +150,11 @@ version contract and release checklist are documented in
   to the section headers and select rows.
 - Repo-side verification: [0.5 Session Tracker acceptance](docs/0.5-session-tracker-acceptance.md).
   Live Forever-client acceptance: **PASS** (full checklist, human tester).
+- Hardened Disenchant target lifecycle after the Combined Backpack fallback:
+  spell-ID-less item-target candidates are cleared on cursor end or non-Disenchant
+  player spell completion, preventing stale enchant targets from being reused by a
+  later Disenchant. Added targeted simulated regression coverage; live collector
+  E2E acceptance remains pending.
 
 ## 0.4.1-alpha — 2026-09-27
 
