@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
 
@@ -124,10 +125,15 @@ await service.SearchAsync(
     "Cadet",
     crusadersOutpost);
 
-Check(handler.Requests[0].Body.Contains(
-        "\"p_zone_name\":\"Crusader's Outpost\"",
-        StringComparison.Ordinal),
-    "zone name disambiguates zones that share the same map id");
+using (var requestBody =
+       JsonDocument.Parse(handler.Requests[0].Body))
+{
+    Check(
+        requestBody.RootElement
+            .GetProperty("p_zone_name")
+            .GetString() == "Crusader's Outpost",
+        "zone name disambiguates zones that share the same map id");
+}
 
 if (failures.Count > 0)
 {
@@ -192,9 +198,7 @@ sealed class FakeSearchHandler : HttpMessageHandler
                 : path.EndsWith(
                     "/rest/v1/rpc/get_foreverdb_search_in_zone",
                     StringComparison.Ordinal)
-                    ? body.Contains(
-                        "Crusader's Outpost",
-                        StringComparison.Ordinal)
+                    ? IsCrusadersOutpost(body)
                         ? "[]"
                         : """
                           [
@@ -219,5 +223,14 @@ sealed class FakeSearchHandler : HttpMessageHandler
                 Encoding.UTF8,
                 "application/json")
         };
+    }
+
+    private static bool IsCrusadersOutpost(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+
+        return document.RootElement
+            .TryGetProperty("p_zone_name", out var zoneName) &&
+            zoneName.GetString() == "Crusader's Outpost";
     }
 }
