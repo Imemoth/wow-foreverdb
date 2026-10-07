@@ -139,7 +139,7 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
       debug breadcrumbs and simulated Lua contract checks.
 - [ ] Herbalism E2E test and fixes — **live capture, Auto Loot, reload/full-exit persistence, interrupted-gather isolation, Companion search/details and Mulgore map-location path PASS. Partial-loot/reopen duplicate was reproduced live (Earthroot 1619, H 22->23->24) and fixed repo-side with full-GameObject-GUID dedup; live post-fix retest, repeated-sync no-double-count and direct disk inspection remain pending**.
-- [ ] Disenchant E2E test and fixes — **live Combined Backpack test reached Disenchant success/loot but input target capture failed (`succeeded without captured target`, unresolved loot). Repo fix adds item-target cursor + ITEM_LOCK_CHANGED fallback; live post-fix retest required**.
+- [ ] Disenchant E2E test and fixes — **live Combined Backpack test reached Disenchant success/loot but input target capture failed (`succeeded without captured target`, unresolved loot). Repo fixes now add the item-target cursor + ITEM_LOCK_CHANGED fallback and clear spell-ID-less item-target candidates on cursor end or non-Disenchant player spell completion, preventing stale enchant targets from leaking into a later Disenchant. Combined Backpack and stale-target simulated regressions PASS; live post-fix retest required**.
 - [ ] Open-water fishing regression test.
 - [ ] Chest/GameObject location regression test.
 - [ ] Fishing-pool coordinate accuracy review and calibration.
