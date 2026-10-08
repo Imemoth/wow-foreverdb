@@ -10,6 +10,7 @@ public sealed class SupabaseAuthService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly SemaphoreSlim _accessTokenGate = new(1, 1);
 
     public SupabaseAuthService(
         HttpClient httpClient,
@@ -21,6 +22,23 @@ public sealed class SupabaseAuthService
 
     public async Task<string> GetAccessTokenAsync(
         CancellationToken cancellationToken = default)
+    {
+        // The search UI can issue concurrent requests; never create competing
+        // anonymous sign-ins or overwrite the installation's saved session.
+        await _accessTokenGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await GetAccessTokenCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _accessTokenGate.Release();
+        }
+    }
+
+    private async Task<string> GetAccessTokenCoreAsync(
+        CancellationToken cancellationToken)
     {
         var session = SessionStore.Load();
 
@@ -153,6 +171,12 @@ public sealed class SupabaseAuthService
             user.TryGetProperty("id", out var id))
         {
             userId = id.GetString() ?? "";
+        }
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            throw new InvalidOperationException(
+                "Supabase authentication did not return an access token.");
         }
 
         return new AuthSession
