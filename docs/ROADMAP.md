@@ -137,6 +137,11 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
+      **Investigation 2026-10-08:** source selection is blocked on verifying
+      actual alternative art/texture IDs in the installed Forever build. The
+      current renderer does not add exploration masks; do not guess IDs.
+      Documented cache-key risk and Windows client evidence gate:
+      [full-map art investigation](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
 
