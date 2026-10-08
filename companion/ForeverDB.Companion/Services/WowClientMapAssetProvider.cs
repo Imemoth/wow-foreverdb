@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "9";
+    private const string ResolverVersion = "10";
 
     private static readonly ConcurrentDictionary<
         string,
@@ -59,6 +59,59 @@ public sealed class WowClientMapAssetProvider
                 $"WoW client map metadata exists for {metadata.Name}, but it has no usable art layer.");
         }
 
+        // The base C_Map art is the unexplored backdrop. The fully
+        // explored appearance is the base plus all WorldMapOverlay tiles.
+        // Enable the generated atlas ONLY for its exact source build.
+        IReadOnlyList<FullRevealRegion> fullRegions =
+            Array.Empty<FullRevealRegion>();
+
+        if (!string.IsNullOrWhiteSpace(_settings.WowRoot))
+        {
+            var cascRoot = FindCascRoot(_settings.WowRoot);
+
+            if (cascRoot is not null)
+            {
+                var installedVersion =
+                    GetOnlineBuildCandidates(
+                        cascRoot,
+                        _settings.WowRoot)
+                    .Select(candidate => candidate.Version)
+                    .FirstOrDefault(version =>
+                        version == FullRevealMapArt.SourceBuildVersion);
+
+                fullRegions = FullRevealMapArt.Find(
+                    metadata.MapArtId, installedVersion);
+            }
+        }
+
+        if (fullRegions.Count > 0)
+        {
+            var fullMap = await LoadVariantAsync(
+                metadata, layer, fullRegions, cancellationToken);
+
+            if (fullMap.IsClientAsset)
+            {
+                return fullMap;
+            }
+        }
+
+        // Retain the original API art and its full legacy CASC/CDN/classic
+        // fallback if the build is unknown or any reveal tile is missing.
+        return await LoadVariantAsync(
+            metadata, layer, null, cancellationToken);
+    }
+
+    private async Task<MapAssetResult> LoadVariantAsync(
+        ForeverDbMap metadata,
+        ForeverDbMapLayer layer,
+        IReadOnlyList<FullRevealRegion>? fullRegions,
+        CancellationToken cancellationToken)
+    {
+        var variant =
+            fullRegions is null
+                ? "base"
+                : FullRevealMapArt.VariantId;
+
         var wowBuildFingerprint =
             MapAssetCacheStore.GetWowBuildFingerprint(
                 _settings.WowRoot);
@@ -68,7 +121,8 @@ public sealed class WowClientMapAssetProvider
                 metadata,
                 layer,
                 ResolverVersion,
-                wowBuildFingerprint);
+                wowBuildFingerprint,
+                variant);
 
         var cachedResolution =
             MapAssetCacheStore.Get(
@@ -76,7 +130,8 @@ public sealed class WowClientMapAssetProvider
 
         var cachePath = GetCachePath(
             metadata,
-            layer);
+            layer,
+            resolutionKey);
 
         if (File.Exists(cachePath))
         {
@@ -95,7 +150,7 @@ public sealed class WowClientMapAssetProvider
                         WowBuildFingerprint = wowBuildFingerprint,
                         Success = true,
                         Status =
-                            $"WoW client map · cached · art #{metadata.MapArtId}",
+                            $"WoW client map · cached · art #{metadata.MapArtId} · {variant}",
                         CacheFile = cachePath,
                         UpdatedAtUtc = DateTimeOffset.UtcNow
                     });
@@ -107,7 +162,7 @@ public sealed class WowClientMapAssetProvider
                     Height = cached.PixelHeight,
                     FromCache = true,
                     Status =
-                        $"WoW client map · cached · art #{metadata.MapArtId}"
+                        $"WoW client map · cached · art #{metadata.MapArtId} · {variant}"
                 };
             }
             catch
@@ -143,6 +198,7 @@ public sealed class WowClientMapAssetProvider
                     () => ExtractRawMap(
                         metadata,
                         layer,
+                        fullRegions,
                         preferredStorageLabel,
                         CancellationToken.None),
                     CancellationToken.None));
@@ -204,6 +260,8 @@ public sealed class WowClientMapAssetProvider
                 Status = raw.Status,
                 Details = new
                 {
+                    artVariant = variant,
+                    revealRegionCount = fullRegions?.Count ?? 0,
                     apiTextureRefs =
                         layer.TextureRefs
                             .Take(24)
@@ -313,6 +371,7 @@ public sealed class WowClientMapAssetProvider
     private RawMapAsset ExtractRawMap(
         ForeverDbMap metadata,
         ForeverDbMapLayer layer,
+        IReadOnlyList<FullRevealRegion>? fullRegions,
         string? preferredStorageLabel,
         CancellationToken cancellationToken)
     {
@@ -1426,7 +1485,8 @@ public sealed class WowClientMapAssetProvider
 
     private static string GetCachePath(
         ForeverDbMap map,
-        ForeverDbMapLayer layer)
+        ForeverDbMapLayer layer,
+        string resolutionKey)
     {
         var folder =
             MapMetadataStore.GetMapCacheDirectory(
@@ -1434,7 +1494,7 @@ public sealed class WowClientMapAssetProvider
 
         return Path.Combine(
             folder,
-            $"art-{map.MapArtId}-layer-{layer.LayerIndex}.png");
+            $"art-{map.MapArtId}-layer-{layer.LayerIndex}-{resolutionKey[..24]}.png");
     }
 
     private static BitmapSource LoadBitmap(
