@@ -18,4 +18,9 @@
     <PackageReference Include="War3Net.Drawing.Blp" Version="6.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/FullRevealOverlays-70009.json"
+                      LogicalName="ForeverDB.Companion.FullRevealOverlays.json" />
+  </ItemGroup>
+
 </Project>
