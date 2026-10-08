@@ -1,4 +1,5 @@
 using ForeverDB.Companion.Services;
+using ForeverDB.Companion.Models;
 
 var failures = new List<string>();
 var assertions = 0;
@@ -192,6 +193,43 @@ Check(rowMajor && tiledCount == 4 &&
       Blue(tiled, 300, 0, 299) == 120 &&
       Blue(tiled, 300, 299, 299) == 160,
     "row-major tile ordering and padded last row/column are correct");
+
+var map = new ForeverDbMap
+{
+    MapId = 1420,
+    MapArtId = 1194
+};
+var layer = new ForeverDbMapLayer
+{
+    LayerIndex = 1,
+    LayerWidth = 1002,
+    LayerHeight = 668,
+    TileWidth = 256,
+    TileHeight = 256,
+    TextureRefs = new List<string> { "111", "222" }
+};
+var originalKey = MapAssetCacheStore.BuildKey(
+    map, layer, "10", "buildA", "base");
+var fullKey = MapAssetCacheStore.BuildKey(
+    map, layer, "10", "buildA", FullRevealMapArt.VariantId);
+var newBuildKey = MapAssetCacheStore.BuildKey(
+    map, layer, "10", "buildB", FullRevealMapArt.VariantId);
+var newVersionKey = MapAssetCacheStore.BuildKey(
+    map, layer, "11", "buildA", FullRevealMapArt.VariantId);
+
+Check(originalKey != fullKey,
+    "base and fully revealed map variants have separate cache keys");
+Check(fullKey != newBuildKey,
+    "installed build fingerprint change invalidates full PNG");
+Check(fullKey != newVersionKey,
+    "resolver version bump invalidates full PNG");
+Check(originalKey == MapAssetCacheStore.BuildKey(
+        map, layer, "10", "buildA", "base"),
+    "same map, variant and build retain a stable cache key");
+layer.TextureRefs.Add("333");
+Check(originalKey != MapAssetCacheStore.BuildKey(
+        map, layer, "10", "buildA", "base"),
+    "changed API tile manifest cannot reuse stale PNG");
 
 if (failures.Count != 0)
 {
