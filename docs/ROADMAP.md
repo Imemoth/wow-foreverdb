@@ -143,7 +143,9 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       atlas from the game DB tables (84 maps, 1,073 regions, 1,739 FileDataIDs),
       local-CASC / exact-build-CDN compositing, atomic base fallback and
       variant-safe PNG caches. Static source: [Map Tab](https://github.com/jonlipin/map-tab).
-      **Windows/WoW validation and CI PASS are not yet established.**
+      **Windows CI Companion build, existing regressions and new map tests
+      PASS on 2026-10-08 (head 2d9d783); real Windows/WoW visual acceptance
+      still OPEN.**
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
