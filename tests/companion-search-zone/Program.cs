@@ -135,6 +135,109 @@ using (var requestBody =
         "zone name disambiguates zones that share the same map id");
 }
 
+// A zone change refreshes the left-hand result objects, NOT the current
+// item/source detail or the Back/Forward chain. The WPF handler suppresses
+// selection events during this remapping.
+var selectedItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 4758,
+    Name = "Prairie Wolf Paw",
+    DisplayText = "Prairie Wolf Paw"
+};
+var matchedItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 4758,
+    Name = "Prairie Wolf Paw (updated)",
+    DisplayText = "Prairie Wolf Paw (updated)"
+};
+var otherItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2672,
+    Name = "Stringy Wolf Meat",
+    DisplayText = "Stringy Wolf Meat"
+};
+
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { otherItem, matchedItem },
+            selectedItem),
+        matchedItem),
+    "zone refresh reselects matching item ID using new result instance");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { otherItem }, selectedItem) is null,
+    "an out-of-zone item is not incorrectly highlighted in filtered results");
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { matchedItem }, selectedItem),
+        matchedItem),
+    "returning to a matching zone can restore the persistent root selection");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { matchedItem }, null) is null,
+    "a search without a selection does not auto-select any result");
+
+var selectedCreature = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 8,
+    Name = "Prairie Stalker"
+};
+var sameCreature = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 8,
+    Name = "Prairie Stalker (refreshed)"
+};
+var differentLevel = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 6
+};
+var differentType = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 2959,
+    SourceLevel = 8
+};
+
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { differentLevel, differentType, sameCreature },
+            selectedCreature),
+        sameCreature),
+    "source identity rebind preserves source type, ID and level");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { differentLevel, differentType }, selectedCreature) is null,
+    "other source levels/types cannot steal selected row on zone change");
+Check(
+    !SearchResultSelection.SameEntity(
+        selectedItem, selectedCreature),
+    "items and sources remain distinct entities in history and selection");
+Check(
+    SearchResultSelection.SameEntity(
+        selectedItem, matchedItem),
+    "display-name changes do not create a different navigation entity");
+Check(
+    SearchResultSelection.FindMatching(
+        Array.Empty<SearchResultItem>(),
+        selectedCreature) is null,
+    "an empty zone result preserves detail outside the list without selection");
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(
