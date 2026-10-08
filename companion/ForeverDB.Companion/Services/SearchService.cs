@@ -9,21 +9,27 @@ public sealed class SearchService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly Func<CancellationToken, Task<string>> _getAccessTokenAsync;
     private readonly LocationService _locationService;
     private readonly StatsService _statsService;
 
     public SearchService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>> getAccessTokenAsync)
     {
         _httpClient = httpClient;
         _settings = settings;
+        _getAccessTokenAsync = getAccessTokenAsync
+            ?? throw new ArgumentNullException(nameof(getAccessTokenAsync));
         _locationService = new LocationService(
             httpClient,
-            settings);
+            settings,
+            getAccessTokenAsync);
         _statsService = new StatsService(
             httpClient,
-            settings);
+            settings,
+            getAccessTokenAsync);
     }
 
     public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
@@ -735,7 +741,7 @@ public sealed class SearchService
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                await GetAuthenticatedTokenAsync(cancellationToken));
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
@@ -774,7 +780,7 @@ public sealed class SearchService
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                await GetAuthenticatedTokenAsync(cancellationToken));
 
         using var response = await _httpClient.SendAsync(
             request,
@@ -791,6 +797,20 @@ public sealed class SearchService
 
         using var document = JsonDocument.Parse(body);
         return document.RootElement.Clone();
+    }
+
+    private async Task<string> GetAuthenticatedTokenAsync(
+        CancellationToken cancellationToken)
+    {
+        var token = await _getAccessTokenAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException(
+                "Authenticated Supabase session required for search.");
+        }
+
+        return token;
     }
 
     private static string GetString(
