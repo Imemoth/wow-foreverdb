@@ -655,6 +655,159 @@ public sealed class WowClientMapAssetProvider
                     $"WoW CASC opened ({storageLabel}), but no map tile was decoded. {detail}");
             }
 
+            if (fullRegions is not null)
+            {
+                // The extracted overlay positions are in the 1002x668
+                // native canvas. Never stretch them onto an unverified
+                // zoom layer: that would misalign the farming markers.
+                if (layer.LayerWidth != 1002 ||
+                    layer.LayerHeight != 668 ||
+                    layer.TileWidth != 256 ||
+                    layer.TileHeight != 256 ||
+                    decodedTiles != expectedTiles)
+                {
+                    return RawMapAsset.Failed(
+                        "Full-reveal source layout or base-tile coverage is not verified.");
+                }
+
+                NativeCascMapReader? overlayCdn = null;
+                var triedOverlayCdn = false;
+                var overlayCdnUsed = false;
+
+                FullRevealTile? DecodeOverlay(Stream stream)
+                {
+                    try
+                    {
+                        using var blp = new War3BlpFile(stream);
+                        var pixels = blp.GetPixels(
+                            0,
+                            out var width,
+                            out var height,
+                            bgra: true);
+
+                        return width > 0 && height > 0
+                            ? new FullRevealTile(pixels, width, height)
+                            : null;
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+
+                FullRevealTile? LoadRevealTile(int fileDataId)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var id = fileDataId.ToString(
+                        CultureInfo.InvariantCulture);
+
+                    using (var localStream = OpenTexture(storage, id))
+                    {
+                        if (localStream is not null)
+                        {
+                            var local = DecodeOverlay(localStream);
+                            if (local is not null)
+                            {
+                                return local;
+                            }
+                        }
+                    }
+
+                    // Only use the active exact-build CDN. Opening a
+                    // second storage is lazy and done at most once.
+                    if (!triedOverlayCdn)
+                    {
+                        triedOverlayCdn = true;
+
+                        foreach (var online in GetOnlineBuildCandidates(
+                                     cascRoot, _settings.WowRoot))
+                        {
+                            if (online.Version !=
+                                FullRevealMapArt.SourceBuildVersion)
+                            {
+                                continue;
+                            }
+
+                            var onlineCache = GetOnlineCascCacheDirectory(
+                                online.Product, online.BuildKey);
+
+                            var reader = NativeCascMapReader.TryOpenOnline(
+                                onlineCache,
+                                online.Product,
+                                online.Region,
+                                online.BuildKey,
+                                $"cdn:{online.Product}:{online.Region}",
+                                out _);
+
+                            if (reader is null)
+                            {
+                                continue;
+                            }
+
+                            using var probe = OpenTexture(reader, id);
+
+                            if (probe is not null)
+                            {
+                                overlayCdn = reader;
+                                break;
+                            }
+
+                            reader.Dispose();
+                        }
+                    }
+
+                    if (overlayCdn is null)
+                    {
+                        return null;
+                    }
+
+                    using var remoteStream = OpenTexture(overlayCdn, id);
+
+                    if (remoteStream is null)
+                    {
+                        return null;
+                    }
+
+                    var remote = DecodeOverlay(remoteStream);
+
+                    if (remote is not null)
+                    {
+                        overlayCdnUsed = true;
+                    }
+
+                    return remote;
+                }
+
+                try
+                {
+                    if (!FullRevealMapArt.TryCompose(
+                            targetPixels,
+                            targetWidth,
+                            targetHeight,
+                            fullRegions,
+                            LoadRevealTile,
+                            out var rendered,
+                            out var overlayTileCount,
+                            out var failure))
+                    {
+                        return RawMapAsset.Failed(
+                            $"Full-reveal unavailable: {failure}");
+                    }
+
+                    targetPixels = rendered;
+                    assetMode += $"+full-reveal:{overlayTileCount}";
+                    if (overlayCdnUsed)
+                    {
+                        assetMode += "+exact-build-CDN-overlays";
+                    }
+                }
+                finally
+                {
+                    overlayCdn?.Dispose();
+                }
+            }
+
             return new RawMapAsset
             {
                 Pixels = targetPixels,
