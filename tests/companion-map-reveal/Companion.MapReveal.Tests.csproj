@@ -9,6 +9,10 @@
   <ItemGroup>
     <Compile Include="../../companion/ForeverDB.Companion/Services/FullRevealMapArt.cs"
              Link="FullRevealMapArt.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/MapAssetCacheStore.cs"
+             Link="MapAssetCacheStore.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Models/ForeverDbSnapshot.cs"
+             Link="ForeverDbSnapshot.cs" />
     <EmbeddedResource
       Include="../../companion/ForeverDB.Companion/Resources/FullRevealOverlays-70009.json"
       LogicalName="ForeverDB.Companion.FullRevealOverlays.json" />
