@@ -1,6 +1,6 @@
 # Legacy stats view: production-only rollout and rollback
 
-Status: **PREPARED, NOT DEPLOYED** (2026-10-08). This procedure applies
+Status: **PRODUCTION MIGRATION DEPLOYED / SQL AND AGGREGATE CHECKS PASS** (2026-10-08); **JWT/Data API and Windows/WPF Companion runtime acceptance PENDING**. This procedure applies
 only to the existing **wow-forever** Supabase project. Do not run against any
 other project or treat the branch checkout as a deployed DB migration.
 
@@ -112,3 +112,13 @@ work around a permission error.
 Leave the ROADMAP item OPEN until production ACL, Data API, Companion
 runtime, and rollback-readiness checks pass. New external Discord-bot /
 third-party read APIs remain explicitly out of scope.
+
+## Production execution ledger (2026-10-08)
+
+- Project: `wow-forever` (`klxhikdlfwgxurdyexdi`), Postgres 17.
+- Applied using Supabase migration name `restrict_legacy_public_stats` (version `20261008153743`): **SUCCESS**. The migration is a single atomic PL/pgSQL DO block containing the REVOKE and all privilege assertions; a failing assertion would roll back the statement. The stand-alone smoke SQL remains for repeatable checks.
+- Confirmed post-migration ACL: `{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}`. Both `anon` and `authenticated` `has_table_privilege(..., 'SELECT')` = false; `service_role` = true. View `security_invoker=true` unchanged.
+- Pre-/post-migration elevated aggregate counts match: legacy view 374, zones 5, item stats 3, item locations 14, source stats 5, source locations 4, catalog items 137, sources 133. Fixture item 117, creature source 3098 level 1.
+- Security advisor run after migration: 7 existing RLS-without-policy INFO findings; 1 authenticated security-definer ingest WARN; 1 leaked-password protection WARN. No new findings reported by the advisor in this scope.
+- **Outstanding:** post-migration JWT/PostgREST tests with both roles, existing Companion Windows/WPF Search / zone change / Stats / Locations / manual + automatic authenticated sync acceptance. Do not mark overall PASS or merge PR until these checks pass. No new public API was introduced.
+- Rollback is documented above and **not executed**.
