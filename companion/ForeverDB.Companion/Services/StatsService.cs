@@ -10,13 +10,17 @@ public sealed class StatsService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly Func<CancellationToken, Task<string>> _getAccessTokenAsync;
 
     public StatsService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>> getAccessTokenAsync)
     {
         _httpClient = httpClient;
         _settings = settings;
+        _getAccessTokenAsync = getAccessTokenAsync
+            ?? throw new ArgumentNullException(nameof(getAccessTokenAsync));
     }
 
     public Task<JsonElement> GetItemStatsAsync(
@@ -46,6 +50,20 @@ public sealed class StatsService
             cancellationToken);
     }
 
+    private async Task<string> GetAuthenticatedTokenAsync(
+        CancellationToken cancellationToken)
+    {
+        var token = await _getAccessTokenAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException(
+                "Authenticated Supabase session required for statistics.");
+        }
+
+        return token;
+    }
+
     private async Task<JsonElement> PostAsync(
         string functionName,
         object body,
@@ -62,7 +80,7 @@ public sealed class StatsService
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                await GetAuthenticatedTokenAsync(cancellationToken));
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
