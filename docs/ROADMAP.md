@@ -144,8 +144,12 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       local-CASC / exact-build-CDN compositing, atomic base fallback and
       variant-safe PNG caches. Static source: [Map Tab](https://github.com/jonlipin/map-tab).
       **Windows CI Companion build, existing regressions and new map tests
-      PASS on 2026-10-08 (head 2d9d783); real Windows/WoW visual acceptance
-      still OPEN.**
+      PASS on 2026-10-08 (head 2d9d783); **first manual Windows
+      screenshots show only the base map (Tirisfal 12/12 FileDataID,
+      Mulgore art #1200 cached base), so full-reveal visual acceptance
+      FAIL/PENDING root cause**. PR #21 now surfaces exact-build/overlay
+      failure reasons even when falling back to cached base; repeat live
+      acceptance after rebuilding the diagnostic update.**
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
