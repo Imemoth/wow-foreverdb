@@ -137,19 +137,19 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
-      **PR #21 implementation candidate (2026-10-08; acceptance OPEN):**
-      the game's base art is the unexplored backdrop; discovered-area overlay
-      textures complete it. The Companion now has an exact-build (1.60.1.70009)
-      atlas from the game DB tables (84 maps, 1,073 regions, 1,739 FileDataIDs),
-      local-CASC / exact-build-CDN compositing, atomic base fallback and
-      variant-safe PNG caches. Static source: [Map Tab](https://github.com/jonlipin/map-tab).
-      **Windows CI Companion build, existing regressions and new map tests
-      PASS on 2026-10-08 (head 2d9d783); **first manual Windows
-      screenshots show only the base map (Tirisfal 12/12 FileDataID,
-      Mulgore art #1200 cached base), so full-reveal visual acceptance
-      FAIL/PENDING root cause**. PR #21 now surfaces exact-build/overlay
-      failure reasons even when falling back to cached base; repeat live
-      acceptance after rebuilding the diagnostic update.**
+      **PR #21 (2026-10-08; Windows visual acceptance OPEN):** full map =
+      native base art + all exploration overlays; no separate MapArtID.
+      The embedded atlas has 84 maps, 1,073 regions and 1,739 texture IDs.
+      Source build 1.60.1.70009 (Map Tab, MIT) was independently compared
+      against the 1.60.1.70245 wago.tools-derived overlay catalog:
+      **all 84 maps and all region/texture records identical (0 differences).**
+      The user's manual screenshots exposed the previous strict single-build
+      gate (active 1.60.1.70245 vs atlas 1.60.1.70009). The PR now
+      **explicitly allows only these two verified builds** while retaining
+      local CASC -> same-build CDN, transactional base fallback and
+      variant-isolated caches. Older screenshots are evidence of a blocked
+      gate, not a client texture failure. **Real full-map rendering and
+      marker/cluster/heatmap alignment still require a new Windows test.**
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
