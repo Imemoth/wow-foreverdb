@@ -1,6 +1,6 @@
 # Legacy stats view: production-only rollout and rollback
 
-Status: **PRODUCTION MIGRATION DEPLOYED / SQL AND AGGREGATE CHECKS PASS** (2026-10-08); **JWT/Data API and Windows/WPF Companion runtime acceptance PENDING**. This procedure applies
+Status: **PRODUCTION MIGRATION DEPLOYED / DATABASE ROLE CHECKS PASS / USER-REPORTED COMPANION RUNTIME PASS** (2026-10-08). **Direct HTTP JWT/PostgREST denial probe is a separate, open follow-up, not yet executed.** This procedure applies
 only to the existing **wow-forever** Supabase project. Do not run against any
 other project or treat the branch checkout as a deployed DB migration.
 
@@ -49,46 +49,50 @@ where c.oid = 'public.observed_loot_stats'::regclass;
    access. Do not test by creating or overwriting synthetic production
    snapshots.
 
-## Production cutover (explicit approval required)
+## Production cutover (completed 2026-10-08)
 
-In **one database transaction**, execute:
+Production migration `restrict_legacy_public_stats` (version
+`20261008153743`) was applied **once**, after explicit user approval, using
+the SQL in `database/migrations/0007_restrict_legacy_public_stats.sql`.
+The migration runs the REVOKE and compatibility assertions inside **one
+PL/pgSQL DO statement**, so a failed assertion would abort that statement
+and roll back the privilege change. It changed only the view SELECT grant;
+it did not change raw data, search/statistics/location RPCs or auth ingest.
 
-```sql
-begin;
-revoke select on table public.observed_loot_stats
-from public, anon, authenticated;
+Do **not** re-apply on PR merge. GitHub merge itself does not execute SQL.
 
--- Insert and run the full DO-block from:
--- database/tests/legacy_stats_access_smoke.sql
+## Post-cutover verification and open transport follow-up
 
-commit;
-```
-
-Paste the real assertions between the REVOKE and COMMIT; a SQL comment
-does **not** execute the test. If any assertion raises an exception,
-ROLLBACK instead of COMMIT. A separate execution of the smoke script is
-still useful for verification but would not protect the initial cutover
-atomically.
-
-Do **not** apply this migration by automatically merging the PR: a GitHub
-merge alone does not execute SQL in Supabase. Do not change the public
-search RPCs or upload a new external-facing API.
-
-## Post-cutover gates (before PASS / merge)
-
-1. Repeat the ACL query above and the SQL smoke test. Expect neither `anon`
-   nor `authenticated` to have view SELECT, with service_role intact.
-2. Data API: GET `/rest/v1/observed_loot_stats?select=*&limit=1` using
-   (a) only the anon key, and (b) an anonymous Auth-user JWT. Both must
-   reject direct access; check actual HTTP status and body.
-3. Confirm the old `items`, `sources`, Search-zone RPCs, item/source
-   statistics RPCs and location RPCs still return the same sample results.
-4. In the **existing** Companion release, perform Search (including zone
-   change), Item/Source Stats, Locations/map details, Manual Sync and
-   Auto Sync. Record the test version and evidence; do not create a separate
-   build from this SQL-only branch.
-5. Re-run Supabase security advisors. Treat unrelated existing findings
-   separately, without classifying this narrow task as broader security PASS.
+- **PASS — ACL:** `anon` and `authenticated` lack SELECT on
+  `public.observed_loot_stats`; `service_role` retains SELECT.
+- **PASS — real PostgreSQL role simulation:** executed transactional
+  `SET LOCAL ROLE anon` and `SET LOCAL ROLE authenticated` separately,
+  then attempted a direct `SELECT` from the view. Both returned
+  `insufficient_privilege`, caught and asserted. Each role still
+  returned the same scoped stats/location/search-zone results as preflight;
+  the `anon` role cannot execute authenticated ingest, while
+  `authenticated` can. Both tests ended with `ROLLBACK` (no data changes).
+- **PASS — aggregate regression:** 374 legacy rows; zone count 5,
+  item stats 3, item locations 14, source stats 5, source locations 4;
+  item catalog 137, source catalog 133. Counts match before and after.
+- **PASS (user-reported 2026-10-08) — existing Windows Companion:**
+  after the live migration, the user confirmed all requested checks
+  worked: Search, zone switch, item/source stats, Locations/map and
+  manual sync. This is *human runtime acceptance*, not an independently
+  executed test by the SQL connector. Auto Sync has prior live
+  acceptance (2026-10-02) but was not separately evidenced here.
+- **PASS — security advisor rerun:** no new findings from this change;
+  existing 7 INFO (RLS enabled without policy), 1 WARN (authenticated
+  SECURITY DEFINER ingest), 1 WARN (leaked password protection) remain.
+- **OPEN — real HTTP transport/JWT probe:** execute
+  `GET /rest/v1/observed_loot_stats?select=*&limit=1` with both an
+  `anon` API key and an anonymous Auth-user JWT; both should be
+  rejected. Also confirm catalog and aggregate RPCs work via actual
+  HTTP. The direct JWT/PostgREST test was **not** performed in this
+  session because an authenticated HTTP transport was unavailable.
+  **Do not claim an HTTP/JWT PASS.** Database-role rejection plus
+  live Companion acceptance support closing the scoped privilege
+  migration; this transport-level check stays tracked separately.
 
 ## Immediate rollback if required
 
@@ -109,9 +113,11 @@ work around a permission error.
 
 ## Release gate
 
-Leave the ROADMAP item OPEN until production ACL, Data API, Companion
-runtime, and rollback-readiness checks pass. New external Discord-bot /
-third-party read APIs remain explicitly out of scope.
+The legacy view privilege migration may be merged after its atomic SQL checks,
+PostgreSQL role-simulation and Companion user acceptance pass. Keep the
+separate **real HTTP/JWT PostgREST smoke** gate OPEN until validated; the
+broader security-readiness milestone is not implied by this change. New
+external Discord-bot / third-party read APIs remain explicitly out of scope.
 
 ## Production execution ledger (2026-10-08)
 
@@ -120,5 +126,5 @@ third-party read APIs remain explicitly out of scope.
 - Confirmed post-migration ACL: `{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}`. Both `anon` and `authenticated` `has_table_privilege(..., 'SELECT')` = false; `service_role` = true. View `security_invoker=true` unchanged.
 - Pre-/post-migration elevated aggregate counts match: legacy view 374, zones 5, item stats 3, item locations 14, source stats 5, source locations 4, catalog items 137, sources 133. Fixture item 117, creature source 3098 level 1.
 - Security advisor run after migration: 7 existing RLS-without-policy INFO findings; 1 authenticated security-definer ingest WARN; 1 leaked-password protection WARN. No new findings reported by the advisor in this scope.
-- **Outstanding:** post-migration JWT/PostgREST tests with both roles, existing Companion Windows/WPF Search / zone change / Stats / Locations / manual + automatic authenticated sync acceptance. Do not mark overall PASS or merge PR until these checks pass. No new public API was introduced.
+- **Additional acceptance (2026-10-08):** direct SELECT denied under transactional `SET LOCAL ROLE anon` and `authenticated`; catalog/search/stats/location RPC results and ingest EXECUTE boundary remained correct for both roles. User reported PASS for the requested Windows Companion Search, zone change, Stats, Locations/map and Manual Sync checks. HTTP/JWT transport test is **still OPEN** and must not be reported as tested. No new public API was introduced.
 - Rollback is documented above and **not executed**.
