@@ -151,8 +151,13 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       and new regressions: PASS** (code commit `c74d819`, run `37817201593`);
       collector smoke also PASS (`37817201541`). Older screenshots are
       evidence of a blocked build gate, not a client texture failure.
-      **Real full-map rendering and marker/cluster/heatmap alignment still
-      require a new Windows test.**
+      **Live Windows screenshot sub-gate PASS (2026-10-08):** Tirisfal
+      (MapArtID 2126), Mulgore (1200) and Silverpine (2158) each show
+      `cached · full-overlays-verified-70009-70245-v2` with previously
+      hidden geography revealed and mining/herbalism/fishing-pool markers.
+      The build-mismatch/base-only failure is resolved. The final acceptance
+      gate remains OPEN for cold `Retry map` decoding, Clusters/Heatmap,
+      position-to-landmark precision and navigation/fallback regression.
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
