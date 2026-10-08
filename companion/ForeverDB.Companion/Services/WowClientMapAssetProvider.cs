@@ -61,26 +61,44 @@ public sealed class WowClientMapAssetProvider
 
         // The base C_Map art is the unexplored backdrop. The fully
         // explored appearance is the base plus all WorldMapOverlay tiles.
-        // Enable the generated atlas ONLY for its exact source build.
+        // Keep the atlas pinned to its source build. A failed full variant
+        // must not hide the cause when the base PNG is already cached.
         IReadOnlyList<FullRevealRegion> fullRegions =
             Array.Empty<FullRevealRegion>();
+        string fullRevealNote;
 
-        if (!string.IsNullOrWhiteSpace(_settings.WowRoot))
+        if (string.IsNullOrWhiteSpace(_settings.WowRoot))
+        {
+            fullRevealNote = "WoW installation path is not configured";
+        }
+        else
         {
             var cascRoot = FindCascRoot(_settings.WowRoot);
 
-            if (cascRoot is not null)
+            if (cascRoot is null)
             {
-                var installedVersion =
+                fullRevealNote = "WoW .build.info was not found";
+            }
+            else
+            {
+                var activeVersions =
                     GetOnlineBuildCandidates(
                         cascRoot,
                         _settings.WowRoot)
                     .Select(candidate => candidate.Version)
-                    .FirstOrDefault(version =>
-                        version == FullRevealMapArt.SourceBuildVersion);
+                    .ToArray();
 
-                fullRegions = FullRevealMapArt.Find(
-                    metadata.MapArtId, installedVersion);
+                fullRevealNote =
+                    FullRevealMapArt.ExplainUnavailability(
+                        metadata.MapArtId,
+                        activeVersions);
+
+                if (string.IsNullOrEmpty(fullRevealNote))
+                {
+                    fullRegions = FullRevealMapArt.Find(
+                        metadata.MapArtId,
+                        FullRevealMapArt.SourceBuildVersion);
+                }
             }
         }
 
@@ -93,12 +111,28 @@ public sealed class WowClientMapAssetProvider
             {
                 return fullMap;
             }
+
+            fullRevealNote = DescribeFullRevealFailure(fullMap.Status);
         }
 
         // Retain the original API art and its full legacy CASC/CDN/classic
         // fallback if the build is unknown or any reveal tile is missing.
-        return await LoadVariantAsync(
+        var baseMap = await LoadVariantAsync(
             metadata, layer, null, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(fullRevealNote))
+        {
+            return baseMap;
+        }
+
+        return new MapAssetResult
+        {
+            Image = baseMap.Image,
+            Width = baseMap.Width,
+            Height = baseMap.Height,
+            FromCache = baseMap.FromCache,
+            Status = $"{baseMap.Status}\nFull reveal unavailable: {fullRevealNote}"
+        };
     }
 
     private async Task<MapAssetResult> LoadVariantAsync(
@@ -366,6 +400,39 @@ public sealed class WowClientMapAssetProvider
             FromCache = false,
             Status = raw.Status
         };
+    }
+
+    // Do not surface arbitrary CASC exception paths or server responses
+    // in the visible status. Expected atlas validation failures are safe
+    // and actionable; full details remain in the resolver diagnostics.
+    private static string DescribeFullRevealFailure(string rawStatus)
+    {
+        const string negativeCachePrefix = "Cached map lookup · ";
+
+        var status =
+            rawStatus.StartsWith(
+                negativeCachePrefix,
+                StringComparison.Ordinal)
+                ? rawStatus[negativeCachePrefix.Length..]
+                : rawStatus;
+
+        const string unavailablePrefix = "Full-reveal unavailable: ";
+
+        if (status.StartsWith(
+                unavailablePrefix,
+                StringComparison.Ordinal))
+        {
+            return status[unavailablePrefix.Length..];
+        }
+
+        if (status.StartsWith(
+                "Full-reveal source layout",
+                StringComparison.Ordinal))
+        {
+            return "map dimensions or base tile coverage do not match the atlas";
+        }
+
+        return "full overlay CASC resolution failed (see resolver diagnostics)";
     }
 
     private RawMapAsset ExtractRawMap(
