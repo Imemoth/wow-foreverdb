@@ -137,11 +137,14 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
-      **Investigation 2026-10-08:** source selection is blocked on verifying
-      actual alternative art/texture IDs in the installed Forever build. The
-      current renderer does not add exploration masks; do not guess IDs.
-      Documented cache-key risk and Windows client evidence gate:
-      [full-map art investigation](0.7-full-map-art-investigation.md).
+      **PR #21 implementation candidate (2026-10-08; acceptance OPEN):**
+      the game's base art is the unexplored backdrop; discovered-area overlay
+      textures complete it. The Companion now has an exact-build (1.60.1.70009)
+      atlas from the game DB tables (84 maps, 1,073 regions, 1,739 FileDataIDs),
+      local-CASC / exact-build-CDN compositing, atomic base fallback and
+      variant-safe PNG caches. Static source: [Map Tab](https://github.com/jonlipin/map-tab).
+      **Windows/WoW validation and CI PASS are not yet established.**
+      See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
 
