@@ -3,9 +3,11 @@ using System.Text.Json;
 
 namespace ForeverDB.Companion.Services;
 
-// WorldMapOverlay + WorldMapOverlayTile metadata from the WoW Forever 1.60.1.70009
-// client. Source: jonlipin/map-tab (MIT), Data/MapOverlays.lua, 2026.
-// NO Blizzard artwork is embedded: FileDataIDs are read from the user's CASC.
+// WorldMapOverlay + WorldMapOverlayTile metadata originated from WoW Forever
+// 1.60.1.70009 (jonlipin/map-tab, MIT). Its complete set of 84 map arts,
+// 1,073 regions and 1,739 FileDataIDs was independently verified identical
+// against the wago.tools-derived 1.60.1.70245 snapshot (cjber/tweaks-forever,
+// Data/Overlays.lua, source blob 8b9d675c). NO Blizzard art is included.
 public sealed record FullRevealRegion(
     int Width,
     int Height,
@@ -21,7 +23,18 @@ public sealed record FullRevealTile(
 public static class FullRevealMapArt
 {
     public const string SourceBuildVersion = "1.60.1.70009";
-    public const string VariantId = "full-overlays-70009-maptab-13cafe8e-v1";
+    public const string VerifiedClientBuildVersion = "1.60.1.70245";
+    public const string VariantId = "full-overlays-verified-70009-70245-v2";
+
+    private static readonly HashSet<string> VerifiedBuildVersions =
+        new(StringComparer.Ordinal)
+        {
+            SourceBuildVersion,
+            VerifiedClientBuildVersion
+        };
+
+    public static bool IsSupportedBuildVersion(string? version) =>
+        version is not null && VerifiedBuildVersions.Contains(version);
 
     private const int TileSize = 256;
     private const string ResourceName =
@@ -48,9 +61,7 @@ public static class FullRevealMapArt
             return $"art #{mapArtId} is not in the reveal atlas";
         }
 
-        if (activeBuildVersions.Contains(
-                SourceBuildVersion,
-                StringComparer.Ordinal))
+        if (activeBuildVersions.Any(IsSupportedBuildVersion))
         {
             return "";
         }
@@ -68,19 +79,19 @@ public static class FullRevealMapArt
             .Take(3)
             .ToArray();
 
+        const string acceptedBuilds =
+            SourceBuildVersion + " or " + VerifiedClientBuildVersion;
+
         return installed.Length == 0
-            ? $"active client build unknown; atlas requires {SourceBuildVersion}"
-            : $"active build {string.Join(", ", installed)}; atlas requires {SourceBuildVersion}";
+            ? $"active client build unknown; atlas verified for {acceptedBuilds}"
+            : $"active build {string.Join(", ", installed)}; atlas verified for {acceptedBuilds}";
     }
 
     public static IReadOnlyList<FullRevealRegion> Find(
         long mapArtId,
         string? activeBuildVersion)
     {
-        if (!string.Equals(
-                activeBuildVersion,
-                SourceBuildVersion,
-                StringComparison.Ordinal))
+        if (!IsSupportedBuildVersion(activeBuildVersion))
         {
             return Array.Empty<FullRevealRegion>();
         }
