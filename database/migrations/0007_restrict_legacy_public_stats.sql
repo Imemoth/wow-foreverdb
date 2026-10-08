@@ -1,19 +1,19 @@
--- Legacy aggregated view is not part of the supported Companion API.
--- Search uses sources/items and get_foreverdb_search_* RPCs.
--- Stats/location details use get_foreverdb_*_stats/locations RPCs.
--- Authenticated snapshot ingest uses ingest_foreverdb_snapshot_auth(jsonb).
--- Keep the view and authenticated SELECT for compatibility; close anonymous access.
+-- Close direct access to the legacy aggregated view while preserving Companion.
+-- Live Supabase audit (2026-10-08):
+--   anon SELECT = true; authenticated SELECT = true;
+--   view option security_invoker=true; per-installation base tables deny
+--   direct SELECT to both roles. A grant on this view alone is NOT proof that
+--   either role can actually read the underlying rows.
 --
--- Important: a PostgreSQL view normally executes with the owner's privileges.
--- Do not substitute security_invoker=true without separately validating RLS.
--- A future removal of the view requires another compatibility review.
+-- Supabase anonymous Auth sign-ins (used by Companion sync) receive the
+-- authenticated Postgres role. Revoking only from anon therefore does NOT
+-- remove self-service anonymous-user access. Neither role needs direct access:
+-- Companion search uses public.items / public.sources and search RPCs;
+-- stats/location details use get_foreverdb_* RPCs; sync uses the separate
+-- authenticated ingest_foreverdb_snapshot_auth(jsonb).
 --
--- Revoking from PUBLIC matters: a PUBLIC grant otherwise overrides the anon revoke.
-revoke select on table public.observed_loot_stats from public, anon;
-grant select on table public.observed_loot_stats to authenticated;
-
--- Deliberately do not alter:
--- public.sources / public.items SELECT (search)
--- get_foreverdb_* RPC EXECUTE (search, stats, locations)
--- ingest_foreverdb_snapshot_auth(jsonb) EXECUTE (authenticated sync)
--- private schema functions or installation-level RLS.
+-- Preserve the view itself, ownership, privileged-role grants, existing
+-- read-only Companion RPCs/catalog grants, and authenticated sync privileges.
+-- Do not publish a new external API as part of this migration.
+revoke select on table public.observed_loot_stats
+from public, anon, authenticated;
