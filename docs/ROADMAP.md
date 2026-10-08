@@ -147,9 +147,12 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       gate (active 1.60.1.70245 vs atlas 1.60.1.70009). The PR now
       **explicitly allows only these two verified builds** while retaining
       local CASC -> same-build CDN, transactional base fallback and
-      variant-isolated caches. Older screenshots are evidence of a blocked
-      gate, not a client texture failure. **Real full-map rendering and
-      marker/cluster/heatmap alignment still require a new Windows test.**
+      variant-isolated caches. **Windows Companion CI with the 70245 allowlist
+      and new regressions: PASS** (code commit `c74d819`, run `37817201593`);
+      collector smoke also PASS (`37817201541`). Older screenshots are
+      evidence of a blocked build gate, not a client texture failure.
+      **Real full-map rendering and marker/cluster/heatmap alignment still
+      require a new Windows test.**
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
