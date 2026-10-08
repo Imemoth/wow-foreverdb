@@ -61,6 +61,31 @@ Check(FullRevealMapArt.Find(
         1194,
         FullRevealMapArt.SourceBuildVersion).Count > 0,
     "known map art ID resolves on exact build");
+Check(FullRevealMapArt.IsSupportedBuildVersion(
+        FullRevealMapArt.VerifiedClientBuildVersion),
+    "verified active 70245 client build is explicitly supported");
+Check(FullRevealMapArt.Find(
+        1200,
+        FullRevealMapArt.VerifiedClientBuildVersion).Count == 15,
+    "Mulgore art 1200 resolves all 15 regions on 70245");
+Check(FullRevealMapArt.Find(
+        1194,
+        FullRevealMapArt.VerifiedClientBuildVersion).Count == 11,
+    "Tirisfal art 1194 resolves all 11 regions on 70245");
+Check(ReferenceEquals(
+        FullRevealMapArt.Find(
+            1200, FullRevealMapArt.SourceBuildVersion),
+        FullRevealMapArt.Find(
+            1200, FullRevealMapArt.VerifiedClientBuildVersion)),
+    "both independently verified builds use the same identical atlas data");
+Check(!FullRevealMapArt.IsSupportedBuildVersion("1.60.1.70235"),
+    "similar but unverified 70235 client build remains blocked");
+Check(FullRevealMapArt.Find(1200, "1.60.1.70246").Count == 0,
+    "unknown future client build is never guessed");
+Check(FullRevealMapArt.ExplainUnavailability(
+        1200,
+        new[] { FullRevealMapArt.VerifiedClientBuildVersion }) == "",
+    "70245 active client is not reported as atlas mismatch");
 Check(FullRevealMapArt.Find(1194, "1.60.1.69913").Count == 0,
     "mismatched build never uses stale overlay data");
 Check(FullRevealMapArt.Find(
