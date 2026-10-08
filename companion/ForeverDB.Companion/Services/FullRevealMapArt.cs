@@ -32,6 +32,9 @@ public static class FullRevealMapArt
         new(Load);
 
     public static int MapCount => Data.Value.Count;
+    public static int OverlayCount => Data.Value.Values.Sum(regions => regions.Count);
+    public static int TileCount => Data.Value.Values.Sum(
+        regions => regions.Sum(region => region.FileDataIds.Count));
 
     public static IReadOnlyList<FullRevealRegion> Find(
         long mapArtId,
