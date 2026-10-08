@@ -68,6 +68,23 @@ Check(FullRevealMapArt.Find(
         FullRevealMapArt.SourceBuildVersion).Count == 0,
     "unknown map art ID returns no overlay candidate");
 
+Check(FullRevealMapArt.ExplainUnavailability(
+        1200,
+        new[] { FullRevealMapArt.SourceBuildVersion }) == "",
+    "known map + exact active client build pass atlas gate");
+Check(FullRevealMapArt.ExplainUnavailability(
+        1200,
+        new[] { "1.60.1.70010" }).Contains("70010"),
+    "different active client build is explained instead of silent base fallback");
+Check(FullRevealMapArt.ExplainUnavailability(
+        1200,
+        Array.Empty<string>()).Contains("unknown"),
+    "missing active build/version is explained");
+Check(FullRevealMapArt.ExplainUnavailability(
+        987654321,
+        new[] { FullRevealMapArt.SourceBuildVersion }).Contains("not in"),
+    "unknown map art is distinguished from build mismatch");
+
 var basePixels = Base(4, 4);
 var small = new[]
 {
@@ -121,10 +138,12 @@ var missing = FullRevealMapArt.TryCompose(
     id => id == 1 ? Tile(1, 1, 90) : null,
     out var incomplete,
     out var partialCount,
-    out _);
+    out var failedFileDataId);
 
 Check(!missing && partialCount == 1,
     "a single unavailable overlay rejects full variant");
+Check(failedFileDataId.Contains("FileDataID 2"),
+    "full variant failure reports the missing overlay texture ID");
 Check(ReferenceEquals(missingBase, incomplete) &&
       Blue(missingBase, 2, 0, 0) == 20,
     "failed full composition returns unchanged base, never partial reveal");
