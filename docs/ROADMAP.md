@@ -155,12 +155,17 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       (MapArtID 2126), Mulgore (1200) and Silverpine (2158) each show
       `cached · full-overlays-verified-70009-70245-v2` with previously
       hidden geography revealed and mining/herbalism/fishing-pool markers.
-      The build-mismatch/base-only failure is resolved. Additional live
-      screenshots **PASS** the Clusters and Heatmap visual sub-gates on
-      both Tirisfal and Mulgore, including a 63% Mulgore Heatmap zoom
-      smoke check. Final gate remains OPEN for cold `Retry map`
-      reconstruction, Back/Forward zone navigation, precise coordinate
-      and tooltip verification and safe missing-art fallback validation.
+      The build-mismatch/base-only failure is resolved. Live Clusters and
+      Heatmap screenshots **PASS** for Tirisfal/Mulgore, including 63% zoom.
+      **Fresh Mulgore `Retry map`: PASS** (12/12 base tiles,
+      `FileDataID+full-reveal:18`, non-cached Windows status). Same-query
+      item↔source detail Back/Forward also works. **Zone change bug found:**
+      changing the zone selector resets the selected result, detail and
+      Back/Forward. PR #21 now contains a focused fix to preserve selection,
+      detail and history during automatic zone-scoped result refresh, with
+      portable identity regressions and Windows CI PASS; **real Windows
+      retest still OPEN**. Tooltip/coordinate accuracy and live missing-art
+      fallback remain separately unverified.
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
