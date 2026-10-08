@@ -244,7 +244,8 @@ Acceptance evidence: [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 - [ ] Code-signing plan.
 - [ ] Auto-update design.
 - [ ] Remove obsolete legacy sync scripts/config after compatibility cleanup.
-- [ ] Remove/restrict legacy public stats view after compatibility validation.
+- [x] Restrict legacy public stats view: **2026-10-08 production SQL migration and role-restriction tests PASS; existing Companion runtime acceptance PASS (user-reported)**. `database/migrations/0007_restrict_legacy_public_stats.sql` revokes direct SELECT from `PUBLIC`, `anon`, and `authenticated`; `service_role` is preserved. Live SQL role impersonation confirmed direct SELECT denied for both roles while Search, Stats, Locations and authenticated Sync RPC grants remain correct. The same catalog/aggregate counts were verified before and after deployment. The Windows Companion tester confirmed Search, zone filter, Stats, map/Locations and Manual Sync continue working. See [production cutover and acceptance ledger](legacy-stats-prod-cutover.md). No new external/public API was published.
+- [ ] Run separate actual HTTP PostgREST smoke checks with `anon` API key **and** anonymous Supabase Auth JWT: both must be denied direct `/rest/v1/observed_loot_stats` SELECT, while supported Search/Stats/Locations RPCs remain usable. **OPEN: transport-level HTTP/JWT checks were not executed; SQL role-impersonation and Companion manual acceptance are not a substitute for a documented HTTP response.**
 
 ## Future — Guildbook
 
