@@ -109,7 +109,8 @@ public partial class MainWindow : Window
 
         _searchService = new SearchService(
             _httpClient,
-            _settings);
+            _settings,
+            auth.GetAccessTokenAsync);
 
         await LoadSearchZonesAsync();
 
