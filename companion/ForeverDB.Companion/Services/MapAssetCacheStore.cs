@@ -41,7 +41,8 @@ public static class MapAssetCacheStore
         ForeverDbMap map,
         ForeverDbMapLayer layer,
         string resolverVersion,
-        string wowBuildFingerprint)
+        string wowBuildFingerprint,
+        string artVariant = "base")
     {
         var refs =
             string.Join(
@@ -52,7 +53,7 @@ public static class MapAssetCacheStore
             $"{map.MapId}|{map.MapArtId}|{layer.LayerIndex}|" +
             $"{layer.LayerWidth}x{layer.LayerHeight}|" +
             $"{layer.TileWidth}x{layer.TileHeight}|" +
-            $"{resolverVersion}|{wowBuildFingerprint}|{refs}";
+            $"{resolverVersion}|{wowBuildFingerprint}|{artVariant}|{refs}";
 
         var hash =
             SHA256.HashData(
@@ -114,29 +115,48 @@ public static class MapAssetCacheStore
     {
         lock (Gate)
         {
-            if (!File.Exists(CacheIndexPath))
+            if (File.Exists(CacheIndexPath))
             {
-                return;
+                var remaining =
+                    LoadAll()
+                        .Where(entry => entry.MapId != mapId)
+                        .ToArray();
+
+                Directory.CreateDirectory(DirectoryPath);
+                File.WriteAllText(
+                    CacheIndexPath,
+                    JsonSerializer.Serialize(
+                        remaining,
+                        new JsonSerializerOptions { WriteIndented = true }));
             }
 
-            var remaining =
-                LoadAll()
-                    .Where(
-                        entry =>
-                            entry.MapId != mapId)
-                    .ToArray();
+            // "Retry map" must invalidate the actual PNG as well as the
+            // resolution index, including older unversioned filenames.
+            var artDirectory = Path.Combine(
+                DirectoryPath,
+                mapId.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
 
-            Directory.CreateDirectory(
-                DirectoryPath);
-
-            File.WriteAllText(
-                CacheIndexPath,
-                JsonSerializer.Serialize(
-                    remaining,
-                    new JsonSerializerOptions
+            if (Directory.Exists(artDirectory))
+            {
+                foreach (var png in
+                         Directory.EnumerateFiles(
+                             artDirectory,
+                             "art-*-layer-*.png",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    try
                     {
-                        WriteIndented = true
-                    }));
+                        File.Delete(png);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                }
+            }
         }
     }
 
