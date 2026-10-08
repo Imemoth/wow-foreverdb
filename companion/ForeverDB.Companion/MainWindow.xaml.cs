@@ -23,6 +23,10 @@ public partial class MainWindow : Window
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
     private SearchResultItem? _currentDetail;
+    // Keep the user's last explicit Search result even if the current
+    // zone's filtered list temporarily does not contain it.
+    private SearchResultItem? _selectedSearchResult;
+    private bool _updatingSearchResults;
     private bool _updatingSearchZoneSelector;
     private int _searchVersion;
 
@@ -468,7 +472,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        await RunSearchAsync();
+        // Changing the scope only refreshes the left-hand results. Detail,
+        // breadcrumb and Back/Forward are independent navigation state.
+        await RunSearchAsync(preserveDetailNavigation: true);
     }
 
     private async void Search_Click(
@@ -488,7 +494,8 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task RunSearchAsync()
+    private async Task RunSearchAsync(
+        bool preserveDetailNavigation = false)
     {
         if (_searchService is null)
         {
@@ -508,7 +515,11 @@ public partial class MainWindow : Window
         }
 
         var searchVersion = ++_searchVersion;
-        ResetSearchState();
+
+        if (!preserveDetailNavigation)
+        {
+            ResetSearchState();
+        }
 
         try
         {
@@ -528,7 +539,34 @@ public partial class MainWindow : Window
                 return;
             }
 
-            SearchResults.ItemsSource = results;
+            // Rebinding ItemsSource clears WPF SelectedItem and can raise
+            // SelectionChanged. Suppress that programmatic event, otherwise
+            // it would clear Back/Forward and discard the current detail.
+            _updatingSearchResults = true;
+
+            try
+            {
+                SearchResults.ItemsSource = results;
+
+                if (preserveDetailNavigation)
+                {
+                    var matched =
+                        SearchResultSelection.FindMatching(
+                            results,
+                            _selectedSearchResult);
+
+                    SearchResults.SelectedItem = matched;
+
+                    if (matched is not null)
+                    {
+                        _selectedSearchResult = matched;
+                    }
+                }
+            }
+            finally
+            {
+                _updatingSearchResults = false;
+            }
 
             var scopeText =
                 selectedZone.IsAllZones
@@ -547,19 +585,39 @@ public partial class MainWindow : Window
                 return;
             }
 
-            ResetSearchState();
-            SearchStatusText.Text = ex.Message;
+            if (!preserveDetailNavigation)
+            {
+                ResetSearchState();
+                SearchStatusText.Text = ex.Message;
+            }
+            else
+            {
+                // Preserve the last working results and detail navigation if
+                // the new zone's search request fails.
+                SearchStatusText.Text =
+                    $"Zone search failed; previous results retained: {ex.Message}";
+            }
         }
     }
 
     private void ResetSearchState()
     {
-        SearchResults.ItemsSource = null;
-        SearchResults.SelectedItem = null;
+        _updatingSearchResults = true;
+
+        try
+        {
+            SearchResults.ItemsSource = null;
+            SearchResults.SelectedItem = null;
+        }
+        finally
+        {
+            _updatingSearchResults = false;
+        }
 
         _backHistory.Clear();
         _forwardHistory.Clear();
         _currentDetail = null;
+        _selectedSearchResult = null;
 
         UpdateNavigationUi();
 
@@ -573,11 +631,15 @@ public partial class MainWindow : Window
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (SearchResults.SelectedItem is not SearchResultItem result)
+        if (_updatingSearchResults ||
+            SearchResults.SelectedItem is not SearchResultItem result)
         {
             return;
         }
 
+        // An explicit new result starts a new detail-navigation chain.
+        // Programmatic re-selection after a zone change must not get here.
+        _selectedSearchResult = result;
         _backHistory.Clear();
         _forwardHistory.Clear();
         _currentDetail = null;
@@ -593,7 +655,7 @@ public partial class MainWindow : Window
     {
         if (recordHistory &&
             _currentDetail is not null &&
-            !SameEntity(_currentDetail, result))
+            !SearchResultSelection.SameEntity(_currentDetail, result))
         {
             _backHistory.Push(_currentDetail);
             _forwardHistory.Clear();
@@ -697,25 +759,6 @@ public partial class MainWindow : Window
 
         BreadcrumbText.Text =
             string.Join("  ›  ", trail);
-    }
-
-    private static bool SameEntity(
-        SearchResultItem left,
-        SearchResultItem right)
-    {
-        if (left.Kind != right.Kind)
-        {
-            return false;
-        }
-
-        if (left.Kind == SearchEntityKind.Item)
-        {
-            return left.ItemId == right.ItemId;
-        }
-
-        return left.SourceType == right.SourceType
-            && left.SourceId == right.SourceId
-            && left.SourceLevel == right.SourceLevel;
     }
 
     private void RenderSearchDetail(
