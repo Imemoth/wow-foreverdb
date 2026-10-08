@@ -244,7 +244,7 @@ Acceptance evidence: [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 - [ ] Code-signing plan.
 - [ ] Auto-update design.
 - [ ] Remove obsolete legacy sync scripts/config after compatibility cleanup.
-- [ ] Remove/restrict legacy public stats view after compatibility validation.
+- [ ] Remove/restrict legacy public stats view after compatibility validation. **2026-10-08 repo hardening prepared:** `database/migrations/0007_restrict_legacy_public_stats.sql` revokes anonymous access while retaining authenticated compatibility and the public Companion search/detail RPCs. Live `wow-forever` was separately inspected and still grants `anon` SELECT on this view; migration is NOT deployed. Run `database/tests/legacy_stats_access_smoke.sql` after applying in a controlled environment, then JWT/PostgREST plus Windows/WPF Search, Stats, Locations and authenticated sync checks before checking this item off.
 
 ## Future — Guildbook
 
