@@ -155,9 +155,12 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       (MapArtID 2126), Mulgore (1200) and Silverpine (2158) each show
       `cached · full-overlays-verified-70009-70245-v2` with previously
       hidden geography revealed and mining/herbalism/fishing-pool markers.
-      The build-mismatch/base-only failure is resolved. The final acceptance
-      gate remains OPEN for cold `Retry map` decoding, Clusters/Heatmap,
-      position-to-landmark precision and navigation/fallback regression.
+      The build-mismatch/base-only failure is resolved. Additional live
+      screenshots **PASS** the Clusters and Heatmap visual sub-gates on
+      both Tirisfal and Mulgore, including a 63% Mulgore Heatmap zoom
+      smoke check. Final gate remains OPEN for cold `Retry map`
+      reconstruction, Back/Forward zone navigation, precise coordinate
+      and tooltip verification and safe missing-art fallback validation.
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
