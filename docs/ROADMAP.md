@@ -196,9 +196,10 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       identity (14 days), with an 18-second network timeout and 15-minute
       retry for failures. No blind 1.60.* approval; offline/invalid/mismatched
       source -> base map with reason. Previously reviewed builds need no
-      network fetch. A GitHub Windows runner successfully fetched and
-      verified at least three map arts for the new 1.60.1.70291 build
-      (CI run `37906111220`; transport probe PASS). **Real Windows
+      network fetch. The GitHub Windows runner fetched exact-version
+      DB2 exports and matched **84/84 embedded map arts** for the
+      new 1.60.1.70291 build (CI `37906377015`; map tests
+      **48/48 PASS**). **Real Windows
       Companion 70291 acceptance still OPEN**, including fresh CASC
       decoding and map/overlay alignment.
       [Full verification design / test gate](0.7-auto-atlas-verification.md).
