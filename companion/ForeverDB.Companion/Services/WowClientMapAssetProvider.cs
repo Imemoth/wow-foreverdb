@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "10";
+    private const string ResolverVersion = "11";
 
     private static readonly ConcurrentDictionary<
         string,
@@ -59,13 +59,15 @@ public sealed class WowClientMapAssetProvider
                 $"WoW client map metadata exists for {metadata.Name}, but it has no usable art layer.");
         }
 
-        // The base C_Map art is the unexplored backdrop. The fully
-        // explored appearance is the base plus all WorldMapOverlay tiles.
-        // Keep the atlas pinned to its source build. A failed full variant
-        // must not hide the cause when the base PNG is already cached.
+        // Only trusted DB2 metadata can establish the overlay-to-map
+        // relationship. Previously reviewed builds are pinned; a new build
+        // must match the embedded atlas at every rectangle/FileDataID for
+        // this art before any full-reveal texture is opened.
         IReadOnlyList<FullRevealRegion> fullRegions =
             Array.Empty<FullRevealRegion>();
         string? fullRevealBuildVersion = null;
+        string? fullRevealBuildKey = null;
+        string? fullRevealVariant = null;
         string fullRevealNote;
 
         if (string.IsNullOrWhiteSpace(_settings.WowRoot))
@@ -82,30 +84,57 @@ public sealed class WowClientMapAssetProvider
             }
             else
             {
-                var activeVersions =
-                    GetOnlineBuildCandidates(
-                        cascRoot,
-                        _settings.WowRoot)
-                    .Select(candidate => candidate.Version)
-                    .ToArray();
+                var candidates = GetOnlineBuildCandidates(
+                    cascRoot, _settings.WowRoot);
+                var known = candidates.FirstOrDefault(
+                    candidate =>
+                        FullRevealMapArt.IsSupportedBuildVersion(
+                            candidate.Version));
 
-                fullRevealNote =
-                    FullRevealMapArt.ExplainUnavailability(
-                        metadata.MapArtId,
-                        activeVersions);
+                fullRevealNote = FullRevealMapArt.ExplainUnavailability(
+                    metadata.MapArtId,
+                    candidates.Select(candidate => candidate.Version).ToArray());
 
-                if (string.IsNullOrEmpty(fullRevealNote))
+                if (known is not null &&
+                    string.IsNullOrEmpty(fullRevealNote))
                 {
-                    // Select an explicitly verified active version, never a
-                    // guessed later 1.60.1 build. The atlas was compared
-                    // byte-for-byte by art/region/texture ID for these two.
-                    fullRevealBuildVersion =
-                        activeVersions.FirstOrDefault(
-                            FullRevealMapArt.IsSupportedBuildVersion);
-
+                    fullRevealBuildVersion = known.Version;
+                    fullRevealBuildKey = known.BuildKey;
                     fullRegions = FullRevealMapArt.Find(
-                        metadata.MapArtId,
-                        fullRevealBuildVersion);
+                        metadata.MapArtId, known.Version);
+                }
+                else if (FullRevealMapArt.GetEmbeddedAtlas()
+                             .ContainsKey(metadata.MapArtId))
+                {
+                    var newBuild = candidates.FirstOrDefault(candidate =>
+                        AutoAtlasBuildVerifier.IsValidIdentity(
+                            candidate.Product, candidate.Version,
+                            candidate.BuildKey));
+
+                    if (newBuild is not null)
+                    {
+                        var proof = await AutoAtlasBuildVerifier.VerifyAsync(
+                            newBuild.Product,
+                            newBuild.Version,
+                            newBuild.BuildKey,
+                            cancellationToken);
+
+                        if (proof.IsVerifiedFor(metadata.MapArtId))
+                        {
+                            fullRegions = FullRevealMapArt.GetEmbeddedAtlas()[
+                                metadata.MapArtId];
+                            fullRevealBuildVersion = newBuild.Version;
+                            fullRevealBuildKey = newBuild.BuildKey;
+                            fullRevealVariant = proof.CacheVariant;
+                            fullRevealNote = "";
+                        }
+                        else
+                        {
+                            fullRevealNote = proof.SourceValidated
+                                ? $"art #{metadata.MapArtId} differs from exact-build DB2 metadata"
+                                : $"Auto Atlas Verification: {proof.Status}";
+                        }
+                    }
                 }
             }
         }
@@ -117,7 +146,9 @@ public sealed class WowClientMapAssetProvider
                 layer,
                 fullRegions,
                 cancellationToken,
-                fullRevealBuildVersion);
+                fullRevealBuildVersion,
+                fullRevealBuildKey,
+                fullRevealVariant);
 
             if (fullMap.IsClientAsset)
             {
@@ -152,12 +183,14 @@ public sealed class WowClientMapAssetProvider
         ForeverDbMapLayer layer,
         IReadOnlyList<FullRevealRegion>? fullRegions,
         CancellationToken cancellationToken,
-        string? fullRevealBuildVersion = null)
+        string? fullRevealBuildVersion = null,
+        string? fullRevealBuildKey = null,
+        string? fullRevealVariant = null)
     {
         var variant =
             fullRegions is null
                 ? "base"
-                : FullRevealMapArt.VariantId;
+                : fullRevealVariant ?? FullRevealMapArt.VariantId;
 
         var wowBuildFingerprint =
             MapAssetCacheStore.GetWowBuildFingerprint(
@@ -247,6 +280,7 @@ public sealed class WowClientMapAssetProvider
                         layer,
                         fullRegions,
                         fullRevealBuildVersion,
+                        fullRevealBuildKey,
                         preferredStorageLabel,
                         CancellationToken.None),
                     CancellationToken.None));
@@ -455,6 +489,7 @@ public sealed class WowClientMapAssetProvider
         ForeverDbMapLayer layer,
         IReadOnlyList<FullRevealRegion>? fullRegions,
         string? fullRevealBuildVersion,
+        string? fullRevealBuildKey,
         string? preferredStorageLabel,
         CancellationToken cancellationToken)
     {
@@ -810,7 +845,12 @@ public sealed class WowClientMapAssetProvider
                             // build whose atlas was selected. In particular,
                             // a 70245 client must never resolve 70009 CDN
                             // art just because both atlases have equal IDs.
-                            if (online.Version != fullRevealBuildVersion)
+                            if (online.Version != fullRevealBuildVersion ||
+                                (fullRevealBuildKey is not null &&
+                                 !string.Equals(
+                                     online.BuildKey,
+                                     fullRevealBuildKey,
+                                     StringComparison.OrdinalIgnoreCase)))
                             {
                                 continue;
                             }
