@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #090b10;
+  --color-ink-900: #0f1218;
+  --color-ink-850: #141821;
+  --color-ink-800: #1a1f2a;
+  --color-ink-700: #262d3b;
+  --color-ink-600: #364055;
+  --color-parchment: #ece4d3;
+  --color-mist: #a7b0bf;
+  --color-gold-300: #f3d38a;
+  --color-gold-400: #e6b95c;
+  --color-gold-500: #c9973d;
+  --color-bronze-400: #c58a52;
+  --color-bronze-600: #8a5a2e;
+  --color-conf-high: #74cf92;
+  --color-conf-medium: #e6c766;
+  --color-conf-low: #eba066;
+  --color-conf-none: #959eae;
+  --color-kind-mob: #ec8b80;
+  --color-kind-skinning: #d9b88f;
+  --color-kind-mining: #de9a62;
+  --color-kind-herbalism: #86d67e;
+  --color-kind-fishing: #6cbcef;
+  --color-kind-pool: #5ccdd3;
+  --color-kind-chest: #e6b95c;
+  --color-kind-object: #c3aeea;
+  --color-kind-disenchant: #d0a0f5;
+  --color-danger: #f08a7e;
+
+  --font-display: "Cinzel Variable", "Cinzel", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html {
+    background: var(--color-ink-950);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    min-height: 100vh;
+    color: var(--color-parchment);
+    font-family: var(--font-sans);
+    background:
+      radial-gradient(1200px 520px at 50% -180px, rgb(201 151 61 / 0.16), transparent 70%),
+      radial-gradient(800px 400px at 100% 0, rgb(110 69 36 / 0.12), transparent 70%),
+      var(--color-ink-950);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgb(230 185 92 / 0.35);
+  }
+  a {
+    color: var(--color-gold-300);
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    color: #fff1c9;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold-400);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .panel {
+    background: linear-gradient(180deg, rgb(26 31 42 / 0.92), rgb(20 24 33 / 0.92));
+    border: 1px solid var(--color-ink-700);
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 30px -18px rgb(0 0 0 / 0.8);
+  }
+  .panel-title {
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
+    color: var(--color-gold-300);
+  }
+  .rule-ornament {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-bronze-600), var(--color-gold-500), var(--color-bronze-600), transparent);
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+  }
+  .data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-ink-850);
+    color: var(--color-mist);
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--color-ink-700);
+    white-space: nowrap;
+  }
+  .data-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgb(38 45 59 / 0.6);
+    vertical-align: middle;
+  }
+  .data-table tbody tr:hover td {
+    background: rgb(230 185 92 / 0.045);
+  }
+  .data-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .field {
+    background: var(--color-ink-900);
+    border: 1px solid var(--color-ink-600);
+    border-radius: 0.5rem;
+    color: var(--color-parchment);
+    padding: 0.5rem 0.75rem;
+    min-height: 2.5rem;
+  }
+  .field:focus-visible {
+    outline: 2px solid var(--color-gold-400);
+    outline-offset: 0;
+  }
+  .btn-gold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    color: #1b1206;
+    background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
+    border: 1px solid #f7dc9b;
+    text-decoration: none;
+  }
+  .btn-gold:hover {
+    color: #1b1206;
+    filter: brightness(1.06);
+  }
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-ink-600);
+    color: var(--color-parchment);
+    background: rgb(15 18 24 / 0.6);
+    text-decoration: none;
+  }
+  .btn-ghost:hover {
+    border-color: var(--color-gold-500);
+    color: #fff;
+  }
+  .prose-fdb {
+    line-height: 1.75;
+    color: #ddd6c6;
+  }
+  .prose-fdb h2 {
+    font-family: var(--font-display);
+    color: var(--color-gold-300);
+    font-size: 1.5rem;
+    margin: 2.2rem 0 0.8rem;
+    letter-spacing: 0.02em;
+  }
+  .prose-fdb h3 {
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin: 1.6rem 0 0.6rem;
+    color: var(--color-parchment);
+  }
+  .prose-fdb p, .prose-fdb ul, .prose-fdb ol, .prose-fdb table, .prose-fdb blockquote {
+    margin: 0 0 1.1rem;
+  }
+  .prose-fdb ul { list-style: disc; padding-left: 1.4rem; }
+  .prose-fdb ol { list-style: decimal; padding-left: 1.4rem; }
+  .prose-fdb li { margin: 0.3rem 0; }
+  .prose-fdb code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--color-ink-800);
+    border: 1px solid var(--color-ink-700);
+    border-radius: 0.3rem;
+    padding: 0.1rem 0.35rem;
+  }
+  .prose-fdb pre {
+    background: var(--color-ink-900);
+    border: 1px solid var(--color-ink-700);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 0 0 1.1rem;
+  }
+  .prose-fdb pre code { background: none; border: 0; padding: 0; }
+  .prose-fdb blockquote {
+    border-left: 3px solid var(--color-gold-500);
+    padding: 0.2rem 0 0.2rem 1rem;
+    color: var(--color-mist);
+  }
+  .prose-fdb table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .prose-fdb th, .prose-fdb td { border: 1px solid var(--color-ink-700); padding: 0.4rem 0.6rem; text-align: left; }
+  .prose-fdb th { background: var(--color-ink-850); }
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -4rem;
+    z-index: 100;
+    padding: 0.6rem 1rem;
+    background: var(--color-gold-400);
+    color: #1b1206;
+    border-radius: 0.4rem;
+    font-weight: 700;
+  }
+  .skip-link:focus { top: 1rem; color: #1b1206; }
+}

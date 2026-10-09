@@ -1,0 +1,99 @@
+name: ForeverDB Web & publication pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'publisher/**'
+      - 'database/public-read/**'
+      - 'database/private-export/**'
+      - 'database/tests/**'
+      - 'scripts/public-pipeline-integration.sh'
+      - '.github/workflows/web-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - name: Production dependency audit (high+ fails)
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build with canary secrets present in the build environment
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
+          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+        run: npm run build
+      - name: No secrets or source maps in browser bundles
+        env:
+          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
+          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+        run: npm run check:bundle-secrets
+      - run: npx playwright install --with-deps chromium
+      - name: E2E (journeys, security, WCAG 2.2 AA automated, SEO, responsive) on fixture data
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }
+
+  publisher-and-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-test-password
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: local-test-password
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Publisher unit tests
+        working-directory: publisher
+        run: npm ci && npm run typecheck && npm test
+      - name: End-to-end publication pipeline on ephemeral PostgreSQL
+        run: ./scripts/public-pipeline-integration.sh
+      - name: Website against the published public read model (Postgres adapter)
+        working-directory: web
+        env:
+          FOREVERDB_DATA_SOURCE: postgres
+          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          npm ci
+          npm run build
+          npx playwright install --with-deps chromium
+          npx playwright test --project=desktop tests/e2e/journeys.spec.ts tests/e2e/security.spec.ts
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, security-events: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with: { languages: javascript-typescript, queries: security-extended }
+      - uses: github/codeql-action/analyze@v3

@@ -1,0 +1,44 @@
+name: Publish public read model (manual)
+
+# One-way publication: private aggregate export -> isolated public read DB.
+# Manual-only until docs/web/go-live-checklist.md section B is complete.
+# Enable the schedule below only after owner approval.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and validate only (no write)
+        type: boolean
+        default: true
+#  schedule:
+#    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Protected environment: required reviewers; holds ONLY the two worker secrets.
+    environment: publication
+    defaults: { run: { working-directory: publisher } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - name: Publish
+        env:
+          PRIVATE_EXPORT_DATABASE_URL: ${{ secrets.PRIVATE_EXPORT_DATABASE_URL }}
+          PUBLIC_PUBLISHER_DATABASE_URL: ${{ secrets.PUBLIC_PUBLISHER_DATABASE_URL }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npx tsx src/cli.ts publish --dry-run
+          else
+            npx tsx src/cli.ts publish
+          fi

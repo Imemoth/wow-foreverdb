@@ -407,6 +407,22 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 - [x] Companion Guildbook tab with guild selector, filter, roster/status/profession columns.
 - [ ] Optional Battle.net enrichment if Forever realm/profile support is verified.
 
+## Web — public ForeverDB website (foundation)
+
+Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthetic sample data; nothing provisioned or deployed; production untouched.** Docs: [docs/web/](web/README.md).
+
+- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets (separate fix needed).
+- [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
+- [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
+- [x] Fail-closed publication worker (`publisher/`): strict contract, name sanitization, sample thresholds, Wilson intervals, dominance flag, deterministic hash.
+- [x] Next.js 16 website: search, item/creature/object/fishing/zone pages, news/guides/blog (Markdown), RSS, sitemap, nonce CSP, distributed rate limiting, progressive Turnstile challenge.
+- [x] Local evidence: unit 80/80, SQL security suites, pipeline E2E, Playwright 44/44 (incl. axe WCAG 2.2 AA) on fixture and 16/16 on Postgres adapter.
+- [ ] CI run on GitHub (branch not yet pushed from the authoring session).
+- [ ] Provision public DB, Upstash, Vercel, WAF ([infrastructure setup](web/infrastructure-setup.md)).
+- [ ] Production 0010 approval + first real publication.
+- [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
+- [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
+
 ## 0.9 — Farming intelligence
 
 - [ ] “Where should I farm this?” view.

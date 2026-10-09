@@ -1,0 +1,16 @@
+{
+  "contractVersion": 1,
+  "locationGrid": 1.0,
+  "thresholds": {
+    "minBucketObservationsForRate": 10,
+    "lowConfidenceBelow": 30,
+    "highConfidenceAtLeast": 100,
+    "dominatedShare": 0.9,
+    "minLocationCellObservations": 2,
+    "maxRejectedRatio": 0.05,
+    "maxAnomalyRatio": 0.02
+  },
+  "allowedSourceTypes": ["creature", "gameobject", "fishing", "item"],
+  "allowedLootKinds": ["mob", "skinning", "mining", "herbalism", "fishing", "fishing_pool", "chest", "gameobject", "disenchant"],
+  "retainPublications": 3
+}
