@@ -149,8 +149,11 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       Windows Companion CI and portable pagination/security-token
       regressions PASS. **Migration 0008 APPLIED to production on 2026-10-09** (ledger
       `20261009072627`); SQL privileges and read-only catalog smoke PASS.
-      Live HTTP transport authentication and Windows UI acceptance
-      remain OPEN before merge/release.
+      Live Windows screenshots confirm Mulgore **35/35**, Silverpine
+      **20/20**, and Tirisfal **50 of 215** first-page browsing with
+      `Load 50 more` button visible. Catalog and basic drilldown
+      VISUAL PASS; actual next-page click, rapid zone navigation history,
+      and HTTP/JWT role checks remain OPEN before merge/release.
       See [zone-only database browse contract](0.7-zone-only-database-browse.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
@@ -199,9 +202,15 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       network fetch. The GitHub Windows runner fetched exact-version
       DB2 exports and matched **84/84 embedded map arts** for the
       new 1.60.1.70291 build (CI `37906377015`; map tests
-      **48/48 PASS**). **Real Windows
-      Companion 70291 acceptance still OPEN**, including fresh CASC
-      decoding and map/overlay alignment.
+      **48/48 PASS**). **70291 real Windows Tirisfal #2126 acceptance
+      PARTIAL PASS (2026-10-09):** 12/12 base tiles,
+      `FileDataID+full-reveal:22` and `Auto Atlas VERIFIED (1.60.1.70291)`
+      on cold render; `cached · full-auto-verified-...` on revisit;
+      marker and heatmap screenshots PASS visually.
+      **Mulgore #1200 and Silverpine #2158 map art, 70291 Retry map,
+      exact marker/tooltip alignment and failure fallback remain OPEN.**
+      The Silverpine-filtered Light Leather detail screenshot displays
+      **Tirisfal art #2126**, not evidence of Silverpine art.
       [Full verification design / test gate](0.7-auto-atlas-verification.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
