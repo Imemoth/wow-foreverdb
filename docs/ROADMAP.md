@@ -134,6 +134,23 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       detail/navigation and map overlays remain unchanged. Live follow-up also
       verified automatic re-search on zone change and clearing stale detail/
       navigation state when the new scope returns zero results.
+      **Historical note:** that original 2026-10-07 zero-result reset
+      behavior was superseded by PR #21's navigation-preserving zone
+      refresh after the 2026-10-08 live Back/Forward regression; its
+      post-fix Windows acceptance is separately pending.
+- [ ] Browse already observed database items and sources by selecting
+      **one zone with an empty Search box**, without requiring a query word.
+      **PR #21 implementation ready, release gate OPEN (2026-10-09):**
+      new `0008_zone_catalog_browse.sql` authenticated-only RPC serves
+      exact observed `map_id + zone_name` entities with stable ordering,
+      total count and **50 per page**, plus a Companion `Load 50 more`
+      control. All zones + blank query does not enumerate the database;
+      name/ID search and detail/Back/Forward are preserved.
+      Windows Companion CI and portable pagination/security-token
+      regressions PASS. **The migration has NOT been deployed to
+      production**; live SQL/HTTP auth tests and Windows UI acceptance
+      remain OPEN before merge/release.
+      See [zone-only database browse contract](0.7-zone-only-database-browse.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
