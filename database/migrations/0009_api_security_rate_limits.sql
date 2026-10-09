@@ -13,6 +13,9 @@
 -- This migration deliberately does not publish raw installation/guild data.
 -- All elevated calls are explicitly bounded wrappers with empty search_path.
 
+-- Atomic cutover: never leave half-revoked grants on an error.
+begin;
+
 create schema if not exists private;
 
 create table if not exists private.foreverdb_api_budgets (
@@ -446,3 +449,5 @@ begin
 end $verify$;
 
 notify pgrst, 'reload schema';
+
+commit;
