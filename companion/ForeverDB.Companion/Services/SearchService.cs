@@ -814,8 +814,25 @@ public sealed class SearchService
 
         if (!response.IsSuccessStatusCode)
         {
+            var missingEndpoint = false;
+            try
+            {
+                using var error = JsonDocument.Parse(bodyJson);
+                missingEndpoint =
+                    error.RootElement.TryGetProperty("code", out var code) &&
+                    code.GetString() == "PGRST202";
+            }
+            catch (JsonException)
+            {
+                // Untrusted body must not be included in UI error messages.
+            }
+
             throw new InvalidOperationException(
-                $"Search failed: {(int)response.StatusCode} {bodyJson}");
+                missingEndpoint
+                    ? "PGRST202: ForeverDB database endpoint not installed."
+                    : response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                        ? "ForeverDB API limit reached; retry in a minute."
+                        : $"Search request rejected (HTTP {(int)response.StatusCode}).");
         }
 
         using var document = JsonDocument.Parse(bodyJson);
