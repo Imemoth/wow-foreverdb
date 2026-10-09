@@ -71,3 +71,29 @@ begin
     null;
 end;
 $$;
+
+-- The live project retains pre-repository private helpers installed during
+-- early prototype development. Reproduce only their signatures in CI so the
+-- backwards-compatible 0008a revocation is tested faithfully.
+create function private.foreverdb_all_stats()
+returns table (
+    source_type text, source_id bigint, source_level integer,
+    source_name text, loot_kind text, item_id bigint, item_name text,
+    observations bigint, drop_count bigint, quantity bigint,
+    quest_drop_count bigint, observed_drop_rate numeric
+) language sql security definer set search_path = ''
+as $$
+select null::text, null::bigint, null::integer,
+       null::text, null::text, null::bigint, null::text,
+       null::bigint, null::bigint, null::bigint, null::bigint,
+       null::numeric where false;
+$$;
+
+create function private.ingest_foreverdb_snapshot_auth(p_snapshot jsonb)
+returns jsonb language sql security definer set search_path = ''
+as $$ select jsonb_build_object('test_fixture', true); $$;
+
+grant execute on function private.foreverdb_all_stats()
+to anon, authenticated;
+grant execute on function private.ingest_foreverdb_snapshot_auth(jsonb)
+to anon, authenticated;
