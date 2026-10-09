@@ -335,6 +335,171 @@ Check(
         selectedCreature) is null,
     "an empty zone result preserves detail outside the list without selection");
 
+// Item ↔ source drilldown must navigate existing history instead of
+// growing Copper Ore → Copper Vein → Copper Ore → ... forever.
+var historyBack = new Stack<SearchResultItem>();
+var historyForward = new Stack<SearchResultItem>();
+SearchResultItem? historyCurrent = null;
+var copperOre = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2770,
+    Name = "Copper Ore"
+};
+var shadowgem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 1210,
+    Name = "Shadowgem"
+};
+var copperVein = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 1731,
+    SourceLevel = 0,
+    Name = "Copper Vein"
+};
+var copperOreRebound = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2770,
+    Name = "Copper Ore (fresh detail row)"
+};
+
+Check(SearchDetailHistory.FollowLink(
+        copperOre, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 0,
+    "first detail opens with empty navigation history");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 0,
+    "mined-from link records one parent for Copper Ore to Copper Vein");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "source-to-item link records a new Shadowgem detail");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperVein) &&
+      historyBack.Count == 1 &&
+      historyForward.Count == 1 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), shadowgem),
+    "returning to already-seen Copper Vein behaves like Back, not a deeper breadcrumb");
+
+Check(SearchDetailHistory.FollowLink(
+        copperOreRebound, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2 &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperOre),
+    "returning to Copper Ore uses stable ID, retains undo history via Forward");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "re-following an undone source link behaves like Forward, not a duplicate");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "forward-history item can be opened via its source detail link");
+
+Check(!SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "clicking the same item/source does not add a breadcrumb or re-fetch");
+
+Check(SearchDetailHistory.StepBack(
+        ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperVein) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "Back button remains consistent after a cyclic drilldown");
+Check(SearchDetailHistory.StepForward(
+        ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, shadowgem) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "Forward button returns to the undone item after cyclic drilldown");
+
+// Jump to an older non-adjacent ancestor: A -> B -> C -> A.
+// It should be A (Back empty, Forward B then C), not A -> B -> C -> A.
+Check(SearchDetailHistory.FollowLink(
+        copperOre, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), copperVein),
+    "jumping to a non-adjacent ancestor collapses all visited crumbs");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "a link to a deeper Forward entry restores both intervening pages");
+
+Check(SearchDetailHistory.FollowLink(
+        selectedItem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 3 && historyForward.Count == 0,
+    "following a brand new entity adds exactly one breadcrumb");
+
+// Same display name but a different entity KIND must not be folded away.
+// Peacebloom item 2447 and its gameobject source 1618 are distinct pages.
+var peaceItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2447,
+    Name = "Peacebloom"
+};
+var peaceNode = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 1618,
+    Name = "Peacebloom"
+};
+
+historyBack.Clear();
+historyForward.Clear();
+historyCurrent = peaceItem;
+
+Check(SearchDetailHistory.FollowLink(
+        peaceNode, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1,
+    "Peacebloom item and same-name herb node remain separate entities");
+Check(SearchDetailHistory.FollowLink(
+        peaceItem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 1 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), peaceNode),
+    "Peacebloom Object to Peacebloom item returns Back rather than nesting");
+
+historyBack.Clear();
+historyForward.Clear();
+historyCurrent = selectedCreature;
+
+Check(SearchDetailHistory.FollowLink(
+        differentLevel, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1,
+    "equal source ID at another level is a distinct navigation target");
+Check(SearchDetailHistory.FollowLink(
+        differentType, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2,
+    "equal source ID with another source type is a distinct navigation target");
+Check(SearchDetailHistory.FollowLink(
+        sameCreature, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2,
+    "source identity folds the history despite renamed detail rows");
+
+Check(!SearchDetailHistory.StepBack(
+        ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2,
+    "Back at the first entry is a safe no-op");
+Check(SearchDetailHistory.StepForward(
+        ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "Forward still works for distinct source levels");
+Check(SearchDetailHistory.FollowLink(
+        otherItem, ref historyCurrent, historyBack, historyForward) &&
+      historyForward.Count == 0 && historyBack.Count == 2,
+    "new branch after stepping back clears stale Forward history");
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(
