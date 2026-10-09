@@ -321,6 +321,15 @@
                                            FontWeight="Bold"
                                            FontSize="12"
                                            Margin="4,2,4,10" />
+                                <Button x:Name="LoadMoreZoneResultsButton"
+                                        DockPanel.Dock="Bottom"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Margin="4,10,4,4"
+                                        Height="36"
+                                        Visibility="Collapsed"
+                                        Click="LoadMoreZoneResultsButton_Click"
+                                        Content="Load 50 more"
+                                        ToolTip="Browse the next page of already observed items and sources in this zone" />
                                 <ListBox x:Name="SearchResults"
                                          SelectionChanged="SearchResults_SelectionChanged" />
                             </DockPanel>
