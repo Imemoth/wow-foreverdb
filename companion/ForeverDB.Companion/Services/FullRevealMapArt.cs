@@ -44,6 +44,12 @@ public static class FullRevealMapArt
         IReadOnlyDictionary<long, IReadOnlyList<FullRevealRegion>>> Data =
         new(Load);
 
+    // The immutable embedded reference used by a separate exact-build metadata
+    // verifier. An unknown build may only use its regions AFTER that verifier
+    // establishes identical map/region/tile data for the specific art.
+    public static IReadOnlyDictionary<long, IReadOnlyList<FullRevealRegion>>
+        GetEmbeddedAtlas() => Data.Value;
+
     public static int MapCount => Data.Value.Count;
     public static int OverlayCount => Data.Value.Values.Sum(regions => regions.Count);
     public static int TileCount => Data.Value.Values.Sum(
