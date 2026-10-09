@@ -24,7 +24,10 @@ var settings = new CompanionSettings
     SupabaseUrl = "https://example.supabase.co",
     SupabaseKey = "sb_publishable_test"
 };
-var service = new SearchService(httpClient, settings);
+var service = new SearchService(
+    httpClient,
+    settings,
+    _ => Task.FromResult("test-auth-token"));
 
 var zones = await service.GetAvailableZonesAsync();
 
@@ -134,6 +137,100 @@ using (var requestBody =
             .GetString() == "Crusader's Outpost",
         "zone name disambiguates zones that share the same map id");
 }
+
+// Empty query + one known zone browses all observed items/sources in
+// bounded pages; never silently truncates the zone to the old 20+20 RPC.
+handler.ClearRequests();
+var browseFirst = await service.BrowseZoneAsync(tirisfal);
+Check(browseFirst.TotalCount == 63 &&
+      browseFirst.Results.Count == 50,
+    "first zone browse page returns 50/63 known entities");
+Check(browseFirst.Results[0].ItemId == 5001 &&
+      browseFirst.Results[49].ItemId == 5050,
+    "zone catalog keeps server's deterministic result order");
+Check(handler.Requests.Count == 1 &&
+      handler.Requests[0].Method == "POST" &&
+      handler.Requests[0].Url.EndsWith(
+          "/rest/v1/rpc/get_foreverdb_zone_catalog",
+          StringComparison.Ordinal),
+    "zone browse calls dedicated catalog RPC once");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "zone catalog requires the authenticated access token, not anon key");
+using (var browseArgs = JsonDocument.Parse(handler.Requests[0].Body))
+{
+    Check(
+        browseArgs.RootElement.GetProperty("p_map_id").GetInt64() == 1420 &&
+        browseArgs.RootElement.GetProperty("p_zone_name").GetString() ==
+            "Tirisfal Glades" &&
+        browseArgs.RootElement.GetProperty("p_limit").GetInt32() == 50 &&
+        browseArgs.RootElement.GetProperty("p_offset").GetInt32() == 0,
+        "catalog RPC enforces zone identity and first-page limit/offset");
+    Check(
+        !browseArgs.RootElement.TryGetProperty("p_query", out _),
+        "catalog browse never fakes an arbitrary wildcard query");
+}
+
+var browseSecond = await service.BrowseZoneAsync(tirisfal, offset: 50);
+Check(browseSecond.TotalCount == 63 &&
+      browseSecond.Results.Count == 13,
+    "second zone browse page covers all remaining entities");
+Check(browseSecond.Results[0].ItemId == 5051 &&
+      browseSecond.Results[12].Kind == SearchEntityKind.Source &&
+      browseSecond.Results[12].SourceId == 8000,
+    "page boundary preserves both item and creature source identities");
+Check(browseFirst.Results.Concat(browseSecond.Results)
+    .Select(result =>
+        result.Kind == SearchEntityKind.Item
+            ? $"I:{result.ItemId}"
+            : $"S:{result.SourceType}:{result.SourceId}:{result.SourceLevel}")
+    .Distinct()
+    .Count() == 63,
+    "paginated browse has neither missing nor duplicate entities");
+Check(handler.Requests[1].Bearer == "test-auth-token" &&
+      handler.Requests[1].Body.Contains(
+          "\"p_offset\":50", StringComparison.Ordinal),
+    "next page authenticates and continues at the expected offset");
+
+handler.ClearRequests();
+var emptyBrowse = await service.BrowseZoneAsync(crusadersOutpost);
+Check(emptyBrowse.TotalCount == 0 && emptyBrowse.Results.Count == 0,
+    "zone with no observed entities safely returns empty page");
+Check(handler.Requests.Count == 1,
+    "empty-zone browse remains one bounded RPC call");
+
+handler.ClearRequests();
+var emptyGlobal = await service.SearchAsync(
+    "", SearchZoneOption.AllZones);
+Check(emptyGlobal.Count == 0 && handler.Requests.Count == 0,
+    "All zones with empty query never downloads entire global catalog");
+var emptyLegacy = await service.SearchAsync("", tirisfal);
+Check(emptyLegacy.Count == 0 && handler.Requests.Count == 0,
+    "legacy named search never silently performs a zone catalog scan");
+
+var rejectsAllZones = false;
+var rejectsNegativeOffset = false;
+
+try
+{
+    await service.BrowseZoneAsync(SearchZoneOption.AllZones);
+}
+catch (ArgumentException)
+{
+    rejectsAllZones = true;
+}
+
+try
+{
+    await service.BrowseZoneAsync(tirisfal, -1);
+}
+catch (ArgumentException)
+{
+    rejectsNegativeOffset = true;
+}
+
+Check(rejectsAllZones && rejectsNegativeOffset &&
+      handler.Requests.Count == 0,
+    "invalid browse scopes/offsets fail before database access");
 
 // A zone change refreshes the left-hand result objects, NOT the current
 // item/source detail or the Back/Forward chain. The WPF handler suppresses
@@ -258,7 +355,8 @@ return 0;
 sealed record CapturedRequest(
     string Method,
     string Url,
-    string Body);
+    string Body,
+    string Bearer);
 
 sealed class FakeSearchHandler : HttpMessageHandler
 {
@@ -280,7 +378,8 @@ sealed class FakeSearchHandler : HttpMessageHandler
             new CapturedRequest(
                 request.Method.Method,
                 request.RequestUri?.ToString() ?? "",
-                body));
+                body,
+                request.Headers.Authorization?.Parameter ?? ""));
 
         var path =
             request.RequestUri?.AbsolutePath ?? "";
@@ -310,6 +409,10 @@ sealed class FakeSearchHandler : HttpMessageHandler
                           ]
                           """
                     : path.EndsWith(
+                        "/rest/v1/rpc/get_foreverdb_zone_catalog",
+                        StringComparison.Ordinal)
+                    ? BuildZoneCatalog(body)
+                : path.EndsWith(
                         "/rest/v1/items",
                         StringComparison.Ordinal)
                         ? """[{"item_id":123,"name":"Test Item"}]"""
@@ -326,6 +429,47 @@ sealed class FakeSearchHandler : HttpMessageHandler
                 Encoding.UTF8,
                 "application/json")
         };
+    }
+
+    private static string BuildZoneCatalog(string body)
+    {
+        if (IsCrusadersOutpost(body))
+        {
+            return "[]";
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var limit = document.RootElement.GetProperty("p_limit").GetInt32();
+        var offset = document.RootElement.GetProperty("p_offset").GetInt32();
+        var all = new List<object>();
+
+        for (var i = 1; i <= 62; i++)
+        {
+            all.Add(new
+            {
+                entity_kind = "item",
+                item_id = (long?)(5000 + i),
+                source_type = (string?)null,
+                source_id = (long?)null,
+                source_level = (int?)null,
+                name = $"Zone Item {i:000}",
+                total_count = 63L
+            });
+        }
+
+        all.Add(new
+        {
+            entity_kind = "source",
+            item_id = (long?)null,
+            source_type = "creature",
+            source_id = (long?)8000,
+            source_level = (int?)8,
+            name = "Zone Wolf",
+            total_count = 63L
+        });
+
+        return JsonSerializer.Serialize(
+            all.Skip(offset).Take(limit));
     }
 
     private static bool IsCrusadersOutpost(string body)
