@@ -137,7 +137,7 @@ public sealed class SupabaseAuthService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Supabase session refresh failed: {(int)response.StatusCode} {body}");
+                $"Supabase session refresh rejected (HTTP {(int)response.StatusCode}).");
         }
 
         return ParseSession(body);
