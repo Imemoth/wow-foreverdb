@@ -522,7 +522,22 @@ public sealed class WowClientMapAssetProvider
                     cascRoot,
                     _settings.WowRoot,
                     effectiveTextureRefs,
-                    preferredStorageLabel);
+                    fullRegions is null ? preferredStorageLabel : null);
+
+            // Local "auto" or an alternative product can be an older
+            // installation. A verified variant may only use the selected
+            // active Forever product. A base-art retry can still use the
+            // more permissive legacy storage compatibility path.
+            if (fullRegions is not null && storage is not null &&
+                !string.Equals(
+                    storageLabel,
+                    "wow_classic_beta",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                storage.Dispose();
+                storage = null;
+                storageLabel = null;
+            }
 
             // 2) If the streamed map art is not physically present, use the
             // exact installed Forever build on Blizzard's CDN. The resulting
@@ -534,6 +549,16 @@ public sealed class WowClientMapAssetProvider
                              cascRoot,
                              _settings.WowRoot))
                 {
+                    if (fullRegions is not null &&
+                        (online.Version != fullRevealBuildVersion ||
+                         !string.Equals(
+                             online.BuildKey,
+                             fullRevealBuildKey,
+                             StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
                     var onlineCache =
                         GetOnlineCascCacheDirectory(
                             online.Product,
@@ -574,8 +599,9 @@ public sealed class WowClientMapAssetProvider
                 }
             }
 
-            // 3) Last-resort compatibility path for older clients/listfiles.
-            if (storage is null)
+            // 3) Last-resort classic named textures are valid for base
+            // art only. They are not evidence of an exact-build atlas.
+            if (storage is null && fullRegions is null)
             {
                 foreach (var classicCandidate in
                          GetClassicMapTextureCandidates(
