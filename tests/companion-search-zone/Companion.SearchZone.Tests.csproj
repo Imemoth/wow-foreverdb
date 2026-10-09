@@ -20,6 +20,8 @@
              Link="SearchService.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SearchResultSelection.cs"
              Link="SearchResultSelection.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchDetailHistory.cs"
+             Link="SearchDetailHistory.cs" />
   </ItemGroup>
 
 </Project>
