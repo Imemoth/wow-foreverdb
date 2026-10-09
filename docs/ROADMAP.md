@@ -162,10 +162,11 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       against the 1.60.1.70245 wago.tools-derived overlay catalog:
       **all 84 maps and all region/texture records identical (0 differences).**
       The user's manual screenshots exposed the previous strict single-build
-      gate (active 1.60.1.70245 vs atlas 1.60.1.70009). The PR now
-      **explicitly allows only these two verified builds** while retaining
-      local CASC -> same-build CDN, transactional base fallback and
-      variant-isolated caches. **Windows Companion CI with the 70245 allowlist
+      gate (active 1.60.1.70245 vs atlas 1.60.1.70009). Those **two
+      manually verified builds remain the offline fast path**; later
+      versions now use the separate strict Auto Atlas Verification flow
+      described below. The CASC -> exact-build CDN, transactional base
+      fallback and variant-isolated caches remain in force. **Windows Companion CI with the 70245 allowlist
       and new regressions: PASS** (code commit `c74d819`, run `37817201593`);
       collector smoke also PASS (`37817201541`). Older screenshots are
       evidence of a blocked build gate, not a client texture failure.
@@ -185,6 +186,22 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       retest still OPEN**. Tooltip/coordinate accuracy and live missing-art
       fallback remain separately unverified.
       See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
+- [ ] Auto Atlas Verification for future WoW Forever builds.
+      **PR #21 repo-side implementation + Windows CI PASS (2026-10-09).**
+      Detect the active Forever beta Version + Build Key; fetch the four
+      exact-version public DB2 CSVs (WorldMapOverlay/Tile, UiMapArt,
+      UiMapArtStyleLayer); strictly compare every map region/offset/tile
+      ID against the embedded source atlas; admit **only matching map arts**.
+      Proofs are cached locally by hashed product/version/build key/atlas
+      identity (14 days), with an 18-second network timeout and 15-minute
+      retry for failures. No blind 1.60.* approval; offline/invalid/mismatched
+      source -> base map with reason. Previously reviewed builds need no
+      network fetch. A GitHub Windows runner successfully fetched and
+      verified at least three map arts for the new 1.60.1.70291 build
+      (CI run `37906111220`; transport probe PASS). **Real Windows
+      Companion 70291 acceptance still OPEN**, including fresh CASC
+      decoding and map/overlay alignment.
+      [Full verification design / test gate](0.7-auto-atlas-verification.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
 
