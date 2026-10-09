@@ -407,6 +407,11 @@ public sealed class WowClientMapAssetProvider
                 raw.Status);
         }
 
+        var successfulStatus =
+            fullRevealVariant is not null
+                ? $"{raw.Status} · Auto Atlas VERIFIED ({fullRevealBuildVersion})"
+                : raw.Status;
+
         var bitmap =
             BitmapSource.Create(
                 raw.Width,
@@ -434,7 +439,7 @@ public sealed class WowClientMapAssetProvider
                 ResolverVersion = ResolverVersion,
                 WowBuildFingerprint = wowBuildFingerprint,
                 Success = true,
-                Status = raw.Status,
+                Status = successfulStatus,
                 AssetMode = raw.AssetMode,
                 StorageLabel = raw.StorageLabel,
                 CacheFile = cachePath,
@@ -447,7 +452,7 @@ public sealed class WowClientMapAssetProvider
             Width = raw.Width,
             Height = raw.Height,
             FromCache = false,
-            Status = raw.Status
+            Status = successfulStatus
         };
     }
 
