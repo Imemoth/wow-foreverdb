@@ -31,6 +31,9 @@ var service = new SearchService(
 
 var zones = await service.GetAvailableZonesAsync();
 
+Check(handler.Requests.Count == 1 &&
+      handler.Requests[0].Bearer == "test-auth-token",
+    "zone discovery requires a signed-in session token");
 Check(zones.Count == 3,
     "zone list contains All zones plus unique valid zones");
 Check(zones[0].IsAllZones &&
@@ -50,16 +53,18 @@ var allZoneResults =
         "123",
         SearchZoneOption.AllZones);
 
-Check(handler.Requests.Count == 2,
-    "All zones performs the existing two catalog queries");
-Check(handler.Requests.All(request => request.Method == "GET"),
-    "All zones does not call the zone RPC");
-Check(handler.Requests.Any(
-        request => request.Url.Contains("item_id.eq.123", StringComparison.Ordinal)),
-    "All zones preserves numeric item ID search");
-Check(handler.Requests.Any(
-        request => request.Url.Contains("source_id.eq.123", StringComparison.Ordinal)),
-    "All zones preserves numeric source ID search");
+Check(handler.Requests.Count == 1,
+    "All zones sends one bounded server-side global search RPC");
+Check(handler.Requests[0].Method == "POST" &&
+      handler.Requests[0].Url.EndsWith(
+          "/rest/v1/rpc/get_foreverdb_search_global",
+          StringComparison.Ordinal),
+    "All zones has no direct PostgREST items/sources reads");
+Check(handler.Requests[0].Body.Contains(
+        "\"p_query\":\"123\"", StringComparison.Ordinal),
+    "All zones preserves numeric ID query in bounded RPC");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "All zones uses the signed-in Supabase JWT, never anon bearer");
 Check(allZoneResults.Count == 2,
     "All zones returns item and source results");
 Check(allZoneResults.Any(
@@ -74,6 +79,15 @@ Check(allZoneResults.Any(
             result.SourceLevel == 7),
     "All zones source result is preserved");
 
+handler.ClearRequests();
+var rejectedWildcard = await service.SearchAsync(
+    "%", SearchZoneOption.AllZones);
+var rejectedLong = await service.SearchAsync(
+    new string('a', 120), SearchZoneOption.AllZones);
+Check(rejectedWildcard.Count == 0 &&
+      rejectedLong.Count == 0 &&
+      handler.Requests.Count == 0,
+    "malformed or expensive wildcard searches fail without any HTTP request");
 handler.ClearRequests();
 
 var tirisfal =
@@ -95,6 +109,8 @@ Check(handler.Requests[0].Method == "POST" &&
           "/rest/v1/rpc/get_foreverdb_search_in_zone",
           StringComparison.Ordinal),
     "specific zone calls the scoped search RPC");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "scoped search carries authenticated JWT");
 Check(handler.Requests[0].Body.Contains(
         "\"p_query\":\"Cadet\"",
         StringComparison.Ordinal),
@@ -578,14 +594,15 @@ sealed class FakeSearchHandler : HttpMessageHandler
                         StringComparison.Ordinal)
                     ? BuildZoneCatalog(body)
                 : path.EndsWith(
-                        "/rest/v1/items",
+                        "/rest/v1/rpc/get_foreverdb_search_global",
                         StringComparison.Ordinal)
-                        ? """[{"item_id":123,"name":"Test Item"}]"""
-                        : path.EndsWith(
-                            "/rest/v1/sources",
-                            StringComparison.Ordinal)
-                            ? """[{"source_type":"creature","source_id":123,"source_level":7,"name":"Test Source"}]"""
-                            : "[]";
+                    ? """
+                      [
+                        {"entity_kind":"item","item_id":123,"source_type":null,"source_id":null,"source_level":null,"name":"Test Item"},
+                        {"entity_kind":"source","item_id":null,"source_type":"creature","source_id":123,"source_level":7,"name":"Test Source"}
+                      ]
+                      """
+                    : "[]";
 
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
