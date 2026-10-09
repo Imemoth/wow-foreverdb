@@ -3,6 +3,10 @@
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin;
+-- Local PostgREST connects as authenticator and switches into JWT role.
+-- This password is test-container-only, never reused for a real project.
+create role authenticator noinherit login password 'local-test-password';
+grant anon, authenticated to authenticator;
 
 create schema auth;
 grant usage on schema auth to anon, authenticated, service_role;
