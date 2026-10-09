@@ -97,3 +97,36 @@ grant execute on function private.foreverdb_all_stats()
 to anon, authenticated;
 grant execute on function private.ingest_foreverdb_snapshot_auth(jsonb)
 to anon, authenticated;
+
+-- The production aggregate read functions were provisioned outside the
+-- numbered migration history; their public wrappers are present in
+-- production and are required for 0008a's compatibility assertion.
+create function public.get_foreverdb_item_stats(p_item_id bigint)
+returns table (
+    source_type text, source_id bigint, source_level integer,
+    source_name text, loot_kind text, item_id bigint, item_name text,
+    observations bigint, drop_count bigint, quantity bigint,
+    quest_drop_count bigint, observed_drop_rate numeric
+) language sql set search_path = ''
+as $$
+    select * from private.foreverdb_item_stats(p_item_id);
+$$;
+
+create function public.get_foreverdb_source_stats(
+    p_source_type text, p_source_id bigint, p_source_level integer
+)
+returns table (
+    source_type text, source_id bigint, source_level integer,
+    source_name text, loot_kind text, item_id bigint, item_name text,
+    observations bigint, drop_count bigint, quantity bigint,
+    quest_drop_count bigint, observed_drop_rate numeric
+) language sql set search_path = ''
+as $$
+    select * from private.foreverdb_source_stats(
+        p_source_type, p_source_id, p_source_level);
+$$;
+
+grant execute on function public.get_foreverdb_item_stats(bigint)
+to anon, authenticated;
+grant execute on function public.get_foreverdb_source_stats(text,bigint,integer)
+to anon, authenticated;
