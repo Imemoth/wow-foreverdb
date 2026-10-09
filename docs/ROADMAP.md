@@ -138,6 +138,18 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       behavior was superseded by PR #21's navigation-preserving zone
       refresh after the 2026-10-08 live Back/Forward regression; its
       post-fix Windows acceptance is separately pending.
+- [ ] Prevent cyclic item/source detail drilldowns from creating
+      unbounded repeated breadcrumbs (e.g. Peacebloom item ↔ Peacebloom
+      object, Copper Ore → Copper Vein → Shadowgem → Copper Vein).
+      **PR #21 implementation + portable regressions added 2026-10-09;
+      Windows runtime acceptance OPEN.** Following a link already
+      in Back/Forward now traverses history to its existing entry
+      instead of appending another occurrence; previously seen names
+      that represent different item/source IDs or creature levels
+      remain distinct. Older async detail responses are discarded
+      after later navigation/searches. New explicit result searches
+      retain their existing reset behavior. See
+      [acceptance §14](0.7-acceptance-test.md).
 - [ ] Browse already observed database items and sources by selecting
       **one zone with an empty Search box**, without requiring a query word.
       **PR #21 implementation ready, release gate OPEN (2026-10-09):**
