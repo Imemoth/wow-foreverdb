@@ -101,7 +101,7 @@ public sealed class SupabaseAuthService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Anonymous Supabase sign-in failed: {(int)response.StatusCode} {body}");
+                $"Supabase authentication rejected (HTTP {(int)response.StatusCode}).");
         }
 
         return ParseSession(body);
