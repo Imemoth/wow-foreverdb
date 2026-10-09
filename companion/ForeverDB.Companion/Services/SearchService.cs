@@ -71,6 +71,64 @@ public sealed class SearchService
             .ToArray();
     }
 
+    public const int ZoneCatalogPageSize = 50;
+
+    // Browse only observed items/sources in a concrete zone. Unlike named
+    // search, this is explicitly paged and must never enumerate All zones.
+    public async Task<ZoneCatalogPage> BrowseZoneAsync(
+        SearchZoneOption zone,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (zone.IsAllZones || !zone.MapId.HasValue ||
+            zone.MapId.Value <= 0 ||
+            offset < 0)
+        {
+            throw new ArgumentException(
+                "A valid selected zone and nonnegative offset are required.");
+        }
+
+        JsonElement data;
+
+        try
+        {
+            data = await PostAsync(
+                "get_foreverdb_zone_catalog",
+                new
+                {
+                    p_map_id = zone.MapId.Value,
+                    p_zone_name = zone.ZoneName,
+                    p_limit = ZoneCatalogPageSize,
+                    p_offset = offset
+                },
+                cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("PGRST202",
+                      StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Zone browsing requires database migration 0008. " +
+                "Apply 0008_zone_catalog_browse.sql before using this feature.",
+                ex);
+        }
+
+        var entries = BuildZoneSearchResults(
+            data,
+            trimmed: "",
+            keepServerOrder: true);
+
+        var total = data.GetArrayLength() == 0
+            ? 0L
+            : Math.Max(0L, GetInt64(data[0], "total_count"));
+
+        return new ZoneCatalogPage
+        {
+            Results = entries,
+            TotalCount = total
+        };
+    }
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string query,
         SearchZoneOption? zone = null,
@@ -137,7 +195,8 @@ public sealed class SearchService
 
     private static IReadOnlyList<SearchResultItem> BuildZoneSearchResults(
         JsonElement data,
-        string trimmed)
+        string trimmed,
+        bool keepServerOrder = false)
     {
         var results = new List<SearchResultItem>();
 
@@ -222,9 +281,9 @@ public sealed class SearchService
                 });
         }
 
-        return SortSearchResults(
-            results,
-            trimmed);
+        return keepServerOrder
+            ? results
+            : SortSearchResults(results, trimmed);
     }
 
     private static IReadOnlyList<SearchResultItem> BuildSearchResults(
