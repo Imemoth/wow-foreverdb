@@ -1,6 +1,10 @@
 -- ForeverDB Companion: browse all *observed* items/sources in one zone.
 -- Forward-only, bounded pages. Does not expose installation identifiers,
 -- raw location coordinates or unpublished player data.
+-- Only Supabase-authenticated sessions may browse the full paged catalog.
+-- The publishable/anon key alone cannot invoke this endpoint. Note that
+-- Supabase anonymous sign-ins still get the authenticated database role;
+-- this is NOT an anti-scraping control or private dataset authorization.
 --
 -- Rollout: apply this migration to Supabase BEFORE publishing a Companion
 -- binary using get_foreverdb_zone_catalog. Do not invoke the new RPC until
@@ -121,10 +125,10 @@ $$;
 
 revoke all on function private.foreverdb_zone_catalog(
     bigint, text, integer, integer
-) from public;
+) from public, anon;
 grant execute on function private.foreverdb_zone_catalog(
     bigint, text, integer, integer
-) to anon, authenticated;
+) to authenticated;
 
 create or replace function public.get_foreverdb_zone_catalog(
     p_map_id bigint,
@@ -156,7 +160,7 @@ $$;
 
 revoke all on function public.get_foreverdb_zone_catalog(
     bigint, text, integer, integer
-) from public;
+) from public, anon;
 grant execute on function public.get_foreverdb_zone_catalog(
     bigint, text, integer, integer
-) to anon, authenticated;
+) to authenticated;
