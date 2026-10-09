@@ -141,8 +141,10 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
 - [ ] Prevent cyclic item/source detail drilldowns from creating
       unbounded repeated breadcrumbs (e.g. Peacebloom item ↔ Peacebloom
       object, Copper Ore → Copper Vein → Shadowgem → Copper Vein).
-      **PR #21 implementation + portable regressions added 2026-10-09;
-      Windows runtime acceptance OPEN.** Following a link already
+      **PR #21 code + Windows WPF CI PASS (2026-10-09):**
+      search-zone suite **63/63 PASS** including 21 new cycle-history
+      assertions (CI `37913729303`). Live Windows cycle-drilldown
+      acceptance OPEN. Following a link already
       in Back/Forward now traverses history to its existing entry
       instead of appending another occurrence; previously seen names
       that represent different item/source IDs or creature levels
