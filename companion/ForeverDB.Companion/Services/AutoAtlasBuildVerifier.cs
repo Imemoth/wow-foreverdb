@@ -48,7 +48,8 @@ public static class AutoAtlasBuildVerifier
         "atlas-verified-builds.json");
 
     private sealed record Attempt(
-        DateTimeOffset Started, Task<AutoAtlasBuildEvidence> Task);
+        DateTimeOffset Started,
+        Lazy<Task<AutoAtlasBuildEvidence>> LazyTask);
 
     private sealed class StoredProof
     {
@@ -104,8 +105,10 @@ public static class AutoAtlasBuildVerifier
         if (Attempts.TryGetValue(key, out var existing))
         {
             var age = DateTimeOffset.UtcNow - existing.Started;
-            var ttl = existing.Task.IsCompletedSuccessfully &&
-                      existing.Task.Result.SourceValidated
+            var completed = existing.LazyTask.IsValueCreated &&
+                            existing.LazyTask.Value.IsCompletedSuccessfully;
+            var ttl = completed &&
+                      existing.LazyTask.Value.Result.SourceValidated
                 ? SuccessTtl
                 : FailureTtl;
 
@@ -123,10 +126,12 @@ public static class AutoAtlasBuildVerifier
             key,
             _ => new Attempt(
                 DateTimeOffset.UtcNow,
-                VerifyFromSourceAsync(
-                    clientVersion!, key, fingerprint, variant, atlas)));
+                new Lazy<Task<AutoAtlasBuildEvidence>>(
+                    () => VerifyFromSourceAsync(
+                        clientVersion!, key, fingerprint, variant, atlas),
+                    LazyThreadSafetyMode.ExecutionAndPublication)));
 
-        return await attempt.Task.WaitAsync(cancellationToken);
+        return await attempt.LazyTask.Value.WaitAsync(cancellationToken);
     }
 
     public static bool IsValidIdentity(
@@ -160,9 +165,10 @@ public static class AutoAtlasBuildVerifier
     {
         foreach (var item in Attempts)
         {
-            if (!item.Value.Task.IsCompleted ||
-                (item.Value.Task.IsCompletedSuccessfully &&
-                 item.Value.Task.Result.SourceValidated))
+            if (!item.Value.LazyTask.IsValueCreated ||
+                !item.Value.LazyTask.Value.IsCompleted ||
+                (item.Value.LazyTask.Value.IsCompletedSuccessfully &&
+                 item.Value.LazyTask.Value.Result.SourceValidated))
             {
                 continue;
             }
@@ -288,7 +294,7 @@ public static class AutoAtlasBuildVerifier
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private static string BuildCacheKey(
+    internal static string BuildCacheKey(
         string product, string version, string buildKey, string atlasHash)
     {
         var input = product.ToLowerInvariant() + "|" + version + "|" +
