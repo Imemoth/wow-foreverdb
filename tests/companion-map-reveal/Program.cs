@@ -17,7 +17,9 @@ if (args.Length == 1 && args[0] == "--probe-current-forever")
         outcome.IsVerifiedFor(1200) &&
         outcome.IsVerifiedFor(2126) &&
         outcome.IsVerifiedFor(2158)
-            ? "Current Forever DB2 transport probe PASS for three map arts."
+            ? $"Current Forever DB2 transport probe PASS for three map arts; " +
+              $"{outcome.VerifiedArtIds.Count}/{FullRevealMapArt.MapCount} " +
+              "embedded art IDs match this exact client build."
             : $"Current Forever DB2 transport probe NOT VERIFIED: {outcome.Status}");
 
     return outcome.IsVerifiedFor(1200) &&
