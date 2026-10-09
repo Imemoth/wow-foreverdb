@@ -84,7 +84,9 @@ public sealed class LocationService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Location query failed: {(int)response.StatusCode} {json}");
+                response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                    ? "ForeverDB API limit reached; retry in a minute."
+                    : $"Location query rejected (HTTP {(int)response.StatusCode}).");
         }
 
         using var document = JsonDocument.Parse(json);
