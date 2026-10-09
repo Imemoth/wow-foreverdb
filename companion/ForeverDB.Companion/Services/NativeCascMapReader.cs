@@ -122,25 +122,13 @@ internal sealed class NativeCascMapReader : IDisposable
             errorCode =
                 Marshal.GetLastWin32Error();
 
-            // Fallback to CascLib's simpler online-storage entrypoint.
-            var simpleParameters =
-                $"{cachePath}*{product}*{region}";
-
-            if (NativeMethods.CascOpenOnlineStorage(
-                    simpleParameters,
-                    0,
-                    out storage) &&
-                storage != IntPtr.Zero)
-            {
-                errorCode = 0;
-
-                return new NativeCascMapReader(
-                    storage,
-                    label + ":latest");
-            }
-
-            errorCode =
-                Marshal.GetLastWin32Error();
+            // Fail closed. CascOpenOnlineStorage(cache*product*region)
+            // silently selects the provider's *latest* CDN build and
+            // cannot guarantee the caller's explicit Build Key. Using it
+            // for any art (especially auto-verified overlays) risks mixing
+            // unrelated client builds despite identical FileDataIDs.
+            // Exact-build CDN errors must return null and preserve the
+            // renderer's original local/base/grid fallback instead.
         }
         catch (DllNotFoundException)
         {
