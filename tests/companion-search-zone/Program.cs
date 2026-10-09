@@ -516,6 +516,78 @@ Check(SearchDetailHistory.FollowLink(
       historyForward.Count == 0 && historyBack.Count == 2,
     "new branch after stepping back clears stale Forward history");
 
+// Rapid WPF zone switches must cancel earlier requests before they reach
+// the renderer; the request epoch is also checked after HTTP completion.
+using (var epoch = new SearchRequestEpoch())
+{
+    var old = epoch.Advance();
+    using var pending = new DeferredZoneHandler();
+    using var deferredHttp = new HttpClient(pending);
+    var deferred = new SearchService(
+        deferredHttp, settings,
+        _ => Task.FromResult("test-auth-token"));
+
+    var previous = deferred.SearchAsync("Cadet", tirisfal, old.Token);
+    var current = epoch.Advance();
+
+    Check(old.Token.IsCancellationRequested &&
+          !epoch.IsCurrent(old.Version) &&
+          epoch.IsCurrent(current.Version),
+        "rapid zone selection cancels old token and advances request epoch");
+
+    var newest = deferred.SearchAsync(
+        "Cadet", crusadersOutpost, current.Token);
+
+    // Deliberately let the second (newer) query finish first.
+    pending.Complete(
+        "Crusader's Outpost",
+        """
+        [{"entity_kind":"item","item_id":9001,"source_type":null,"source_id":null,"source_level":null,"name":"Latest Zone Item"}]
+        """);
+
+    var freshResult = await newest;
+    var newestWouldRender = epoch.IsCurrent(current.Version)
+        ? freshResult
+        : Array.Empty<SearchResultItem>();
+
+    pending.Complete(
+        "Tirisfal Glades",
+        """
+        [{"entity_kind":"item","item_id":9000,"source_type":null,"source_id":null,"source_level":null,"name":"Stale Zone Item"}]
+        """);
+
+    var previousCancelled = false;
+    try
+    {
+        await previous;
+    }
+    catch (OperationCanceledException)
+    {
+        previousCancelled = true;
+    }
+
+    Check(previousCancelled &&
+          newestWouldRender.Count == 1 &&
+          newestWouldRender[0].ItemId == 9001,
+        "reversed HTTP response order renders only the latest selected zone");
+    Check(!epoch.IsCurrent(old.Version),
+        "late first response cannot reclaim current UI epoch");
+}
+
+handler.ClearRequests();
+await service.GetDetailAsync(new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2447,
+    Name = "Peacebloom"
+});
+Check(handler.Requests.Count == 2 &&
+      handler.Requests.All(request =>
+          request.Method == "POST" &&
+          request.Bearer == "test-auth-token" &&
+          !request.Url.Contains("/rest/v1/items", StringComparison.Ordinal)),
+    "item stats and locations both use the authenticated RPC boundary");
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(
@@ -661,5 +733,41 @@ sealed class FakeSearchHandler : HttpMessageHandler
         return document.RootElement
             .TryGetProperty("p_zone_name", out var zoneName) &&
             zoneName.GetString() == "Crusader's Outpost";
+    }
+}
+
+sealed class DeferredZoneHandler : HttpMessageHandler
+{
+    private readonly Dictionary<string, TaskCompletionSource<HttpResponseMessage>>
+        _pending = new(StringComparer.Ordinal);
+
+    public DeferredZoneHandler()
+    {
+        foreach (var zone in new[] { "Tirisfal Glades", "Crusader's Outpost" })
+        {
+            _pending[zone] = new TaskCompletionSource<HttpResponseMessage>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    public void Complete(string zone, string response)
+    {
+        _pending[zone].TrySetResult(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    response, Encoding.UTF8, "application/json")
+            });
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var json = await request.Content!.ReadAsStringAsync(cancellationToken);
+        using var body = JsonDocument.Parse(json);
+        var zone = body.RootElement
+            .GetProperty("p_zone_name").GetString()!;
+        return await _pending[zone].Task.WaitAsync(cancellationToken);
     }
 }
