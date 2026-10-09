@@ -57,7 +57,9 @@ jobs:
             database/migrations/0005_guildbook_v1.sql \
             database/migrations/0006_companion_search_zone.sql \
             database/sql/search_location_api.sql \
-            database/migrations/0008_zone_catalog_browse.sql
+            database/migrations/0008_zone_catalog_browse.sql \
+            database/migrations/0008a_close_unused_private_rpcs.sql \
+            database/migrations/0008b_prepare_authenticated_global_search.sql
           do
             psql -X -v ON_ERROR_STOP=1 -f "$m" > /dev/null
           done
