@@ -10,13 +10,17 @@ public sealed class StatsService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly Func<CancellationToken, Task<string>> _accessTokenProvider;
 
     public StatsService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>> accessTokenProvider)
     {
         _httpClient = httpClient;
         _settings = settings;
+        _accessTokenProvider = accessTokenProvider ??
+            throw new ArgumentNullException(nameof(accessTokenProvider));
     }
 
     public Task<JsonElement> GetItemStatsAsync(
@@ -59,10 +63,11 @@ public sealed class StatsService
             "apikey",
             _settings.SupabaseKey);
 
+        var accessToken = await _accessTokenProvider(cancellationToken);
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                accessToken);
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
