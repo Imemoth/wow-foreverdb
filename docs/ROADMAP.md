@@ -147,8 +147,9 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       control. All zones + blank query does not enumerate the database;
       name/ID search and detail/Back/Forward are preserved.
       Windows Companion CI and portable pagination/security-token
-      regressions PASS. **The migration has NOT been deployed to
-      production**; live SQL/HTTP auth tests and Windows UI acceptance
+      regressions PASS. **Migration 0008 APPLIED to production on 2026-10-09** (ledger
+      `20261009072627`); SQL privileges and read-only catalog smoke PASS.
+      Live HTTP transport authentication and Windows UI acceptance
       remain OPEN before merge/release.
       See [zone-only database browse contract](0.7-zone-only-database-browse.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
