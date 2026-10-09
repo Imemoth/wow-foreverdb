@@ -11,10 +11,12 @@ public sealed class SearchService
     private readonly CompanionSettings _settings;
     private readonly LocationService _locationService;
     private readonly StatsService _statsService;
+    private readonly Func<CancellationToken, Task<string>> _accessTokenProvider;
 
     public SearchService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>>? accessTokenProvider = null)
     {
         _httpClient = httpClient;
         _settings = settings;
@@ -24,6 +26,13 @@ public sealed class SearchService
         _statsService = new StatsService(
             httpClient,
             settings);
+
+        // The bounded catalog RPC is authenticated-only. Reuse the same
+        // anonymous Auth session as the existing Companion sync flow;
+        // an injectable provider keeps portable tests credential-free.
+        var auth = new SupabaseAuthService(httpClient, settings);
+        _accessTokenProvider =
+            accessTokenProvider ?? auth.GetAccessTokenAsync;
     }
 
     public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
@@ -92,6 +101,9 @@ public sealed class SearchService
 
         try
         {
+            var accessToken =
+                await _accessTokenProvider(cancellationToken);
+
             data = await PostAsync(
                 "get_foreverdb_zone_catalog",
                 new
@@ -101,7 +113,8 @@ public sealed class SearchService
                     p_limit = ZoneCatalogPageSize,
                     p_offset = offset
                 },
-                cancellationToken);
+                cancellationToken,
+                bearerToken: accessToken);
         }
         catch (InvalidOperationException ex)
             when (ex.Message.Contains("PGRST202",
@@ -781,7 +794,8 @@ public sealed class SearchService
     private async Task<JsonElement> PostAsync(
         string functionName,
         object body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? bearerToken = null)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -794,7 +808,7 @@ public sealed class SearchService
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                bearerToken ?? _settings.SupabaseKey);
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
