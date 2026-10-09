@@ -22,10 +22,12 @@ public sealed class SearchService
         _settings = settings;
         _locationService = new LocationService(
             httpClient,
-            settings);
+            settings,
+            accessTokenProvider);
         _statsService = new StatsService(
             httpClient,
-            settings);
+            settings,
+            accessTokenProvider);
 
         // Reuse the same anonymous Auth session as Companion sync, without
         // pulling authentication/session persistence into search tests.
@@ -36,10 +38,12 @@ public sealed class SearchService
     public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
         CancellationToken cancellationToken = default)
     {
+        var token = await _accessTokenProvider(cancellationToken);
         var data = await PostAsync(
             "get_foreverdb_search_zones",
             new Dictionary<string, object?>(),
-            cancellationToken);
+            cancellationToken,
+            bearerToken: token);
 
         var zones = new List<SearchZoneOption>
         {
@@ -152,6 +156,16 @@ public sealed class SearchService
 
         var trimmed = query.Trim();
 
+        // Match the SQL API's bounded query contract before sending any HTTP.
+        // Wildcards must not turn ordinary search into a full-table scan.
+        if (trimmed.Length < 2 || trimmed.Length > 80 ||
+            trimmed.IndexOfAny(new[] { '%', '_', '\\' }) >= 0)
+        {
+            return Array.Empty<SearchResultItem>();
+        }
+
+        var token = await _accessTokenProvider(cancellationToken);
+
         if (zone is not null &&
             !zone.IsAllZones)
         {
@@ -163,45 +177,23 @@ public sealed class SearchService
                     p_map_id = zone.MapId!.Value,
                     p_zone_name = zone.ZoneName
                 },
-                cancellationToken);
+                cancellationToken,
+                bearerToken: token);
 
             return BuildZoneSearchResults(
                 data,
                 trimmed);
         }
 
-        var encoded = Uri.EscapeDataString($"*{trimmed}*");
+        // One authenticated, server-budgeted RPC replaces unrestricted
+        // PostgREST GET/offset/filter access to public.items and sources.
+        var results = await PostAsync(
+            "get_foreverdb_search_global",
+            new { p_query = trimmed },
+            cancellationToken,
+            bearerToken: token);
 
-        var itemPath =
-            $"/rest/v1/items?select=item_id,name&name=ilike.{encoded}&limit=20";
-
-        var sourcePath =
-            $"/rest/v1/sources?select=source_type,source_id,source_level,name&name=ilike.{encoded}&limit=20";
-
-        if (long.TryParse(trimmed, out var numericId))
-        {
-            itemPath =
-                $"/rest/v1/items?select=item_id,name&or=(item_id.eq.{numericId},name.ilike.{encoded})&limit=20";
-
-            sourcePath =
-                $"/rest/v1/sources?select=source_type,source_id,source_level,name&or=(source_id.eq.{numericId},name.ilike.{encoded})&limit=20";
-        }
-
-        var itemsTask = GetAsync(
-            itemPath,
-            cancellationToken);
-        var sourcesTask = GetAsync(
-            sourcePath,
-            cancellationToken);
-
-        await Task.WhenAll(
-            itemsTask,
-            sourcesTask);
-
-        return BuildSearchResults(
-            await itemsTask,
-            await sourcesTask,
-            trimmed);
+        return BuildZoneSearchResults(results, trimmed);
     }
 
     private static IReadOnlyList<SearchResultItem> BuildZoneSearchResults(
@@ -827,40 +819,6 @@ public sealed class SearchService
         }
 
         using var document = JsonDocument.Parse(bodyJson);
-        return document.RootElement.Clone();
-    }
-
-    private async Task<JsonElement> GetAsync(
-        string path,
-        CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{_settings.SupabaseUrl.TrimEnd('/')}{path}");
-
-        request.Headers.TryAddWithoutValidation(
-            "apikey",
-            _settings.SupabaseKey);
-
-        request.Headers.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                _settings.SupabaseKey);
-
-        using var response = await _httpClient.SendAsync(
-            request,
-            cancellationToken);
-
-        var body = await response.Content.ReadAsStringAsync(
-            cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Search failed: {(int)response.StatusCode} {body}");
-        }
-
-        using var document = JsonDocument.Parse(body);
         return document.RootElement.Clone();
     }
 
