@@ -3,6 +3,30 @@ using System.Globalization;
 using System.Text;
 using ForeverDB.Companion.Models;
 
+// Opt-in live network smoke. CI treats transport failures as non-blocking:
+// local deterministic regressions must never depend on a third party.
+if (args.Length == 1 && args[0] == "--probe-current-forever")
+{
+    var outcome = await AutoAtlasBuildVerifier.VerifyAsync(
+        "wow_classic_beta",
+        "1.60.1.70291",
+        "AABBCCDDEEFF00112233445566778899",
+        CancellationToken.None);
+
+    Console.WriteLine(
+        outcome.IsVerifiedFor(1200) &&
+        outcome.IsVerifiedFor(2126) &&
+        outcome.IsVerifiedFor(2158)
+            ? "Current Forever DB2 transport probe PASS for three map arts."
+            : $"Current Forever DB2 transport probe NOT VERIFIED: {outcome.Status}");
+
+    return outcome.IsVerifiedFor(1200) &&
+           outcome.IsVerifiedFor(2126) &&
+           outcome.IsVerifiedFor(2158)
+        ? 0
+        : 1;
+}
+
 var failures = new List<string>();
 var assertions = 0;
 
@@ -348,6 +372,26 @@ Check(AutoAtlasBuildVerifier.IsValidIdentity(
         "wow_classic_beta", "1.60.1.70291",
         "ABCDEF0123456789ABCDEF0123456789"),
     "new Forever build with exact valid product/build key can be checked");
+var fingerprint = AtlasMetadataVerifier.Fingerprint(sourceAtlas);
+var evidenceKey = AutoAtlasBuildVerifier.BuildCacheKey(
+    "wow_classic_beta", "1.60.1.70291",
+    "ABCDEF0123456789ABCDEF0123456789", fingerprint);
+Check(evidenceKey == AutoAtlasBuildVerifier.BuildCacheKey(
+        "wow_classic_beta", "1.60.1.70291",
+        "ABCDEF0123456789ABCDEF0123456789", fingerprint),
+    "exact-build atlas proof cache key is deterministic");
+Check(evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
+        "wow_classic_beta", "1.60.1.70292",
+        "ABCDEF0123456789ABCDEF0123456789", fingerprint) &&
+      evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
+        "wow_classic_beta", "1.60.1.70291",
+        "FEDCBA9876543210FEDCBA9876543210", fingerprint) &&
+      evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
+        "wow_classic_beta", "1.60.1.70291",
+        "ABCDEF0123456789ABCDEF0123456789",
+        new string('0', 64)),
+    "build number, CASC build key and reference atlas changes invalidate proof");
+
 Check(!AutoAtlasBuildVerifier.IsValidIdentity(
         "wow", "1.60.1.70291",
         "ABCDEF0123456789ABCDEF0123456789") &&
