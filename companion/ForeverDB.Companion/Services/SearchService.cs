@@ -16,7 +16,7 @@ public sealed class SearchService
     public SearchService(
         HttpClient httpClient,
         CompanionSettings settings,
-        Func<CancellationToken, Task<string>>? accessTokenProvider = null)
+        Func<CancellationToken, Task<string>> accessTokenProvider)
     {
         _httpClient = httpClient;
         _settings = settings;
@@ -27,12 +27,10 @@ public sealed class SearchService
             httpClient,
             settings);
 
-        // The bounded catalog RPC is authenticated-only. Reuse the same
-        // anonymous Auth session as the existing Companion sync flow;
-        // an injectable provider keeps portable tests credential-free.
-        var auth = new SupabaseAuthService(httpClient, settings);
-        _accessTokenProvider =
-            accessTokenProvider ?? auth.GetAccessTokenAsync;
+        // Reuse the same anonymous Auth session as Companion sync, without
+        // pulling authentication/session persistence into search tests.
+        _accessTokenProvider = accessTokenProvider ??
+            throw new ArgumentNullException(nameof(accessTokenProvider));
     }
 
     public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
