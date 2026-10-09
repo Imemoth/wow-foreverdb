@@ -9,6 +9,10 @@
   <ItemGroup>
     <Compile Include="../../companion/ForeverDB.Companion/Services/FullRevealMapArt.cs"
              Link="FullRevealMapArt.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/AtlasMetadataVerifier.cs"
+             Link="AtlasMetadataVerifier.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/AutoAtlasBuildVerifier.cs"
+             Link="AutoAtlasBuildVerifier.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/MapAssetCacheStore.cs"
              Link="MapAssetCacheStore.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Models/ForeverDbSnapshot.cs"
