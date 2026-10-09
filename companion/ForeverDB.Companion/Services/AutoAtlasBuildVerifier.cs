@@ -111,8 +111,11 @@ public static class AutoAtlasBuildVerifier
 
             if (age >= ttl)
             {
-                Attempts.TryRemove(
-                    new KeyValuePair<string, Attempt>(key, existing));
+                if (Attempts.TryGetValue(key, out var current) &&
+                    ReferenceEquals(current, existing))
+                {
+                    Attempts.TryRemove(key, out _);
+                }
             }
         }
 
@@ -157,11 +160,17 @@ public static class AutoAtlasBuildVerifier
     {
         foreach (var item in Attempts)
         {
-            if (item.Value.Task.IsCompletedSuccessfully &&
-                !item.Value.Task.Result.SourceValidated)
+            if (!item.Value.Task.IsCompleted ||
+                (item.Value.Task.IsCompletedSuccessfully &&
+                 item.Value.Task.Result.SourceValidated))
             {
-                Attempts.TryRemove(
-                    new KeyValuePair<string, Attempt>(item.Key, item.Value));
+                continue;
+            }
+
+            if (Attempts.TryGetValue(item.Key, out var current) &&
+                ReferenceEquals(current, item.Value))
+            {
+                Attempts.TryRemove(item.Key, out _);
             }
         }
     }
