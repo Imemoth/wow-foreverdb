@@ -10,6 +10,9 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public'
+      and p.prokind = 'f'
+      and (p.proname like 'get_foreverdb_%'
+           or p.proname = 'ingest_foreverdb_snapshot_auth')
       and (
         lower(pg_get_functiondef(p.oid)) like
             '%private.foreverdb_all_stats(%'
