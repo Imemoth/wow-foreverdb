@@ -29,6 +29,10 @@ public partial class MainWindow : Window
     private bool _updatingSearchResults;
     private bool _updatingSearchZoneSelector;
     private int _searchVersion;
+    private SearchZoneOption? _zoneBrowseScope;
+    private long _zoneBrowseTotal;
+    private int _zoneBrowseLoaded;
+    private bool _loadingMoreZoneResults;
 
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
@@ -466,8 +470,7 @@ public partial class MainWindow : Window
         SelectionChangedEventArgs e)
     {
         if (_updatingSearchZoneSelector ||
-            _searchService is null ||
-            string.IsNullOrWhiteSpace(SearchBox.Text))
+            _searchService is null)
         {
             return;
         }
@@ -504,17 +507,35 @@ public partial class MainWindow : Window
         }
 
         var query = SearchBox.Text.Trim();
+        var selectedZone =
+            SearchZoneSelector.SelectedItem as SearchZoneOption
+            ?? SearchZoneOption.AllZones;
+        var isZoneBrowse =
+            query.Length == 0 && !selectedZone.IsAllZones;
+        var searchVersion = ++_searchVersion;
 
-        if (string.IsNullOrWhiteSpace(query))
+        ClearZoneBrowse();
+
+        // Do not download an unbounded global catalog: browse requires
+        // a specific zone. Scope changes preserve detail and navigation.
+        if (query.Length == 0 && selectedZone.IsAllZones)
         {
-            _searchVersion++;
-            ResetSearchState();
+            if (!preserveDetailNavigation)
+            {
+                ResetSearchState();
+            }
+            else
+            {
+                BindSearchResults(
+                    Array.Empty<SearchResultItem>(),
+                    preserveDetailNavigation: true);
+            }
+
             SearchStatusText.Text =
-                "Type an item or source name and press Search.";
+                "Choose a zone to browse observed items and sources, " +
+                "or enter a name to search all zones.";
             return;
         }
-
-        var searchVersion = ++_searchVersion;
 
         if (!preserveDetailNavigation)
         {
@@ -523,60 +544,54 @@ public partial class MainWindow : Window
 
         try
         {
-            SearchStatusText.Text = "Searching...";
+            SearchStatusText.Text =
+                isZoneBrowse ? "Loading zone catalog..." : "Searching...";
 
-            var selectedZone =
-                SearchZoneSelector.SelectedItem as SearchZoneOption
-                ?? SearchZoneOption.AllZones;
+            IReadOnlyList<SearchResultItem> results;
+            long total = 0;
 
-            var results =
-                await _searchService.SearchAsync(
+            if (isZoneBrowse)
+            {
+                var page = await _searchService.BrowseZoneAsync(
+                    selectedZone);
+
+                results = page.Results;
+                total = page.TotalCount;
+            }
+            else
+            {
+                results = await _searchService.SearchAsync(
                     query,
                     selectedZone);
+            }
 
             if (searchVersion != _searchVersion)
             {
                 return;
             }
 
-            // Rebinding ItemsSource clears WPF SelectedItem and can raise
-            // SelectionChanged. Suppress that programmatic event, otherwise
-            // it would clear Back/Forward and discard the current detail.
-            _updatingSearchResults = true;
+            BindSearchResults(results, preserveDetailNavigation);
 
-            try
+            if (isZoneBrowse)
             {
-                SearchResults.ItemsSource = results;
-
-                if (preserveDetailNavigation)
-                {
-                    var matched =
-                        SearchResultSelection.FindMatching(
-                            results,
-                            _selectedSearchResult);
-
-                    SearchResults.SelectedItem = matched;
-
-                    if (matched is not null)
-                    {
-                        _selectedSearchResult = matched;
-                    }
-                }
+                _zoneBrowseScope = selectedZone;
+                _zoneBrowseTotal = total;
+                _zoneBrowseLoaded = results.Count;
+                UpdateZoneBrowseStatus();
+                UpdateZoneBrowseButton();
             }
-            finally
+            else
             {
-                _updatingSearchResults = false;
+                var scopeText =
+                    selectedZone.IsAllZones
+                        ? ""
+                        : $" in {selectedZone.ZoneName}";
+
+                SearchStatusText.Text =
+                    results.Count == 0
+                        ? $"No matching items or sources{scopeText}."
+                        : $"{results.Count} result(s){scopeText}.";
             }
-
-            var scopeText =
-                selectedZone.IsAllZones
-                    ? ""
-                    : $" in {selectedZone.ZoneName}";
-
-            SearchStatusText.Text =
-                results.Count == 0
-                    ? $"No matching items or sources{scopeText}."
-                    : $"{results.Count} result(s){scopeText}.";
         }
         catch (Exception ex)
         {
@@ -592,16 +607,152 @@ public partial class MainWindow : Window
             }
             else
             {
-                // Preserve the last working results and detail navigation if
-                // the new zone's search request fails.
                 SearchStatusText.Text =
                     $"Zone search failed; previous results retained: {ex.Message}";
             }
         }
     }
 
+    private void BindSearchResults(
+        IReadOnlyList<SearchResultItem> results,
+        bool preserveDetailNavigation)
+    {
+        // Changing ItemsSource raises WPF SelectionChanged. Suppress those
+        // programmatic events so the active detail/history are not lost.
+        _updatingSearchResults = true;
+
+        try
+        {
+            SearchResults.ItemsSource = results;
+
+            if (preserveDetailNavigation)
+            {
+                var matched =
+                    SearchResultSelection.FindMatching(
+                        results,
+                        _selectedSearchResult);
+
+                SearchResults.SelectedItem = matched;
+
+                if (matched is not null)
+                {
+                    _selectedSearchResult = matched;
+                }
+            }
+        }
+        finally
+        {
+            _updatingSearchResults = false;
+        }
+    }
+
+    private void ClearZoneBrowse()
+    {
+        _zoneBrowseScope = null;
+        _zoneBrowseTotal = 0;
+        _zoneBrowseLoaded = 0;
+        UpdateZoneBrowseButton();
+    }
+
+    private void UpdateZoneBrowseStatus()
+    {
+        if (_zoneBrowseScope is null)
+        {
+            return;
+        }
+
+        SearchStatusText.Text =
+            _zoneBrowseTotal == 0
+                ? $"No observed items or sources in {_zoneBrowseScope.ZoneName}."
+                : $"Showing {_zoneBrowseLoaded} of {_zoneBrowseTotal} " +
+                  $"known items and sources in {_zoneBrowseScope.ZoneName}.";
+    }
+
+    private void UpdateZoneBrowseButton()
+    {
+        LoadMoreZoneResultsButton.Visibility =
+            _zoneBrowseScope is not null &&
+            _zoneBrowseLoaded < _zoneBrowseTotal
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        LoadMoreZoneResultsButton.IsEnabled =
+            !_loadingMoreZoneResults;
+    }
+
+    private async void LoadMoreZoneResultsButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_loadingMoreZoneResults ||
+            _searchService is null ||
+            _zoneBrowseScope is null ||
+            _zoneBrowseLoaded >= _zoneBrowseTotal ||
+            !string.IsNullOrWhiteSpace(SearchBox.Text))
+        {
+            return;
+        }
+
+        var searchVersion = _searchVersion;
+        var zone = _zoneBrowseScope;
+        var offset = _zoneBrowseLoaded;
+        _loadingMoreZoneResults = true;
+        UpdateZoneBrowseButton();
+
+        try
+        {
+            var page = await _searchService.BrowseZoneAsync(
+                zone, offset);
+
+            // A different zone or new query may have started while the
+            // next page was loading; never append stale data to its list.
+            if (searchVersion != _searchVersion ||
+                !ReferenceEquals(_zoneBrowseScope, zone) ||
+                !string.IsNullOrWhiteSpace(SearchBox.Text))
+            {
+                return;
+            }
+
+            var existing =
+                SearchResults.ItemsSource as IEnumerable<SearchResultItem>
+                ?? Array.Empty<SearchResultItem>();
+            var merged = existing.Concat(page.Results).ToArray();
+
+            BindSearchResults(
+                merged,
+                preserveDetailNavigation: true);
+
+            _zoneBrowseLoaded += page.Results.Count;
+            _zoneBrowseTotal = page.TotalCount;
+
+            // Avoid an endless Load more loop if rows were deleted after
+            // the previous page and its offset is now beyond the end.
+            if (page.Results.Count == 0)
+            {
+                _zoneBrowseTotal = _zoneBrowseLoaded;
+            }
+
+            UpdateZoneBrowseStatus();
+        }
+        catch (Exception ex)
+        {
+            if (searchVersion == _searchVersion &&
+                ReferenceEquals(_zoneBrowseScope, zone))
+            {
+                SearchStatusText.Text =
+                    $"Could not load the next zone catalog page: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _loadingMoreZoneResults = false;
+            UpdateZoneBrowseButton();
+        }
+    }
+
     private void ResetSearchState()
     {
+        ClearZoneBrowse();
         _updatingSearchResults = true;
 
         try
