@@ -38,6 +38,16 @@ public sealed class SearchResultItem
     public override string ToString() => DisplayText;
 }
 
+// One bounded server page of entities actually observed in a selected zone.
+// TotalCount is calculated before paging; All zones / empty query never
+// initiates a full catalog download.
+public sealed class ZoneCatalogPage
+{
+    public IReadOnlyList<SearchResultItem> Results { get; init; } =
+        Array.Empty<SearchResultItem>();
+    public long TotalCount { get; init; }
+}
+
 public sealed class EntityDetail
 {
     public string Title { get; init; } = "";
