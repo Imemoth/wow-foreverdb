@@ -1,21 +1,28 @@
 name: ForeverDB production HTTP authorization smoke
 
+# Manually approved, read-only, low-volume live test. It creates one test
+# anonymous Auth identity per run: never execute on every PR push.
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/api-security-live.yml'
-      - 'tests/api_security_live_smoke.py'
   workflow_dispatch:
+    inputs:
+      post_lockdown:
+        description: 'Run extended HTTP access checks after production 0009'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   live-auth-boundary:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'research/full-reveal-map-art-gate' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Low-volume production HTTPS JWT authorization smoke
+      - name: Low-volume production HTTPS JWT boundary
+        if: '!inputs.post_lockdown'
         run: python3 tests/api_security_live_smoke.py
+      - name: Verify post-lockdown production HTTPS boundary
+        if: inputs.post_lockdown
+        run: python3 tests/api_security_live_smoke.py --post-lockdown
