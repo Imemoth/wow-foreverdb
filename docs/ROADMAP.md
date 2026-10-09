@@ -345,6 +345,56 @@ Acceptance evidence: [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 - [ ] **Registered-account quota tier and reserved capacity** (future): retain today's anonymous JWT budgets; after true account registration/login is implemented, grant a larger per-registered-user budget plus a separately reserved fair-share request pool. Verify ownership/entitlement in Supabase before allocating privileged capacity, preserve private Guildbook RLS/account boundaries, and protect against account-multiplication abuse. **Not in 0009; no higher tier enabled today.**
 - [ ] Post-0009 production HTTP+Windows acceptance: publishable/anon calls rejected, authenticated name/zone/detail/locations work, Manual Sync/Guildbook remain functional, expected rate-limit response is safe and sanitized. Avoid stress testing sole production; a low-volume Auth HTTPS smoke and isolated PT429 regression are sufficient for initial deployment.
 
+### Account login, sessions and private data access — planned
+
+Requested 2026-10-09. **Status: PLANNED; not implemented or runtime-accepted.**
+Goal: introduce an explicit ForeverDB user account and use its verified identity
+to authorize Guildbook and future private queries. The existing automatic
+anonymous Auth session is a technical sync identity, not this account-login feature.
+
+- [ ] Define the account sign-up/sign-in/recovery flow and login provider before
+      implementation; distinguish the ForeverDB account from WoW characters and
+      the game account. Do not collect game-account passwords.
+- [ ] Implement visible signed-in/signed-out state, secure session storage,
+      session restore/refresh, expiry handling and logout. An expired or invalid
+      session must not silently regain private access through anonymous fallback.
+- [ ] Define verified account ownership of installations and their collected
+      data, including multiple devices/characters belonging to the same account.
+      Prepare a safe migration/linking path for existing anonymous installations
+      that preserves observations; knowing an installation ID alone is not proof
+      of ownership.
+- [ ] Require explicit account login for Guildbook. Logged-out users must not
+      load or view its private data, including previously cached Guildbook data.
+      Logged-in users may query only the Guildbook observations collected by
+      installations verified as their own; guild membership or a known guild ID
+      alone must not grant access to other accounts' collected snapshots.
+- [ ] Enforce account ownership server-side for protected reads and writes
+      through database policies and RPC/API authorization. Derive the caller
+      from the validated session; never trust a client-supplied account,
+      installation, character or guild ID as authorization. UI hiding alone
+      is insufficient.
+- [ ] Create a feature/access matrix for Guildbook and later account-bound
+      features, such as synced quest history, personal statistics and saved
+      preferences. Default protected queries to the current account's collected
+      data; login must not grant unrestricted access to the full database.
+      Decide any intentionally shared catalog/aggregate access separately and
+      explicitly before rollout.
+- [ ] Scope local private caches by account, clear private views on logout,
+      expiry and account switch, and cancel/discard in-flight responses from the
+      previous session so they cannot repopulate another account's UI.
+- [ ] Define logged-out/offline behavior for local collection and queued sync,
+      and ensure queued data cannot be uploaded under the wrong account.
+- [ ] Add acceptance checks for two distinct accounts, logged-out and anonymous
+      callers, forged ownership IDs, direct API calls, session expiry/restart,
+      logout/account switching and migration of existing installations. Prove
+      each account can access its own data and cannot read or modify the other's.
+
+Delivery order: agree the identity/ownership and feature-access contracts ->
+session/login flow and existing-data migration -> backend enforcement +
+Guildbook gating -> extend the same account boundary to later private features.
+Keep the current live baseline and this planned access model distinct; this
+roadmap entry does not deploy login or change production permissions.
+
 ## Future — Guildbook
 
 Research note: [Guildbook API options](GUILDBOOK-API.md)
