@@ -138,20 +138,19 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       behavior was superseded by PR #21's navigation-preserving zone
       refresh after the 2026-10-08 live Back/Forward regression; its
       post-fix Windows acceptance is separately pending.
-- [ ] Prevent cyclic item/source detail drilldowns from creating
+- [x] Prevent cyclic item/source detail drilldowns from creating
       unbounded repeated breadcrumbs (e.g. Peacebloom item ↔ Peacebloom
       object, Copper Ore → Copper Vein → Shadowgem → Copper Vein).
-      **PR #21 code + Windows WPF CI PASS (2026-10-09):**
-      search-zone suite **63/63 PASS** including 21 new cycle-history
-      assertions (CI `37913729303`). Live Windows cycle-drilldown
-      acceptance OPEN. Following a link already
-      in Back/Forward now traverses history to its existing entry
-      instead of appending another occurrence; previously seen names
-      that represent different item/source IDs or creature levels
-      remain distinct. Older async detail responses are discarded
-      after later navigation/searches. New explicit result searches
-      retain their existing reset behavior. See
-      [acceptance §14](0.7-acceptance-test.md).
+      **PR #21 CODE/CI + Windows visual PASS (2026-10-09).**
+      Search-zone suite **63/63 assertions PASS**, including 21
+      new cycle/history checks. Real Windows screenshots show
+      `Copper Ore › Copper Vein › Shadowgem` collapsing back to
+      `Copper Ore › Copper Vein`, with Forward enabled. A separate
+      `Poor Copper Vein` still creates a legitimate new step.
+      A Mulgore detail also survives switching the Search zone to
+      Silverpine. **Rapid switching / async response race stress
+      remains OPEN**, as does direct manual Forward-click acceptance.
+      See [acceptance §14](0.7-acceptance-test.md).
 - [ ] Browse already observed database items and sources by selecting
       **one zone with an empty Search box**, without requiring a query word.
       **PR #21 implementation ready, release gate OPEN (2026-10-09):**
