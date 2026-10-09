@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
     private int _detailRequestVersion;
+    private readonly SearchRequestEpoch _searchRequests = new();
+    private readonly SearchRequestEpoch _detailRequests = new();
     private SearchResultItem? _currentDetail;
     // Keep the user's last explicit Search result even if the current
     // zone's filtered list temporarily does not contain it.
@@ -57,6 +59,8 @@ public partial class MainWindow : Window
 
     private async Task RebuildServicesAsync()
     {
+        _searchRequests.Advance();
+        _detailRequests.Advance();
         _watcher?.Dispose();
         _watcher = null;
         _syncService = null;
@@ -515,6 +519,7 @@ public partial class MainWindow : Window
         var isZoneBrowse =
             query.Length == 0 && !selectedZone.IsAllZones;
         var searchVersion = ++_searchVersion;
+        var searchCancellation = _searchRequests.Advance().Token;
 
         ClearZoneBrowse();
 
@@ -555,7 +560,8 @@ public partial class MainWindow : Window
             if (isZoneBrowse)
             {
                 var page = await _searchService.BrowseZoneAsync(
-                    selectedZone);
+                    selectedZone,
+                    cancellationToken: searchCancellation);
 
                 results = page.Results;
                 total = page.TotalCount;
@@ -564,7 +570,8 @@ public partial class MainWindow : Window
             {
                 results = await _searchService.SearchAsync(
                     query,
-                    selectedZone);
+                    selectedZone,
+                    searchCancellation);
             }
 
             if (searchVersion != _searchVersion)
@@ -594,6 +601,12 @@ public partial class MainWindow : Window
                         ? $"No matching items or sources{scopeText}."
                         : $"{results.Count} result(s){scopeText}.";
             }
+        }
+        catch (OperationCanceledException)
+            when (searchCancellation.IsCancellationRequested)
+        {
+            // Rapid zone changes deliberately cancel the previous RPC.
+            return;
         }
         catch (Exception ex)
         {
@@ -704,7 +717,8 @@ public partial class MainWindow : Window
         try
         {
             var page = await _searchService.BrowseZoneAsync(
-                zone, offset);
+                zone, offset,
+                cancellationToken: _searchRequests.Token);
 
             // A different zone or new query may have started while the
             // next page was loading; never append stale data to its list.
@@ -772,6 +786,7 @@ public partial class MainWindow : Window
         _currentDetail = null;
         _selectedSearchResult = null;
         ++_detailRequestVersion; // Ignore any in-flight detail from the previous search.
+        _detailRequests.Advance(); // Abort obsolete HTTP detail requests.
 
         UpdateNavigationUi();
 
@@ -833,6 +848,7 @@ public partial class MainWindow : Window
         SearchResultItem result)
     {
         var requestVersion = ++_detailRequestVersion;
+        var detailCancellation = _detailRequests.Advance().Token;
 
         if (_searchService is null)
         {
@@ -849,7 +865,8 @@ public partial class MainWindow : Window
             DetailTabs.Items.Clear();
 
             var detail =
-                await _searchService.GetDetailAsync(result);
+                await _searchService.GetDetailAsync(
+                    result, detailCancellation);
 
             // Back/Forward and repeated item-source drilldown are async.
             // An older request must not replace a newer selection's panel.
@@ -861,6 +878,11 @@ public partial class MainWindow : Window
             }
 
             RenderSearchDetail(result, detail);
+        }
+        catch (OperationCanceledException)
+            when (detailCancellation.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception ex)
         {
