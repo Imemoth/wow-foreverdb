@@ -22,6 +22,7 @@ public partial class MainWindow : Window
 
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
+    private int _detailRequestVersion;
     private SearchResultItem? _currentDetail;
     // Keep the user's last explicit Search result even if the current
     // zone's filtered list temporarily does not contain it.
@@ -770,6 +771,7 @@ public partial class MainWindow : Window
         _forwardHistory.Clear();
         _currentDetail = null;
         _selectedSearchResult = null;
+        ++_detailRequestVersion; // Ignore any in-flight detail from the previous search.
 
         UpdateNavigationUi();
 
@@ -805,23 +807,33 @@ public partial class MainWindow : Window
         SearchResultItem result,
         bool recordHistory = true)
     {
-        if (recordHistory &&
-            _currentDetail is not null &&
-            !SearchResultSelection.SameEntity(_currentDetail, result))
+        if (recordHistory)
         {
-            _backHistory.Push(_currentDetail);
-            _forwardHistory.Clear();
+            if (!SearchDetailHistory.FollowLink(
+                    result, ref _currentDetail,
+                    _backHistory, _forwardHistory))
+            {
+                // Clicking the same item/source twice does not append another
+                // breadcrumb or trigger a redundant detail request.
+                return;
+            }
+        }
+        else
+        {
+            // An explicit result click starts a fresh navigation chain;
+            // the calling selection handler already cleared both stacks.
+            _currentDetail = result;
         }
 
-        _currentDetail = result;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(result);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private async Task LoadSearchDetailCoreAsync(
         SearchResultItem result)
     {
+        var requestVersion = ++_detailRequestVersion;
+
         if (_searchService is null)
         {
             DetailTitleText.Text = "Search service is not ready.";
@@ -839,10 +851,24 @@ public partial class MainWindow : Window
             var detail =
                 await _searchService.GetDetailAsync(result);
 
+            // Back/Forward and repeated item-source drilldown are async.
+            // An older request must not replace a newer selection's panel.
+            if (requestVersion != _detailRequestVersion ||
+                _currentDetail is null ||
+                !SearchResultSelection.SameEntity(_currentDetail, result))
+            {
+                return;
+            }
+
             RenderSearchDetail(result, detail);
         }
         catch (Exception ex)
         {
+            if (requestVersion != _detailRequestVersion)
+            {
+                return;
+            }
+
             DetailTitleText.Text = result.Name;
             DetailSubtitleText.Text = ex.Message;
             DetailTabs.Items.Clear();
@@ -853,42 +879,28 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        if (_backHistory.Count == 0)
+        if (!SearchDetailHistory.StepBack(
+                ref _currentDetail, _backHistory, _forwardHistory))
         {
             return;
         }
 
-        if (_currentDetail is not null)
-        {
-            _forwardHistory.Push(_currentDetail);
-        }
-
-        var target = _backHistory.Pop();
-        _currentDetail = target;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(target);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private async void ForwardButton_Click(
         object sender,
         RoutedEventArgs e)
     {
-        if (_forwardHistory.Count == 0)
+        if (!SearchDetailHistory.StepForward(
+                ref _currentDetail, _backHistory, _forwardHistory))
         {
             return;
         }
 
-        if (_currentDetail is not null)
-        {
-            _backHistory.Push(_currentDetail);
-        }
-
-        var target = _forwardHistory.Pop();
-        _currentDetail = target;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(target);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private void UpdateNavigationUi()
