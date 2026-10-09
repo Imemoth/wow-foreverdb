@@ -84,7 +84,9 @@ public sealed class StatsService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Stats query failed: {(int)response.StatusCode} {json}");
+                response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                    ? "ForeverDB API limit reached; retry in a minute."
+                    : $"Stats query rejected (HTTP {(int)response.StatusCode}).");
         }
 
         using var document = JsonDocument.Parse(json);
