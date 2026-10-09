@@ -1,8 +1,14 @@
 name: ForeverDB production HTTP authorization smoke
 
-# Manually approved, read-only, low-volume live test. It creates one test
-# anonymous Auth identity per run: never execute on every PR push.
+# Approved 0009 production rollout: one PR #21-only post-lockdown gate.
+# The additional pull_request trigger fires only if THIS WORKFLOW FILE is
+# changed, not on every PR push. It creates one empty anonymous Auth identity.
+# After the PR is merged, this PR-number-specific gate is inert; normal
+# operations remain workflow_dispatch/manual-only.
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/api-security-live.yml'
   workflow_dispatch:
     inputs:
       post_lockdown:
@@ -16,13 +22,14 @@ permissions:
 
 jobs:
   live-auth-boundary:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 21
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - name: Low-volume production HTTPS JWT boundary
-        if: '!inputs.post_lockdown'
+        if: github.event_name == 'workflow_dispatch' && !inputs.post_lockdown
         run: python3 tests/api_security_live_smoke.py
       - name: Verify post-lockdown production HTTPS boundary
-        if: inputs.post_lockdown
+        if: github.event_name == 'pull_request' || inputs.post_lockdown
         run: python3 tests/api_security_live_smoke.py --post-lockdown
