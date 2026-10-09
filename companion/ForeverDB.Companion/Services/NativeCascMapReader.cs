@@ -334,17 +334,6 @@ internal sealed class NativeCascMapReader : IDisposable
 
         [DllImport(
             DllName,
-            EntryPoint = "CascOpenOnlineStorage",
-            SetLastError = true,
-            CharSet = CharSet.Ansi)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        public static extern bool CascOpenOnlineStorage(
-            string parameters,
-            uint localeMask,
-            out IntPtr storage);
-
-        [DllImport(
-            DllName,
             EntryPoint = "CascOpenStorage",
             SetLastError = true,
             CharSet = CharSet.Ansi)]
