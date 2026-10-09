@@ -1,0 +1,21 @@
+name: ForeverDB production HTTP authorization smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/api-security-live.yml'
+      - 'tests/api_security_live_smoke.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-auth-boundary:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'research/full-reveal-map-art-gate' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Low-volume production HTTPS JWT authorization smoke
+        run: python3 tests/api_security_live_smoke.py
