@@ -1,4 +1,6 @@
 using ForeverDB.Companion.Services;
+using System.Globalization;
+using System.Text;
 using ForeverDB.Companion.Models;
 
 var failures = new List<string>();
@@ -274,6 +276,166 @@ layer.TextureRefs.Add("333");
 Check(originalKey != MapAssetCacheStore.BuildKey(
         map, layer, "10", "buildA", "base"),
     "changed API tile manifest cannot reuse stale PNG");
+
+// Full exact-build verification: reconstruct a complete, internally
+// consistent four-table DB2 export from the pinned map-art catalog.
+var sourceAtlas = FullRevealMapArt.GetEmbeddedAtlas();
+var overlaysCsv = new StringBuilder(
+    "ID,UiMapArtID,OffsetX,OffsetY,TextureWidth,TextureHeight,PlayerConditionID\n");
+var overlayTilesCsv = new StringBuilder(
+    "ID,WorldMapOverlayID,LayerIndex,RowIndex,ColIndex,FileDataID\n");
+var artCsv = new StringBuilder("ID,UiMapArtStyleID\n");
+var layersCsv = new StringBuilder(
+    "ID,UiMapArtStyleID,LayerIndex,TileWidth,TileHeight\n");
+
+var overlayId = 0;
+var tileId = 0;
+var layerId = 0;
+
+foreach (var art in sourceAtlas.OrderBy(pair => pair.Key))
+{
+    var style = checked((int)art.Key + 100000);
+    artCsv.Append(art.Key).Append(',').Append(style).Append('\n');
+    layersCsv.Append(++layerId).Append(',').Append(style)
+        .Append(",0,256,256\n");
+
+    foreach (var region in art.Value)
+    {
+        overlayId++;
+        overlaysCsv.Append(overlayId).Append(',').Append(art.Key)
+            .Append(',').Append(region.OffsetX)
+            .Append(',').Append(region.OffsetY)
+            .Append(',').Append(region.Width)
+            .Append(',').Append(region.Height)
+            .Append(",0\n");
+
+        var columns = (region.Width + 255) / 256;
+
+        for (var i = 0; i < region.FileDataIds.Count; i++)
+        {
+            overlayTilesCsv.Append(++tileId).Append(',')
+                .Append(overlayId).Append(",0,")
+                .Append(i / columns).Append(',')
+                .Append(i % columns).Append(',')
+                .Append(region.FileDataIds[i]).Append('\n');
+        }
+    }
+}
+
+var exports = new Dictionary<string, string>
+{
+    ["WorldMapOverlay"] = overlaysCsv.ToString(),
+    ["WorldMapOverlayTile"] = overlayTilesCsv.ToString(),
+    ["UiMapArt"] = artCsv.ToString(),
+    ["UiMapArtStyleLayer"] = layersCsv.ToString()
+};
+
+var sameAtlas = AtlasMetadataVerifier.Compare(exports, sourceAtlas);
+Check(sameAtlas.SourceValid &&
+      sameAtlas.VerifiedArtIds.Count == 84 &&
+      sameAtlas.SourceRegionCount == 1073 &&
+      sameAtlas.SourceTileCount == 1739,
+    "complete four-table metadata match verifies every embedded art");
+Check(sameAtlas.VerifiedArtIds.Contains(1200) &&
+      sameAtlas.VerifiedArtIds.Contains(2126) &&
+      sameAtlas.VerifiedArtIds.Contains(2158),
+    "build update does not require manually allowlisting an unchanged art");
+Check(AtlasMetadataVerifier.Fingerprint(sourceAtlas).Length == 64 &&
+      AtlasMetadataVerifier.Fingerprint(sourceAtlas) ==
+          AtlasMetadataVerifier.Fingerprint(sourceAtlas),
+    "reference atlas fingerprint is stable and SHA256 length");
+Check(AutoAtlasBuildVerifier.IsValidIdentity(
+        "wow_classic_beta", "1.60.1.70291",
+        "ABCDEF0123456789ABCDEF0123456789"),
+    "new Forever build with exact valid product/build key can be checked");
+Check(!AutoAtlasBuildVerifier.IsValidIdentity(
+        "wow", "1.60.1.70291",
+        "ABCDEF0123456789ABCDEF0123456789") &&
+      !AutoAtlasBuildVerifier.IsValidIdentity(
+        "wow_classic_beta", "1.60.1.invalid",
+        "ABCDEF0123456789ABCDEF0123456789") &&
+      !AutoAtlasBuildVerifier.IsValidIdentity(
+        "wow_classic_beta", "1.60.1.70291",
+        "unsafe/path"),
+    "wrong product, malformed build/version or key cannot auto-verify");
+
+var modifiedTiles = exports["WorldMapOverlayTile"]
+    .Split('\n', StringSplitOptions.None);
+var tileColumns = modifiedTiles[1].Split(',');
+tileColumns[5] = (int.Parse(
+    tileColumns[5], CultureInfo.InvariantCulture) + 1)
+    .ToString(CultureInfo.InvariantCulture);
+modifiedTiles[1] = string.Join(',', tileColumns);
+var mismatched = new Dictionary<string, string>(exports)
+{
+    ["WorldMapOverlayTile"] = string.Join('\n', modifiedTiles)
+};
+var changedAtlas = AtlasMetadataVerifier.Compare(
+    mismatched, sourceAtlas);
+
+Check(changedAtlas.SourceValid &&
+      changedAtlas.VerifiedArtIds.Count == 83 &&
+      !changedAtlas.VerifiedArtIds.Contains(1194) &&
+      changedAtlas.VerifiedArtIds.Contains(1200),
+    "one changed source FileDataID blocks only its map, not unchanged art");
+
+var duplicatedTiles = exports["WorldMapOverlayTile"] +
+                      modifiedTiles[1] + "\n";
+Check(!AtlasMetadataVerifier.Compare(
+        new Dictionary<string, string>(exports)
+        {
+            ["WorldMapOverlayTile"] = duplicatedTiles
+        }, sourceAtlas).SourceValid,
+    "duplicate tile ID or position rejects the complete DB2 evidence");
+
+var incompleteTiles = exports["WorldMapOverlayTile"]
+    .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+Check(!AtlasMetadataVerifier.Compare(
+        new Dictionary<string, string>(exports)
+        {
+            ["WorldMapOverlayTile"] = string.Join('\n',
+                incompleteTiles.SkipLast(1))
+        }, sourceAtlas).SourceValid,
+    "missing overlay tile rejects incomplete source instead of promoting it");
+
+var badCondition = exports["WorldMapOverlay"]
+    .Split('\n', StringSplitOptions.None);
+var overlayColumns = badCondition[1].Split(',');
+overlayColumns[6] = "1";
+badCondition[1] = string.Join(',', overlayColumns);
+Check(!AtlasMetadataVerifier.Compare(
+        new Dictionary<string, string>(exports)
+        {
+            ["WorldMapOverlay"] = string.Join('\n', badCondition)
+        }, sourceAtlas).SourceValid,
+    "conditional/personalized overlay cannot be verified automatically");
+
+Check(!AtlasMetadataVerifier.Compare(
+        new Dictionary<string, string>(exports)
+        {
+            ["UiMapArtStyleLayer"] =
+                "ID,UiMapArtStyleID,LayerIndex,TileWidth\n1,1000,0,256"
+        }, sourceAtlas).SourceValid,
+    "missing required DB2 CSV columns fail closed");
+
+Check(!AtlasMetadataVerifier.Compare(
+        new Dictionary<string, string>(exports)
+        {
+            ["WorldMapOverlay"] = "<html>Service unavailable</html>"
+        }, sourceAtlas).SourceValid,
+    "HTTP/HTML error body cannot be mistaken for valid build evidence");
+
+var addColumns = new Dictionary<string, string>(exports);
+addColumns["UiMapArt"] = exports["UiMapArt"]
+    .Replace("ID,UiMapArtStyleID\n",
+        "ID,UiMapArtStyleID,Note\n")
+    .Replace("\n", ",\"CSV, includes \"\"quotes\"\"\"\n")
+    // restore the single real header line (the rows have the extra field)
+    .Replace("ID,UiMapArtStyleID,Note,\"CSV, includes \"\"quotes\"\"\"\n",
+             "ID,UiMapArtStyleID,Note\n");
+Check(AtlasMetadataVerifier.Compare(addColumns, sourceAtlas)
+        .VerifiedArtIds.Count == 84,
+    "RFC4180 quoted comma/double quotes in extra CSV columns are safe");
 
 if (failures.Count != 0)
 {
