@@ -56,3 +56,14 @@ select null::text, null::bigint, null::integer,
        null::bigint, null::bigint, null::bigint, null::bigint,
        null::numeric where false;
 $$;
+
+-- Supabase-managed trigger helper exists in the live project, but is not
+-- part of the committed initial migration. Its body is irrelevant: 0004
+-- revokes EXECUTE on the function in the isolated baseline.
+create function public.rls_auto_enable()
+returns event_trigger language plpgsql
+as $$
+begin
+    null;
+end;
+$$;
