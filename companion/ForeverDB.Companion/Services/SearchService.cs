@@ -11,28 +11,39 @@ public sealed class SearchService
     private readonly CompanionSettings _settings;
     private readonly LocationService _locationService;
     private readonly StatsService _statsService;
+    private readonly Func<CancellationToken, Task<string>> _accessTokenProvider;
 
     public SearchService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>> accessTokenProvider)
     {
         _httpClient = httpClient;
         _settings = settings;
         _locationService = new LocationService(
             httpClient,
-            settings);
+            settings,
+            accessTokenProvider);
         _statsService = new StatsService(
             httpClient,
-            settings);
+            settings,
+            accessTokenProvider);
+
+        // Reuse the same anonymous Auth session as Companion sync, without
+        // pulling authentication/session persistence into search tests.
+        _accessTokenProvider = accessTokenProvider ??
+            throw new ArgumentNullException(nameof(accessTokenProvider));
     }
 
     public async Task<IReadOnlyList<SearchZoneOption>> GetAvailableZonesAsync(
         CancellationToken cancellationToken = default)
     {
+        var token = await _accessTokenProvider(cancellationToken);
         var data = await PostAsync(
             "get_foreverdb_search_zones",
             new Dictionary<string, object?>(),
-            cancellationToken);
+            cancellationToken,
+            bearerToken: token);
 
         var zones = new List<SearchZoneOption>
         {
@@ -71,6 +82,68 @@ public sealed class SearchService
             .ToArray();
     }
 
+    public const int ZoneCatalogPageSize = 50;
+
+    // Browse only observed items/sources in a concrete zone. Unlike named
+    // search, this is explicitly paged and must never enumerate All zones.
+    public async Task<ZoneCatalogPage> BrowseZoneAsync(
+        SearchZoneOption zone,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (zone.IsAllZones || !zone.MapId.HasValue ||
+            zone.MapId.Value <= 0 ||
+            offset < 0)
+        {
+            throw new ArgumentException(
+                "A valid selected zone and nonnegative offset are required.");
+        }
+
+        JsonElement data;
+
+        try
+        {
+            var accessToken =
+                await _accessTokenProvider(cancellationToken);
+
+            data = await PostAsync(
+                "get_foreverdb_zone_catalog",
+                new
+                {
+                    p_map_id = zone.MapId.Value,
+                    p_zone_name = zone.ZoneName,
+                    p_limit = ZoneCatalogPageSize,
+                    p_offset = offset
+                },
+                cancellationToken,
+                bearerToken: accessToken);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("PGRST202",
+                      StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Zone browsing requires database migration 0008. " +
+                "Apply 0008_zone_catalog_browse.sql before using this feature.",
+                ex);
+        }
+
+        var entries = BuildZoneSearchResults(
+            data,
+            trimmed: "",
+            keepServerOrder: true);
+
+        var total = data.GetArrayLength() == 0
+            ? 0L
+            : Math.Max(0L, GetInt64(data[0], "total_count"));
+
+        return new ZoneCatalogPage
+        {
+            Results = entries,
+            TotalCount = total
+        };
+    }
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string query,
         SearchZoneOption? zone = null,
@@ -83,6 +156,16 @@ public sealed class SearchService
 
         var trimmed = query.Trim();
 
+        // Match the SQL API's bounded query contract before sending any HTTP.
+        // Wildcards must not turn ordinary search into a full-table scan.
+        if (trimmed.Length < 2 || trimmed.Length > 80 ||
+            trimmed.IndexOfAny(new[] { '%', '_', '\\' }) >= 0)
+        {
+            return Array.Empty<SearchResultItem>();
+        }
+
+        var token = await _accessTokenProvider(cancellationToken);
+
         if (zone is not null &&
             !zone.IsAllZones)
         {
@@ -94,50 +177,29 @@ public sealed class SearchService
                     p_map_id = zone.MapId!.Value,
                     p_zone_name = zone.ZoneName
                 },
-                cancellationToken);
+                cancellationToken,
+                bearerToken: token);
 
             return BuildZoneSearchResults(
                 data,
                 trimmed);
         }
 
-        var encoded = Uri.EscapeDataString($"*{trimmed}*");
+        // One authenticated, server-budgeted RPC replaces unrestricted
+        // PostgREST GET/offset/filter access to public.items and sources.
+        var results = await PostAsync(
+            "get_foreverdb_search_global",
+            new { p_query = trimmed },
+            cancellationToken,
+            bearerToken: token);
 
-        var itemPath =
-            $"/rest/v1/items?select=item_id,name&name=ilike.{encoded}&limit=20";
-
-        var sourcePath =
-            $"/rest/v1/sources?select=source_type,source_id,source_level,name&name=ilike.{encoded}&limit=20";
-
-        if (long.TryParse(trimmed, out var numericId))
-        {
-            itemPath =
-                $"/rest/v1/items?select=item_id,name&or=(item_id.eq.{numericId},name.ilike.{encoded})&limit=20";
-
-            sourcePath =
-                $"/rest/v1/sources?select=source_type,source_id,source_level,name&or=(source_id.eq.{numericId},name.ilike.{encoded})&limit=20";
-        }
-
-        var itemsTask = GetAsync(
-            itemPath,
-            cancellationToken);
-        var sourcesTask = GetAsync(
-            sourcePath,
-            cancellationToken);
-
-        await Task.WhenAll(
-            itemsTask,
-            sourcesTask);
-
-        return BuildSearchResults(
-            await itemsTask,
-            await sourcesTask,
-            trimmed);
+        return BuildZoneSearchResults(results, trimmed);
     }
 
     private static IReadOnlyList<SearchResultItem> BuildZoneSearchResults(
         JsonElement data,
-        string trimmed)
+        string trimmed,
+        bool keepServerOrder = false)
     {
         var results = new List<SearchResultItem>();
 
@@ -222,9 +284,9 @@ public sealed class SearchService
                 });
         }
 
-        return SortSearchResults(
-            results,
-            trimmed);
+        return keepServerOrder
+            ? results
+            : SortSearchResults(results, trimmed);
     }
 
     private static IReadOnlyList<SearchResultItem> BuildSearchResults(
@@ -722,7 +784,8 @@ public sealed class SearchService
     private async Task<JsonElement> PostAsync(
         string functionName,
         object body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? bearerToken = null)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -735,7 +798,7 @@ public sealed class SearchService
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                bearerToken ?? _settings.SupabaseKey);
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
@@ -751,45 +814,28 @@ public sealed class SearchService
 
         if (!response.IsSuccessStatusCode)
         {
+            var missingEndpoint = false;
+            try
+            {
+                using var error = JsonDocument.Parse(bodyJson);
+                missingEndpoint =
+                    error.RootElement.TryGetProperty("code", out var code) &&
+                    code.GetString() == "PGRST202";
+            }
+            catch (JsonException)
+            {
+                // Untrusted body must not be included in UI error messages.
+            }
+
             throw new InvalidOperationException(
-                $"Search failed: {(int)response.StatusCode} {bodyJson}");
+                missingEndpoint
+                    ? "PGRST202: ForeverDB database endpoint not installed."
+                    : response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                        ? "ForeverDB API limit reached; retry in a minute."
+                        : $"Search request rejected (HTTP {(int)response.StatusCode}).");
         }
 
         using var document = JsonDocument.Parse(bodyJson);
-        return document.RootElement.Clone();
-    }
-
-    private async Task<JsonElement> GetAsync(
-        string path,
-        CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{_settings.SupabaseUrl.TrimEnd('/')}{path}");
-
-        request.Headers.TryAddWithoutValidation(
-            "apikey",
-            _settings.SupabaseKey);
-
-        request.Headers.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                _settings.SupabaseKey);
-
-        using var response = await _httpClient.SendAsync(
-            request,
-            cancellationToken);
-
-        var body = await response.Content.ReadAsStringAsync(
-            cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Search failed: {(int)response.StatusCode} {body}");
-        }
-
-        using var document = JsonDocument.Parse(body);
         return document.RootElement.Clone();
     }
 

@@ -1,0 +1,89 @@
+name: ForeverDB API security regressions
+
+on:
+  pull_request:
+    paths:
+      - 'database/**'
+      - 'companion/ForeverDB.Companion/Services/SearchService.cs'
+      - 'companion/ForeverDB.Companion/Services/StatsService.cs'
+      - 'companion/ForeverDB.Companion/Services/LocationService.cs'
+      - 'companion/ForeverDB.Companion/Services/SupabaseAuthService.cs'
+      - '.github/workflows/api-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg-roles-quotas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-test-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: local-test-password
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGDATABASE: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create isolated test roles
+        run: psql -X -v ON_ERROR_STOP=1 -f database/tests/api_security_local_bootstrap.sql
+
+      - name: Apply historical schema fixtures (ephemeral database ONLY)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for m in \
+            database/migrations/0001_initial_schema.sql \
+            database/migrations/0002_sync_safety.sql \
+            database/migrations/0003_companion_auth.sql \
+            database/migrations/0004_remove_legacy_ingest.sql \
+            database/migrations/0005_guildbook_v1.sql \
+            database/migrations/0006_companion_search_zone.sql \
+            database/sql/search_location_api.sql \
+            database/migrations/0008_zone_catalog_browse.sql \
+            database/migrations/0008a_close_unused_private_rpcs.sql \
+            database/migrations/0008b_prepare_authenticated_global_search.sql
+          do
+            psql -X -v ON_ERROR_STOP=1 -f "$m" > /dev/null
+          done
+
+      - name: Apply API security migration
+        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0009_api_security_rate_limits.sql
+
+      - name: Verify grants, JWT rules, server 429 and query bounds
+        run: psql -X -v ON_ERROR_STOP=1 -f database/tests/api_security_roles_and_quotas.sql
+
+      - name: Verify no unbounded direct anon/private access
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -Atc "
+            select case
+              when has_schema_privilege('anon','private','usage')
+                or has_schema_privilege('authenticated','private','usage')
+                or has_table_privilege('anon','public.items','select')
+                or has_table_privilege('authenticated','public.items','select')
+                or has_function_privilege(
+                   'anon',
+                   'public.get_foreverdb_zone_catalog(bigint,text,integer,integer)',
+                   'execute'
+                )
+              then 'FAIL' else 'PASS' end;
+          " | grep -qx PASS

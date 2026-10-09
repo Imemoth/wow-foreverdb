@@ -22,9 +22,20 @@ public partial class MainWindow : Window
 
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
+    private int _detailRequestVersion;
+    private readonly SearchRequestEpoch _searchRequests = new();
+    private readonly SearchRequestEpoch _detailRequests = new();
     private SearchResultItem? _currentDetail;
+    // Keep the user's last explicit Search result even if the current
+    // zone's filtered list temporarily does not contain it.
+    private SearchResultItem? _selectedSearchResult;
+    private bool _updatingSearchResults;
     private bool _updatingSearchZoneSelector;
     private int _searchVersion;
+    private SearchZoneOption? _zoneBrowseScope;
+    private long _zoneBrowseTotal;
+    private int _zoneBrowseLoaded;
+    private bool _loadingMoreZoneResults;
 
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +59,8 @@ public partial class MainWindow : Window
 
     private async Task RebuildServicesAsync()
     {
+        _searchRequests.Advance();
+        _detailRequests.Advance();
         _watcher?.Dispose();
         _watcher = null;
         _syncService = null;
@@ -109,7 +122,8 @@ public partial class MainWindow : Window
 
         _searchService = new SearchService(
             _httpClient,
-            _settings);
+            _settings,
+            auth.GetAccessTokenAsync);
 
         await LoadSearchZonesAsync();
 
@@ -462,13 +476,14 @@ public partial class MainWindow : Window
         SelectionChangedEventArgs e)
     {
         if (_updatingSearchZoneSelector ||
-            _searchService is null ||
-            string.IsNullOrWhiteSpace(SearchBox.Text))
+            _searchService is null)
         {
             return;
         }
 
-        await RunSearchAsync();
+        // Changing the scope only refreshes the left-hand results. Detail,
+        // breadcrumb and Back/Forward are independent navigation state.
+        await RunSearchAsync(preserveDetailNavigation: true);
     }
 
     private async void Search_Click(
@@ -488,7 +503,8 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task RunSearchAsync()
+    private async Task RunSearchAsync(
+        bool preserveDetailNavigation = false)
     {
         if (_searchService is null)
         {
@@ -497,48 +513,100 @@ public partial class MainWindow : Window
         }
 
         var query = SearchBox.Text.Trim();
+        var selectedZone =
+            SearchZoneSelector.SelectedItem as SearchZoneOption
+            ?? SearchZoneOption.AllZones;
+        var isZoneBrowse =
+            query.Length == 0 && !selectedZone.IsAllZones;
+        var searchVersion = ++_searchVersion;
+        var searchCancellation = _searchRequests.Advance().Token;
 
-        if (string.IsNullOrWhiteSpace(query))
+        ClearZoneBrowse();
+
+        // Do not download an unbounded global catalog: browse requires
+        // a specific zone. Scope changes preserve detail and navigation.
+        if (query.Length == 0 && selectedZone.IsAllZones)
         {
-            _searchVersion++;
-            ResetSearchState();
+            if (!preserveDetailNavigation)
+            {
+                ResetSearchState();
+            }
+            else
+            {
+                BindSearchResults(
+                    Array.Empty<SearchResultItem>(),
+                    preserveDetailNavigation: true);
+            }
+
             SearchStatusText.Text =
-                "Type an item or source name and press Search.";
+                "Choose a zone to browse observed items and sources, " +
+                "or enter a name to search all zones.";
             return;
         }
 
-        var searchVersion = ++_searchVersion;
-        ResetSearchState();
+        if (!preserveDetailNavigation)
+        {
+            ResetSearchState();
+        }
 
         try
         {
-            SearchStatusText.Text = "Searching...";
+            SearchStatusText.Text =
+                isZoneBrowse ? "Loading zone catalog..." : "Searching...";
 
-            var selectedZone =
-                SearchZoneSelector.SelectedItem as SearchZoneOption
-                ?? SearchZoneOption.AllZones;
+            IReadOnlyList<SearchResultItem> results;
+            long total = 0;
 
-            var results =
-                await _searchService.SearchAsync(
+            if (isZoneBrowse)
+            {
+                var page = await _searchService.BrowseZoneAsync(
+                    selectedZone,
+                    cancellationToken: searchCancellation);
+
+                results = page.Results;
+                total = page.TotalCount;
+            }
+            else
+            {
+                results = await _searchService.SearchAsync(
                     query,
-                    selectedZone);
+                    selectedZone,
+                    searchCancellation);
+            }
 
             if (searchVersion != _searchVersion)
             {
                 return;
             }
 
-            SearchResults.ItemsSource = results;
+            BindSearchResults(results, preserveDetailNavigation);
 
-            var scopeText =
-                selectedZone.IsAllZones
-                    ? ""
-                    : $" in {selectedZone.ZoneName}";
+            if (isZoneBrowse)
+            {
+                _zoneBrowseScope = selectedZone;
+                _zoneBrowseTotal = total;
+                _zoneBrowseLoaded = results.Count;
+                UpdateZoneBrowseStatus();
+                UpdateZoneBrowseButton();
+            }
+            else
+            {
+                var scopeText =
+                    selectedZone.IsAllZones
+                        ? ""
+                        : $" in {selectedZone.ZoneName}";
 
-            SearchStatusText.Text =
-                results.Count == 0
-                    ? $"No matching items or sources{scopeText}."
-                    : $"{results.Count} result(s){scopeText}.";
+                SearchStatusText.Text =
+                    results.Count == 0
+                        ? $"No matching items or sources{scopeText}."
+                        : $"{results.Count} result(s){scopeText}.";
+            }
+        }
+        catch (OperationCanceledException)
+            when (searchCancellation.IsCancellationRequested)
+        {
+            // Rapid zone changes deliberately cancel the previous RPC.
+            return;
         }
         catch (Exception ex)
         {
@@ -547,19 +615,178 @@ public partial class MainWindow : Window
                 return;
             }
 
-            ResetSearchState();
-            SearchStatusText.Text = ex.Message;
+            if (!preserveDetailNavigation)
+            {
+                ResetSearchState();
+                SearchStatusText.Text = ex.Message;
+            }
+            else
+            {
+                SearchStatusText.Text =
+                    $"Zone search failed; previous results retained: {ex.Message}";
+            }
+        }
+    }
+
+    private void BindSearchResults(
+        IReadOnlyList<SearchResultItem> results,
+        bool preserveDetailNavigation)
+    {
+        // Changing ItemsSource raises WPF SelectionChanged. Suppress those
+        // programmatic events so the active detail/history are not lost.
+        _updatingSearchResults = true;
+
+        try
+        {
+            SearchResults.ItemsSource = results;
+
+            if (preserveDetailNavigation)
+            {
+                var matched =
+                    SearchResultSelection.FindMatching(
+                        results,
+                        _selectedSearchResult);
+
+                SearchResults.SelectedItem = matched;
+
+                if (matched is not null)
+                {
+                    _selectedSearchResult = matched;
+                }
+            }
+        }
+        finally
+        {
+            _updatingSearchResults = false;
+        }
+    }
+
+    private void ClearZoneBrowse()
+    {
+        _zoneBrowseScope = null;
+        _zoneBrowseTotal = 0;
+        _zoneBrowseLoaded = 0;
+        UpdateZoneBrowseButton();
+    }
+
+    private void UpdateZoneBrowseStatus()
+    {
+        if (_zoneBrowseScope is null)
+        {
+            return;
+        }
+
+        SearchStatusText.Text =
+            _zoneBrowseTotal == 0
+                ? $"No observed items or sources in {_zoneBrowseScope.ZoneName}."
+                : $"Showing {_zoneBrowseLoaded} of {_zoneBrowseTotal} " +
+                  $"known items and sources in {_zoneBrowseScope.ZoneName}.";
+    }
+
+    private void UpdateZoneBrowseButton()
+    {
+        LoadMoreZoneResultsButton.Visibility =
+            _zoneBrowseScope is not null &&
+            _zoneBrowseLoaded < _zoneBrowseTotal
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        LoadMoreZoneResultsButton.IsEnabled =
+            !_loadingMoreZoneResults;
+    }
+
+    private async void LoadMoreZoneResultsButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_loadingMoreZoneResults ||
+            _searchService is null ||
+            _zoneBrowseScope is null ||
+            _zoneBrowseLoaded >= _zoneBrowseTotal ||
+            !string.IsNullOrWhiteSpace(SearchBox.Text))
+        {
+            return;
+        }
+
+        var searchVersion = _searchVersion;
+        var zone = _zoneBrowseScope;
+        var offset = _zoneBrowseLoaded;
+        _loadingMoreZoneResults = true;
+        UpdateZoneBrowseButton();
+
+        try
+        {
+            var page = await _searchService.BrowseZoneAsync(
+                zone, offset,
+                cancellationToken: _searchRequests.Token);
+
+            // A different zone or new query may have started while the
+            // next page was loading; never append stale data to its list.
+            if (searchVersion != _searchVersion ||
+                !ReferenceEquals(_zoneBrowseScope, zone) ||
+                !string.IsNullOrWhiteSpace(SearchBox.Text))
+            {
+                return;
+            }
+
+            var existing =
+                SearchResults.ItemsSource as IEnumerable<SearchResultItem>
+                ?? Array.Empty<SearchResultItem>();
+            var merged = existing.Concat(page.Results).ToArray();
+
+            BindSearchResults(
+                merged,
+                preserveDetailNavigation: true);
+
+            _zoneBrowseLoaded += page.Results.Count;
+            _zoneBrowseTotal = page.TotalCount;
+
+            // Avoid an endless Load more loop if rows were deleted after
+            // the previous page and its offset is now beyond the end.
+            if (page.Results.Count == 0)
+            {
+                _zoneBrowseTotal = _zoneBrowseLoaded;
+            }
+
+            UpdateZoneBrowseStatus();
+        }
+        catch (Exception ex)
+        {
+            if (searchVersion == _searchVersion &&
+                ReferenceEquals(_zoneBrowseScope, zone))
+            {
+                SearchStatusText.Text =
+                    $"Could not load the next zone catalog page: {ex.Message}";
+            }
+        }
+        finally
+        {
+            _loadingMoreZoneResults = false;
+            UpdateZoneBrowseButton();
         }
     }
 
     private void ResetSearchState()
     {
-        SearchResults.ItemsSource = null;
-        SearchResults.SelectedItem = null;
+        ClearZoneBrowse();
+        _updatingSearchResults = true;
+
+        try
+        {
+            SearchResults.ItemsSource = null;
+            SearchResults.SelectedItem = null;
+        }
+        finally
+        {
+            _updatingSearchResults = false;
+        }
 
         _backHistory.Clear();
         _forwardHistory.Clear();
         _currentDetail = null;
+        _selectedSearchResult = null;
+        ++_detailRequestVersion; // Ignore any in-flight detail from the previous search.
+        _detailRequests.Advance(); // Abort obsolete HTTP detail requests.
 
         UpdateNavigationUi();
 
@@ -573,11 +800,15 @@ public partial class MainWindow : Window
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (SearchResults.SelectedItem is not SearchResultItem result)
+        if (_updatingSearchResults ||
+            SearchResults.SelectedItem is not SearchResultItem result)
         {
             return;
         }
 
+        // An explicit new result starts a new detail-navigation chain.
+        // Programmatic re-selection after a zone change must not get here.
+        _selectedSearchResult = result;
         _backHistory.Clear();
         _forwardHistory.Clear();
         _currentDetail = null;
@@ -591,23 +822,34 @@ public partial class MainWindow : Window
         SearchResultItem result,
         bool recordHistory = true)
     {
-        if (recordHistory &&
-            _currentDetail is not null &&
-            !SameEntity(_currentDetail, result))
+        if (recordHistory)
         {
-            _backHistory.Push(_currentDetail);
-            _forwardHistory.Clear();
+            if (!SearchDetailHistory.FollowLink(
+                    result, ref _currentDetail,
+                    _backHistory, _forwardHistory))
+            {
+                // Clicking the same item/source twice does not append another
+                // breadcrumb or trigger a redundant detail request.
+                return;
+            }
+        }
+        else
+        {
+            // An explicit result click starts a fresh navigation chain;
+            // the calling selection handler already cleared both stacks.
+            _currentDetail = result;
         }
 
-        _currentDetail = result;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(result);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private async Task LoadSearchDetailCoreAsync(
         SearchResultItem result)
     {
+        var requestVersion = ++_detailRequestVersion;
+        var detailCancellation = _detailRequests.Advance().Token;
+
         if (_searchService is null)
         {
             DetailTitleText.Text = "Search service is not ready.";
@@ -623,12 +865,32 @@ public partial class MainWindow : Window
             DetailTabs.Items.Clear();
 
             var detail =
-                await _searchService.GetDetailAsync(result);
+                await _searchService.GetDetailAsync(
+                    result, detailCancellation);
+
+            // Back/Forward and repeated item-source drilldown are async.
+            // An older request must not replace a newer selection's panel.
+            if (requestVersion != _detailRequestVersion ||
+                _currentDetail is null ||
+                !SearchResultSelection.SameEntity(_currentDetail, result))
+            {
+                return;
+            }
 
             RenderSearchDetail(result, detail);
         }
+        catch (OperationCanceledException)
+            when (detailCancellation.IsCancellationRequested)
+        {
+            return;
+        }
         catch (Exception ex)
         {
+            if (requestVersion != _detailRequestVersion)
+            {
+                return;
+            }
+
             DetailTitleText.Text = result.Name;
             DetailSubtitleText.Text = ex.Message;
             DetailTabs.Items.Clear();
@@ -639,42 +901,28 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        if (_backHistory.Count == 0)
+        if (!SearchDetailHistory.StepBack(
+                ref _currentDetail, _backHistory, _forwardHistory))
         {
             return;
         }
 
-        if (_currentDetail is not null)
-        {
-            _forwardHistory.Push(_currentDetail);
-        }
-
-        var target = _backHistory.Pop();
-        _currentDetail = target;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(target);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private async void ForwardButton_Click(
         object sender,
         RoutedEventArgs e)
     {
-        if (_forwardHistory.Count == 0)
+        if (!SearchDetailHistory.StepForward(
+                ref _currentDetail, _backHistory, _forwardHistory))
         {
             return;
         }
 
-        if (_currentDetail is not null)
-        {
-            _backHistory.Push(_currentDetail);
-        }
-
-        var target = _forwardHistory.Pop();
-        _currentDetail = target;
         UpdateNavigationUi();
-
-        await LoadSearchDetailCoreAsync(target);
+        await LoadSearchDetailCoreAsync(_currentDetail!);
     }
 
     private void UpdateNavigationUi()
@@ -697,25 +945,6 @@ public partial class MainWindow : Window
 
         BreadcrumbText.Text =
             string.Join("  ›  ", trail);
-    }
-
-    private static bool SameEntity(
-        SearchResultItem left,
-        SearchResultItem right)
-    {
-        if (left.Kind != right.Kind)
-        {
-            return false;
-        }
-
-        if (left.Kind == SearchEntityKind.Item)
-        {
-            return left.ItemId == right.ItemId;
-        }
-
-        return left.SourceType == right.SourceType
-            && left.SourceId == right.SourceId
-            && left.SourceLevel == right.SourceLevel;
     }
 
     private void RenderSearchDetail(

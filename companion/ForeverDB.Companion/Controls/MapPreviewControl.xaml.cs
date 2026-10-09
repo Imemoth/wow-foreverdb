@@ -269,6 +269,9 @@ public partial class MapPreviewControl : UserControl
 
         MapAssetCacheStore.RemoveMap(
             _currentMapId);
+        // Retry transient offline/HTTP proof failures immediately, without
+        // invalidating valid build-bound verification evidence.
+        AutoAtlasBuildVerifier.RetryTransientFailures();
 
         AssetStatusText.Text =
             "Local map cache cleared. Retrying WoW client map...";

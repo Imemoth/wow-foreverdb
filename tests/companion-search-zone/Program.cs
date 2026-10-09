@@ -24,10 +24,16 @@ var settings = new CompanionSettings
     SupabaseUrl = "https://example.supabase.co",
     SupabaseKey = "sb_publishable_test"
 };
-var service = new SearchService(httpClient, settings);
+var service = new SearchService(
+    httpClient,
+    settings,
+    _ => Task.FromResult("test-auth-token"));
 
 var zones = await service.GetAvailableZonesAsync();
 
+Check(handler.Requests.Count == 1 &&
+      handler.Requests[0].Bearer == "test-auth-token",
+    "zone discovery requires a signed-in session token");
 Check(zones.Count == 3,
     "zone list contains All zones plus unique valid zones");
 Check(zones[0].IsAllZones &&
@@ -47,16 +53,18 @@ var allZoneResults =
         "123",
         SearchZoneOption.AllZones);
 
-Check(handler.Requests.Count == 2,
-    "All zones performs the existing two catalog queries");
-Check(handler.Requests.All(request => request.Method == "GET"),
-    "All zones does not call the zone RPC");
-Check(handler.Requests.Any(
-        request => request.Url.Contains("item_id.eq.123", StringComparison.Ordinal)),
-    "All zones preserves numeric item ID search");
-Check(handler.Requests.Any(
-        request => request.Url.Contains("source_id.eq.123", StringComparison.Ordinal)),
-    "All zones preserves numeric source ID search");
+Check(handler.Requests.Count == 1,
+    "All zones sends one bounded server-side global search RPC");
+Check(handler.Requests[0].Method == "POST" &&
+      handler.Requests[0].Url.EndsWith(
+          "/rest/v1/rpc/get_foreverdb_search_global",
+          StringComparison.Ordinal),
+    "All zones has no direct PostgREST items/sources reads");
+Check(handler.Requests[0].Body.Contains(
+        "\"p_query\":\"123\"", StringComparison.Ordinal),
+    "All zones preserves numeric ID query in bounded RPC");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "All zones uses the signed-in Supabase JWT, never anon bearer");
 Check(allZoneResults.Count == 2,
     "All zones returns item and source results");
 Check(allZoneResults.Any(
@@ -71,6 +79,15 @@ Check(allZoneResults.Any(
             result.SourceLevel == 7),
     "All zones source result is preserved");
 
+handler.ClearRequests();
+var rejectedWildcard = await service.SearchAsync(
+    "%", SearchZoneOption.AllZones);
+var rejectedLong = await service.SearchAsync(
+    new string('a', 120), SearchZoneOption.AllZones);
+Check(rejectedWildcard.Count == 0 &&
+      rejectedLong.Count == 0 &&
+      handler.Requests.Count == 0,
+    "malformed or expensive wildcard searches fail without any HTTP request");
 handler.ClearRequests();
 
 var tirisfal =
@@ -92,6 +109,8 @@ Check(handler.Requests[0].Method == "POST" &&
           "/rest/v1/rpc/get_foreverdb_search_in_zone",
           StringComparison.Ordinal),
     "specific zone calls the scoped search RPC");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "scoped search carries authenticated JWT");
 Check(handler.Requests[0].Body.Contains(
         "\"p_query\":\"Cadet\"",
         StringComparison.Ordinal),
@@ -135,6 +154,440 @@ using (var requestBody =
         "zone name disambiguates zones that share the same map id");
 }
 
+// Empty query + one known zone browses all observed items/sources in
+// bounded pages; never silently truncates the zone to the old 20+20 RPC.
+handler.ClearRequests();
+var browseFirst = await service.BrowseZoneAsync(tirisfal);
+Check(browseFirst.TotalCount == 63 &&
+      browseFirst.Results.Count == 50,
+    "first zone browse page returns 50/63 known entities");
+Check(browseFirst.Results[0].ItemId == 5001 &&
+      browseFirst.Results[49].ItemId == 5050,
+    "zone catalog keeps server's deterministic result order");
+Check(handler.Requests.Count == 1 &&
+      handler.Requests[0].Method == "POST" &&
+      handler.Requests[0].Url.EndsWith(
+          "/rest/v1/rpc/get_foreverdb_zone_catalog",
+          StringComparison.Ordinal),
+    "zone browse calls dedicated catalog RPC once");
+Check(handler.Requests[0].Bearer == "test-auth-token",
+    "zone catalog requires the authenticated access token, not anon key");
+using (var browseArgs = JsonDocument.Parse(handler.Requests[0].Body))
+{
+    Check(
+        browseArgs.RootElement.GetProperty("p_map_id").GetInt64() == 1420 &&
+        browseArgs.RootElement.GetProperty("p_zone_name").GetString() ==
+            "Tirisfal Glades" &&
+        browseArgs.RootElement.GetProperty("p_limit").GetInt32() == 50 &&
+        browseArgs.RootElement.GetProperty("p_offset").GetInt32() == 0,
+        "catalog RPC enforces zone identity and first-page limit/offset");
+    Check(
+        !browseArgs.RootElement.TryGetProperty("p_query", out _),
+        "catalog browse never fakes an arbitrary wildcard query");
+}
+
+var browseSecond = await service.BrowseZoneAsync(tirisfal, offset: 50);
+Check(browseSecond.TotalCount == 63 &&
+      browseSecond.Results.Count == 13,
+    "second zone browse page covers all remaining entities");
+Check(browseSecond.Results[0].ItemId == 5051 &&
+      browseSecond.Results[12].Kind == SearchEntityKind.Source &&
+      browseSecond.Results[12].SourceId == 8000,
+    "page boundary preserves both item and creature source identities");
+Check(browseFirst.Results.Concat(browseSecond.Results)
+    .Select(result =>
+        result.Kind == SearchEntityKind.Item
+            ? $"I:{result.ItemId}"
+            : $"S:{result.SourceType}:{result.SourceId}:{result.SourceLevel}")
+    .Distinct()
+    .Count() == 63,
+    "paginated browse has neither missing nor duplicate entities");
+Check(handler.Requests[1].Bearer == "test-auth-token" &&
+      handler.Requests[1].Body.Contains(
+          "\"p_offset\":50", StringComparison.Ordinal),
+    "next page authenticates and continues at the expected offset");
+
+handler.ClearRequests();
+var emptyBrowse = await service.BrowseZoneAsync(crusadersOutpost);
+Check(emptyBrowse.TotalCount == 0 && emptyBrowse.Results.Count == 0,
+    "zone with no observed entities safely returns empty page");
+Check(handler.Requests.Count == 1,
+    "empty-zone browse remains one bounded RPC call");
+
+handler.ClearRequests();
+var emptyGlobal = await service.SearchAsync(
+    "", SearchZoneOption.AllZones);
+Check(emptyGlobal.Count == 0 && handler.Requests.Count == 0,
+    "All zones with empty query never downloads entire global catalog");
+var emptyLegacy = await service.SearchAsync("", tirisfal);
+Check(emptyLegacy.Count == 0 && handler.Requests.Count == 0,
+    "legacy named search never silently performs a zone catalog scan");
+
+var rejectsAllZones = false;
+var rejectsNegativeOffset = false;
+
+try
+{
+    await service.BrowseZoneAsync(SearchZoneOption.AllZones);
+}
+catch (ArgumentException)
+{
+    rejectsAllZones = true;
+}
+
+try
+{
+    await service.BrowseZoneAsync(tirisfal, -1);
+}
+catch (ArgumentException)
+{
+    rejectsNegativeOffset = true;
+}
+
+Check(rejectsAllZones && rejectsNegativeOffset &&
+      handler.Requests.Count == 0,
+    "invalid browse scopes/offsets fail before database access");
+
+// A zone change refreshes the left-hand result objects, NOT the current
+// item/source detail or the Back/Forward chain. The WPF handler suppresses
+// selection events during this remapping.
+var selectedItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 4758,
+    Name = "Prairie Wolf Paw",
+    DisplayText = "Prairie Wolf Paw"
+};
+var matchedItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 4758,
+    Name = "Prairie Wolf Paw (updated)",
+    DisplayText = "Prairie Wolf Paw (updated)"
+};
+var otherItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2672,
+    Name = "Stringy Wolf Meat",
+    DisplayText = "Stringy Wolf Meat"
+};
+
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { otherItem, matchedItem },
+            selectedItem),
+        matchedItem),
+    "zone refresh reselects matching item ID using new result instance");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { otherItem }, selectedItem) is null,
+    "an out-of-zone item is not incorrectly highlighted in filtered results");
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { matchedItem }, selectedItem),
+        matchedItem),
+    "returning to a matching zone can restore the persistent root selection");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { matchedItem }, null) is null,
+    "a search without a selection does not auto-select any result");
+
+var selectedCreature = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 8,
+    Name = "Prairie Stalker"
+};
+var sameCreature = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 8,
+    Name = "Prairie Stalker (refreshed)"
+};
+var differentLevel = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "creature",
+    SourceId = 2959,
+    SourceLevel = 6
+};
+var differentType = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 2959,
+    SourceLevel = 8
+};
+
+Check(
+    ReferenceEquals(
+        SearchResultSelection.FindMatching(
+            new[] { differentLevel, differentType, sameCreature },
+            selectedCreature),
+        sameCreature),
+    "source identity rebind preserves source type, ID and level");
+Check(
+    SearchResultSelection.FindMatching(
+        new[] { differentLevel, differentType }, selectedCreature) is null,
+    "other source levels/types cannot steal selected row on zone change");
+Check(
+    !SearchResultSelection.SameEntity(
+        selectedItem, selectedCreature),
+    "items and sources remain distinct entities in history and selection");
+Check(
+    SearchResultSelection.SameEntity(
+        selectedItem, matchedItem),
+    "display-name changes do not create a different navigation entity");
+Check(
+    SearchResultSelection.FindMatching(
+        Array.Empty<SearchResultItem>(),
+        selectedCreature) is null,
+    "an empty zone result preserves detail outside the list without selection");
+
+// Item ↔ source drilldown must navigate existing history instead of
+// growing Copper Ore → Copper Vein → Copper Ore → ... forever.
+var historyBack = new Stack<SearchResultItem>();
+var historyForward = new Stack<SearchResultItem>();
+SearchResultItem? historyCurrent = null;
+var copperOre = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2770,
+    Name = "Copper Ore"
+};
+var shadowgem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 1210,
+    Name = "Shadowgem"
+};
+var copperVein = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 1731,
+    SourceLevel = 0,
+    Name = "Copper Vein"
+};
+var copperOreRebound = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2770,
+    Name = "Copper Ore (fresh detail row)"
+};
+
+Check(SearchDetailHistory.FollowLink(
+        copperOre, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 0,
+    "first detail opens with empty navigation history");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 0,
+    "mined-from link records one parent for Copper Ore to Copper Vein");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "source-to-item link records a new Shadowgem detail");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperVein) &&
+      historyBack.Count == 1 &&
+      historyForward.Count == 1 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), shadowgem),
+    "returning to already-seen Copper Vein behaves like Back, not a deeper breadcrumb");
+
+Check(SearchDetailHistory.FollowLink(
+        copperOreRebound, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2 &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperOre),
+    "returning to Copper Ore uses stable ID, retains undo history via Forward");
+
+Check(SearchDetailHistory.FollowLink(
+        copperVein, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "re-following an undone source link behaves like Forward, not a duplicate");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "forward-history item can be opened via its source detail link");
+
+Check(!SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "clicking the same item/source does not add a breadcrumb or re-fetch");
+
+Check(SearchDetailHistory.StepBack(
+        ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, copperVein) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "Back button remains consistent after a cyclic drilldown");
+Check(SearchDetailHistory.StepForward(
+        ref historyCurrent, historyBack, historyForward) &&
+      SearchResultSelection.SameEntity(historyCurrent!, shadowgem) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "Forward button returns to the undone item after cyclic drilldown");
+
+// Jump to an older non-adjacent ancestor: A -> B -> C -> A.
+// It should be A (Back empty, Forward B then C), not A -> B -> C -> A.
+Check(SearchDetailHistory.FollowLink(
+        copperOre, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), copperVein),
+    "jumping to a non-adjacent ancestor collapses all visited crumbs");
+
+Check(SearchDetailHistory.FollowLink(
+        shadowgem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2 && historyForward.Count == 0,
+    "a link to a deeper Forward entry restores both intervening pages");
+
+Check(SearchDetailHistory.FollowLink(
+        selectedItem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 3 && historyForward.Count == 0,
+    "following a brand new entity adds exactly one breadcrumb");
+
+// Same display name but a different entity KIND must not be folded away.
+// Peacebloom item 2447 and its gameobject source 1618 are distinct pages.
+var peaceItem = new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2447,
+    Name = "Peacebloom"
+};
+var peaceNode = new SearchResultItem
+{
+    Kind = SearchEntityKind.Source,
+    SourceType = "gameobject",
+    SourceId = 1618,
+    Name = "Peacebloom"
+};
+
+historyBack.Clear();
+historyForward.Clear();
+historyCurrent = peaceItem;
+
+Check(SearchDetailHistory.FollowLink(
+        peaceNode, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1,
+    "Peacebloom item and same-name herb node remain separate entities");
+Check(SearchDetailHistory.FollowLink(
+        peaceItem, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 1 &&
+      SearchResultSelection.SameEntity(historyForward.Peek(), peaceNode),
+    "Peacebloom Object to Peacebloom item returns Back rather than nesting");
+
+historyBack.Clear();
+historyForward.Clear();
+historyCurrent = selectedCreature;
+
+Check(SearchDetailHistory.FollowLink(
+        differentLevel, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1,
+    "equal source ID at another level is a distinct navigation target");
+Check(SearchDetailHistory.FollowLink(
+        differentType, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 2,
+    "equal source ID with another source type is a distinct navigation target");
+Check(SearchDetailHistory.FollowLink(
+        sameCreature, ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2,
+    "source identity folds the history despite renamed detail rows");
+
+Check(!SearchDetailHistory.StepBack(
+        ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 0 && historyForward.Count == 2,
+    "Back at the first entry is a safe no-op");
+Check(SearchDetailHistory.StepForward(
+        ref historyCurrent, historyBack, historyForward) &&
+      historyBack.Count == 1 && historyForward.Count == 1,
+    "Forward still works for distinct source levels");
+Check(SearchDetailHistory.FollowLink(
+        otherItem, ref historyCurrent, historyBack, historyForward) &&
+      historyForward.Count == 0 && historyBack.Count == 2,
+    "new branch after stepping back clears stale Forward history");
+
+// Rapid WPF zone switches must cancel earlier requests before they reach
+// the renderer; the request epoch is also checked after HTTP completion.
+using (var epoch = new SearchRequestEpoch())
+{
+    var old = epoch.Advance();
+    using var pending = new DeferredZoneHandler();
+    using var deferredHttp = new HttpClient(pending);
+    var deferred = new SearchService(
+        deferredHttp, settings,
+        _ => Task.FromResult("test-auth-token"));
+
+    var previous = deferred.SearchAsync("Cadet", tirisfal, old.Token);
+    var current = epoch.Advance();
+
+    Check(old.Token.IsCancellationRequested &&
+          !epoch.IsCurrent(old.Version) &&
+          epoch.IsCurrent(current.Version),
+        "rapid zone selection cancels old token and advances request epoch");
+
+    var newest = deferred.SearchAsync(
+        "Cadet", crusadersOutpost, current.Token);
+
+    // Deliberately let the second (newer) query finish first.
+    pending.Complete(
+        "Crusader's Outpost",
+        """
+        [{"entity_kind":"item","item_id":9001,"source_type":null,"source_id":null,"source_level":null,"name":"Latest Zone Item"}]
+        """);
+
+    var freshResult = await newest;
+    var newestWouldRender = epoch.IsCurrent(current.Version)
+        ? freshResult
+        : Array.Empty<SearchResultItem>();
+
+    pending.Complete(
+        "Tirisfal Glades",
+        """
+        [{"entity_kind":"item","item_id":9000,"source_type":null,"source_id":null,"source_level":null,"name":"Stale Zone Item"}]
+        """);
+
+    var previousCancelled = false;
+    try
+    {
+        await previous;
+    }
+    catch (OperationCanceledException)
+    {
+        previousCancelled = true;
+    }
+
+    Check(previousCancelled &&
+          newestWouldRender.Count == 1 &&
+          newestWouldRender[0].ItemId == 9001,
+        "reversed HTTP response order renders only the latest selected zone");
+    Check(!epoch.IsCurrent(old.Version),
+        "late first response cannot reclaim current UI epoch");
+}
+
+handler.ClearRequests();
+await service.GetDetailAsync(new SearchResultItem
+{
+    Kind = SearchEntityKind.Item,
+    ItemId = 2447,
+    Name = "Peacebloom"
+});
+Check(handler.Requests.Count == 2 &&
+      handler.Requests.All(request =>
+          request.Method == "POST" &&
+          request.Bearer == "test-auth-token" &&
+          !request.Url.Contains("/rest/v1/items", StringComparison.Ordinal)),
+    "item stats and locations both use the authenticated RPC boundary");
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(
@@ -155,7 +608,8 @@ return 0;
 sealed record CapturedRequest(
     string Method,
     string Url,
-    string Body);
+    string Body,
+    string Bearer);
 
 sealed class FakeSearchHandler : HttpMessageHandler
 {
@@ -177,7 +631,8 @@ sealed class FakeSearchHandler : HttpMessageHandler
             new CapturedRequest(
                 request.Method.Method,
                 request.RequestUri?.ToString() ?? "",
-                body));
+                body,
+                request.Headers.Authorization?.Parameter ?? ""));
 
         var path =
             request.RequestUri?.AbsolutePath ?? "";
@@ -207,14 +662,19 @@ sealed class FakeSearchHandler : HttpMessageHandler
                           ]
                           """
                     : path.EndsWith(
-                        "/rest/v1/items",
+                        "/rest/v1/rpc/get_foreverdb_zone_catalog",
                         StringComparison.Ordinal)
-                        ? """[{"item_id":123,"name":"Test Item"}]"""
-                        : path.EndsWith(
-                            "/rest/v1/sources",
-                            StringComparison.Ordinal)
-                            ? """[{"source_type":"creature","source_id":123,"source_level":7,"name":"Test Source"}]"""
-                            : "[]";
+                    ? BuildZoneCatalog(body)
+                : path.EndsWith(
+                        "/rest/v1/rpc/get_foreverdb_search_global",
+                        StringComparison.Ordinal)
+                    ? """
+                      [
+                        {"entity_kind":"item","item_id":123,"source_type":null,"source_id":null,"source_level":null,"name":"Test Item"},
+                        {"entity_kind":"source","item_id":null,"source_type":"creature","source_id":123,"source_level":7,"name":"Test Source"}
+                      ]
+                      """
+                    : "[]";
 
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -225,6 +685,47 @@ sealed class FakeSearchHandler : HttpMessageHandler
         };
     }
 
+    private static string BuildZoneCatalog(string body)
+    {
+        if (IsCrusadersOutpost(body))
+        {
+            return "[]";
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var limit = document.RootElement.GetProperty("p_limit").GetInt32();
+        var offset = document.RootElement.GetProperty("p_offset").GetInt32();
+        var all = new List<object>();
+
+        for (var i = 1; i <= 62; i++)
+        {
+            all.Add(new
+            {
+                entity_kind = "item",
+                item_id = (long?)(5000 + i),
+                source_type = (string?)null,
+                source_id = (long?)null,
+                source_level = (int?)null,
+                name = $"Zone Item {i:000}",
+                total_count = 63L
+            });
+        }
+
+        all.Add(new
+        {
+            entity_kind = "source",
+            item_id = (long?)null,
+            source_type = "creature",
+            source_id = (long?)8000,
+            source_level = (int?)8,
+            name = "Zone Wolf",
+            total_count = 63L
+        });
+
+        return JsonSerializer.Serialize(
+            all.Skip(offset).Take(limit));
+    }
+
     private static bool IsCrusadersOutpost(string body)
     {
         using var document = JsonDocument.Parse(body);
@@ -232,5 +733,41 @@ sealed class FakeSearchHandler : HttpMessageHandler
         return document.RootElement
             .TryGetProperty("p_zone_name", out var zoneName) &&
             zoneName.GetString() == "Crusader's Outpost";
+    }
+}
+
+sealed class DeferredZoneHandler : HttpMessageHandler
+{
+    private readonly Dictionary<string, TaskCompletionSource<HttpResponseMessage>>
+        _pending = new(StringComparer.Ordinal);
+
+    public DeferredZoneHandler()
+    {
+        foreach (var zone in new[] { "Tirisfal Glades", "Crusader's Outpost" })
+        {
+            _pending[zone] = new TaskCompletionSource<HttpResponseMessage>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    public void Complete(string zone, string response)
+    {
+        _pending[zone].TrySetResult(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    response, Encoding.UTF8, "application/json")
+            });
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var json = await request.Content!.ReadAsStringAsync(cancellationToken);
+        using var body = JsonDocument.Parse(json);
+        var zone = body.RootElement
+            .GetProperty("p_zone_name").GetString()!;
+        return await _pending[zone].Task.WaitAsync(cancellationToken);
     }
 }

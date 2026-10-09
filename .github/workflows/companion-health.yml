@@ -9,6 +9,7 @@ on:
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
       - 'tests/companion-search-zone/**'
+      - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
@@ -18,6 +19,7 @@ on:
       - 'tests/companion-health/**'
       - 'tests/companion-guildbook/**'
       - 'tests/companion-search-zone/**'
+      - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
       - '.github/workflows/companion-health.yml'
@@ -52,6 +54,14 @@ jobs:
 
       - name: Search zone regression checks
         run: dotnet run --project tests/companion-search-zone/Companion.SearchZone.Tests.csproj -c Release
+
+      - name: Fully revealed map art regression checks
+        run: dotnet run --project tests/companion-map-reveal/Companion.MapReveal.Tests.csproj -c Release
+
+      - name: Current Forever DB2 metadata transport probe (informational)
+        if: github.event_name == 'pull_request' && github.head_ref == 'research/full-reveal-map-art-gate'
+        continue-on-error: true
+        run: dotnet run --project tests/companion-map-reveal/Companion.MapReveal.Tests.csproj -c Release -- --probe-current-forever
 
       - name: git diff --check
         shell: pwsh

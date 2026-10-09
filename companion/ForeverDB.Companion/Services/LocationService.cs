@@ -10,13 +10,17 @@ public sealed class LocationService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    private readonly Func<CancellationToken, Task<string>> _accessTokenProvider;
 
     public LocationService(
         HttpClient httpClient,
-        CompanionSettings settings)
+        CompanionSettings settings,
+        Func<CancellationToken, Task<string>> accessTokenProvider)
     {
         _httpClient = httpClient;
         _settings = settings;
+        _accessTokenProvider = accessTokenProvider ??
+            throw new ArgumentNullException(nameof(accessTokenProvider));
     }
 
     public Task<IReadOnlyList<DetailLocation>> GetItemLocationsAsync(
@@ -59,10 +63,11 @@ public sealed class LocationService
             "apikey",
             _settings.SupabaseKey);
 
+        var accessToken = await _accessTokenProvider(cancellationToken);
         request.Headers.Authorization =
             new AuthenticationHeaderValue(
                 "Bearer",
-                _settings.SupabaseKey);
+                accessToken);
 
         request.Content = new StringContent(
             JsonSerializer.Serialize(body),
@@ -79,7 +84,9 @@ public sealed class LocationService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Location query failed: {(int)response.StatusCode} {json}");
+                response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                    ? "ForeverDB API limit reached; retry in a minute."
+                    : $"Location query rejected (HTTP {(int)response.StatusCode}).");
         }
 
         using var document = JsonDocument.Parse(json);

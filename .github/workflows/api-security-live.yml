@@ -1,0 +1,30 @@
+name: ForeverDB production HTTP authorization smoke
+
+# Manually approved read-only, low-volume production HTTP smoke.
+# Each run creates one empty anonymous Auth identity. One-time post-0009
+# PR acceptance passed in run 37933319217 (2026-10-09); keep this workflow
+# manual-only to avoid new anonymous users on each code/documentation push.
+on:
+  workflow_dispatch:
+    inputs:
+      post_lockdown:
+        description: 'Run extended HTTP access checks after production 0009'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-auth-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Low-volume production HTTPS JWT boundary
+        if: '!inputs.post_lockdown'
+        run: python3 tests/api_security_live_smoke.py
+      - name: Verify post-lockdown production HTTPS boundary
+        if: inputs.post_lockdown
+        run: python3 tests/api_security_live_smoke.py --post-lockdown

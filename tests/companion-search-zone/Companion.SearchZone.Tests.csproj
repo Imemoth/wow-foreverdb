@@ -18,6 +18,12 @@
              Link="StatsService.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SearchService.cs"
              Link="SearchService.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchResultSelection.cs"
+             Link="SearchResultSelection.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchDetailHistory.cs"
+             Link="SearchDetailHistory.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchRequestEpoch.cs"
+             Link="SearchRequestEpoch.cs" />
   </ItemGroup>
 
 </Project>

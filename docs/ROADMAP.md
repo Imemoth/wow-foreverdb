@@ -134,9 +134,103 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       detail/navigation and map overlays remain unchanged. Live follow-up also
       verified automatic re-search on zone change and clearing stale detail/
       navigation state when the new scope returns zero results.
+      **Historical note:** that original 2026-10-07 zero-result reset
+      behavior was superseded by PR #21's navigation-preserving zone
+      refresh after the 2026-10-08 live Back/Forward regression; its
+      post-fix Windows acceptance is separately pending.
+- [x] Prevent cyclic item/source detail drilldowns from creating
+      unbounded repeated breadcrumbs (e.g. Peacebloom item ↔ Peacebloom
+      object, Copper Ore → Copper Vein → Shadowgem → Copper Vein).
+      **PR #21 CODE/CI + Windows visual PASS (2026-10-09).**
+      Search-zone suite **63/63 assertions PASS**, including 21
+      new cycle/history checks. Real Windows screenshots show
+      `Copper Ore › Copper Vein › Shadowgem` collapsing back to
+      `Copper Ore › Copper Vein`, with Forward enabled. A separate
+      `Poor Copper Vein` still creates a legitimate new step.
+      A Mulgore detail also survives switching the Search zone to
+      Silverpine. **Rapid switching / async response race stress
+      remains OPEN**, as does direct manual Forward-click acceptance.
+      See [acceptance §14](0.7-acceptance-test.md).
+- [ ] Browse already observed database items and sources by selecting
+      **one zone with an empty Search box**, without requiring a query word.
+      **PR #21 implementation ready, release gate OPEN (2026-10-09):**
+      new `0008_zone_catalog_browse.sql` authenticated-only RPC serves
+      exact observed `map_id + zone_name` entities with stable ordering,
+      total count and **50 per page**, plus a Companion `Load 50 more`
+      control. All zones + blank query does not enumerate the database;
+      name/ID search and detail/Back/Forward are preserved.
+      Windows Companion CI and portable pagination/security-token
+      regressions PASS. **Migration 0008 APPLIED to production on 2026-10-09** (ledger
+      `20261009072627`); SQL privileges and read-only catalog smoke PASS.
+      **2026-10-09 live Windows catalog browse PASS:** Mulgore
+      **35/35**, Silverpine **20/20** and Tirisfal **215/215**
+      after repeated `Load 50 more` clicks. First-page 50/215
+      and final 215/215 both confirmed; item and creature details
+      can be opened. Precise duplicate-free record audit,
+      rapid cross-zone Back/Forward and actual HTTP/JWT security
+      tests remain OPEN before merge/release.
+      See [zone-only database browse contract](0.7-zone-only-database-browse.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
       the existing Blizzard-CDN fallback rules.
+      **PR #21 (2026-10-08; Windows visual acceptance OPEN):** full map =
+      native base art + all exploration overlays; no separate MapArtID.
+      The embedded atlas has 84 maps, 1,073 regions and 1,739 texture IDs.
+      Source build 1.60.1.70009 (Map Tab, MIT) was independently compared
+      against the 1.60.1.70245 wago.tools-derived overlay catalog:
+      **all 84 maps and all region/texture records identical (0 differences).**
+      The user's manual screenshots exposed the previous strict single-build
+      gate (active 1.60.1.70245 vs atlas 1.60.1.70009). Those **two
+      manually verified builds remain the offline fast path**; later
+      versions now use the separate strict Auto Atlas Verification flow
+      described below. The CASC -> exact-build CDN, transactional base
+      fallback and variant-isolated caches remain in force. **Windows Companion CI with the 70245 allowlist
+      and new regressions: PASS** (code commit `c74d819`, run `37817201593`);
+      collector smoke also PASS (`37817201541`). Older screenshots are
+      evidence of a blocked build gate, not a client texture failure.
+      **Live Windows screenshot sub-gate PASS (2026-10-08):** Tirisfal
+      (MapArtID 2126), Mulgore (1200) and Silverpine (2158) each show
+      `cached · full-overlays-verified-70009-70245-v2` with previously
+      hidden geography revealed and mining/herbalism/fishing-pool markers.
+      The build-mismatch/base-only failure is resolved. Live Clusters and
+      Heatmap screenshots **PASS** for Tirisfal/Mulgore, including 63% zoom.
+      **Fresh Mulgore `Retry map`: PASS** (12/12 base tiles,
+      `FileDataID+full-reveal:18`, non-cached Windows status). Same-query
+      item↔source detail Back/Forward also works. **Zone change bug found:**
+      changing the zone selector resets the selected result, detail and
+      Back/Forward. PR #21 now contains a focused fix to preserve selection,
+      detail and history during automatic zone-scoped result refresh, with
+      portable identity regressions and Windows CI PASS; **real Windows
+      retest still OPEN**. Tooltip/coordinate accuracy and live missing-art
+      fallback remain separately unverified.
+      See [full-map art investigation and acceptance](0.7-full-map-art-investigation.md).
+- [ ] Auto Atlas Verification for future WoW Forever builds.
+      **PR #21 repo-side implementation + Windows CI PASS (2026-10-09).**
+      Detect the active Forever beta Version + Build Key; fetch the four
+      exact-version public DB2 CSVs (WorldMapOverlay/Tile, UiMapArt,
+      UiMapArtStyleLayer); strictly compare every map region/offset/tile
+      ID against the embedded source atlas; admit **only matching map arts**.
+      Proofs are cached locally by hashed product/version/build key/atlas
+      identity (14 days), with an 18-second network timeout and 15-minute
+      retry for failures. No blind 1.60.* approval; offline/invalid/mismatched
+      source -> base map with reason. Previously reviewed builds need no
+      network fetch. The GitHub Windows runner fetched exact-version
+      DB2 exports and matched **84/84 embedded map arts** for the
+      new 1.60.1.70291 build (CI `37906377015`; map tests
+      **48/48 PASS**). **70291 real Windows three-zone full-map VISUAL
+      PASS (2026-10-09):** Tirisfal **#2126** cold `12/12` base
+      tiles and `FileDataID+full-reveal:22 · Auto Atlas VERIFIED
+      (1.60.1.70291)`, plus verified warm cache; Mulgore **#1200**
+      (Prairie Stalker) and Silverpine **#2158** (Light Leather)
+      display fully revealed, cached `full-auto-verified-...`
+      map art and location markers. Earlier Silverpine-filtered
+      Light Leather detail was focused on Tirisfal #2126; new
+      screenshot explicitly proves Silverpine #2158.
+      **Still OPEN:** new-build Retry map, noncached CASC composition
+      specifically for Mulgore/Silverpine, tooltip/pixel precision,
+      rapid zone-navigation history and safe failure fallback.
+      Three-zone visual PASS does not imply a global runtime/release PASS.
+      [Full verification design / test gate](0.7-auto-atlas-verification.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
 
@@ -246,6 +340,10 @@ Acceptance evidence: [0.8 Guildbook acceptance](0.8-guildbook-acceptance.md).
 - [ ] Remove obsolete legacy sync scripts/config after compatibility cleanup.
 - [x] Restrict legacy public stats view: **2026-10-08 production SQL migration and role-restriction tests PASS; existing Companion runtime acceptance PASS (user-reported)**. `database/migrations/0007_restrict_legacy_public_stats.sql` revokes direct SELECT from `PUBLIC`, `anon`, and `authenticated`; `service_role` is preserved. Live SQL role impersonation confirmed direct SELECT denied for both roles while Search, Stats, Locations and authenticated Sync RPC grants remain correct. The same catalog/aggregate counts were verified before and after deployment. The Windows Companion tester confirmed Search, zone filter, Stats, map/Locations and Manual Sync continue working. See [production cutover and acceptance ledger](legacy-stats-prod-cutover.md). No new external/public API was published.
 - [ ] Run separate actual HTTP PostgREST smoke checks with `anon` API key **and** anonymous Supabase Auth JWT: both must be denied direct `/rest/v1/observed_loot_stats` SELECT, while supported Search/Stats/Locations RPCs remain usable. **OPEN: transport-level HTTP/JWT checks were not executed; SQL role-impersonation and Companion manual acceptance are not a substitute for a documented HTTP response.**
+
+- [x] Production API lockdown and quota foundation — **0009 migration deployed on 2026-10-09** (`20261009124630 api_security_rate_limits`). Anon/publishable-key-only reads, stats and ingest denied; current Companion uses anonymous Supabase Auth JWT; Search/Stats/Locations/catalog RPCs and ingest remain available to authenticated sessions. Production SQL grants, bounded RPCs and **PT429 on the 21st catalog request** PASS in rollback-only synthetic-UID tests. The supported-client policy is **latest Companion only**; older key-only clients are intentionally unsupported. Real post-lockdown external HTTPS smoke and updated Companion Manual Sync/Guildbook checks are separate release acceptance. [API security hardening](0.8-api-security-hardening.md).
+- [ ] **Registered-account quota tier and reserved capacity** (future): retain today's anonymous JWT budgets; after true account registration/login is implemented, grant a larger per-registered-user budget plus a separately reserved fair-share request pool. Verify ownership/entitlement in Supabase before allocating privileged capacity, preserve private Guildbook RLS/account boundaries, and protect against account-multiplication abuse. **Not in 0009; no higher tier enabled today.**
+- [ ] Post-0009 production HTTP+Windows acceptance: **live external HTTPS/anon-vs-JWT boundary PASS** ([run 37933319217](https://github.com/Imemoth/wow-foreverdb/actions/runs/37933319217)); key-only RPCs 401, JWT auth/search/catalog 200, direct raw reads 403. **Real production SQL quota 20/21 PT429 and oversized ingest PT413 PASS in rolled-back synthetic-UID checks.** Still OPEN: newest Companion **Manual Sync/Guildbook** confirmation after cutover and safe error message UX; no destructive/sustained production HTTP rate load test was performed. See [security cutover ledger](0.8-api-security-hardening.md).
 
 ### Account login, sessions and private data access — planned
 

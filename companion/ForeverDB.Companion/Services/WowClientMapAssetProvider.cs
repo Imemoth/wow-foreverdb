@@ -12,7 +12,7 @@ namespace ForeverDB.Companion.Services;
 
 public sealed class WowClientMapAssetProvider
 {
-    private const string ResolverVersion = "9";
+    private const string ResolverVersion = "11";
 
     private static readonly ConcurrentDictionary<
         string,
@@ -59,6 +59,139 @@ public sealed class WowClientMapAssetProvider
                 $"WoW client map metadata exists for {metadata.Name}, but it has no usable art layer.");
         }
 
+        // Only trusted DB2 metadata can establish the overlay-to-map
+        // relationship. Previously reviewed builds are pinned; a new build
+        // must match the embedded atlas at every rectangle/FileDataID for
+        // this art before any full-reveal texture is opened.
+        IReadOnlyList<FullRevealRegion> fullRegions =
+            Array.Empty<FullRevealRegion>();
+        string? fullRevealBuildVersion = null;
+        string? fullRevealBuildKey = null;
+        string? fullRevealVariant = null;
+        string fullRevealNote;
+
+        if (string.IsNullOrWhiteSpace(_settings.WowRoot))
+        {
+            fullRevealNote = "WoW installation path is not configured";
+        }
+        else
+        {
+            var cascRoot = FindCascRoot(_settings.WowRoot);
+
+            if (cascRoot is null)
+            {
+                fullRevealNote = "WoW .build.info was not found";
+            }
+            else
+            {
+                var candidates = GetOnlineBuildCandidates(
+                    cascRoot, _settings.WowRoot);
+                var known = candidates.FirstOrDefault(
+                    candidate =>
+                        FullRevealMapArt.IsSupportedBuildVersion(
+                            candidate.Version));
+
+                fullRevealNote = FullRevealMapArt.ExplainUnavailability(
+                    metadata.MapArtId,
+                    candidates.Select(candidate => candidate.Version).ToArray());
+
+                if (known is not null &&
+                    string.IsNullOrEmpty(fullRevealNote))
+                {
+                    fullRevealBuildVersion = known.Version;
+                    fullRevealBuildKey = known.BuildKey;
+                    fullRegions = FullRevealMapArt.Find(
+                        metadata.MapArtId, known.Version);
+                }
+                else if (FullRevealMapArt.GetEmbeddedAtlas()
+                             .ContainsKey(metadata.MapArtId))
+                {
+                    var newBuild = candidates.FirstOrDefault(candidate =>
+                        AutoAtlasBuildVerifier.IsValidIdentity(
+                            candidate.Product, candidate.Version,
+                            candidate.BuildKey));
+
+                    if (newBuild is not null)
+                    {
+                        var proof = await AutoAtlasBuildVerifier.VerifyAsync(
+                            newBuild.Product,
+                            newBuild.Version,
+                            newBuild.BuildKey,
+                            cancellationToken);
+
+                        if (proof.IsVerifiedFor(metadata.MapArtId))
+                        {
+                            fullRegions = FullRevealMapArt.GetEmbeddedAtlas()[
+                                metadata.MapArtId];
+                            fullRevealBuildVersion = newBuild.Version;
+                            fullRevealBuildKey = newBuild.BuildKey;
+                            fullRevealVariant = proof.CacheVariant;
+                            fullRevealNote = "";
+                        }
+                        else
+                        {
+                            fullRevealNote = proof.SourceValidated
+                                ? $"art #{metadata.MapArtId} differs from exact-build DB2 metadata"
+                                : $"Auto Atlas Verification: {proof.Status}";
+                        }
+                    }
+                }
+            }
+        }
+
+        if (fullRegions.Count > 0)
+        {
+            var fullMap = await LoadVariantAsync(
+                metadata,
+                layer,
+                fullRegions,
+                cancellationToken,
+                fullRevealBuildVersion,
+                fullRevealBuildKey,
+                fullRevealVariant);
+
+            if (fullMap.IsClientAsset)
+            {
+                return fullMap;
+            }
+
+            fullRevealNote = DescribeFullRevealFailure(fullMap.Status);
+        }
+
+        // Retain the original API art and its full legacy CASC/CDN/classic
+        // fallback if the build is unknown or any reveal tile is missing.
+        var baseMap = await LoadVariantAsync(
+            metadata, layer, null, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(fullRevealNote))
+        {
+            return baseMap;
+        }
+
+        return new MapAssetResult
+        {
+            Image = baseMap.Image,
+            Width = baseMap.Width,
+            Height = baseMap.Height,
+            FromCache = baseMap.FromCache,
+            Status = $"{baseMap.Status}\nFull reveal unavailable: {fullRevealNote}"
+        };
+    }
+
+    private async Task<MapAssetResult> LoadVariantAsync(
+        ForeverDbMap metadata,
+        ForeverDbMapLayer layer,
+        IReadOnlyList<FullRevealRegion>? fullRegions,
+        CancellationToken cancellationToken,
+        string? fullRevealBuildVersion = null,
+        string? fullRevealBuildKey = null,
+        string? fullRevealVariant = null)
+    {
+        var variant =
+            fullRegions is null
+                ? "base"
+                : fullRevealVariant ?? FullRevealMapArt.VariantId;
+
         var wowBuildFingerprint =
             MapAssetCacheStore.GetWowBuildFingerprint(
                 _settings.WowRoot);
@@ -68,7 +201,8 @@ public sealed class WowClientMapAssetProvider
                 metadata,
                 layer,
                 ResolverVersion,
-                wowBuildFingerprint);
+                wowBuildFingerprint,
+                variant);
 
         var cachedResolution =
             MapAssetCacheStore.Get(
@@ -76,7 +210,8 @@ public sealed class WowClientMapAssetProvider
 
         var cachePath = GetCachePath(
             metadata,
-            layer);
+            layer,
+            resolutionKey);
 
         if (File.Exists(cachePath))
         {
@@ -95,7 +230,7 @@ public sealed class WowClientMapAssetProvider
                         WowBuildFingerprint = wowBuildFingerprint,
                         Success = true,
                         Status =
-                            $"WoW client map · cached · art #{metadata.MapArtId}",
+                            $"WoW client map · cached · art #{metadata.MapArtId} · {variant}",
                         CacheFile = cachePath,
                         UpdatedAtUtc = DateTimeOffset.UtcNow
                     });
@@ -107,7 +242,7 @@ public sealed class WowClientMapAssetProvider
                     Height = cached.PixelHeight,
                     FromCache = true,
                     Status =
-                        $"WoW client map · cached · art #{metadata.MapArtId}"
+                        $"WoW client map · cached · art #{metadata.MapArtId} · {variant}"
                 };
             }
             catch
@@ -143,6 +278,9 @@ public sealed class WowClientMapAssetProvider
                     () => ExtractRawMap(
                         metadata,
                         layer,
+                        fullRegions,
+                        fullRevealBuildVersion,
+                        fullRevealBuildKey,
                         preferredStorageLabel,
                         CancellationToken.None),
                     CancellationToken.None));
@@ -204,6 +342,9 @@ public sealed class WowClientMapAssetProvider
                 Status = raw.Status,
                 Details = new
                 {
+                    artVariant = variant,
+                    fullRevealBuildVersion = fullRevealBuildVersion ?? "",
+                    revealRegionCount = fullRegions?.Count ?? 0,
                     apiTextureRefs =
                         layer.TextureRefs
                             .Take(24)
@@ -266,6 +407,11 @@ public sealed class WowClientMapAssetProvider
                 raw.Status);
         }
 
+        var successfulStatus =
+            fullRevealVariant is not null
+                ? $"{raw.Status} · Auto Atlas VERIFIED ({fullRevealBuildVersion})"
+                : raw.Status;
+
         var bitmap =
             BitmapSource.Create(
                 raw.Width,
@@ -293,7 +439,7 @@ public sealed class WowClientMapAssetProvider
                 ResolverVersion = ResolverVersion,
                 WowBuildFingerprint = wowBuildFingerprint,
                 Success = true,
-                Status = raw.Status,
+                Status = successfulStatus,
                 AssetMode = raw.AssetMode,
                 StorageLabel = raw.StorageLabel,
                 CacheFile = cachePath,
@@ -306,13 +452,49 @@ public sealed class WowClientMapAssetProvider
             Width = raw.Width,
             Height = raw.Height,
             FromCache = false,
-            Status = raw.Status
+            Status = successfulStatus
         };
+    }
+
+    // Do not surface arbitrary CASC exception paths or server responses
+    // in the visible status. Expected atlas validation failures are safe
+    // and actionable; full details remain in the resolver diagnostics.
+    private static string DescribeFullRevealFailure(string rawStatus)
+    {
+        const string negativeCachePrefix = "Cached map lookup · ";
+
+        var status =
+            rawStatus.StartsWith(
+                negativeCachePrefix,
+                StringComparison.Ordinal)
+                ? rawStatus[negativeCachePrefix.Length..]
+                : rawStatus;
+
+        const string unavailablePrefix = "Full-reveal unavailable: ";
+
+        if (status.StartsWith(
+                unavailablePrefix,
+                StringComparison.Ordinal))
+        {
+            return status[unavailablePrefix.Length..];
+        }
+
+        if (status.StartsWith(
+                "Full-reveal source layout",
+                StringComparison.Ordinal))
+        {
+            return "map dimensions or base tile coverage do not match the atlas";
+        }
+
+        return "full overlay CASC resolution failed (see resolver diagnostics)";
     }
 
     private RawMapAsset ExtractRawMap(
         ForeverDbMap metadata,
         ForeverDbMapLayer layer,
+        IReadOnlyList<FullRevealRegion>? fullRegions,
+        string? fullRevealBuildVersion,
+        string? fullRevealBuildKey,
         string? preferredStorageLabel,
         CancellationToken cancellationToken)
     {
@@ -345,7 +527,22 @@ public sealed class WowClientMapAssetProvider
                     cascRoot,
                     _settings.WowRoot,
                     effectiveTextureRefs,
-                    preferredStorageLabel);
+                    fullRegions is null ? preferredStorageLabel : null);
+
+            // Local "auto" or an alternative product can be an older
+            // installation. A verified variant may only use the selected
+            // active Forever product. A base-art retry can still use the
+            // more permissive legacy storage compatibility path.
+            if (fullRegions is not null && storage is not null &&
+                !string.Equals(
+                    storageLabel,
+                    "wow_classic_beta",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                storage.Dispose();
+                storage = null;
+                storageLabel = null;
+            }
 
             // 2) If the streamed map art is not physically present, use the
             // exact installed Forever build on Blizzard's CDN. The resulting
@@ -357,6 +554,16 @@ public sealed class WowClientMapAssetProvider
                              cascRoot,
                              _settings.WowRoot))
                 {
+                    if (fullRegions is not null &&
+                        (online.Version != fullRevealBuildVersion ||
+                         !string.Equals(
+                             online.BuildKey,
+                             fullRevealBuildKey,
+                             StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
                     var onlineCache =
                         GetOnlineCascCacheDirectory(
                             online.Product,
@@ -397,8 +604,9 @@ public sealed class WowClientMapAssetProvider
                 }
             }
 
-            // 3) Last-resort compatibility path for older clients/listfiles.
-            if (storage is null)
+            // 3) Last-resort classic named textures are valid for base
+            // art only. They are not evidence of an exact-build atlas.
+            if (storage is null && fullRegions is null)
             {
                 foreach (var classicCandidate in
                          GetClassicMapTextureCandidates(
@@ -594,6 +802,167 @@ public sealed class WowClientMapAssetProvider
 
                 return RawMapAsset.Failed(
                     $"WoW CASC opened ({storageLabel}), but no map tile was decoded. {detail}");
+            }
+
+            if (fullRegions is not null)
+            {
+                // The extracted overlay positions are in the 1002x668
+                // native canvas. Never stretch them onto an unverified
+                // zoom layer: that would misalign the farming markers.
+                if (layer.LayerWidth != 1002 ||
+                    layer.LayerHeight != 668 ||
+                    layer.TileWidth != 256 ||
+                    layer.TileHeight != 256 ||
+                    decodedTiles != expectedTiles)
+                {
+                    return RawMapAsset.Failed(
+                        "Full-reveal source layout or base-tile coverage is not verified.");
+                }
+
+                NativeCascMapReader? overlayCdn = null;
+                var triedOverlayCdn = false;
+                var overlayCdnUsed = false;
+
+                FullRevealTile? DecodeOverlay(Stream stream)
+                {
+                    try
+                    {
+                        using var blp = new War3BlpFile(stream);
+                        var pixels = blp.GetPixels(
+                            0,
+                            out var width,
+                            out var height,
+                            bgra: true);
+
+                        return width > 0 && height > 0
+                            ? new FullRevealTile(pixels, width, height)
+                            : null;
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+
+                FullRevealTile? LoadRevealTile(int fileDataId)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var id = fileDataId.ToString(
+                        CultureInfo.InvariantCulture);
+
+                    using (var localStream = OpenTexture(storage, id))
+                    {
+                        if (localStream is not null)
+                        {
+                            var local = DecodeOverlay(localStream);
+                            if (local is not null)
+                            {
+                                return local;
+                            }
+                        }
+                    }
+
+                    // Only use the active exact-build CDN. Opening a
+                    // second storage is lazy and done at most once.
+                    if (!triedOverlayCdn)
+                    {
+                        triedOverlayCdn = true;
+
+                        foreach (var online in GetOnlineBuildCandidates(
+                                     cascRoot, _settings.WowRoot))
+                        {
+                            // Overlay fallback must use the SAME active
+                            // build whose atlas was selected. In particular,
+                            // a 70245 client must never resolve 70009 CDN
+                            // art just because both atlases have equal IDs.
+                            if (online.Version != fullRevealBuildVersion ||
+                                (fullRevealBuildKey is not null &&
+                                 !string.Equals(
+                                     online.BuildKey,
+                                     fullRevealBuildKey,
+                                     StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+
+                            var onlineCache = GetOnlineCascCacheDirectory(
+                                online.Product, online.BuildKey);
+
+                            var reader = NativeCascMapReader.TryOpenOnline(
+                                onlineCache,
+                                online.Product,
+                                online.Region,
+                                online.BuildKey,
+                                $"cdn:{online.Product}:{online.Region}",
+                                out _);
+
+                            if (reader is null)
+                            {
+                                continue;
+                            }
+
+                            using var probe = OpenTexture(reader, id);
+
+                            if (probe is not null)
+                            {
+                                overlayCdn = reader;
+                                break;
+                            }
+
+                            reader.Dispose();
+                        }
+                    }
+
+                    if (overlayCdn is null)
+                    {
+                        return null;
+                    }
+
+                    using var remoteStream = OpenTexture(overlayCdn, id);
+
+                    if (remoteStream is null)
+                    {
+                        return null;
+                    }
+
+                    var remote = DecodeOverlay(remoteStream);
+
+                    if (remote is not null)
+                    {
+                        overlayCdnUsed = true;
+                    }
+
+                    return remote;
+                }
+
+                try
+                {
+                    if (!FullRevealMapArt.TryCompose(
+                            targetPixels,
+                            targetWidth,
+                            targetHeight,
+                            fullRegions,
+                            LoadRevealTile,
+                            out var rendered,
+                            out var overlayTileCount,
+                            out var failure))
+                    {
+                        return RawMapAsset.Failed(
+                            $"Full-reveal unavailable: {failure}");
+                    }
+
+                    targetPixels = rendered;
+                    assetMode += $"+full-reveal:{overlayTileCount}";
+                    if (overlayCdnUsed)
+                    {
+                        assetMode += "+exact-build-CDN-overlays";
+                    }
+                }
+                finally
+                {
+                    overlayCdn?.Dispose();
+                }
             }
 
             return new RawMapAsset
@@ -1426,7 +1795,8 @@ public sealed class WowClientMapAssetProvider
 
     private static string GetCachePath(
         ForeverDbMap map,
-        ForeverDbMapLayer layer)
+        ForeverDbMapLayer layer,
+        string resolutionKey)
     {
         var folder =
             MapMetadataStore.GetMapCacheDirectory(
@@ -1434,7 +1804,7 @@ public sealed class WowClientMapAssetProvider
 
         return Path.Combine(
             folder,
-            $"art-{map.MapArtId}-layer-{layer.LayerIndex}.png");
+            $"art-{map.MapArtId}-layer-{layer.LayerIndex}-{resolutionKey[..24]}.png");
     }
 
     private static BitmapSource LoadBitmap(

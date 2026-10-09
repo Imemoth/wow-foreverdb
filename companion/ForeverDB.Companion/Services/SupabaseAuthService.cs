@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 using System.Text;
 using System.Text.Json;
 using ForeverDB.Companion.Models;
@@ -10,6 +11,10 @@ public sealed class SupabaseAuthService
 {
     private readonly HttpClient _httpClient;
     private readonly CompanionSettings _settings;
+    // Search, detail and sync can begin concurrently on startup. A single
+    // session owner prevents duplicate anonymous accounts/signups and
+    // unnecessary authentication traffic during initial load/refresh.
+    private static readonly SemaphoreSlim SessionGate = new(1, 1);
 
     public SupabaseAuthService(
         HttpClient httpClient,
@@ -22,36 +27,53 @@ public sealed class SupabaseAuthService
     public async Task<string> GetAccessTokenAsync(
         CancellationToken cancellationToken = default)
     {
-        var session = SessionStore.Load();
+        await SessionGate.WaitAsync(cancellationToken);
 
-        if (session is not null &&
-            session.ExpiresAt > DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 90)
+        try
         {
-            return session.AccessToken;
-        }
+            // Recheck the persistent session *after* acquiring the gate.
+            // Do not create another anonymous account for parallel callers.
+            var session = SessionStore.Load();
 
-        if (session is not null &&
-            !string.IsNullOrWhiteSpace(session.RefreshToken))
-        {
-            try
+            if (session is not null &&
+                session.ExpiresAt >
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 90)
             {
-                session = await RefreshAsync(
-                    session.RefreshToken,
-                    cancellationToken);
-
-                SessionStore.Save(session);
                 return session.AccessToken;
             }
-            catch
+
+            if (session is not null &&
+                !string.IsNullOrWhiteSpace(session.RefreshToken))
             {
-                SessionStore.Clear();
+                try
+                {
+                    session = await RefreshAsync(
+                        session.RefreshToken,
+                        cancellationToken);
+
+                    SessionStore.Save(session);
+                    return session.AccessToken;
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Expired/invalid refresh tokens require a new session.
+                    SessionStore.Clear();
+                }
             }
+
+            session = await SignInAnonymouslyAsync(cancellationToken);
+            SessionStore.Save(session);
+            return session.AccessToken;
         }
-
-        session = await SignInAnonymouslyAsync(cancellationToken);
-        SessionStore.Save(session);
-
-        return session.AccessToken;
+        finally
+        {
+            SessionGate.Release();
+        }
     }
 
     private async Task<AuthSession> SignInAnonymouslyAsync(
@@ -79,7 +101,7 @@ public sealed class SupabaseAuthService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Anonymous Supabase sign-in failed: {(int)response.StatusCode} {body}");
+                $"Supabase authentication rejected (HTTP {(int)response.StatusCode}).");
         }
 
         return ParseSession(body);
@@ -115,7 +137,7 @@ public sealed class SupabaseAuthService
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Supabase session refresh failed: {(int)response.StatusCode} {body}");
+                $"Supabase session refresh rejected (HTTP {(int)response.StatusCode}).");
         }
 
         return ParseSession(body);
