@@ -149,11 +149,13 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       Windows Companion CI and portable pagination/security-token
       regressions PASS. **Migration 0008 APPLIED to production on 2026-10-09** (ledger
       `20261009072627`); SQL privileges and read-only catalog smoke PASS.
-      Live Windows screenshots confirm Mulgore **35/35**, Silverpine
-      **20/20**, and Tirisfal **50 of 215** first-page browsing with
-      `Load 50 more` button visible. Catalog and basic drilldown
-      VISUAL PASS; actual next-page click, rapid zone navigation history,
-      and HTTP/JWT role checks remain OPEN before merge/release.
+      **2026-10-09 live Windows catalog browse PASS:** Mulgore
+      **35/35**, Silverpine **20/20** and Tirisfal **215/215**
+      after repeated `Load 50 more` clicks. First-page 50/215
+      and final 215/215 both confirmed; item and creature details
+      can be opened. Precise duplicate-free record audit,
+      rapid cross-zone Back/Forward and actual HTTP/JWT security
+      tests remain OPEN before merge/release.
       See [zone-only database browse contract](0.7-zone-only-database-browse.md).
 - [ ] Prefer a fully revealed zone map in the Companion over fog-of-war/partially
       revealed map variants, while keeping exact-build/local-CASC resolution and
@@ -202,15 +204,19 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       network fetch. The GitHub Windows runner fetched exact-version
       DB2 exports and matched **84/84 embedded map arts** for the
       new 1.60.1.70291 build (CI `37906377015`; map tests
-      **48/48 PASS**). **70291 real Windows Tirisfal #2126 acceptance
-      PARTIAL PASS (2026-10-09):** 12/12 base tiles,
-      `FileDataID+full-reveal:22` and `Auto Atlas VERIFIED (1.60.1.70291)`
-      on cold render; `cached · full-auto-verified-...` on revisit;
-      marker and heatmap screenshots PASS visually.
-      **Mulgore #1200 and Silverpine #2158 map art, 70291 Retry map,
-      exact marker/tooltip alignment and failure fallback remain OPEN.**
-      The Silverpine-filtered Light Leather detail screenshot displays
-      **Tirisfal art #2126**, not evidence of Silverpine art.
+      **48/48 PASS**). **70291 real Windows three-zone full-map VISUAL
+      PASS (2026-10-09):** Tirisfal **#2126** cold `12/12` base
+      tiles and `FileDataID+full-reveal:22 · Auto Atlas VERIFIED
+      (1.60.1.70291)`, plus verified warm cache; Mulgore **#1200**
+      (Prairie Stalker) and Silverpine **#2158** (Light Leather)
+      display fully revealed, cached `full-auto-verified-...`
+      map art and location markers. Earlier Silverpine-filtered
+      Light Leather detail was focused on Tirisfal #2126; new
+      screenshot explicitly proves Silverpine #2158.
+      **Still OPEN:** new-build Retry map, noncached CASC composition
+      specifically for Mulgore/Silverpine, tooltip/pixel precision,
+      rapid zone-navigation history and safe failure fallback.
+      Three-zone visual PASS does not imply a global runtime/release PASS.
       [Full verification design / test gate](0.7-auto-atlas-verification.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
