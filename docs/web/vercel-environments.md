@@ -65,15 +65,18 @@ Do these **before merging** the hardening PR (new code refuses to serve a hosted
 
 These variables are backward compatible with the code currently on `main` (a `preview` designation with fixture data behaves like today's mode and additionally fixes the cookie flag), so setting them first is safe.
 
-## 4. Node.js decision: **22.x**
+## 4. Node.js decision: **24.x**
 
-| Place | Before | After |
+The owner selected Node.js 24.x (2026-10-10). It is configured identically everywhere and enforced by CI.
+
+| Place | Value | Mechanism |
 | --- | --- | --- |
-| GitHub CI (web, publisher) | `22` (hard-coded) | `.node-version` = `22` (single source) |
-| `package.json` engines (web, publisher) | `>=22` (Vercel warns it "will automatically upgrade when a new major Node.js Version is released") | `22.x` |
-| Vercel runtime | **24.x** (dashboard setting; the live demo currently runs Node 24) | `22.x` via `engines` (Vercel gives `engines.node` precedence over the dashboard setting; Vercel does **not** read `.node-version`) |
+| GitHub CI (web, publisher, publish workflow) | `24` | `.node-version` = `24` (single source; every `setup-node` step uses `node-version-file`) |
+| `package.json` engines (web, publisher) | `24.x` | Vercel gives `engines.node` precedence over the dashboard setting; Vercel does **not** read `.node-version` |
+| Vercel dashboard (Settings → General → Node.js Version) | `24.x` | already set by the owner; `engines` agrees |
+| `@types/node` (web, publisher) | `24.19.2` | matches the runtime major (was `22.20.5`); the only dependency change |
 
-Why 22: every verification run on this repository (unit, Playwright, publication pipeline, parity, CodeQL) ran on Node 22; `@types/node` is `22.x`; Next 16.4.0, React 19.3.0, Playwright 1.63.0 and the publisher support it; **no dependency was changed** to get here. Node 24 is a separate migration (a CI matrix PR and a dependency review) to be done before Node 22 leaves maintenance (April 2027). **Merging this change moves the live demo from Node 24 to Node 22** (a deliberate downgrade to the one version all evidence covers; Node 24 was never verified for this app). `.node-version` is the single source for **CI and developers**; **Vercel follows `engines`**, so the two are kept equal by a CI step that fails if the running major, `.node-version` and the `engines` of **both** `web` and `publisher` disagree. Optional owner step: also set Settings → General → Node.js Version to `22.x` so the dashboard agrees. **Verified on Vercel (2026-10-10, preview build of this branch):** the build log reads *"Due to `engines: { node: 22.x }` in your `package.json` file, the Node.js Version defined in your Project Settings (\"24.x\") will not apply, Node.js Version \"22.x\" will be used instead."* The old `>=22` warning ("will automatically upgrade when a new major Node.js Version is released") is gone. The production build after the merge should show the same line.
+Compatibility basis (registry `engines` fields, 2026-10-10): Next 16.4.0 `>=20.9.0`, Playwright 1.63.0 `>=20`, `pg` 8.23.1 (no upper bound), vitest 3.2.7, TypeScript 5.9.3 (no runtime constraint), React 19.3.0 (no constraint). Measured evidence: the complete verification suite (lint, typecheck, unit, environment matrix, production build with canary secrets, bundle scan, Playwright desktop/mobile/preview, publisher unit, publication pipeline, Postgres-adapter E2E, parity) was re-run on **Node 24.21.0** from a clean `npm ci`; results are in `verification-results.md`. CI fails if the running major, `.node-version` and the `engines` of **both** `web` and `publisher` disagree, so Vercel and CI cannot drift apart again. Node 22 is no longer used anywhere in the repository. (`>=22` previously let Vercel float silently; `24.x` pins the major.)
 
 ## 5. Deployment protection policy
 

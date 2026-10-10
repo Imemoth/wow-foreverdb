@@ -10,7 +10,7 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 
 - [ ] **Hardening PR (`web/vercel-preview-hardening`)**: `Web release gate` green; Vercel variables `FOREVERDB_DEPLOYMENT=preview` and `FOREVERDB_DATA_SOURCE=fixture` set on Production and Preview **before merging** (`vercel-environments.md` §3)
 - [ ] **Required checks enforced** (PENDING): ruleset `.github/rulesets/main-release-gates.json` imported and a deliberately failing PR shown unmergeable (`release-gates.md` §2)
-- [ ] Node.js: CI, `engines` and Vercel runtime all 22.x; the Vercel production build log no longer shows the `engines` ">=22" warning
+- [ ] Node.js: CI, `engines` and Vercel runtime all 24.x (owner decision); the Vercel build log shows Node 24 and no `engines` auto-upgrade warning
 
 ## B. Data boundary (security-critical)
 - [ ] Separate public DB provisioned, Data API disabled (`infrastructure-setup.md` 1–4)
@@ -51,6 +51,6 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
 | Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets` | Pending production approval / out of scope of PR #22 |
 | F-3 Companion denominator fix (`0011`) | **F3_FULLY_VERIFIED** (2026-10-10; PR #37 merged as `6d0df83`; production ledger `20261010151518`; 5/5 Windows Companion Search UI checks PASS; see `docs/f3-observed-rate-denominator.md`) |
-| Preview hardening (explicit designation, noindex everywhere, fail-closed hosted config, CI split + aggregate gate, Node 22 pin) | **Implemented · Locally tested** · GitHub CI result recorded in `verification-results.md` |
+| Preview hardening (explicit designation, noindex everywhere, fail-closed hosted config, CI split + aggregate gate, Node 24 pin) | **Implemented · Locally tested** · GitHub CI result recorded in `verification-results.md` |
 | Vercel variables, Production Branch, unauthenticated protection test, ruleset enforcement | **PENDING owner action** (connector cannot read or write variables; no ruleset API) |
 | Production mode (`FOREVERDB_DEPLOYMENT=production`) | **BLOCKED** until A–C are ✅ |

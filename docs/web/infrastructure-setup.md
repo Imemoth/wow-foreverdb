@@ -32,5 +32,5 @@ Nothing below has been provisioned or configured. Each step names the secret it 
 ## Vercel — current state and owner actions (2026-10-10)
 - Project `wow-foreverdb` exists (Next.js, Hobby, GitHub-linked, root `web`), production-target deployment READY, **Vercel Authentication on** (`all_except_custom_domains`), no password/trusted-IP protection, **no custom firewall configuration**, no custom domain.
 - The connector used for the hardening work could **not** read or write environment variables (HTTP 403, scoped and unscoped), so the variable matrix is an **owner action** (`vercel-environments.md` §3). It must be done before merging the hardening PR.
-- Pending owner decisions: change the Production Branch to a `release` branch (promotion control), set the dashboard Node.js version to 22.x (optional, `engines` already pins it), the ruleset import (`release-gates.md`), and the unauthenticated external access test.
+- Pending owner decisions: change the Production Branch to a `release` branch (promotion control), dashboard Node.js version is already 24.x (matches `engines`), the ruleset import (`release-gates.md`), and the unauthenticated external access test.
 - Not to be done without separate approval: custom domains/DNS, billing or plan changes, enabling `FOREVERDB_DEPLOYMENT=production`.
