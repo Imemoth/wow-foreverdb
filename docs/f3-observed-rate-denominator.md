@@ -48,6 +48,8 @@ observed_rate = SUM(drop_count of the item) / SUM(observations of ALL installati
 Installation A: 100 observations, 10 drops of X. Installation B: 100 observations, 0 drops.
 Before: 10 / 100 = 10 %. After: 10 / 200 = **5 %**.
 
+Numerator semantics are unchanged: an item row counts only for an installation that also recorded the matching source row (exactly what the old per-installation join did). Ingest always writes both together, so this only matters for manually repaired data, where it prevents a numerator larger than the denominator.
+
 Implementation: item totals and source totals are aggregated **independently** and joined on the full source identity. Source totals are computed once per source key (never per item), so several items from one source cannot multiply the denominator. Division is `numeric`; a zero denominator returns `NULL`; sums stay `bigint`.
 
 ## What changed
@@ -59,7 +61,7 @@ Implementation: item totals and source totals are aggregated **independently** a
 | `database/tests/f3_drop_rate_denominator.sql` | Regression suite (below). |
 | `.github/workflows/api-security.yml` | Runs the suite; the existing security suite then runs on the post-0011 state. |
 
-No client change. No table, view, policy, grant or data change. The public wrappers and the 0009 budgets are untouched. One deliberate non-denominator change: a deterministic `ORDER BY source_type, source_id, source_level, loot_kind, item_id`, so the wrappers' `LIMIT 500` truncates stably (the old functions had no ordering).
+No client change. No table, view, policy, grant or data change. The public wrappers and the 0009 budgets are untouched. One deliberate non-denominator change: a deterministic `ORDER BY source_type, source_id, source_level, loot_kind, item_id`. The row set is unchanged; only for an item with **more than 500 sources** does the wrappers' `LIMIT 500` now keep the lowest source ids (stable) instead of an arbitrary 500 (the old functions had no ordering). The Companion re-sorts after the cut as before. No such item exists today.
 
 ### Security properties (asserted inside the migration, transaction aborts otherwise)
 
@@ -85,6 +87,8 @@ No client change. No table, view, policy, grant or data change. The public wrapp
 | H response contract | identical result type; wrapper JSON keys unchanged |
 | I security | ACL/owner/config byte-identical; API roles denied; anon and private access denied through real roles |
 | J non-F-3 behaviour | same row set; identical non-denominator columns; single-installation buckets identical; exactly 11 corrected fixture buckets, all lower |
+| Item row without that installation's own source row (900015) | excluded from the numerator, rate stays 10 % (found by the review; fails against the first draft) |
+| Item view vs captured baseline | same row set and non-denominator columns for all fixture items |
 | Item view vs source view vs `all_stats` | internally consistent |
 | Rollback round trip | rollback restores the defect and identical ACLs; 0011 re-applies cleanly |
 
@@ -135,10 +139,16 @@ Apply `database/rollback/0011_restore_previous_observed_rate_functions.sql` (ver
 ## Remaining risks
 
 - Production is not changed; the live Companion is still affected until the owner applies 0011.
-- The previous function definitions exist only in production and in the rollback file (they were provisioned outside the numbered migrations).
+- The previous function definitions exist only in production and in the rollback file (they were provisioned outside the numbered migrations). The rollback file was verified **byte-identical** to production: md5 of `pg_get_functiondef` equals md5 of the file's definitions for all three functions (`all_stats` 8d9d8cf1…, `item_stats` 434fea25…, `source_stats` 0010ecb5…), read-only, 2026-10-10.
 - Thin contributor base (7 installations): corrected rates are still small-sample figures; the website's sample thresholds remain the honest presentation.
 - The Windows Companion UI was not run in this session (no .NET/Windows runner); the contract argument above is from reading `SearchService.cs`.
 
 ## Independent review
 
-See the PR description for the review summary.
+A separate reviewer agent (given the files and the review dimensions, not the author's conclusions) reviewed aggregation math, join multiplicity, zero-denominator and precision, privileges, response contract, performance, migration safety and test quality.
+
+- Critical / high: **none**.
+- Medium (fixed): an installation holding an item row but no source row would have been added to the numerator (rate 60 % instead of the old 10 % in the reproduction). Item rows are now restricted to installations that also have the matching source row; new scenario 900015 fails against the first draft and passes now.
+- Low (fixed): header claims about `LIMIT 500` ordering and "unchanged" columns corrected; dangling doc path fixed; the unused item-view baseline is now compared; comment accuracy.
+- Low (open, documented): neither version indexes `installation_item_stats` by source, so the source view scans that table (not a regression; the table is small today).
+- Nothing found in: aggregation math, join multiplicity, zero-drop coverage, NULL/zero handling, bigint/numeric precision, privilege escalation, response contract, migration safety.

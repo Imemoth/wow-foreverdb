@@ -17,7 +17,9 @@
 --                     installations for that exact source+loot_kind)
 -- The source totals are computed once per source key (no join fan-out per item), so
 -- adding items never multiplies the denominator. drop_count, quantity and
--- quest_drop_count are unchanged (they were already summed over the item rows).
+-- quest_drop_count are unchanged: they are still summed over the same item rows as
+-- before (an item row counts only for an installation that also has the matching
+-- source row, exactly like the old per-installation join).
 --
 -- SCOPE / SAFETY:
 --   * Replaces ONLY the bodies of three existing private functions with
@@ -30,8 +32,10 @@
 --   * The Companion client computes its rate and Wilson score from the returned
 --     observations and drop_count, so it is corrected without a client change.
 --   * Added a deterministic ORDER BY (source_type, source_id, source_level,
---     loot_kind, item_id) so the wrappers' LIMIT 500 truncates stably; the row
---     set is otherwise the same as before for any bucket that already had rows.
+--     loot_kind, item_id). The row set is the same as before; only when a result
+--     exceeds the wrappers' LIMIT 500 (an item with more than 500 sources) does the
+--     truncation differ: it was arbitrary and is now stable (lowest source ids
+--     first). The Companion re-sorts after the cut, as before.
 --
 -- ROLLBACK: database/rollback/0011_restore_previous_observed_rate_functions.sql
 -- (restores the exact previous definitions; reintroduces the F-3 inflation).
@@ -39,7 +43,7 @@
 -- Numbering: 0010 is the prepared, unapplied public-projection export under
 -- database/private-export/ and is intentionally unrelated to this migration.
 --
--- Apply to production ONLY after explicit owner approval (see docs/web/f3-rollout.md).
+-- Apply to production ONLY after explicit owner approval (see docs/f3-observed-rate-denominator.md).
 
 begin;
 
@@ -115,6 +119,14 @@ as $function$
                sum(ii.quantity) as qty,
                sum(ii.quest_drop_count) as quest_drops
         from public.installation_item_stats ii
+        -- Numerator semantics are unchanged: an item row counts only for an installation
+        -- that also recorded the matching source row (as the old per-installation join did).
+        join public.installation_source_stats own
+          on own.installation_id = ii.installation_id
+         and own.source_type = ii.source_type
+         and own.source_id = ii.source_id
+         and own.source_level = ii.source_level
+         and own.loot_kind = ii.loot_kind
         where ii.item_id = p_item_id
         group by ii.source_type, ii.source_id, ii.source_level, ii.loot_kind, ii.item_id
     ),
@@ -186,6 +198,12 @@ as $function$
                sum(ii.quantity) as qty,
                sum(ii.quest_drop_count) as quest_drops
         from public.installation_item_stats ii
+        join public.installation_source_stats own
+          on own.installation_id = ii.installation_id
+         and own.source_type = ii.source_type
+         and own.source_id = ii.source_id
+         and own.source_level = ii.source_level
+         and own.loot_kind = ii.loot_kind
         where ii.source_type = p_source_type
           and ii.source_id = p_source_id
           and ii.source_level = p_source_level
@@ -254,6 +272,12 @@ as $function$
                sum(ii.quantity) as qty,
                sum(ii.quest_drop_count) as quest_drops
         from public.installation_item_stats ii
+        join public.installation_source_stats own
+          on own.installation_id = ii.installation_id
+         and own.source_type = ii.source_type
+         and own.source_id = ii.source_id
+         and own.source_level = ii.source_level
+         and own.loot_kind = ii.loot_kind
         group by ii.source_type, ii.source_id, ii.source_level, ii.loot_kind, ii.item_id
     ),
     source_totals as (

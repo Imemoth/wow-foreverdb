@@ -40,7 +40,7 @@ $$;
 delete from public.installation_item_stats where installation_id like 'f3-%';
 delete from public.installation_source_stats where installation_id like 'f3-%';
 delete from public.installations where id like 'f3-%';
-delete from public.sources where source_id between 900001 and 900014;
+delete from public.sources where source_id between 900001 and 900015;
 delete from public.items where item_id between 910001 and 910005;
 delete from private.foreverdb_api_budgets where bucket like '%0000000000f3';
 
@@ -101,6 +101,9 @@ insert into _f3_src values
  ('f3-c','creature',900013,10,'mob',1000000000000);
 -- Orphan: item row without any source row for its kind (900014): both versions must drop it.
 insert into _f3_src values ('f3-a','creature',900014,10,'skinning',7);
+-- 900015: installation b has an item row but NO source row for that kind (never produced by ingest,
+-- possible only through manual repair). Old numerator semantics must hold: b's drops stay excluded.
+insert into _f3_src values ('f3-a','creature',900015,10,'mob',100);
 
 insert into _f3_item values
  ('f3-a','creature',900001,10,'mob',910001,10,10,0),
@@ -125,6 +128,8 @@ insert into _f3_item values
  ('f3-a','creature',900013,10,'mob',910001,1000000000000,1000000000000,0);
 -- Orphan row: kind 'mob' has NO source row for 900014 (only 'skinning' does).
 insert into _f3_item values ('f3-a','creature',900014,10,'mob',910001,5,5,0);
+insert into _f3_item values ('f3-a','creature',900015,10,'mob',910001,10,10,0),
+                            ('f3-b','creature',900015,10,'mob',910001,50,50,0);
 
 insert into public.sources (source_type, source_id, source_level, name)
 select distinct st, sid, lvl, 'F3 source ' || sid from (
@@ -141,7 +146,7 @@ lateral private.foreverdb_source_stats(k.st, k.sid, k.lvl) s;
 create temporary table _f3_old_item as
 select i.item_id as k_item, s.* from (values (910001),(910002),(910003),(910004),(910005)) i(item_id),
 lateral private.foreverdb_item_stats(i.item_id) s
-where s.source_id between 900001 and 900014;
+where s.source_id between 900001 and 900015;
 
 -- ---------------------------------------------------- 3. baseline defect proof
 do $baseline$
@@ -241,6 +246,11 @@ begin
     perform pg_temp.f3_assert(r.obs = 9000000000000 and r.drops = 1000000000000
         and abs(r.rate - 1.0/9) < 1e-12 and r.qty = 1000000000000, 'large counts keep precision');
 
+    -- Item row without the installation's own source row never enters the numerator (old semantics).
+    select * into r from pg_temp.f3_row('creature',900015,10,'mob',910001);
+    perform pg_temp.f3_assert(r.obs = 100 and r.drops = 10 and r.qty = 10 and r.rate = 0.1,
+        'numerator must exclude an installation that has an item row but no source row (rate must not exceed the old 10%)');
+
     raise notice 'PASS: scenarios A-G (single, zero-drop contributor, three installations, multi-item, levels, kinds, empty/zero, large)';
 end $scenarios$;
 
@@ -252,19 +262,20 @@ begin
     from private.foreverdb_item_stats(910001) i
     join lateral private.foreverdb_source_stats(i.source_type, i.source_id, i.source_level) s
       on s.loot_kind = i.loot_kind and s.item_id = i.item_id
-    where i.source_id between 900001 and 900014
+    where i.source_id between 900001 and 900015
       and (i.observations, i.drop_count, i.quantity, i.quest_drop_count, i.observed_drop_rate)
           is distinct from (s.observations, s.drop_count, s.quantity, s.quest_drop_count, s.observed_drop_rate);
     perform pg_temp.f3_assert(v_bad = 0, 'item view and source view disagree on ' || v_bad || ' buckets');
     perform pg_temp.f3_assert(
         (select count(*) from private.foreverdb_all_stats() a
-          where a.source_id between 900001 and 900014)
+          where a.source_id between 900001 and 900015)
         = (select count(*) from _f3_old_src), 'all_stats row count differs from baseline');
     raise notice 'PASS: item view, source view and all_stats are internally consistent';
 end $consistency$;
 
 -- J. Non-F-3 behaviour is unchanged: same row set, same non-denominator columns,
--- single-installation buckets identical in EVERY column, and every corrected
+-- single-installation buckets identical in observations and rate (the other columns are
+-- covered by the non-denominator check above), and every corrected
 -- denominator equals the fixture ground truth (sum of all installations).
 create temporary table _f3_new_src as
 select s.* from (select distinct st, sid, lvl from _f3_src) k,
@@ -288,6 +299,30 @@ begin
     where (o.source_name, o.item_name, o.drop_count, o.quantity, o.quest_drop_count)
           is distinct from (n.source_name, n.item_name, n.drop_count, n.quantity, n.quest_drop_count);
     perform pg_temp.f3_assert(v_bad = 0, 'non-denominator columns changed: ' || v_bad);
+
+    -- Item view (all fixture items) vs the captured baseline: same keys, same non-denominator columns.
+    select count(*) into v_bad from (
+        (select source_type, source_id, source_level, loot_kind, item_id from _f3_old_item
+         except select n.source_type, n.source_id, n.source_level, n.loot_kind, n.item_id
+                from (values (910001),(910002),(910003),(910004),(910005)) i(item_id),
+                lateral private.foreverdb_item_stats(i.item_id) n
+                where n.source_id between 900001 and 900015)
+        union all
+        (select n.source_type, n.source_id, n.source_level, n.loot_kind, n.item_id
+         from (values (910001),(910002),(910003),(910004),(910005)) i(item_id),
+         lateral private.foreverdb_item_stats(i.item_id) n
+         where n.source_id between 900001 and 900015
+         except select source_type, source_id, source_level, loot_kind, item_id from _f3_old_item)) d;
+    perform pg_temp.f3_assert(v_bad = 0, 'item view row set changed: ' || v_bad);
+    select count(*) into v_bad
+    from _f3_old_item o
+    join lateral (select n.* from (values (910001),(910002),(910003),(910004),(910005)) i(item_id),
+                  lateral private.foreverdb_item_stats(i.item_id) n
+                  where n.item_id = o.item_id and n.source_id = o.source_id and n.source_level = o.source_level
+                    and n.source_type = o.source_type and n.loot_kind = o.loot_kind) n on true
+    where (o.drop_count, o.quantity, o.quest_drop_count, o.source_name, o.item_name)
+          is distinct from (n.drop_count, n.quantity, n.quest_drop_count, n.source_name, n.item_name);
+    perform pg_temp.f3_assert(v_bad = 0, 'item view non-denominator columns changed: ' || v_bad);
 
     -- Single-installation (source, level, kind) buckets: identical in every column.
     select count(*) into v_bad
@@ -447,13 +482,13 @@ delete from public.installation_item_stats where installation_id like 'f3-%';
 delete from public.installation_source_stats where installation_id like 'f3-%';
 delete from public.installations where id like 'f3-%';
 delete from private.foreverdb_api_budgets where bucket like '%0000000000f3';
-delete from public.sources where source_id between 900001 and 900014;
+delete from public.sources where source_id between 900001 and 900015;
 delete from public.items where item_id between 910001 and 910005;
 do $cleanup$
 begin
     perform pg_temp.f3_assert(
         (select count(*) from public.installation_item_stats where installation_id like 'f3-%') = 0
-        and (select count(*) from public.sources where source_id between 900001 and 900014) = 0,
+        and (select count(*) from public.sources where source_id between 900001 and 900015) = 0,
         'fixtures were not fully removed');
     raise notice 'PASS: F-3 suite complete, fixtures removed';
 end $cleanup$;
