@@ -35,7 +35,7 @@ jobs:
           -o artifacts/ForeverDB-Companion-win-x64
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ForeverDB-Companion-win-x64
           path: artifacts/ForeverDB-Companion-win-x64

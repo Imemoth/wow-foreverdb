@@ -46,7 +46,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: E2E (journeys, security, WCAG 2.2 AA automated, SEO, responsive) on fixture data
         run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }
 
