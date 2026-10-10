@@ -3,8 +3,8 @@
 Mark an item ✅ only with linked evidence (CI run URL, screenshot, command output). **Production deploy stays blocked until every item in sections A–C is ✅.**
 
 ## A. Repository and CI
-- [ ] PR #22 open. `ForeverDB Web & publication pipeline` workflow green **on the hardening commit** (web, publisher-and-pipeline incl. new parity step, CodeQL). Earlier head `fde9ae6` was reported green by the owner; the new commit is unverified until pushed. Link the run URL
-- [ ] Existing workflows still green (API security, collector smoke, Companion health), proving the Companion and addon are unaffected
+- [x] PR #22 open. `ForeverDB Web & publication pipeline` workflow green on the hardening head `3e463f3` (web, publisher-and-pipeline incl. parity step, codeql, CodeQL code-scanning): [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)
+- [x] Existing workflows still green on `3e463f3`: API security [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423), collector smoke [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480). Companion health is not PR-triggered and was not run
 - [ ] Code review by the owner, including `publisher/src/contract.ts` (allowlist) and both SQL files
 - [ ] Editorial review of `web/content/*`. Flip `sample: false` only on reviewed articles
 
@@ -38,6 +38,6 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 ## F. Status ledger (2026-10-10)
 | Gate | State |
 | --- | --- |
-| P1 challenge limiter + body cap, P2 zone semantics | Implemented · Locally tested · **GitHub CI: not verified for this commit** |
+| P1 challenge limiter + body cap, P2 zone semantics | Implemented · Locally tested · **GitHub CI verified on `3e463f3`** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)) |
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
 | Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets`; F-3 denominator fix | Pending production approval / out of scope of PR #22 |

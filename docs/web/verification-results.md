@@ -4,11 +4,19 @@ Executed in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15 ephemeral 
 
 **Evidence tiers used below:** *Implemented* (code exists) · *Locally tested* (run in the authoring workspace) · *GitHub CI verified* · *Runtime verified* (real Upstash/Turnstile/staging) · *Pending infrastructure* · *Pending production approval*.
 
-**GitHub CI status.** The owner reported six successful checks (web, publisher/pipeline, API security, collector smoke, CodeQL, …) for the earlier head `fde9ae6`. That was not re-verified here. The 2026-10-10 hardening commit (P1/P2) had **not been pushed** from the authoring session (no GitHub credential was attached), so **CI for it is NOT YET VERIFIED**. Check the PR's Actions tab after pushing; do not treat the local results below as CI evidence.
+**GitHub CI status (GitHub CI verified, 2026-10-10).** Head `3e463f3` (hardening commit `d16f7d5` + a one-line CodeQL test fix) is green on PR #22:
+- `ForeverDB Web & publication pipeline` [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488): `web` success, `publisher-and-pipeline` success (incl. the fixture<->PostgreSQL parity step), `codeql` success; code-scanning check `CodeQL` success.
+- `Collector smoke tests` [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480): success (this is where the Lua smoke tests run).
+- `ForeverDB API security regressions` [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423): `pg-roles-quotas` success.
+- On the intermediate head `d16f7d5` the code-scanning check failed with 1 high alert (`js/incomplete-url-substring-sanitization`, `web/tests/unit/challenge.test.ts:45`: `startsWith()` on a mocked Upstash URL, a false positive in a test mock). Fixed in `3e463f3` by comparing the parsed origin; the alert closed and the review thread resolved.
+- Companion health is not a PR-triggered workflow and did not run. `Supabase Preview` was skipped.
+- Earlier head `fde9ae6`: all checks green ([run 38044909365](https://github.com/Imemoth/wow-foreverdb/actions/runs/38044909365)).
+
+CI covers only the in-repo checks above (fixture data, memory rate-limit store, mocked Upstash/Turnstile). It is **not** runtime evidence.
 
 ## 2026-10-10 hardening (PR #22 follow-up): P1 challenge endpoint, P2 zone statistics
 
-All results **locally tested**, not CI-verified.
+Results below were **locally tested**; the same suites subsequently passed in GitHub CI (see above).
 
 | Area | Check | Result |
 | --- | --- | --- |
@@ -26,8 +34,8 @@ All results **locally tested**, not CI-verified.
 | Dependencies | `npm audit --omit=dev --audit-level=high` web and publisher | **PASS** 0 vulnerabilities |
 | Repo-wide | `git diff --check` | **PASS** |
 | Repo-wide | API security regression (`api_security_roles_and_quotas.sql` + anon/private check) on ephemeral PG | **PASS** locally (not touched by this change) |
-| Repo-wide | Collector smoke (Lua) | **NOT RUN** locally: `lua5.4` unavailable in the workspace. No addon/collector file changed |
-| Repo-wide | CodeQL | **NOT RUN** locally (GitHub-only) |
+| Repo-wide | Collector smoke (Lua) | **NOT RUN** locally (`lua5.4` unavailable). **CI: success** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480)). No addon/collector file changed |
+| Repo-wide | CodeQL | **NOT RUN** locally (GitHub-only). **CI: success** on `3e463f3` ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)) |
 | Independent review | Separate reviewer agent over the full diff: 0 critical/high; 3 medium (proxy body buffer, IPv6 rotation, untested matcher) fixed in this change; low items fixed or documented (zone/zones copy "related items", parity skip fails in CI, docs) | done |
 
 Known low residuals from the review: collation differences between JS `localeCompare` and PostgreSQL ordering for exotic names (parity data is ASCII); preview deployments without `RATE_LIMIT_SALT` use a public dev salt; shared NAT users share the 6/10-min challenge budget.
@@ -52,7 +60,6 @@ Known low residuals from the review: collation differences between JS `localeCom
 | Fail-closed config | `FOREVERDB_DEPLOYMENT=production` + fixture ⇒ HTTP 500, no config detail in body, reason only in server log | **PASS** | manual curl |
 
 ## Not executed (honest gaps)
-- GitHub Actions CI for the 2026-10-10 hardening commit, including CodeQL and collector smoke (not pushed from the authoring session).
 - Any provisioning (public DB, Upstash, Turnstile, Vercel, WAF): nothing exists yet.
 - Load and abuse testing against a staging deployment. The in-app limiter was only exercised in-process (memory store).
 - Real Upstash behaviour (only a mocked REST pipeline was tested), incl. the new challenge limiter and its fail-closed 503.
