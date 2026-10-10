@@ -26,23 +26,23 @@ Status of this document: **PREVIEW HARDENED (code) / production still BLOCKED.**
 - A **hosted** deployment (`VERCEL=1`, or `VERCEL_ENV` of `production`/`preview`) **never falls back to `local`**: a missing or `local` `FOREVERDB_DEPLOYMENT` is rejected, and `FOREVERDB_DATA_SOURCE` must be explicit. `vercel dev` (`VERCEL_ENV=development`) counts as a developer machine.
 - **Vercel's "production" target is not ForeverDB production.** The temporary synthetic demonstration is served through the production alias and must say `FOREVERDB_DEPLOYMENT=preview`. The reverse is rejected: `FOREVERDB_DEPLOYMENT=production` is only valid when `VERCEL_ENV=production`.
 - `production` refuses the fixture adapter, the memory limiter, a missing trusted-IP header or salt, an `http` URL, and a `SITE_URL` that differs from `VERCEL_PROJECT_PRODUCTION_URL`.
-- Any `postgres` data source must be the `foreverdb_web_reader` role and must **not** reference the private project (`klxhikdlfwgxurdyexdi`); a local database address is rejected on hosted deployments.
+- Any `postgres` data source must be the `foreverdb_web_reader` role and must **not** reference the private project (`klxhikdlfwgxurdyexdi`; matched case-insensitively and after percent-decoding); a local address (any spelling: `localhost.`, `0x7f.1`, `[::ffff:7f00:1]`, `[::]`, private/link-local ranges) is rejected on hosted deployments.
 - On any hosted/designated deployment, variables named `SUPABASE*`, `*SERVICE_ROLE*`, `DATABASE_URL`, `POSTGRES_URL*` are rejected, and application variables whose value references the private project are rejected. (Account System V1 will relax this deliberately, behind its own review.)
 - `SITE_URL` on a hosted deployment must be https, not credentialed, not localhost/private; preview derives its own origin from `VERCEL_BRANCH_URL`/`VERCEL_URL` (or the production alias for the temporary demo).
-- `TRUSTED_IP_HEADER=cf-connecting-ip` is rejected on Vercel (not set by the platform, so client-spoofable).
+- `TRUSTED_IP_HEADER` unset defaults to `x-real-ip` on Vercel (the platform overwrites it); an explicit `none` is rejected on hosted deployments (it would put every visitor in one rate-limit bucket); `cf-connecting-ip` is rejected on Vercel (not set by the platform, so client-spoofable).
 - Error messages name **variables only**, never values. The reason a configuration is refused is logged server-side; the response is a generic HTTP 500 and `robots.txt` also refuses, so a refused deployment can never be indexed.
-- Every response carries `X-ForeverDB-Deployment: <designation>`; non-production responses also carry `X-Robots-Tag: noindex, nofollow` (HTML, API and error responses). The HTML carries `<meta name="foreverdb-deployment">`, so a preview cannot be mistaken for a release at the HTTP level. The session cookie is `__Host-` + `Secure` whenever the real origin is https.
+- Every response **that passes through the proxy** (all pages, all `/api/*` including 4xx/429/503) carries `X-ForeverDB-Deployment: <designation>`; non-production ones also carry `X-Robots-Tag: noindex, nofollow`. The proxy matcher deliberately **excludes** `_next/static`, `_next/image`, `fonts/`, `favicon.ico`, `icon.svg`, `robots.txt` and `sitemap.xml` (cookie-free, cacheable assets): those carry only the static security headers from `next.config.ts`, and `robots.txt`/`sitemap.xml` express non-indexability in their *content* (disallow-all, empty). A refused configuration answers a bare HTTP 500 with no headers by design. The HTML carries `<meta name="foreverdb-deployment">`, so a preview cannot be mistaken for a release at the HTTP level. The session cookie is `__Host-` + `Secure` whenever the real origin is https.
 
 ## 3. Environment-variable matrix
 
-Only the first two are needed for the temporary demonstration; both are **non-secret**.
+Only the first two are required for the temporary demonstration; both are **non-secret**.
 
 | Variable | Local | Preview (branch previews) | Temporary demo (Vercel *Production* target) | Future production |
 | --- | --- | --- | --- | --- |
 | `FOREVERDB_DEPLOYMENT` | *(unset → local)* | **`preview`** | **`preview`** | `production` |
 | `FOREVERDB_DATA_SOURCE` | *(unset → fixture)* | **`fixture`** | **`fixture`** | `postgres` |
 | `SITE_URL` | *(default localhost)* | leave unset (derived) | leave unset (derived from the production alias) or `https://wow-foreverdb.vercel.app` | **explicit** `https://<production domain>` |
-| `TRUSTED_IP_HEADER` | `none` | `x-real-ip` (recommended) | `x-real-ip` (recommended) | `x-real-ip` (**required**) |
+| `TRUSTED_IP_HEADER` | `none` | unset (defaults to `x-real-ip` on Vercel) | unset (defaults to `x-real-ip` on Vercel) | `x-real-ip` (**required**, explicit) |
 | `RATE_LIMIT_SALT` | optional | recommended (32+ random bytes) | recommended | **required** |
 | `RATE_LIMIT_BACKEND` | `memory` | `memory` | `memory` | `upstash` |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | unset | unset | unset | **unset until Upstash is provisioned and reviewed** |
@@ -59,7 +59,7 @@ Do these **before merging** the hardening PR (new code refuses to serve a hosted
 1. Vercel → project `wow-foreverdb` → Settings → Environment Variables.
 2. Add `FOREVERDB_DEPLOYMENT` = `preview` for **Production** and **Preview**.
 3. Add `FOREVERDB_DATA_SOURCE` = `fixture` for **Production** and **Preview**.
-4. Recommended: add `TRUSTED_IP_HEADER` = `x-real-ip` for Production and Preview.
+4. `TRUSTED_IP_HEADER` needs no action: on Vercel it defaults to `x-real-ip`. Do **not** set it to `none`.
 5. CLI equivalent: `vercel env add FOREVERDB_DEPLOYMENT production` (value `preview`), then `preview`; same for `FOREVERDB_DATA_SOURCE` (value `fixture`). Variables apply to **new** deployments only: redeploy afterwards.
 6. Verify (step 8 below).
 
@@ -71,16 +71,16 @@ These variables are backward compatible with the code currently on `main` (a `pr
 | --- | --- | --- |
 | GitHub CI (web, publisher) | `22` (hard-coded) | `.node-version` = `22` (single source) |
 | `package.json` engines (web, publisher) | `>=22` (Vercel warns it "will automatically upgrade when a new major Node.js Version is released") | `22.x` |
-| Vercel runtime | **24.x** (dashboard setting, selected because `>=22` floats) | `22.x` via `engines` (Vercel gives `engines.node` precedence over the dashboard setting) |
+| Vercel runtime | **24.x** (dashboard setting; the live demo currently runs Node 24) | `22.x` via `engines` (Vercel gives `engines.node` precedence over the dashboard setting; Vercel does **not** read `.node-version`) |
 
-Why 22: every verification run on this repository (unit, Playwright, publication pipeline, parity, CodeQL) ran on Node 22; `@types/node` is `22.x`; Next 16.4.0, React 19.3.0, Playwright 1.63.0 and the publisher support it; **no dependency was changed** to get here. Node 24 is a separate migration (a CI matrix PR and a dependency review) to be done before Node 22 leaves maintenance (April 2027). CI now fails if the running major, `.node-version` and `engines` disagree. Optional owner step: also set Settings → General → Node.js Version to `22.x` so the dashboard agrees. After the merge, confirm in the production build log that the Vercel `engines` warning is gone.
+Why 22: every verification run on this repository (unit, Playwright, publication pipeline, parity, CodeQL) ran on Node 22; `@types/node` is `22.x`; Next 16.4.0, React 19.3.0, Playwright 1.63.0 and the publisher support it; **no dependency was changed** to get here. Node 24 is a separate migration (a CI matrix PR and a dependency review) to be done before Node 22 leaves maintenance (April 2027). **Merging this change moves the live demo from Node 24 to Node 22** (a deliberate downgrade to the one version all evidence covers; Node 24 was never verified for this app). `.node-version` is the single source for **CI and developers**; **Vercel follows `engines`**, so the two are kept equal by a CI step that fails if the running major, `.node-version` and the `engines` of **both** `web` and `publisher` disagree. Optional owner step: also set Settings → General → Node.js Version to `22.x` so the dashboard agrees. After the merge, confirm in the production build log that the Vercel `engines` warning is gone.
 
 ## 5. Deployment protection policy
 
 | Surface | Policy | Mechanism | Status |
 | --- | --- | --- | --- |
 | Branch/PR previews | **Not publicly accessible** | Vercel Authentication (SSO), applies to all previews | Configured (`ssoProtection: all_except_custom_domains`) |
-| Temporary synthetic demo (`wow-foreverdb.vercel.app`, no custom domain) | Protected, labelled, non-indexable | SSO (the alias is not a *custom* domain); banner; `noindex` header, meta, `robots.txt` | Configured; **unauthenticated external access test PENDING** (see below) |
+| Temporary synthetic demo (`wow-foreverdb.vercel.app`, no custom domain) | Intended: protected. **Not verified: it may be publicly reachable.** Either way it is labelled (banner) and non-indexable (header, meta, `robots.txt`, empty sitemap) and holds only synthetic data | `ssoProtection: all_except_custom_domains` is configured, but on Hobby the production `.vercel.app` alias may fall outside that scope; only the external test below can tell | **PENDING: unauthenticated external access test** (see below). If it turns out to be public, the content is synthetic and clearly labelled; decide whether to keep it public as a demo or restrict it |
 | Future production | Public, hardened | App limits (Upstash), WAF rules, Attack Challenge Mode, Turnstile (optional) | Not provisioned |
 
 **Important caveat of `all_except_custom_domains`:** once a **custom domain** is attached to the production environment it becomes **publicly reachable without Vercel login**. Do not attach a custom domain for the synthetic demo. Attach one only as part of the production go-live, after the checklist passes.

@@ -31,6 +31,9 @@ const FORBIDDEN_DATABASE_MARKERS = ["klxhikdlfwgxurdyexdi"];
 /** Variable names the public website must never be given (private backend credentials). */
 const FORBIDDEN_VARIABLE_NAME = /(^|_)SUPABASE(_|$)|SERVICE_ROLE|^DATABASE_URL$|^POSTGRES_(URL|PRISMA_URL|URL_NON_POOLING|URL_NO_SSL)$/i;
 
+/** Platform-provided metadata (commit messages, branch names, ...) may legitimately mention anything. */
+const SYSTEM_METADATA_NAME = /^(NEXT_PUBLIC_)?VERCEL_/i;
+
 /** Variables whose values are scanned for the private project reference. System metadata is excluded. */
 const SCANNED_VARIABLE_NAME = /^(FOREVERDB_|PUBLIC_|SITE_URL$|UPSTASH_|RATE_LIMIT|TURNSTILE_|CHALLENGE_|NEXT_PUBLIC_|TRUSTED_)|DATABASE|POSTGRES|SUPABASE|DB_URL/i;
 
@@ -46,7 +49,7 @@ const Base = z.object({
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(20).optional(),
   RATE_LIMIT_SALT: z.string().min(32).optional(),
-  TRUSTED_IP_HEADER: z.enum(["x-real-ip", "x-forwarded-for", "cf-connecting-ip", "none"]).default("none"),
+  TRUSTED_IP_HEADER: z.enum(["x-real-ip", "x-forwarded-for", "cf-connecting-ip", "none"]).optional(),
   TURNSTILE_SECRET_KEY: z.string().min(10).optional(),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(10).optional(),
   CHALLENGE_COOKIE_SECRET: z.string().min(32).optional(),
@@ -80,17 +83,45 @@ export function detectHosting(raw: RawEnv): { onVercel: boolean; hosted: boolean
   return { onVercel, hosted: onVercel && vercelEnv !== "development", vercelEnv };
 }
 
+/**
+ * Host of any URL, normalised by the WHATWG special-scheme parser (so postgresql:// hosts such as
+ * `0x7f.1` or `[::ffff:7f00:1]` are canonicalised exactly like https ones). Lowercase, no brackets,
+ * no trailing dot.
+ */
 function hostOf(url: string): string | null {
+  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^/?#@]*@)?([^/?#]*)/i.exec(url.trim());
+  if (!m) return null;
   try {
-    return new URL(url).hostname.toLowerCase();
+    return normaliseHost(new URL(`https://${m[1]}`).hostname);
   } catch {
     return null;
   }
 }
 
-const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[?::1\]?|.*\.localhost|.*\.local|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/;
+function normaliseHost(h: string): string {
+  return h.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+}
+
+const LOCAL_HOST = /^(localhost|.*\.localhost|.*\.local|.*\.internal|127\.\d+\.\d+\.\d+|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+)$/;
 function isLocalHost(host: string | null): boolean {
-  return host === null || LOCAL_HOST.test(host);
+  if (host === null) return true;
+  const h = normaliseHost(host);
+  if (h === "" || LOCAL_HOST.test(h)) return true;
+  // IPv6 literals: unspecified, loopback, IPv4-mapped (any), unique-local fc00::/7, link-local fe80::/10.
+  if (h.includes(":")) return h === "::" || h === "::1" || h.startsWith("::ffff:") || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h);
+  return false;
+}
+
+/** Case-insensitive, percent-decoding check for the private project reference. */
+function referencesPrivateProject(value: string): boolean {
+  const lower = value.toLowerCase();
+  let decoded = lower;
+  try {
+    decoded = decodeURIComponent(value).toLowerCase();
+  } catch {
+    /* keep the raw form */
+  }
+  return FORBIDDEN_DATABASE_MARKERS.some((m) => lower.includes(m) || decoded.includes(m));
 }
 
 /**
@@ -103,8 +134,18 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
 
   const parsed = Base.safeParse(raw);
   if (!parsed.success) {
-    // Zod messages for constraints (min length, enum) do not include values; keep paths only.
-    return { ok: false, issues: parsed.error.issues.map((i) => `${i.path.join(".") || "environment"}: ${i.message}`) };
+    // Never forward Zod's own text for enums: it echoes the received value ("received ' preview'"),
+    // and a mis-pasted secret in an enum variable would be thrown and logged.
+    return {
+      ok: false,
+      issues: parsed.error.issues.map((i) => {
+        const where = i.path.join(".") || "environment";
+        if (i.code === "invalid_enum_value") return `${where}: must be one of ${i.options.join(" | ")}`;
+        if (i.code === "too_small") return `${where}: is too short`;
+        if (i.code === "invalid_string") return `${where}: is not a valid value`;
+        return `${where}: is invalid`;
+      }),
+    };
   }
   const b = parsed.data;
   const host = detectHosting(raw);
@@ -137,7 +178,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
   if (dataSource === "postgres") {
     const url = b.PUBLIC_READ_DATABASE_URL;
     if (!url) fail("PUBLIC_READ_DATABASE_URL is required for the postgres data source");
-    else if (FORBIDDEN_DATABASE_MARKERS.some((m) => url.includes(m))) {
+    else if (referencesPrivateProject(url)) {
       fail("PUBLIC_READ_DATABASE_URL points at the PRIVATE production database; refusing to start");
     } else {
       let user = "";
@@ -160,7 +201,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
     if (!(host.hosted || deployment !== "local")) break;
     if (value === undefined || value === "") continue;
     if (FORBIDDEN_VARIABLE_NAME.test(name)) fail(`${name}: private backend credentials must not be configured for the public website`);
-    else if (SCANNED_VARIABLE_NAME.test(name) && FORBIDDEN_DATABASE_MARKERS.some((m) => value.includes(m))) {
+    else if (SCANNED_VARIABLE_NAME.test(name) && !SYSTEM_METADATA_NAME.test(name) && referencesPrivateProject(value)) {
       fail(`${name}: references the PRIVATE production project; refusing to start`);
     }
   }
@@ -170,7 +211,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
   if (!siteUrlRaw) {
     if (host.hosted && deployment === "preview") {
       // Preview derives its own origin from the platform (production-target demo uses the production alias).
-      const derived = (host.vercelEnv === "production" ? raw.VERCEL_PROJECT_PRODUCTION_URL : undefined) ?? raw.VERCEL_BRANCH_URL ?? raw.VERCEL_URL;
+      const derived = (host.vercelEnv === "production" ? raw.VERCEL_PROJECT_PRODUCTION_URL : undefined) || raw.VERCEL_BRANCH_URL || raw.VERCEL_URL;
       if (derived) siteUrlRaw = `https://${derived}`;
       else fail("SITE_URL is required (no Vercel URL metadata is available to derive it)");
     } else if (host.hosted) {
@@ -208,15 +249,19 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
   }
 
   // 6. Abuse controls --------------------------------------------------------
+  // Unset on Vercel: x-real-ip is overwritten by the platform, so it is the safe default. An explicit
+  // "none" would hash every visitor into ONE bucket (one bot could rate-limit everyone), so hosted rejects it.
+  const trustedIp = b.TRUSTED_IP_HEADER ?? (host.onVercel && host.hosted ? "x-real-ip" : "none");
+  if (host.hosted && trustedIp === "none") fail("TRUSTED_IP_HEADER=none on a hosted deployment would put every visitor in one rate-limit bucket");
   if (deployment === "production") {
     if (b.RATE_LIMIT_BACKEND !== "upstash") fail("production requires the distributed (upstash) rate limiter");
-    if (b.TRUSTED_IP_HEADER === "none") fail("production requires TRUSTED_IP_HEADER");
+    if (trustedIp === "none") fail("production requires TRUSTED_IP_HEADER");
     if (!b.RATE_LIMIT_SALT) fail("production requires RATE_LIMIT_SALT");
   }
   if (b.RATE_LIMIT_BACKEND === "upstash" && (!b.UPSTASH_REDIS_REST_URL || !b.UPSTASH_REDIS_REST_TOKEN)) {
     fail("upstash rate limiter requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
   }
-  if (host.onVercel && b.TRUSTED_IP_HEADER === "cf-connecting-ip") {
+  if (host.onVercel && trustedIp === "cf-connecting-ip") {
     fail("TRUSTED_IP_HEADER=cf-connecting-ip is only trustworthy behind Cloudflare; on Vercel use x-real-ip");
   }
   if (b.TURNSTILE_SECRET_KEY && (!b.NEXT_PUBLIC_TURNSTILE_SITE_KEY || !b.CHALLENGE_COOKIE_SECRET)) {
@@ -228,6 +273,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
     ok: true,
     env: {
       ...b,
+      TRUSTED_IP_HEADER: trustedIp,
       FOREVERDB_DEPLOYMENT: deployment,
       FOREVERDB_DATA_SOURCE: dataSource,
       SITE_URL: siteUrl,

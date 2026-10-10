@@ -14,6 +14,52 @@ Executed in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15 ephemeral 
 
 CI covers only the in-repo checks above (fixture data, memory rate-limit store, mocked Upstash/Turnstile). It is **not** runtime evidence.
 
+## 2026-10-10 Vercel preview hardening (PR `web/vercel-preview-hardening`)
+
+Target outcome: **PREVIEW HARDENED / PRODUCTION STILL BLOCKED.** Evidence tiers as above. GitHub CI results for the final head are added below once the checks have finished; nothing here is a production or deployment-protection verification unless it says so.
+
+### Local results (Node 22.22.0, Next 16.4.0, React 19.3.0, Playwright 1.63.0, PostgreSQL 16.15 ephemeral)
+
+| Area | Result |
+| --- | --- |
+| ESLint, TypeScript (`web`, `publisher`) | **PASS** (0 errors, 0 warnings) |
+| Web unit tests | **PASS 150/150** (was 115): 41 are the env/matrix suites (`env.test.ts` 6 + `env-matrix.test.ts` 35 incl. review-hardening cases) |
+| Environment-boundary matrix | **PASS 41/41**: local / hosted preview / production-target demo / production, hosted without designation, production + fixture, missing Upstash/trusted IP/salt, private-project reference (case-insensitive, percent-encoded), wrong role, local-address spellings, `SUPABASE*` variables, secrets never echoed, noindex headers, `robots.txt`, sitemap |
+| Mutation checks (rule deleted ⇒ test fails) | **PASS** for 4 unit rules (empty-metadata fall-through, case-insensitive marker, system-metadata exclusion, trusted-IP default) and 3 HTTP refusal rules (production + fixture, missing designation, forbidden variable names): exactly the matching case fails |
+| Production build with canary secrets, bundle-secret scan | **PASS** (37 files) |
+| Production dependency audit (`web`, `publisher`) | **PASS** 0 vulnerabilities |
+| Web E2E (Playwright), all projects in one run | **PASS 62/62** (was 46): journeys 12 · security 6 · **preview-safety 16** · a11y/SEO (axe WCAG 2.2 AA) 16 · responsive 12 |
+| Preview-safety (HTTP level) | **PASS 16/16**: synthetic banner, `X-Robots-Tag`/meta/`robots.txt`/empty sitemap, canonical on the site origin (never localhost), CSP/HSTS/nosniff/frame/COOP/Permissions-Policy, `Secure` + `__Host-` + HttpOnly + SameSite cookie, API cache and no cookie, generic errors, no secret/connection string in HTML, 429 with markers, positive control, 4 fail-closed refusals each logging exactly one rule |
+| Publisher unit tests | **PASS 29/29** |
+| Publication pipeline integration (ephemeral PostgreSQL) | **PASS** (all pipeline checks) |
+| Website vs published read model (Postgres adapter E2E) | **PASS 18/18** |
+| Fixture ↔ PostgreSQL parity | **PASS 37/37** |
+| `scripts/verify-deployment.mjs` | `--expect preview` against a local preview server **22/22**; `--expect protected` **28/28** on a 401-everywhere stand-in and **0/28 (fails, as it must)** on a stand-in that leaks |
+| Node/engines consistency (the CI step's logic) | **PASS** (22 / 22.x / 22.x) |
+| Workflow YAML and ruleset JSON | parse OK; job names match the ruleset contexts |
+| `git diff --check` | **PASS** |
+
+Playwright note: this sandbox's pre-installed Chromium is older than Playwright 1.63 expects, so the browser tests were run with `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium` (the config's existing override). CI installs the matching browser.
+
+### Independent review
+
+A separate reviewer agent (files and dimensions only) found **no critical or high** issues. Medium: the three "refuse to serve" HTTP tests could pass for the wrong reason (several violations each, no positive control) and the unauthenticated-reachability claim was unverified. Low: Zod enum errors echoed the received value; the private-project check was case-sensitive and not percent-decoded; `localhost.`/`0x7f.1`/IPv4-mapped IPv6 passed the local-address check for non-special URL schemes; empty-string Vercel metadata did not fall through; one rate-limit bucket if the trusted-IP header were `none`; over-stated header-coverage, Node and protection claims in the docs. **All were fixed or corrected** (tests reworked to one violation each plus a positive control and a log-reason assertion, then mutation-checked; normalisation and value-free messages in `env.ts`; documentation corrected). Left as documented limits: the proxy matcher excludes static assets, `robots.txt` and `sitemap.xml`; a refused configuration answers a bare 500; the derived `SITE_URL` may differ from the URL a visitor used (affects only the unconfigured challenge POST).
+
+### Live observations (read-only, 2026-10-10 ~19:07 UTC, before this change)
+
+Authenticated fetch through the Vercel connector of the live demo: HTTP 200, nonce CSP with `strict-dynamic`, HSTS, `nosniff`, `X-Frame-Options: DENY`, `Cache-Control: private, no-cache, no-store`, `X-Robots-Tag: noindex, nofollow`, synthetic banner; **defects:** canonical `http://localhost:3000` and an `fdb_sid` cookie without `Secure` (the hosted deployment silently ran as `local`). These are what the explicit designation and the origin-keyed cookie fix. The Vercel environment-variable listing and creation both returned HTTP 403, so environment variables could not be read or set from this work.
+
+### NOT RUN / PENDING (not claimed as passed)
+
+| Item | Why | What proves it |
+| --- | --- | --- |
+| Unauthenticated external access to the production alias, a branch preview, `/api/v1/meta` and the search API | The connector sandbox cannot resolve or tunnel to `*.vercel.app` (DNS failure, HTTP 403 from the egress policy); the connector's own fetch uses a protection bypass, so it proves nothing about protection | `node web/scripts/verify-deployment.mjs <url> --expect protected` from an ordinary machine |
+| Vercel environment variables (read and set) | HTTP 403, scoped and unscoped | Owner steps in `vercel-environments.md` §3 (**required before merging**) |
+| Required status checks actually blocking a merge | No ruleset/branch-protection API available; a passing workflow is not enforcement | Import `.github/rulesets/main-release-gates.json`, show a failing PR is unmergeable |
+| Vercel Production Branch / `release` branch, Node dashboard setting | Production-impacting or dashboard-only; prepared, awaiting owner approval | `vercel-environments.md` §4, §6 |
+| Behaviour on Node 24 | Deliberately not changed; Node 22 pinned | A separate migration PR |
+| Real Upstash, real Turnstile, WAF rules, load test | Not provisioned (unchanged) | Go-live checklist C |
+
 ## 2026-10-10 hardening (PR #22 follow-up): P1 challenge endpoint, P2 zone statistics
 
 Results below were **locally tested**; the same suites subsequently passed in GitHub CI (see above).

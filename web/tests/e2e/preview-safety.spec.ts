@@ -148,17 +148,25 @@ test.describe("security headers, cookies and caching (HTTP level)", () => {
 });
 
 /* ---- Unsafe configurations must refuse to serve (fail closed) ---------------------------------- */
+/*
+ * Each case differs from a VALID configuration by exactly ONE violated rule, the server's own log must
+ * name exactly that rule, and a positive control proves the valid configuration serves. Removing a rule
+ * from env.ts therefore makes its case fail (the server would start serving).
+ */
 
 const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_)/;
 
-async function withServer(port: number, env: Record<string, string>, run: (base: string) => Promise<void>) {
+async function withServer(port: number, env: Record<string, string>, run: (base: string, log: () => string) => Promise<void>) {
   const clean: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(process.env)) if (!SENSITIVE_PREFIXES.test(k)) clean[k] = v;
+  let output = "";
   const child: ChildProcess = spawn("npx", ["next", "start", "-p", String(port)], {
     env: { ...clean, ...env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     detached: true, // own process group, so the whole tree (npx -> next-server) can be stopped
   });
+  child.stdout?.on("data", (d) => (output += String(d)));
+  child.stderr?.on("data", (d) => (output += String(d)));
   try {
     const base = `http://127.0.0.1:${port}`;
     for (let i = 0; i < 80; i++) {
@@ -169,7 +177,7 @@ async function withServer(port: number, env: Record<string, string>, run: (base:
         await new Promise((r) => setTimeout(r, 500));
       }
     }
-    await run(base);
+    await run(base, () => output);
   } finally {
     try {
       if (child.pid) process.kill(-child.pid, "SIGTERM");
@@ -180,36 +188,96 @@ async function withServer(port: number, env: Record<string, string>, run: (base:
   }
 }
 
-const cases: Array<{ name: string; port: number; env: Record<string, string> }> = [
+/** A VALID hosted preview served through the Vercel production alias (the temporary demonstration). */
+const validDemo: Record<string, string> = {
+  VERCEL: "1",
+  VERCEL_ENV: "production",
+  VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
+  VERCEL_URL: "wow-foreverdb-abc.vercel.app",
+  FOREVERDB_DEPLOYMENT: "preview",
+  FOREVERDB_DATA_SOURCE: "fixture",
+  TRUSTED_IP_HEADER: "x-real-ip",
+};
+const noDesignation: Record<string, string> = Object.fromEntries(Object.entries(validDemo).filter(([k]) => k !== "FOREVERDB_DEPLOYMENT"));
+
+/** A configuration that satisfies EVERY production requirement (fake credentials; never contacted). */
+const validProductionShape: Record<string, string> = {
+  VERCEL: "1",
+  VERCEL_ENV: "production",
+  VERCEL_PROJECT_PRODUCTION_URL: "foreverdb.example",
+  FOREVERDB_DEPLOYMENT: "production",
+  FOREVERDB_DATA_SOURCE: "postgres",
+  PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
+  SITE_URL: "https://foreverdb.example",
+  RATE_LIMIT_BACKEND: "upstash",
+  UPSTASH_REDIS_REST_URL: "https://fake-upstash.invalid",
+  UPSTASH_REDIS_REST_TOKEN: "t".repeat(30),
+  RATE_LIMIT_SALT: "s".repeat(40),
+  TRUSTED_IP_HEADER: "x-real-ip",
+};
+
+const cases: Array<{ name: string; port: number; env: Record<string, string>; reason: RegExp; mustNotMention: RegExp }> = [
   {
-    name: "production designation with the synthetic fixture adapter",
+    name: "production designation with the synthetic fixture adapter (the ONLY violation)",
     port: 3212,
-    env: { FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "fixture", SITE_URL: "https://foreverdb.example", RATE_LIMIT_BACKEND: "memory", TRUSTED_IP_HEADER: "x-real-ip", RATE_LIMIT_SALT: "s".repeat(40) },
+    env: { ...validProductionShape, FOREVERDB_DATA_SOURCE: "fixture" },
+    reason: /production must not serve the synthetic fixture/,
+    mustNotMention: /upstash|TRUSTED_IP|RATE_LIMIT_SALT|https|only valid in the Vercel|PRIVATE/i,
   },
   {
-    name: "hosted deployment with no ForeverDB designation (must not fall back to local)",
+    name: "hosted deployment with no ForeverDB designation (must not fall back to local; the ONLY violation)",
     port: 3213,
-    env: { VERCEL: "1", VERCEL_ENV: "production", VERCEL_URL: "foreverdb-x.vercel.app" },
+    env: noDesignation,
+    reason: /FOREVERDB_DEPLOYMENT must be set explicitly/,
+    mustNotMention: /FOREVERDB_DATA_SOURCE|SITE_URL|TRUSTED_IP/,
   },
   {
-    name: "public database URL that points at the private Supabase project",
+    name: "public database URL that references the private Supabase project",
     port: 3214,
-    env: { FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "postgres", SITE_URL: "https://preview.foreverdb.test", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
+    env: { ...validDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
+    reason: /PRIVATE production/,
+    mustNotMention: /must use the least-privilege|not a valid URL/,
+  },
+  {
+    name: "Supabase credentials configured for the public website (the ONLY violation)",
+    port: 3215,
+    env: { ...validDemo, SUPABASE_SERVICE_ROLE_KEY: "sb-secret-DO-NOT-LEAK" },
+    reason: /SUPABASE_SERVICE_ROLE_KEY: private backend credentials/,
+    mustNotMention: /FOREVERDB_DEPLOYMENT|SITE_URL/,
   },
 ];
 
 test.describe("unsafe configurations refuse to serve", () => {
   test.describe.configure({ timeout: 90_000 });
+
+  test("positive control: the valid hosted preview (through the production alias) serves", async () => {
+    await withServer(3211, validDemo, async (base) => {
+      const home = await fetch(base + "/", { signal: AbortSignal.timeout(10_000) });
+      expect(home.status).toBe(200);
+      expect(home.headers.get("x-foreverdb-deployment")).toBe("preview");
+      expect(home.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(await home.text()).toContain("https://wow-foreverdb.vercel.app");
+      expect((await fetch(base + "/robots.txt")).status).toBe(200);
+      expect((await fetch(base + "/api/v1/meta")).status).toBe(200);
+    });
+  });
+
   for (const c of cases) {
     test(c.name, async () => {
-      await withServer(c.port, c.env, async (base) => {
+      await withServer(c.port, c.env, async (base, log) => {
         for (const path of ["/", "/robots.txt", "/api/v1/meta"]) {
           const r = await fetch(base + path, { signal: AbortSignal.timeout(10_000) });
           expect(r.status, `${path} must not be served`).toBeGreaterThanOrEqual(500);
           const body = await r.text();
           // The reason is logged server-side only: nothing about the configuration reaches the client.
-          for (const leak of [/Unsafe ForeverDB configuration/i, /FOREVERDB_/, /klxhikdlfwgxurdyexdi/, /foreverdb_web_reader/, /fixture/i]) expect(body).not.toMatch(leak);
+          for (const leak of [/Unsafe ForeverDB configuration/i, /FOREVERDB_/, /klxhikdlfwgxurdyexdi/, /foreverdb_web_reader/, /fixture/i, /SUPABASE/i, /sb-secret/]) expect(body).not.toMatch(leak);
         }
+        // The server's own log names exactly the violated rule, and never a secret value.
+        const out = log();
+        const line = out.split("\n").find((l) => l.includes("Unsafe ForeverDB configuration")) ?? "";
+        expect(line, "the refusal reason is logged").toMatch(c.reason);
+        expect(line).not.toMatch(c.mustNotMention);
+        expect(out).not.toContain("sb-secret-DO-NOT-LEAK");
       });
     });
   }

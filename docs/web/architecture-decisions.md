@@ -86,7 +86,7 @@ The website never gets unrestricted access to the private database. Public loot 
 
 ## ADR-013 — One Node.js major for CI and hosting: 22.x (Accepted — 2026-10-10)
 
-`.node-version` is the single source (`22`); `engines.node` is `22.x` in `web` and `publisher` (Vercel gives `engines` precedence over the dashboard setting, so the runtime follows); CI fails if the running major, `.node-version` and `engines` differ. Chosen because all existing evidence (unit, Playwright, pipeline, parity, CodeQL) is on Node 22 and `>=22` let Vercel float to Node 24 unannounced. No dependency was changed. A Node 24 migration is a separate, dated task (before Node 22 leaves maintenance in April 2027).
+`.node-version` is the single source for CI and developers (`22`); `engines.node` is `22.x` in `web` and `publisher` and is what **Vercel** follows (it gives `engines` precedence over the dashboard setting and does not read `.node-version`); CI fails if the running major, `.node-version` and both `engines` differ. Merging moves the live demo from Node 24 to 22. Chosen because all existing evidence (unit, Playwright, pipeline, parity, CodeQL) is on Node 22 and `>=22` let Vercel float to Node 24 unannounced. No dependency was changed. A Node 24 migration is a separate, dated task (before Node 22 leaves maintenance in April 2027).
 
 ## ADR-014 — Release gates and controlled promotion (Accepted in code; enforcement PENDING owner action)
 

@@ -186,6 +186,45 @@ describe("error messages never echo secret values", () => {
   });
 });
 
+describe("review hardening: normalisation, value-free messages, trusted IP", () => {
+  it("never echoes the received value of an enum variable", () => {
+    const m = issues({ ...previewDemo, FOREVERDB_DEPLOYMENT: " preview-SECRET-value" });
+    expect(m).toMatch(/FOREVERDB_DEPLOYMENT: must be one of local \| preview \| production/);
+    expect(m).not.toContain("SECRET");
+    expect(issues({ ...previewDemo, TRUSTED_IP_HEADER: "tok_live_SECRET123" })).not.toContain("SECRET");
+    expect(issues({ ...previewDemo, RATE_LIMIT_BACKEND: "SECRET" })).not.toContain("SECRET");
+  });
+  it("detects the private project reference case-insensitively and percent-encoded", () => {
+    const db = (host: string, q = "") => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@${host}/db${q}` });
+    expect(issues(db("db.KLXHIKDLFWGXURDYEXDI.supabase.co"))).toMatch(/PRIVATE production/);
+    expect(issues(db("db.example.com", "?options=%6Clx&application_name=%4BLXHIKDLFWGXURDYEXDI"))).toMatch(/PRIVATE production/);
+    expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://KlxHikDlFwGxUrDyExDi.supabase.co" })).toMatch(/references the PRIVATE/);
+  });
+  it("treats loopback/private/unspecified spellings as local addresses", () => {
+    const db = (host: string) => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@${host}/db` });
+    for (const h of ["localhost.", "LOCALHOST", "0x7f.1", "127.1", "[::ffff:7f00:1]", "[::1]", "[::]", "[fd00::1]", "10.0.0.5", "169.254.1.1", "metadata.internal"]) {
+      expect(issues(db(h)), h).toMatch(/local address/);
+    }
+    for (const u of ["https://localhost.", "https://[::ffff:7f00:1]", "https://[::]", "https://LOCALHOST", "https://0x7f.1", "https://[fe80::1]"]) {
+      expect(issues({ ...previewDemo, SITE_URL: u }), u).toMatch(/local address/);
+    }
+    expect(ok({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.example.com:6543/db" }).FOREVERDB_DATA_SOURCE).toBe("postgres");
+  });
+  it("falls through empty-string Vercel metadata when deriving SITE_URL", () => {
+    const e = ok({ VERCEL: "1", VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "", VERCEL_URL: "wow-foreverdb-abc.vercel.app", FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture" });
+    expect(e.SITE_URL).toBe("https://wow-foreverdb-abc.vercel.app");
+  });
+  it("ignores platform metadata names (auto-exposed system variables) in the private-reference scan", () => {
+    const e = ok({ ...previewDemo, NEXT_PUBLIC_VERCEL_GIT_COMMIT_MESSAGE: "docs: mention klxhikdlfwgxurdyexdi", VERCEL_GIT_COMMIT_MESSAGE: "klxhikdlfwgxurdyexdi" });
+    expect(e.FOREVERDB_DEPLOYMENT).toBe("preview");
+  });
+  it("defaults the trusted client-IP header to x-real-ip on Vercel and rejects an explicit none", () => {
+    expect(ok(previewDemo).TRUSTED_IP_HEADER).toBe("x-real-ip");
+    expect(issues({ ...previewDemo, TRUSTED_IP_HEADER: "none" })).toMatch(/one rate-limit bucket/);
+    expect(ok({}).TRUSTED_IP_HEADER).toBe("none"); // local development
+  });
+});
+
 describe("deployment headers keep non-production out of search indexes", () => {
   it("stamps preview and local as noindex and identifies the designation", () => {
     expect(deploymentHeaders("preview")).toEqual({ "X-ForeverDB-Deployment": "preview", "X-Robots-Tag": "noindex, nofollow" });
