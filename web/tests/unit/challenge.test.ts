@@ -42,7 +42,7 @@ function installFetch(verdict: (token: string) => Response | Promise<Response> =
   vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
     if (u === SITEVERIFY) return siteverify(u, init);
-    if (u.startsWith(UPSTASH)) {
+    if (new URL(u).origin === UPSTASH) {
       const commands = JSON.parse(init!.body as string) as string[][];
       upstashCalls.push(commands);
       if (upstashMode === "network") throw new TypeError("fetch failed");
