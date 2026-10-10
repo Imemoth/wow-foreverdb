@@ -95,6 +95,7 @@ jobs:
 
   # ---------------------------------------------------------------------------------------------
   publisher-and-pipeline:
+    name: publisher-and-pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -139,6 +140,7 @@ jobs:
 
   # ---------------------------------------------------------------------------------------------
   codeql:
+    name: codeql
     runs-on: ubuntu-latest
     permissions: { contents: read, security-events: write }
     steps:

@@ -23,12 +23,12 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "Web release gate" },
-          { "context": "Web code quality" },
-          { "context": "Web E2E (Playwright)" },
-          { "context": "publisher-and-pipeline" },
-          { "context": "codeql" },
-          { "context": "collector-smoke" }
+          { "context": "Web release gate", "integration_id": 15368 },
+          { "context": "Web code quality", "integration_id": 15368 },
+          { "context": "Web E2E (Playwright)", "integration_id": 15368 },
+          { "context": "publisher-and-pipeline", "integration_id": 15368 },
+          { "context": "codeql", "integration_id": 15368 },
+          { "context": "collector-smoke", "integration_id": 15368 }
         ]
       }
     }

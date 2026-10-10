@@ -41,6 +41,14 @@ const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok: Boolean(ok), detail: ok ? "" : String(detail) });
 
 const bypass = bypassEnv ? process.env[bypassEnv] : undefined;
+if (bypassEnv && mode === "protected") {
+  console.error("--bypass-env cannot be combined with --expect protected: the protection test must be unauthenticated");
+  process.exit(2);
+}
+if (bypassEnv && !/^https:\/\/[a-z0-9.-]+\.vercel\.app$/i.test(origin) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+  console.error("refusing to send a protection-bypass secret to a host that is not https://*.vercel.app or localhost");
+  process.exit(2);
+}
 if (bypassEnv && !bypass) {
   console.error(`environment variable ${bypassEnv} is not set`);
   process.exit(2);

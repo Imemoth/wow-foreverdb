@@ -112,16 +112,21 @@ function isLocalHost(host: string | null): boolean {
   return false;
 }
 
-/** Case-insensitive, percent-decoding check for the private project reference. */
+/** Case-insensitive check for the private project reference: NFKC-folded and percent-decoded repeatedly (double encoding, fullwidth forms). */
 function referencesPrivateProject(value: string): boolean {
-  const lower = value.toLowerCase();
-  let decoded = lower;
-  try {
-    decoded = decodeURIComponent(value).toLowerCase();
-  } catch {
-    /* keep the raw form */
+  const forms = new Set<string>();
+  let current = value;
+  for (let i = 0; i < 4; i += 1) {
+    forms.add(current.normalize("NFKC").toLowerCase());
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) break;
+      current = next;
+    } catch {
+      break;
+    }
   }
-  return FORBIDDEN_DATABASE_MARKERS.some((m) => lower.includes(m) || decoded.includes(m));
+  return [...forms].some((f) => FORBIDDEN_DATABASE_MARKERS.some((m) => f.includes(m)));
 }
 
 /**

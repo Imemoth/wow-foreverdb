@@ -165,6 +165,9 @@ describe("private backend credentials never reach the public website", () => {
   it("rejects any application variable that references the private project", () => {
     expect(issues({ ...previewDemo, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co/db", FOREVERDB_DATA_SOURCE: "postgres" })).toMatch(/PRIVATE production/);
     expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://klxhikdlfwgxurdyexdi.supabase.co" })).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
+    // double percent-encoding and fullwidth spellings fold to the same reference
+    expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://%256bl%2578hikdlfwgxurdyexdi.example" })).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
+    expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://ｋｌｘｈｉｋｄｌｆｗｇｘｕｒｄｙｅｘｄｉ.example" })).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
   });
   it("does not scan unrelated Vercel system metadata (a commit message may mention anything)", () => {
     expect(ok({ ...previewDemo, VERCEL_GIT_COMMIT_MESSAGE: "docs: ledger for klxhikdlfwgxurdyexdi" }).FOREVERDB_DEPLOYMENT).toBe("preview");

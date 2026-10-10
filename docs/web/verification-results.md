@@ -1,6 +1,6 @@
 # Verification results — `web/foundation-mvp`
 
-Executed in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15 ephemeral clusters, Chromium via Playwright 1.56.1). **No check ran against production except the read-only audit queries listed in the assessment.**
+Executed in an isolated cloud workspace (Node 22.22 for the earlier sections and **Node 24.21.0 for the 2026-10-10 Node 24 section**, PostgreSQL 16.15 ephemeral clusters, Chromium via Playwright). **No check ran against production except the read-only audit queries listed in the assessment.**
 
 **Evidence tiers used below:** *Implemented* (code exists) · *Locally tested* (run in the authoring workspace) · *GitHub CI verified* · *Runtime verified* (real Upstash/Turnstile/staging) · *Pending infrastructure* · *Pending production approval*.
 
@@ -18,7 +18,7 @@ CI covers only the in-repo checks above (fixture data, memory rate-limit store, 
 
 Target outcome: **PREVIEW HARDENED / PRODUCTION STILL BLOCKED.** Evidence tiers as above. GitHub CI results for the final head are added below once the checks have finished; nothing here is a production or deployment-protection verification unless it says so.
 
-### Local results (Node 22.22.0, Next 16.4.0, React 19.3.0, Playwright 1.63.0, PostgreSQL 16.15 ephemeral)
+### Local results of the first hardening commits (Node 22.22.0 — superseded by the Node 24 section below; Next 16.4.0, React 19.3.0, Playwright 1.63.0, PostgreSQL 16.15 ephemeral)
 
 | Area | Result |
 | --- | --- |
@@ -35,7 +35,7 @@ Target outcome: **PREVIEW HARDENED / PRODUCTION STILL BLOCKED.** Evidence tiers 
 | Website vs published read model (Postgres adapter E2E) | **PASS 18/18** |
 | Fixture ↔ PostgreSQL parity | **PASS 37/37** |
 | `scripts/verify-deployment.mjs` | `--expect preview` against a local preview server **22/22**; `--expect protected` **28/28** on a 401-everywhere stand-in and **0/28 (fails, as it must)** on a stand-in that leaks |
-| Node/engines consistency (the CI step's logic) | **PASS** (22 / 22.x / 22.x) |
+| Node/engines consistency (the CI step's logic) | **PASS** (22 / 22.x / 22.x at that time; now 24 / 24.x / 24.x) |
 | Workflow YAML and ruleset JSON | parse OK; job names match the ruleset contexts |
 | `git diff --check` | **PASS** |
 
@@ -53,9 +53,47 @@ Authenticated fetch through the Vercel connector of the live demo: HTTP 200, non
 
 | Check | Result |
 | --- | --- |
-| Build log of the branch preview | **PASS** `engines: 22.x` overrides the project's `24.x`: *"Node.js Version \"22.x\" will be used instead"*; the `>=22` auto-upgrade warning is gone |
+| Build log of the branch preview (earlier, `engines` 22.x) | **PASS** `engines` took precedence over the dashboard setting (Vercel ignores `.node-version`); superseded by the Node 24 build below |
 | New code on a Vercel preview with no ForeverDB variables | **PASS (fails closed)** HTTP 500, generic body, no application header or cookie |
 | Both branch previews built | READY (`dpl_4kq9vM59…` for `240c8f8`, `dpl_2ojaHek5…` for `5d0086f`) |
+
+### Node.js 24.x migration and live preview (2026-10-10, head after `85b1553`)
+
+Owner decision: Node.js 24.x everywhere (`.node-version` 24, `engines` 24.x in `web` and `publisher`, `@types/node` 24.19.2, publish workflow on `node-version-file`). The only dependency change is `@types/node` (+ its `undici-types`); lockfiles were patched by hand to touch nothing else.
+
+**Local, Node 24.21.0, clean `npm ci`:**
+
+| Area | Result |
+| --- | --- |
+| Production audit (`--omit=dev --audit-level=high`) | **PASS** |
+| Lint / typecheck | **PASS / PASS** |
+| Unit tests | **PASS 150/150** (8 files) |
+| Environment matrix (`env.test.ts` + `env-matrix.test.ts`) | **PASS 41/41** (after the review hardening of the private-project scan: double percent-encoding and fullwidth spellings; same count, more assertions) |
+| Production build with canary secrets + bundle-secret scan | **PASS** (37 files, no canaries, no private project reference, no source maps) |
+| Playwright desktop + mobile + preview | **PASS 62/62** |
+| Publisher typecheck + unit | **PASS 29/29** |
+| Publication pipeline / Postgres-adapter E2E / parity | **CI only** for Node 24 (needs the CI PostgreSQL service); Node 22 local results above stand for those until CI reports |
+
+Compatibility basis (registry `engines`): Next 16.4.0 `>=20.9.0`, Playwright 1.63.0 `>=20`, `pg` 8.23.1 and vitest 3.2.7 without an upper bound, TypeScript 5.9.3 and React 19.3.0 without a runtime constraint; no removed Node API is used in `web` or `publisher` (independent review).
+
+**Vercel, real platform — deployment `dpl_7tQv8hiQ5Gh7YDnkjqxGFLzovnSy`, commit `8d31c7e`, READY:**
+
+| Check | Result |
+| --- | --- |
+| Build under Node 24 | **PASS** — build log: *Skipping build cache since Node.js version changed from "22.x" to "24.x"*; Next.js 16.4.0 Turbopack compiled, TypeScript and 16 static pages generated, no `engines` warning |
+| Variables present and effective | **PASS (behavioural)** — the new code does not answer HTTP 500; it serves as `preview` with the fixture source (`/api/v1/meta` → `"mode":"synthetic-sample"`) and a `Secure` `__Host-fdb_sid` cookie. This proves `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture` and a working IP-header default **take effect**; the masked values themselves were not read |
+| `GET /` (authorized fetch) | **PASS** HTTP 200, `x-foreverdb-deployment: preview`, `x-robots-tag: noindex, nofollow`, robots meta `noindex, nofollow`, `<meta name="foreverdb-deployment" content="preview">`, "Preview with synthetic sample data" banner, canonical `https://wow-foreverdb-git-web-vercel-preview-h-14e306-imemoths-projects.vercel.app` (no localhost), nonce CSP with `strict-dynamic`, no `unsafe-inline`/`unsafe-eval`, HSTS, `X-Frame-Options: DENY`, `nosniff`, cookie `__Host-fdb_sid; Path=/; Secure; HttpOnly; SameSite=lax`; no `klxhikdlfwgxurdyexdi`, `supabase`, `postgres://` or `service_role` in the HTML |
+| `/robots.txt` | **PASS** `Disallow: /`; HSTS, `nosniff`, `DENY`; `x-robots-tag: noindex` (platform-level; this path is outside the proxy matcher so it lacks `X-ForeverDB-Deployment`, as already disclosed) |
+| `/sitemap.xml` | **PASS** empty `<urlset>`; `x-robots-tag: noindex` |
+| `/api/v1/meta` | **PASS** HTTP 200 JSON, synthetic counts, `x-foreverdb-deployment: preview`, `x-robots-tag: noindex, nofollow`, deny-all CSP, no cookie |
+| `/api/v1/search?q=copper` | **PASS** HTTP 200, `dataset: synthetic-sample`, 2 rows (Copper Ore, Copper Vein) |
+| `/api/v1/search?q=%25&bogus=1` | **PASS** HTTP 400 `{"error":"unknown_parameter"}`, `cache-control: no-store`, no stack/SQL/connection string |
+
+These fetches went through the Vercel connector, which authenticates with a protection bypass, so they verify **application behaviour** on the real platform, **not** deployment protection. Item/source page navigation was verified in the E2E journeys (62/62) and not re-fetched live.
+
+### Independent review (fresh-context reviewer, 2026-10-10, no prior conclusions supplied)
+
+No Critical or High findings; no path to the private Supabase project found. Medium: (1) Node 24 doc claims preceded the evidence — **fixed** by this section and by running the suite; (2) the ruleset's required checks had no `integration_id`, so any actor with commit-status write access could post a green context — **fixed** (`integration_id` 15368, GitHub Actions, on every context). Remaining recommendation, not applied because it changes repository governance: a `CODEOWNERS` entry or required-workflow rule for `.github/**`, since a PR runs its own workflow file. Low: `--bypass-env` weakened the "protected" test and was sent to any host — **fixed** (rejected with `--expect protected`; only `https://*.vercel.app` or localhost); private-project scan now NFKC-folds and decodes repeatedly — **fixed**; docs said `TRUSTED_IP_HEADER` is explicit in production while code defaults it on Vercel — **doc corrected**; job `name:` made explicit for `publisher-and-pipeline` and `codeql` — **fixed**. Documented and deferred (bounded, pre-existing or low value): "hosted" means Vercel only (other hosts resolve to `local`, which still demands a localhost `SITE_URL` and is never indexable); an explicit foreign https `SITE_URL` is accepted on preview; `/sitemap.xml` and `/robots.txt` are outside the proxy (the dynamic sitemap is unthrottled, pre-existing); `fdb_pass` is not `__Host-` prefixed (inert until Turnstile is configured); E2E specs are listed by name in the workflow (a new spec file must be added there); actions are tag-pinned; `npm audit` reads a live feed; `codeql` cannot run on fork PRs.
 
 ### NOT RUN / PENDING (not claimed as passed)
 
@@ -65,7 +103,6 @@ Authenticated fetch through the Vercel connector of the live demo: HTTP 200, non
 | Vercel environment variables (read and set) | HTTP 403, scoped and unscoped | Owner steps in `vercel-environments.md` §3 (**required before merging**) |
 | Required status checks actually blocking a merge | No ruleset/branch-protection API available; a passing workflow is not enforcement | Import `.github/rulesets/main-release-gates.json`, show a failing PR is unmergeable |
 | Vercel Production Branch / `release` branch, Node dashboard setting | Production-impacting or dashboard-only; prepared, awaiting owner approval | `vercel-environments.md` §4, §6 |
-| Behaviour on Node 24 | Deliberately not changed; Node 22 pinned | A separate migration PR |
 | Real Upstash, real Turnstile, WAF rules, load test | Not provisioned (unchanged) | Go-live checklist C |
 
 ## 2026-10-10 hardening (PR #22 follow-up): P1 challenge endpoint, P2 zone statistics

@@ -42,7 +42,7 @@ Only the first two are required for the temporary demonstration; both are **non-
 | `FOREVERDB_DEPLOYMENT` | *(unset → local)* | **`preview`** | **`preview`** | `production` |
 | `FOREVERDB_DATA_SOURCE` | *(unset → fixture)* | **`fixture`** | **`fixture`** | `postgres` |
 | `SITE_URL` | *(default localhost)* | leave unset (derived) | leave unset (derived from the production alias) or `https://wow-foreverdb.vercel.app` | **explicit** `https://<production domain>` |
-| `TRUSTED_IP_HEADER` | `none` | unset (defaults to `x-real-ip` on Vercel) | unset (defaults to `x-real-ip` on Vercel) | `x-real-ip` (**required**, explicit) |
+| `TRUSTED_IP_HEADER` | `none` | unset (defaults to `x-real-ip` on Vercel) | unset (defaults to `x-real-ip` on Vercel) | `x-real-ip` (defaults on Vercel; set it explicitly as a deliberate act) |
 | `RATE_LIMIT_SALT` | optional | recommended (32+ random bytes) | recommended | **required** |
 | `RATE_LIMIT_BACKEND` | `memory` | `memory` | `memory` | `upstash` |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | unset | unset | unset | **unset until Upstash is provisioned and reviewed** |
