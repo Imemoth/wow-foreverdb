@@ -59,7 +59,7 @@ The app counts per hashed IP, per anonymous session cookie and per route globall
 
 ## ADR-007 — Explicitly labelled fixture adapter until the public DB exists (Accepted)
 
-`FixtureAdapter` serves a projection that the **real publisher** builds from **synthetic** test inputs (`database/tests/fixtures/`). Every page shows a non-dismissable banner, the API reports `"dataset":"synthetic-sample"`, all pages are `noindex`, and `env.ts` refuses `fixture` in production. The same E2E suite passes against the fixture adapter **and** against the Postgres adapter reading the real `web_api` schema, which is the parity evidence.
+`FixtureAdapter` serves a projection that the **real publisher** builds from **synthetic** test inputs (`database/tests/fixtures/`). Every page shows a non-dismissable banner, the API reports `"mode":"synthetic-sample"`, all non-production responses are `noindex` (header, meta, `robots.txt`, empty sitemap), and `env.ts` refuses `fixture` in production (ADR-011). The same E2E suite passes against the fixture adapter **and** against the Postgres adapter reading the real `web_api` schema, which is the parity evidence.
 
 ## ADR-008 — Git-managed Markdown editorial content (Accepted)
 
@@ -72,3 +72,22 @@ The app counts per hashed IP, per anonymous session cookie and per route globall
 ## ADR-010 — Future accounts are a separate system (Proposed)
 
 The public site has no login. Future registered accounts must use verified identity: a provider or email, never the anonymous JWT. Account→installation ownership must be proven (a claim code shown in the Companion, signed by the installation's session), never inferred from a known installation or guild ID. Account features go behind a separate authenticated origin or route group with `private, no-store` and its own threat review. Higher registered-user quotas use a separate reserved pool. None of this is implemented, and no private data is exposed.
+
+## ADR-011 — Explicit, fail-closed deployment designation on hosted platforms (Accepted — 2026-10-10)
+
+`FOREVERDB_DEPLOYMENT` is `local | preview | production`. **Hosted deployments never default to `local`:** on Vercel the designation and the data source must be explicit, and the site URL must be an https origin that is not local. The designation is cross-checked against the platform's own metadata (`VERCEL_ENV`, `VERCEL_PROJECT_PRODUCTION_URL`), but **Vercel's "production" target is not ForeverDB production**: the temporary synthetic demonstration is served through the production alias and declares `preview`; `production` is only valid on the Vercel production environment and only with the public PostgreSQL read model, Upstash, a trusted-IP header, a salt and an https URL equal to the production domain. Private-backend credentials (`SUPABASE*`, service-role, `DATABASE_URL`, `POSTGRES_URL*`) and any reference to the private project are rejected on hosted deployments. Refusal is a generic HTTP 500 for every route including `robots.txt`; the reason is logged server-side and names variables only. Every response carries `X-ForeverDB-Deployment`; non-production responses carry `X-Robots-Tag: noindex, nofollow`. Rationale: the first hosted deployment silently ran as `local` and shipped a `localhost` canonical URL and a non-`Secure` session cookie. Details: `docs/web/vercel-environments.md`.
+
+## ADR-012 — Two physically separate databases; accounts are a separate boundary (Accepted decision; infrastructure Proposed)
+
+1. **Private Supabase (`wow-forever`)**: Companion ingestion, authentication, installation ownership, Guildbook and future account-bound data.
+2. **Public PostgreSQL (not yet provisioned)**: sanitised, approved aggregate loot and location statistics only.
+
+The website never gets unrestricted access to the private database. Public loot search remains anonymous. The next milestone, **ForeverDB Account System V1**, delivers real registration, email confirmation, login/logout, password recovery, a secure session lifecycle, a basic profile, and preparation for verified Companion installation linking. It uses the existing private Supabase Auth through a **separately reviewed security boundary** (its own origin or route group, `private, no-store`, its own threat model); public browsing continues to use the isolated public read database and must not require login. It supersedes the "Proposed" status of ADR-010 once designed and is **not implemented** in the hardening change.
+
+## ADR-013 — One Node.js major for CI and hosting: 24.x (Accepted — 2026-10-10, revised same day by owner decision from 22.x to 24.x)
+
+`.node-version` is the single source for CI and developers (`24`); `engines.node` is `24.x` in `web` and `publisher` and is what **Vercel** follows (it gives `engines` precedence over the dashboard setting and does not read `.node-version`; the dashboard is also `24.x`); CI fails if the running major, `.node-version` and both `engines` differ. The first draft pinned 22.x because all evidence then existed only on 22; the owner chose 24.x as the target, so the full suite was re-run on Node 24.21.0 and `@types/node` moved to 24.19.2 (the only dependency change). The live demo already ran Node 24, so the runtime does not change; the pin removes the silent float of the previous `>=22` range.
+
+## ADR-014 — Release gates and controlled promotion (Accepted in code; enforcement PENDING owner action)
+
+CI is split into distinct, stably named checks (`Web code quality`, `Web E2E (Playwright)`, `publisher-and-pipeline`, `codeql`) plus one aggregate `Web release gate` that fails on any failed, cancelled or skipped upstream job; there is no `paths:` filter so required checks always report. Required status checks are repository settings: `.github/rulesets/main-release-gates.json` is provided and enforcement is **PENDING** until applied and demonstrated (`docs/web/release-gates.md`). Production promotion: today `main` auto-deploys to the Vercel Production target (serving the protected, noindexed synthetic demo); before incomplete features such as Account System V1 reach `main`, the Vercel Production Branch should move to a protected `release` branch so `main` builds previews only. That change is prepared and awaits owner approval (`docs/web/vercel-environments.md` §6).

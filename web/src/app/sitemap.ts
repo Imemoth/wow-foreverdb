@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { data } from "@/lib/data";
-import { serverEnv } from "@/lib/env";
+import { isIndexable, serverEnv } from "@/lib/env";
 import { itemPath, sourcePath, zonePath } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /** Only indexable entities (thin-content policy) and published, non-sample articles. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const env = serverEnv();
-  if (env.FOREVERDB_DEPLOYMENT !== "production") return [];
+  if (!isIndexable(env)) return [];
   const u = (p: string) => new URL(p, env.SITE_URL).toString();
   const db = data();
   const [items, sources, zones] = await Promise.all([db.sitemap("item", 0, 5000), db.sitemap("source", 0, 5000), db.sitemap("zone", 0, 5000)]);
