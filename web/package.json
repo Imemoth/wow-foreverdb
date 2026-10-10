@@ -1,0 +1,49 @@
+{
+  "name": "foreverdb-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForeverDB public website: observed WoW: Forever database, news and guides.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
+    "fixture:refresh": "node scripts/refresh-fixture.mjs",
+    "test:parity": "vitest run --config vitest.parity.config.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/cinzel": "5.3.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "next": "16.3.8",
+    "pg": "8.23.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "server-only": "0.0.1",
+    "yaml": "2.9.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.3",
+    "@playwright/test": "1.56.1",
+    "@tailwindcss/postcss": "4.1.18",
+    "@types/node": "22.20.5",
+    "@types/pg": "8.15.6",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.8",
+    "tailwindcss": "4.1.18",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

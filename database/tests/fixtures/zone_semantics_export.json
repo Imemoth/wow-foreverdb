@@ -1,0 +1,238 @@
+{
+ "meta": {
+  "contract_version": 1,
+  "exported_at": "2026-10-10T00:00:00Z",
+  "data_updated_at": "2026-10-10T00:00:00Z"
+ },
+ "sources": [
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "name": "Fixture Zone Walker",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9002,
+   "source_level": 8,
+   "name": "Fixture Local Guard",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "gameobject",
+   "source_id": 9301,
+   "source_level": 0,
+   "name": "Fixture Copper Vein",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "fishing",
+   "source_id": 1420,
+   "source_level": 0,
+   "name": "Fishing - Tirisfal Glades",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  }
+ ],
+ "items": [
+  {
+   "item_id": 9101,
+   "name": "Fixture Walker Trinket",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "item_id": 9102,
+   "name": "Fixture Walker Scrap",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "item_id": 9103,
+   "name": "Fixture Copper Nugget",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "item_id": 9104,
+   "name": "Fixture Murloc Perch",
+   "first_seen_at": null,
+   "last_seen_at": "2026-10-09T12:00:00Z"
+  }
+ ],
+ "buckets": [
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "loot_kind": "mob",
+   "observations": 100,
+   "installations": 3,
+   "max_installation_share": 0.4,
+   "last_updated_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9002,
+   "source_level": 8,
+   "loot_kind": "mob",
+   "observations": 50,
+   "installations": 3,
+   "max_installation_share": 0.4,
+   "last_updated_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "gameobject",
+   "source_id": 9301,
+   "source_level": 0,
+   "loot_kind": "mining",
+   "observations": 60,
+   "installations": 3,
+   "max_installation_share": 0.4,
+   "last_updated_at": "2026-10-09T12:00:00Z"
+  },
+  {
+   "source_type": "fishing",
+   "source_id": 1420,
+   "source_level": 0,
+   "loot_kind": "fishing",
+   "observations": 40,
+   "installations": 3,
+   "max_installation_share": 0.5,
+   "last_updated_at": "2026-10-09T12:00:00Z"
+  }
+ ],
+ "drops": [
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "loot_kind": "mob",
+   "item_id": 9101,
+   "drops": 40,
+   "quantity": 40,
+   "quest_drops": 0,
+   "installations": 3,
+   "max_installation_share": 0.4
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "loot_kind": "mob",
+   "item_id": 9102,
+   "drops": 25,
+   "quantity": 25,
+   "quest_drops": 0,
+   "installations": 3,
+   "max_installation_share": 0.4
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9002,
+   "source_level": 8,
+   "loot_kind": "mob",
+   "item_id": 9101,
+   "drops": 10,
+   "quantity": 10,
+   "quest_drops": 0,
+   "installations": 3,
+   "max_installation_share": 0.4
+  },
+  {
+   "source_type": "gameobject",
+   "source_id": 9301,
+   "source_level": 0,
+   "loot_kind": "mining",
+   "item_id": 9103,
+   "drops": 55,
+   "quantity": 110,
+   "quest_drops": 0,
+   "installations": 3,
+   "max_installation_share": 0.4
+  },
+  {
+   "source_type": "fishing",
+   "source_id": 1420,
+   "source_level": 0,
+   "loot_kind": "fishing",
+   "item_id": 9104,
+   "drops": 20,
+   "quantity": 20,
+   "quest_drops": 0,
+   "installations": 3,
+   "max_installation_share": 0.5
+  }
+ ],
+ "locations": [
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "loot_kind": "mob",
+   "map_id": 1420,
+   "zone_name": "Tirisfal Glades",
+   "subzone_name": "Brill",
+   "x": 41.0,
+   "y": 52.0,
+   "observations": 12,
+   "installations": 2
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9001,
+   "source_level": 10,
+   "loot_kind": "mob",
+   "map_id": 1421,
+   "zone_name": "Silverpine Forest",
+   "subzone_name": "The Sepulcher",
+   "x": 30.0,
+   "y": 60.0,
+   "observations": 8,
+   "installations": 2
+  },
+  {
+   "source_type": "creature",
+   "source_id": 9002,
+   "source_level": 8,
+   "loot_kind": "mob",
+   "map_id": 1420,
+   "zone_name": "Tirisfal Glades",
+   "subzone_name": "Deathknell",
+   "x": 20.0,
+   "y": 30.0,
+   "observations": 5,
+   "installations": 2
+  },
+  {
+   "source_type": "gameobject",
+   "source_id": 9301,
+   "source_level": 0,
+   "loot_kind": "mining",
+   "map_id": 1420,
+   "zone_name": "Tirisfal Glades",
+   "subzone_name": "Agamand Mills",
+   "x": 60.0,
+   "y": 40.0,
+   "observations": 6,
+   "installations": 2
+  },
+  {
+   "source_type": "fishing",
+   "source_id": 1420,
+   "source_level": 0,
+   "loot_kind": "fishing",
+   "map_id": 1420,
+   "zone_name": "Tirisfal Glades",
+   "subzone_name": "Brill",
+   "x": 45.0,
+   "y": 55.0,
+   "observations": 4,
+   "installations": 2
+  }
+ ]
+}

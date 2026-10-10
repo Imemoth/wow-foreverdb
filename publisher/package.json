@@ -1,0 +1,25 @@
+{
+  "name": "foreverdb-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-way, fail-closed publication worker: private aggregate export -> sanitized public read model.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "publish:dry-run": "tsx src/cli.ts publish --dry-run",
+    "build-projection": "tsx src/cli.ts build"
+  },
+  "dependencies": {
+    "pg": "8.23.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/pg": "8.15.6",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
