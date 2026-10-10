@@ -58,7 +58,7 @@ For each source/bucket/item combination ForeverDB stores:
 
 Derived values are not persisted as truth:
 
-- observed drop rate = `drops / observations`, where `observations` is the **total source loot observations of every contributing installation for that exact source, level and loot kind**, including installations that never received the item (F-3: the live Companion RPCs still wrongly sum only installations that have an item row until migration `0011` is applied in production; status MERGED / PRODUCTION MIGRATION PENDING, see `docs/f3-observed-rate-denominator.md`)
+- observed drop rate = `drops / observations`, where `observations` is the **total source loot observations of every contributing installation for that exact source, level and loot kind**, including installations that never received the item (F-3: the Companion RPCs used to wrongly sum only installations that had an item row; migration `0011` fixed this in production on 2026-10-10 (ledger `20261010151518`); status PRODUCTION SQL VERIFIED / COMPANION ACCEPTANCE PENDING, see `docs/f3-observed-rate-denominator.md`)
 - average stack when dropped = `quantity / drops`
 
 ## Locations
