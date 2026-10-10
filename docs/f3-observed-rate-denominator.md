@@ -1,7 +1,7 @@
 # F-3 — Companion observed drop-rate denominator
 
-**Status: PRODUCTION SQL VERIFIED / COMPANION ACCEPTANCE PENDING.**
-Migration `0011_fix_observed_drop_rate_denominator.sql` was merged by PR #37 (squash commit `6d0df83`) and **applied to the production Supabase project `wow-forever` (`klxhikdlfwgxurdyexdi`) on 2026-10-10 15:15:18 UTC** with the owner's explicit approval, through `apply_migration`. Ledger entry: **`20261010151518 fix_observed_drop_rate_denominator`** (exactly one new row; `0010` was not applied). The automated read-only SQL verification passed (see "Production deployment record"). **F-3 is NOT closed:** the manual Windows Companion acceptance is still **PENDING** and F-3 must not be called fully verified until it passes.
+**Status: F3_FULLY_VERIFIED (production SQL PASS + Windows Companion 0.8.2-alpha acceptance PASS, 2026-10-10).**
+Migration `0011_fix_observed_drop_rate_denominator.sql` was merged by PR #37 (squash commit `6d0df83`) and **applied to the production Supabase project `wow-forever` (`klxhikdlfwgxurdyexdi`) on 2026-10-10 15:15:18 UTC** with the owner's explicit approval, through `apply_migration`. Ledger entry: **`20261010151518 fix_observed_drop_rate_denominator`** (exactly one new row; `0010` was not applied). The automated read-only SQL verification passed (see "Production deployment record"). **F-3 is closed:** 2026-10-10 real Windows Companion Search screenshots confirmed all four item-detail controls and the Copper Vein source-detail parity check (5/5 PASS); see the acceptance record below.
 
 Finding origin: `docs/web/00-current-state-assessment.md` (F-3).
 
@@ -169,18 +169,19 @@ The after-`prosrc` hashes equal the values computed beforehand from the merged f
 | Putrid Claw (2855) | Rotting Dead (creature 1525, level 6, mob) | 2/4 = 50.0 % | 2/5 = **40.0 %** |
 | Raw Brilliant Smallfish (6291) control | Tirisfal Glades (fishing 1420, fishing) | 10/28 = 35.7 % | 10/28 = **35.7 %** (unchanged) |
 
-### Manual Companion acceptance (PENDING; not performed; requires the current Windows Companion)
+### Manual Windows Companion acceptance (PASS — 2026-10-10)
 
-This is the only part of F-3 that is not verified. The SQL checks above prove the database; they do not prove the Companion display.
+**Runtime:** ForeverDB Companion 0.8.2-alpha, real Windows UI, connected to the production-backed Search RPCs. The project owner supplied screenshots in the 2026-10-10 acceptance conversation; screenshots are **not yet archived in this repository**. This is a user-observed runtime acceptance, not a scripted UI test or authenticated API load test.
 
-1. Start the latest Windows Companion (restart it so no cached statistics are shown) and let Search sign in as usual.
-2. Search `Shadowgem`, open its detail. In the Copper Vein (mining) row expect Observations **110**, Drops **1**, Rate **0.9 %**. Open the source `Copper Vein` and confirm the Shadowgem row shows the same values.
-3. Search `Fractured Canine`, open the Cursed Darkhound (level 8) row: expect **1 / 12, 8.3 %**.
-4. Search `Putrid Claw`, open the Rotting Dead (level 6) row: expect **2 / 5, 40.0 %**.
-5. Control: Search `Raw Brilliant Smallfish`, Tirisfal Glades fishing: expect **10 / 28, 35.7 %** (unchanged).
-6. Expect lower confidence scores on the corrected rows (the Wilson score uses the larger denominator). No error, no empty result, and no change to Search, zone browsing or Manual Sync behaviour.
+| UI check | Item / source | Drops | Observations | Rate | Result |
+| --- | --- | ---: | ---: | ---: | --- |
+| Item detail | Shadowgem → Copper Vein (mining) | 1 | 110 | 0.9 % | **PASS** |
+| Item detail | Fractured Canine → Cursed Darkhound (level 8) | 1 | 12 | 8.3 % | **PASS** |
+| Item detail | Putrid Claw → Rotting Dead (level 6) | 2 | 5 | 40.0 % | **PASS** |
+| Unchanged control | Raw Brilliant Smallfish → Tirisfal Glades (fishing) | 10 | 28 | 35.7 % | **PASS** |
+| Source detail (independent drilldown) | Copper Vein → Shadowgem (mining) | 1 | 110 | 0.9 % | **PASS** |
 
-Record the outcome (date, Companion version, PASS/FAIL per step) in this file and in `docs/ROADMAP.md`; only then change the status to `F3_FULLY_VERIFIED`.
+**Acceptance: 5/5 PASS; item-detail and source-detail denominators and displayed rates agree; `F3_FULLY_VERIFIED`.** The source-detail screenshot shows other Copper Vein drops against the same 110-observation mining bucket. The real Companion Search successfully retrieved protected API data. This acceptance does **not** certify quota-exhaustion behavior, Manual Sync, Guildbook or unrelated Search/zone flows; those remain separate release checks.
 
 ## Production rollout runbook (executed 2026-10-10 as recorded above; kept for reference and for the rollback)
 
@@ -221,7 +222,7 @@ If **any** value differs, STOP and investigate; do not force the migration.
 | 7 | Corrected denominators | see acceptance pair below; the item row's `observations` includes zero-drop installations |
 | 8 | Unaffected buckets | re-run the aggregate comparison: 353 unchanged buckets keep identical `observations`/rate (a changed count different from 21 needs an explanation: new data only) |
 | 9 | Performance | baseline (old functions, production, 2026-10-10): item stats Shadowgem 8.3 ms, source stats Copper Vein 5.2 ms, item stats Linen Cloth (42 rows) 7.2 ms; the new versions must stay in the same order of magnitude (well below the 5 s wrapper timeout) |
-| 10 | Companion Search | **MANUAL ACCEPTANCE PENDING** (needs the Windows Companion) |
+| 10 | Companion Search | **PASS — 5/5 real Windows Companion 0.8.2-alpha UI cases, 2026-10-10** (see acceptance record above) |
 
 **Manual Companion acceptance pair** (catalog identifiers only, no installation data):
 
@@ -244,13 +245,13 @@ Unaffected control: Raw Brilliant Smallfish (6291) at Tirisfal Glades fishing: 1
 
 ## Remaining risks
 
-- The Companion UI display has not been confirmed on a real Windows Companion (manual acceptance PENDING). Until then F-3 is not fully verified.
+- F-3 Companion Search item/source acceptance is complete (5/5 PASS). Other client flows such as Manual Sync, Guildbook and general zone navigation were not retested as part of this F-3-specific acceptance.
 - The previous function definitions exist only in production and in the rollback file (they were provisioned outside the numbered migrations). The rollback file was verified **byte-identical** to production: md5 of `pg_get_functiondef` equals md5 of the file's definitions for all three functions (`all_stats` 8d9d8cf1…, `item_stats` 434fea25…, `source_stats` 0010ecb5…), read-only, 2026-10-10.
 - Production runs PostgreSQL 17.6; the CI/local suites ran on PostgreSQL 16 (as in the existing CI). The SQL uses only portable constructs; the verification plan compares `prosrc` hashes (formatter-independent) and re-runs the aggregate comparison on production to cover the version difference.
 - Single production database, no staging: the in-migration assertions and the tested rollback are the safety net. The rollback (`restore_previous_observed_rate_functions`) has not been run and remains available; running it would bring the inflation back.
 - Thin contributor base (7 installations): corrected rates are still small-sample figures; the website's sample thresholds remain the honest presentation.
-- The Windows Companion UI was not run (no .NET/Windows runner); that the Companion shows the corrected values follows from reading `SearchService.cs` and must be confirmed by the manual acceptance.
-- An end-to-end call with a real authenticated JWT through the public wrappers was not run (it would write budget rows in production); the wrappers are unchanged and verified statically.
+- No native automated Windows UI run was performed by CI; real user-supplied Companion 0.8.2-alpha screenshots independently confirm the displayed item/source values (five acceptance checks).
+- Automated production SQL verification did not make a real authenticated JWT call; the subsequent manual Companion Search acceptance exercised authenticated item/source queries. A dedicated protocol-level token/quota-boundary regression was not part of this F-3 acceptance.
 
 ## Independent review
 

@@ -3,7 +3,7 @@
 Mark an item ✅ only with linked evidence (CI run URL, screenshot, command output). **Production deploy stays blocked until every item in sections A–C is ✅.**
 
 ## A. Repository and CI
-- [x] PR #22 open. `ForeverDB Web & publication pipeline` workflow green on the hardening head `3e463f3` (web, publisher-and-pipeline incl. parity step, codeql, CodeQL code-scanning): [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)
+- [x] PR #22 merged as `b972431d`. `ForeverDB Web & publication pipeline` workflow green on the hardening head `3e463f3` (web, publisher-and-pipeline incl. parity step, codeql, CodeQL code-scanning): [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)
 - [x] Existing workflows still green on `3e463f3`: API security [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207423), collector smoke [https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207480). Companion health is not PR-triggered and was not run
 - [ ] Code review by the owner, including `publisher/src/contract.ts` (allowlist) and both SQL files
 - [ ] Editorial review of `web/content/*`. Flip `sample: false` only on reviewed articles
@@ -14,7 +14,7 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] **Owner approval** recorded for production 0010. Applied in a maintenance window. In-migration assertions passed. Ledger entry recorded
 - [ ] Projection reader login enabled. `public_projection_export_smoke.sql` checks (privileges only, no seeding) adapted and run read-only on production
 - [ ] First real `publish --dry-run` reviewed (counts, rejections, anomalies), then a real publish
-- [ ] Spot check: item/source pages match Companion figures where denominators agree (beware F-3 until `0011` is applied in production; the website's own figures already use the correct denominator)
+- [ ] Spot check: future live website item/source pages match the corrected Companion statistics. F-3 SQL and Windows Companion runtime acceptance are both PASS; separate website publication is not yet provisioned.
 - [ ] Confirm no website env var references the production project
 - [ ] Zone semantics verified on the real public DB: item rows have `observations IS NULL`/`inferred`; `public_read_zone_semantics.sql` adapted to the real data or the schema CHECKs confirmed present. Migration 0001 (edited in place) has not been applied anywhere earlier, otherwise ship a `0002`
 
@@ -41,4 +41,4 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | P1 challenge limiter + body cap, P2 zone semantics | Implemented · Locally tested · **GitHub CI verified on `3e463f3`** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)) |
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
 | Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets` | Pending production approval / out of scope of PR #22 |
-| F-3 Companion denominator fix (`0011`) | **PRODUCTION SQL VERIFIED / COMPANION ACCEPTANCE PENDING** (PR #37 merged as `6d0df83`; applied to production 2026-10-10, ledger `20261010151518`; see `docs/f3-observed-rate-denominator.md`) |
+| F-3 Companion denominator fix (`0011`) | **F3_FULLY_VERIFIED** (2026-10-10; PR #37 merged as `6d0df83`; production ledger `20261010151518`; 5/5 Windows Companion Search UI checks PASS; see `docs/f3-observed-rate-denominator.md`) |
