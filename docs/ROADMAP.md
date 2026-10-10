@@ -409,29 +409,29 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 ## Web — public ForeverDB website (foundation)
 
-Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthetic sample data; nothing provisioned or deployed; production untouched.** Docs: [docs/web/](web/README.md).
+PR #22 merged to `main` (2026-10-10). **Website status: repo-complete foundation MVP on synthetic sample data; separate public infrastructure not provisioned and web publication/export (`0010`) not deployed.** Docs: [docs/web/](web/README.md).
 
-- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets. **Applied to production 2026-10-10 (ledger `20261010151518`); Companion acceptance pending** (see below).
+- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the Companion stats RPCs previously under-counted the observed-rate denominator for multi-installation buckets. **F3_FULLY_VERIFIED (2026-10-10): production SQL PASS and Windows Companion acceptance 5/5 PASS** (see below).
 - [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
 - [x] Fail-closed publication worker (`publisher/`): strict contract, name sanitization, sample thresholds, Wilson intervals, dominance flag, deterministic hash.
 - [x] Next.js 16 website: search, item/creature/object/fishing/zone pages, news/guides/blog (Markdown), RSS, sitemap, nonce CSP, distributed rate limiting, progressive Turnstile challenge.
 - [x] Local evidence: web unit 115/115, publisher 29/29, SQL security + zone-semantics suites, pipeline E2E, fixture↔PostgreSQL parity 37/37, Playwright 46/46 (incl. axe WCAG 2.2 AA) on fixture and 18/18 on Postgres adapter.
 - [x] PR #22 hardening (implemented, locally tested): dedicated fail-closed rate limit + bounded body for `POST /api/v1/challenge`; zone item statistics no longer present global drop counts as zone-specific (item↔zone is *inferred*, count *not measured*).
-- [ ] GitHub CI on the hardening commit (re-verify after push; earlier head `fde9ae6` reported green by owner).
+- [x] GitHub CI on PR #22 hardening commit `3e463f3` and documentation head `66ae5c3` verified green; merged as `b972431d`.
 - [ ] Provision public DB, Upstash, Vercel, WAF ([infrastructure setup](web/infrastructure-setup.md)).
 - [ ] Production 0010 approval + first real publication.
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
 
-### F-3 — Companion observed drop-rate denominator (applied to production; Companion acceptance pending)
+### F-3 — Companion observed drop-rate denominator (F3_FULLY_VERIFIED — 2026-10-10)
 
-PR #37 merged to `main` as `6d0df83`; migration `0011` applied to production `wow-forever` (`klxhikdlfwgxurdyexdi`) on 2026-10-10 15:15:18 UTC, **ledger `20261010151518 fix_observed_drop_rate_denominator`**. **Status: PRODUCTION SQL VERIFIED / COMPANION ACCEPTANCE PENDING. F-3 is not closed until the manual Windows Companion acceptance passes.** Record, evidence, hashes, rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
+PR #37 merged to `main` as `6d0df83`; migration `0011` applied to production `wow-forever` (`klxhikdlfwgxurdyexdi`) on 2026-10-10 15:15:18 UTC, **ledger `20261010151518 fix_observed_drop_rate_denominator`**. **Status: F3_FULLY_VERIFIED. Production SQL and real Windows Companion 0.8.2-alpha item/source UI checks both PASS (5/5, 2026-10-10).** Record, evidence, hashes, rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
 
 - [x] Root cause proven, forward-only migration and verified rollback merged (PR #37); regression suite in CI.
 - [x] Read-only preflight, then `apply_migration` of `0011` only (`0010` not applied); function bodies byte-identical to the reviewed file.
 - [x] Production SQL verification: ledger, hashes, owner/ACL/`SECURITY DEFINER`/`search_path` unchanged, anon denied, wrappers and 0009 gate unchanged, corrected denominators on all 374 buckets, 21 affected (max correction 25.00 points, average 5.88), 353 unchanged, performance in line with baseline.
-- [ ] **Manual Windows Companion acceptance (PENDING):** Shadowgem at Copper Vein (mining) 1/5 = 20.0 % becomes 1/110 = 0.9 %; two further affected cases and an unchanged control are listed in the F-3 record. Only then mark F-3 fully verified.
+- [x] **Manual Windows Companion acceptance (PASS — 2026-10-10, 5/5 checks):** Shadowgem at Copper Vein (mining) 1/110 = 0.9 % in both item and source details; Fractured Canine at Cursed Darkhound level 8 1/12 = 8.3 %; Putrid Claw at Rotting Dead level 6 2/5 = 40.0 %; unchanged Raw Brilliant Smallfish at Tirisfal Glades 10/28 = 35.7 %. User-supplied 0.8.2-alpha screenshots; see the F-3 acceptance record. Manual Sync/Guildbook remain independent gates.
 
 ## 0.9 — Farming intelligence
 
