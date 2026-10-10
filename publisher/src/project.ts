@@ -42,7 +42,17 @@ export interface PubZone { map_id: number; zone_name: string; observations: numb
 export interface PubZoneEntity {
   map_id: number; entity_kind: "item" | "source"; item_id: number | null; source_type: SourceType | null;
   source_id: number | null; source_level: number | null; display_kind: DisplayKind; name: string; name_norm: string;
-  loot_kinds: LootKind[]; observations: number;
+  loot_kinds: LootKind[];
+  /**
+   * Zone-specific MEASURED count. Sources: observations of that source in the zone.
+   * Items: ALWAYS null (not measured) - the data does not establish how often an
+   * item dropped inside a zone; the item's global drop count must never stand in.
+   */
+  observations: number | null;
+  /** 'observed' = the source itself was seen in the zone; 'inferred' = item linked via such a source. */
+  association: "observed" | "inferred";
+  /** Items only: number of distinct sources observed in this zone that drop the item (structural count, not a drop count). */
+  associated_source_count: number | null;
 }
 export interface PubLocation {
   source_type: SourceType; source_id: number; source_level: number; loot_kind: LootKind; map_id: number;
@@ -236,8 +246,12 @@ export function buildProjection(rawExport: unknown, config: PublicationConfig): 
   }
   const locations = [...cell.values()].filter((c) => c.observations >= t.minLocationCellObservations);
 
-  // Zone membership (honest association: source observed in zone; item via a
-  // source bucket observed in zone — cannot prove which zone a drop occurred in).
+  // Zone membership (honest association): a source is "observed" in a zone when
+  // location data places it there; an item is "inferred" to belong to the zone
+  // through such a source. The data cannot show in which zone an individual
+  // drop happened, so items carry NO zone-specific drop count (observations =
+  // null). Global drop counts are never allocated, divided or copied to zones.
+  const itemSources = new Map<string, Set<string>>();
   const itemById = new Map(items.map((i) => [i.item_id, i]));
   const zoneEntities = new Map<string, PubZoneEntity>();
   const dropsByBucket = new Map<string, PubDrop[]>();
@@ -255,9 +269,10 @@ export function buildProjection(rawExport: unknown, config: PublicationConfig): 
       map_id: mapId, entity_kind: "source" as const, item_id: null, source_type: src.source_type,
       source_id: src.source_id, source_level: src.source_level, display_kind: src.display_kind,
       name: src.name, name_norm: src.name_norm, loot_kinds: [] as LootKind[], observations: 0,
+      association: "observed" as const, associated_source_count: null,
     };
     if (!se.loot_kinds.includes(kind)) se.loot_kinds.push(kind);
-    se.observations += obs;
+    se.observations = (se.observations ?? 0) + obs;
     zoneEntities.set(sKey, se);
     for (const d of dropsByBucket.get(bk(type, src.source_id, src.source_level, kind)) ?? []) {
       const it = itemById.get(d.item_id);
@@ -266,10 +281,13 @@ export function buildProjection(rawExport: unknown, config: PublicationConfig): 
       const ie = zoneEntities.get(iKey) ?? {
         map_id: mapId, entity_kind: "item" as const, item_id: d.item_id, source_type: null, source_id: null,
         source_level: null, display_kind: "item" as const, name: it.name, name_norm: it.name_norm,
-        loot_kinds: [] as LootKind[], observations: 0,
+        loot_kinds: [] as LootKind[], observations: null,
+        association: "inferred" as const, associated_source_count: 0,
       };
       if (!ie.loot_kinds.includes(kind)) ie.loot_kinds.push(kind);
-      ie.observations += d.drops;
+      const srcSet = itemSources.get(iKey) ?? itemSources.set(iKey, new Set()).get(iKey)!;
+      srcSet.add(`${src.source_type}|${src.source_id}|${src.source_level}`);
+      ie.associated_source_count = srcSet.size;
       zoneEntities.set(iKey, ie);
     }
   }

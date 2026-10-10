@@ -88,6 +88,11 @@ jobs:
           npm run build
           npx playwright install --with-deps chromium
           npx playwright test --project=desktop tests/e2e/journeys.spec.ts tests/e2e/security.spec.ts
+      - name: Fixture <-> PostgreSQL adapter parity (zone semantics regression dataset)
+        working-directory: web
+        env:
+          PARITY_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_zone
+        run: npm run test:parity
 
   codeql:
     runs-on: ubuntu-latest

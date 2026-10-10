@@ -14,6 +14,7 @@ import {
   type SourceType,
   type ZoneDetail,
   type ZoneEntityQuery,
+  type ZoneEntityRow,
   type ZoneSummary,
 } from "./types";
 
@@ -118,13 +119,18 @@ export class PostgresAdapter implements PublicDataAdapter {
     return (r?.d as ZoneDetail) ?? null;
   }
 
-  async zoneEntities(z: ZoneEntityQuery): Promise<Page<SearchRow>> {
+  async zoneEntities(z: ZoneEntityQuery): Promise<Page<ZoneEntityRow>> {
     const rows = await this.q(
       "select * from web_api.zone_entities($1, $2, $3, $4, $5, $6)",
       [z.mapId, z.displayKind, z.lootKind, z.q, z.pageSize, (z.page - 1) * z.pageSize],
     );
     return {
-      rows: rows.map((r) => toSearchRow({ ...r, map_ids: [r.map_id ?? z.mapId] })),
+      rows: rows.map((r) => ({
+        ...toSearchRow({ ...r, observations: 0, map_ids: [r.map_id ?? z.mapId] }),
+        observations: num(r.observations),
+        association: r.association as ZoneEntityRow["association"],
+        associatedSourceCount: num(r.associated_source_count),
+      })),
       total: rows.length ? Number(rows[0]!.total_count) : 0,
     };
   }

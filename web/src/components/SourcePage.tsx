@@ -122,7 +122,7 @@ export async function SourcePage({ type, rawId }: { type: SourceType; rawId: str
           <>
             <ul className="flex flex-wrap gap-2">
               {s.zones.map((z) => (
-                <li key={z.mapId}><Link className="btn-ghost text-sm" href={zonePath(z.mapId)}>{z.zoneName} <span className="text-mist">· {fmtInt(z.observations)}</span></Link></li>
+                <li key={z.mapId}><Link className="btn-ghost text-sm" href={zonePath(z.mapId)}>{z.zoneName} <span className="text-mist">· {z.observations != null ? fmtInt(z.observations) : "n/a"}</span></Link></li>
               ))}
             </ul>
             <p className="text-xs text-mist">

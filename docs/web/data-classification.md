@@ -39,6 +39,15 @@
 
 `pub.publications` (ledger) · `pub.state` (active pointer) · `pub.audit_log` · `pub.items` · `pub.sources` · `pub.buckets` · `pub.drops` · `pub.zones` · `pub.zone_entities` · `pub.locations` · `pub.search_index`. Column-level definitions and CHECK constraints are in the migration. Every data row carries `publication_id`.
 
+## Zone membership semantics (`pub.zone_entities`)
+
+| Row | `association` | `observations` | `associated_source_count` |
+| --- | --- | --- | --- |
+| Source in zone | `observed` | **Measured**: observations of that source located in the zone | `NULL` |
+| Item in zone | `inferred` (via a source observed in the zone) | **`NULL` = not measured** | Distinct in-zone sources that drop the item |
+
+The item-to-zone association is legitimate and kept; a **zone-specific item drop count does not exist in the data** and is never invented: no global total, no proportional/divided share. Table CHECK constraints enforce this (an item row with a numeric count, or a source row marked `inferred`, cannot be published even by a defective worker; see `database/public-read/tests/public_read_zone_semantics.sql`). `pub.search_index` and `pub.items` keep the **global** `total_drops`/`observations`, labelled "all zones" in the UI. The foundation migration `0001` was edited in place because it has not been applied anywhere (verify before any environment applies it; otherwise add `0002`). Regression dataset: `database/tests/fixtures/zone_semantics_export.json` (one creature in two zones, global item total 50, no per-zone item count).
+
 ## Thresholds (`publisher/publication-config.json`)
 
 | Setting | Default | Effect |
@@ -55,4 +64,4 @@
 These thresholds are **sample-size** controls. They do **not** prove contributor anonymity: installations ≠ people, and the current base is 7 installations.
 
 ## Known data-quality caveats surfaced in the UI
-Observed rates, not drop chances (empty corpses may be missed) · per-level and per-method separation · item-to-zone association via sources · fishing-pool coordinates are projected · herbalism/disenchant provisional · no quest catalog · overlapping snapshots can double count.
+Observed rates, not drop chances (empty corpses may be missed) · per-level and per-method separation · item-to-zone association is **inferred** via sources and carries no zone-specific count · fishing-pool coordinates are projected · herbalism/disenchant provisional · no quest catalog · overlapping snapshots can double count.

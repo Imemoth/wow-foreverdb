@@ -132,13 +132,13 @@ export default async function ItemPage({ params }: { params: Params }) {
       <div className="grid gap-8 md:grid-cols-2">
         <section aria-labelledby="zones-title">
           <h2 id="zones-title" className="panel-title text-xl">Zones</h2>
-          <p className="mt-1 text-xs text-mist">Zones where a source of this item was observed. ForeverDB cannot prove the exact zone of each individual drop.</p>
+          <p className="mt-1 text-xs text-mist">Inferred: zones where a source of this item was observed. ForeverDB cannot prove the zone of any individual drop, so no zone-specific drop count is shown.</p>
           {d.zones.length === 0 ? <p className="mt-3 text-sm text-mist">No located observations.</p> : (
             <ul className="mt-3 space-y-1.5">
               {d.zones.map((z) => (
                 <li key={z.mapId} className="flex justify-between gap-3 text-sm">
                   <Link href={zonePath(z.mapId)}>{z.zoneName}</Link>
-                  <span className="text-mist">{fmtInt(z.observations)} related observations</span>
+                  <span className="text-mist">{z.sourceCount ? `via ${fmtInt(z.sourceCount)} source${z.sourceCount === 1 ? "" : "s"}` : "inferred"}</span>
                 </li>
               ))}
             </ul>

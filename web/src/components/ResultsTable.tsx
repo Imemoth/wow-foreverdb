@@ -1,12 +1,17 @@
-import type { SearchRow, ZoneSummary } from "@/lib/data/types";
+import type { SearchRow, ZoneEntityRow, ZoneSummary } from "@/lib/data/types";
 import { displayId, fmtInt } from "@/lib/format";
 import { entityPath, zonePath } from "@/lib/routes";
 import { DisplayKindBadge, LootKindBadge } from "./Badges";
 import { EntityLink } from "./EntityLink";
 import Link from "next/link";
 
-export function ResultsTable({ rows, zones, caption, observationsLabel = "Observations" }: {
-  rows: SearchRow[]; zones: ZoneSummary[]; caption: string; observationsLabel?: string;
+/**
+ * Search rows carry GLOBAL observation counts (label them as such). Zone-directory
+ * rows carry the ZONE-SPECIFIC measured count, which is null ("not measured") for
+ * items: the association is inferred through sources and no per-zone drop count exists.
+ */
+export function ResultsTable({ rows, zones, caption, observationsLabel = "Observations (all zones)" }: {
+  rows: (SearchRow | ZoneEntityRow)[]; zones: ZoneSummary[]; caption: string; observationsLabel?: string;
 }) {
   const zoneName = new Map(zones.map((z) => [z.mapId, z.zoneName]));
   return (
@@ -46,7 +51,16 @@ export function ResultsTable({ rows, zones, caption, observationsLabel = "Observ
                   ))}
                   {r.mapIds.length > 3 && <span className="text-xs"> +{r.mapIds.length - 3}</span>}
                 </td>
-                <td className="num text-mist">{fmtInt(r.observations)}</td>
+                <td className="num text-mist">
+                  {r.observations != null ? fmtInt(r.observations) : (
+                    <span title="Items are linked to this zone through sources observed here. ForeverDB has no zone-specific drop count for them.">
+                      Not measured
+                      {"associatedSourceCount" in r && r.associatedSourceCount != null && (
+                        <span className="block text-[0.7rem]">inferred via {fmtInt(r.associatedSourceCount)} source{r.associatedSourceCount === 1 ? "" : "s"}</span>
+                      )}
+                    </span>
+                  )}
+                </td>
               </tr>
             );
           })}

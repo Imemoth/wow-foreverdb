@@ -13,7 +13,33 @@ export function clientIp(headers: Headers, trusted: "x-real-ip" | "x-forwarded-f
   // x-forwarded-for: the platform-appended client address is the FIRST entry
   // only when the platform overwrites the header (Vercel does). Configure accordingly.
   const first = raw.split(",")[0]!.trim();
-  return /^[0-9a-fA-F:.]{2,45}$/.test(first) ? first : "invalid";
+  if (!/^[0-9a-fA-F:.]{2,45}$/.test(first)) return "invalid";
+  return first.includes(":") ? ipv6Prefix64(first) : first;
+}
+
+/**
+ * IPv6 clients commonly hold a whole /64 (or more), so keying on the full
+ * address would give them unlimited buckets. Canonicalise (expand, lowercase)
+ * and keep the first 64 bits. IPv4-mapped addresses collapse to their IPv4 form.
+ */
+export function ipv6Prefix64(addr: string): string {
+  let host: string;
+  try {
+    host = new URL(`http://[${addr}]/`).hostname.slice(1, -1); // WHATWG canonical form
+  } catch {
+    return "invalid";
+  }
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (mapped) {
+    const a = parseInt(mapped[1]!, 16), b = parseInt(mapped[2]!, 16);
+    return `${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`;
+  }
+  const [head, tail = ""] = host.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = host.includes("::") ? [...left, ...Array(8 - left.length - right.length).fill("0"), ...right] : left;
+  if (groups.length !== 8) return "invalid";
+  return `${groups.slice(0, 4).map((g) => g.padStart(4, "0")).join(":")}::/64`;
 }
 
 export function hashIp(ip: string, salt: string | undefined): string {

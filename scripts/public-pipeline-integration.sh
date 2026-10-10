@@ -78,5 +78,20 @@ $PSQL -d $PUB -c "select pub_admin.activate_publication($first)" >/dev/null
 pass "new publication activated; operator rollback restored publication $first"
 
 $PSQL -d $PUB -f database/public-read/tests/public_read_model_security.sql 2>&1 | grep -E "PASS|FAIL" || fail "public read model security"
+
+# P2: deterministic zone-semantics regression fixture in its OWN throwaway public database
+# (a source observed in two zones, known global item drop count, no zone-specific item count).
+PUB2=fdb_it_zone
+$PSQL -d postgres -c "drop database if exists $PUB2" -c "create database $PUB2" >/dev/null
+$PSQL -d $PUB2 -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
+out=$(cd publisher && PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${PUB2}" \
+      npx tsx src/cli.ts publish --from-export ../database/tests/fixtures/zone_semantics_export.json)
+echo "$out" | grep -q '"outcome":"activated"' || fail "zone-semantics publish: $out"
+zs=$($PSQL -d $PUB2 -f database/public-read/tests/public_read_zone_semantics.sql 2>&1) || { echo "$zs"; fail "zone semantics SQL"; }
+echo "$zs" | grep -E "PASS|FAIL"
+echo "$zs" | grep -q FAIL && fail "zone semantics SQL reported FAIL"
+[ "$(echo "$zs" | grep -c PASS)" = 2 ] || fail "zone semantics SQL: expected 2 PASS lines"
+pass "zone-semantics regression database published and verified (PUB2=$PUB2)"
 echo "ALL PIPELINE CHECKS PASSED"
 echo "PUBLIC_READ_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB}"
+echo "PARITY_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB2}"

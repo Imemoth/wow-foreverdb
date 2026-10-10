@@ -14,7 +14,7 @@ import { z } from "zod";
  * website traffic never reaches the production database at all.
  */
 
-export const RULE_NAMES = ["api_search", "api_detail", "page_db"] as const;
+export const RULE_NAMES = ["api_search", "api_detail", "page_db", "api_challenge"] as const;
 export type RuleName = (typeof RULE_NAMES)[number];
 
 const Rule = z.object({
@@ -32,6 +32,14 @@ export const DEFAULT_RULES: Record<RuleName, Rule> = {
   api_search: { windowSec: 60, perIp: 30, perSession: 30, global: 3_000, challengeAt: 20 },
   api_detail: { windowSec: 60, perIp: 120, perSession: 120, global: 10_000 },
   page_db: { windowSec: 60, perIp: 90, perSession: 90, global: 15_000, challengeAt: 60 },
+  /**
+   * POST /api/v1/challenge: every allowed request triggers an outbound
+   * Cloudflare Siteverify call, so the budget is deliberately small. A human
+   * needs one successful attempt per 30-minute pass. `perSession` is part of
+   * the shared schema but is NEVER consulted for this rule (the session cookie
+   * is client-controlled and must not be an identity here).
+   */
+  api_challenge: { windowSec: 600, perIp: 6, perSession: 6, global: 600 },
 };
 
 export function loadRules(json: string | undefined): Record<RuleName, Rule> {
@@ -48,6 +56,15 @@ export function classify(pathname: string): RuleName | null {
   if (pathname.startsWith("/api/v1/")) return pathname === "/api/v1/challenge" ? null : "api_detail";
   if (pathname === "/database" || /^\/(item|creature|object|fishing|zone)\//.test(pathname)) return "page_db";
   return null;
+}
+
+/**
+ * The rule (if any) that protects a request. Data routes are limited on
+ * GET/HEAD; the challenge endpoint is limited on POST (its only method).
+ */
+export function classifyRequest(pathname: string, method: string): RuleName | null {
+  if (pathname === "/api/v1/challenge") return method === "POST" ? "api_challenge" : null;
+  return method === "GET" || method === "HEAD" ? classify(pathname) : null;
 }
 
 export interface Counter { key: string; limit: number }
@@ -126,4 +143,32 @@ export async function checkRateLimit(
 const SESSION_RE = /^[A-Za-z0-9_-]{22}$/;
 export function validSessionId(v: string | undefined | null): string | null {
   return v && SESSION_RE.test(v) ? v : null;
+}
+
+/**
+ * Strict two-phase budget for endpoints with costly side effects (outbound
+ * calls). Identity is the hashed trusted-header IP ONLY: no session cookie.
+ * The per-IP counter is consulted first; a client already over its own budget
+ * is rejected WITHOUT touching the global counter, so one abusive address
+ * cannot burn the shared ceiling on its own. The store throws on failure;
+ * callers must treat that as fail-closed.
+ */
+export async function checkStrictLimit(
+  store: CounterStore,
+  ruleName: RuleName,
+  rule: Rule,
+  ipHash: string,
+  nowMs: number = Date.now(),
+): Promise<Decision> {
+  const window = Math.floor(nowMs / 1000 / rule.windowSec);
+  const resetSec = Math.max(1, Math.ceil((window + 1) * rule.windowSec - nowMs / 1000));
+  const [ipCount] = await store.incr([`rl:${ruleName}:ip:${ipHash}:${window}`], rule.windowSec * 2);
+  if (ipCount === undefined || ipCount > rule.perIp) {
+    return { allowed: false, reason: "rate_limited", retryAfterSec: resetSec, limit: rule.perIp };
+  }
+  const [globalCount] = await store.incr([`rl:${ruleName}:global:${window}`], rule.windowSec * 2);
+  if (globalCount === undefined || globalCount > rule.global) {
+    return { allowed: false, reason: "rate_limited", retryAfterSec: resetSec, limit: rule.global };
+  }
+  return { allowed: true, remaining: Math.max(0, rule.perIp - ipCount), limit: rule.perIp, resetSec };
 }

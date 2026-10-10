@@ -1,13 +1,45 @@
 # Verification results — `web/foundation-mvp`
 
-Executed 2026-10-09 in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15 ephemeral clusters, Chromium 141 via Playwright 1.56.1). **No check ran against production except the read-only audit queries listed in the assessment.** GitHub Actions has **not** run this branch yet: the session could not push.
+Executed in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15 ephemeral clusters, Chromium via Playwright 1.56.1). **No check ran against production except the read-only audit queries listed in the assessment.**
+
+**Evidence tiers used below:** *Implemented* (code exists) · *Locally tested* (run in the authoring workspace) · *GitHub CI verified* · *Runtime verified* (real Upstash/Turnstile/staging) · *Pending infrastructure* · *Pending production approval*.
+
+**GitHub CI status.** The owner reported six successful checks (web, publisher/pipeline, API security, collector smoke, CodeQL, …) for the earlier head `fde9ae6`. That was not re-verified here. The 2026-10-10 hardening commit (P1/P2) had **not been pushed** from the authoring session (no GitHub credential was attached), so **CI for it is NOT YET VERIFIED**. Check the PR's Actions tab after pushing; do not treat the local results below as CI evidence.
+
+## 2026-10-10 hardening (PR #22 follow-up): P1 challenge endpoint, P2 zone statistics
+
+All results **locally tested**, not CI-verified.
+
+| Area | Check | Result |
+| --- | --- | --- |
+| P1 unit (web) | `tests/unit/challenge.test.ts`: full proxy→route chain with mocked Siteverify/Upstash. Repeated POST → 429 (`Retry-After`, `no-store`) and **zero** Siteverify calls after the limit; per-IP then global ceiling; abusive IP does not burn the global budget; spoofed untrusted headers/rotating session cookie/missing trusted header cannot bypass; IPv6 /64 keying; missing/invalid/understated/overstated `Content-Length`; oversize, streamed-oversize (cancelled), at-cap/over-cap by one byte, malformed JSON/UTF-8/empty; foreign/missing origin and wrong content type refused before counting; invalid token, Siteverify outage/non-JSON, no secret/third-party body echo; Upstash HTTP 500/network/garbage → 503 fail-closed with no Siteverify call; healthy Upstash keys (no session key); unconfigured Turnstile → free 404; proxy matcher covers the route. The pre-fix proxy fails 10 of these (mutation check) | **PASS** (included in 115/115) |
+| P2 unit (publisher) | `test/zone-semantics.test.ts`: item in both zones, observations `null`/`inferred`, no zone claims global 50, distinct-source counts, source observations kept, aggregates, search index global, determinism, committed web projection equals worker output | **PASS 9/9** (publisher total **29/29**) |
+| P2 unit (web) | `tests/unit/zone-semantics.test.ts`: adapter, API route, rendered table labels ("Not measured", "inferred via N sources"), search ordering stays global, shared sample dataset has no numeric item zone count, creature/gathering/fishing intact | **PASS 11/11** |
+| Web unit total | all files | **PASS 115/115** |
+| SQL | `public_read_zone_semantics.sql` (2 PASS): web_api rows/ordering/item+source JSON; schema CHECK rejects numeric item count and mislabelled association. Existing `public_read_model_security.sql` (3 PASS), export smoke (2 PASS) | **PASS** |
+| Pipeline | `scripts/public-pipeline-integration.sh` incl. new zone-semantics database: publish, idempotent republish, fail-closed cases, rollback | **PASS** (exit 0) |
+| Parity | `npm run test:parity`: FixtureAdapter vs PostgresAdapter on the regression dataset (zones, zone directory incl. filters/paging/out-of-range, items, sources, search incl. zone/sort/kind) | **PASS 37/37** (found and fixed one pre-existing out-of-range total mismatch) |
+| E2E fixture | incl. 2 new specs (zone directory never shows item counts; item page "Inferred") | **PASS 46/46** |
+| E2E Postgres adapter | journeys + security, desktop | **PASS 18/18** |
+| Static | ESLint, `tsc --noEmit` (web, publisher) | **PASS** |
+| Build / bundle | `next build`; bundle secret scan (37 files) | **PASS** |
+| Dependencies | `npm audit --omit=dev --audit-level=high` web and publisher | **PASS** 0 vulnerabilities |
+| Repo-wide | `git diff --check` | **PASS** |
+| Repo-wide | API security regression (`api_security_roles_and_quotas.sql` + anon/private check) on ephemeral PG | **PASS** locally (not touched by this change) |
+| Repo-wide | Collector smoke (Lua) | **NOT RUN** locally: `lua5.4` unavailable in the workspace. No addon/collector file changed |
+| Repo-wide | CodeQL | **NOT RUN** locally (GitHub-only) |
+| Independent review | Separate reviewer agent over the full diff: 0 critical/high; 3 medium (proxy body buffer, IPv6 rotation, untested matcher) fixed in this change; low items fixed or documented (zone/zones copy "related items", parity skip fails in CI, docs) | done |
+
+Known low residuals from the review: collation differences between JS `localeCompare` and PostgreSQL ordering for exotic names (parity data is ASCII); preview deployments without `RATE_LIMIT_SALT` use a public dev salt; shared NAT users share the 6/10-min challenge budget.
+
+## Foundation results (2026-10-09, historical, superseded counts where noted above)
 
 | Area | Check | Result | Evidence / command |
 | --- | --- | --- | --- |
 | Dependencies | `npm audit --omit=dev` (web) | **PASS** — 0 vulnerabilities | after replacing gray-matter (4 moderate via js-yaml/argparse/sprintf-js) |
 | Static | ESLint (next core-web-vitals + TS, `react/no-danger`, no eval) | **PASS** | `npm run lint` |
 | Static | TypeScript strict (web, publisher) | **PASS** | `tsc --noEmit` |
-| Unit (web) | Validation bounds, IDs, rate limiter (IP/session/global/challenge/Upstash pipeline), identity hashing and pass cookie, CSP, env fail-closed rules, fixture adapter semantics, formatting, routes, content front matter, Markdown XSS/links/images | **PASS 60/60** | `npm test` |
+| Unit (web) | Validation bounds, IDs, rate limiter (IP/session/global/challenge/Upstash pipeline), identity hashing and pass cookie, CSP, env fail-closed rules, fixture adapter semantics, formatting, routes, content front matter, Markdown XSS/links/images | **PASS 60/60** (now 115/115, see above) | `npm test` |
 | Unit (publisher) | Name sanitizer, Wilson/confidence, projection, contract violation fail-closed (no value echo), rejection and anomaly ratios, dominance, location suppression, synthetic pool kind, deterministic hash, no private identifiers | **PASS 20/20** | `npm test` |
 | SQL (private export 0010) | API roles cannot reach the export. Denominators equal raw sums. 1 % quantization. Fine grid rejected. Reader denied 11 private tables. Zero private identifiers/canaries in output | **PASS** | `database/tests/public_projection_export_smoke.sql` |
 | SQL (public read model) | Web reader: no table SELECT/INSERT/UPDATE, no admin; bounds on all `web_api` functions; injection string inert. Publisher: no SELECT/DELETE/rollback, RLS blocks writes into the active publication, mismatched finalize rolls back. Supabase API roles: no access | **PASS** | `database/public-read/tests/public_read_model_security.sql` |
@@ -20,11 +52,11 @@ Executed 2026-10-09 in an isolated cloud workspace (Node 22.22, PostgreSQL 16.15
 | Fail-closed config | `FOREVERDB_DEPLOYMENT=production` + fixture ⇒ HTTP 500, no config detail in body, reason only in server log | **PASS** | manual curl |
 
 ## Not executed (honest gaps)
-- GitHub Actions CI on this branch (push blocked), including CodeQL.
+- GitHub Actions CI for the 2026-10-10 hardening commit, including CodeQL and collector smoke (not pushed from the authoring session).
 - Any provisioning (public DB, Upstash, Turnstile, Vercel, WAF): nothing exists yet.
 - Load and abuse testing against a staging deployment. The in-app limiter was only exercised in-process (memory store).
-- Real Upstash behaviour (only a mocked REST pipeline was tested).
-- Real Turnstile verification (endpoint covered only for its closed state).
+- Real Upstash behaviour (only a mocked REST pipeline was tested), incl. the new challenge limiter and its fail-closed 503.
+- Real Turnstile verification (success path covered only with a mocked Siteverify; no call to Cloudflare was made).
 - Screen-reader testing (NVDA/VoiceOver) and manual WCAG review. Automated axe catches only part of WCAG.
 - Lighthouse / Core Web Vitals measurement on real infrastructure.
 - Applying 0010 to production and running the export against real data.

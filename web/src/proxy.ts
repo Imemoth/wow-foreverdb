@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
 import { BASE_SECURITY_HEADERS, HSTS, buildPageCsp } from "@/lib/security/headers";
+import { isSameOriginJson } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
 import {
   MemoryStore,
   UpstashStore,
   checkRateLimit,
-  classify,
+  checkStrictLimit,
+  classifyRequest,
   loadRules,
   validSessionId,
   type CounterStore,
@@ -71,8 +73,39 @@ export async function proxy(request: NextRequest) {
   const ipHash = hashIp(clientIp(request.headers, env.TRUSTED_IP_HEADER), env.RATE_LIMIT_SALT);
   const sessionId = validSessionId(request.cookies.get(sidCookie)?.value);
 
-  const ruleName = classify(pathname);
-  if (ruleName && (request.method === "GET" || request.method === "HEAD")) {
+  const ruleName = classifyRequest(pathname, request.method);
+  if (ruleName === "api_challenge") {
+    // Outbound-call endpoint (Cloudflare Siteverify). Nothing below may reach
+    // the route handler without first passing the origin pre-check and the
+    // strict per-IP + global budget. Not applicable until Turnstile is
+    // configured (the route answers 404 for free).
+    if (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET) {
+      // Cross-site POSTs are refused BEFORE counting so a hostile page cannot
+      // burn a victim's budget from their browser.
+      if (!isSameOriginJson(request.headers, env.SITE_URL)) {
+        return NextResponse.json({ error: "forbidden" }, {
+          status: 403,
+          headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
+        });
+      }
+      try {
+        // Identity: trusted-header IP hash only. The session cookie is
+        // client-controlled and deliberately NOT part of this decision.
+        const decision = await checkStrictLimit(counterStore(), ruleName, rules[ruleName], ipHash);
+        if (!decision.allowed) {
+          log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
+          return tooMany(true, decision.retryAfterSec, decision.reason, https);
+        }
+      } catch (e) {
+        // FAIL CLOSED: without a working limiter we must not expose the
+        // outbound Siteverify call. Data routes are unaffected.
+        log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
+        return NextResponse.json({ error: "temporarily_unavailable" }, {
+          status: 503, headers: { ...BASE_SECURITY_HEADERS, "Retry-After": "30", "Cache-Control": "no-store" },
+        });
+      }
+    }
+  } else if (ruleName) {
     try {
       const decision = await checkRateLimit(counterStore(), ruleName, rules[ruleName], {
         ipHash,

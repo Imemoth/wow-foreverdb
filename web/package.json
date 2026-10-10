@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
-    "fixture:refresh": "node scripts/refresh-fixture.mjs"
+    "fixture:refresh": "node scripts/refresh-fixture.mjs",
+    "test:parity": "vitest run --config vitest.parity.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/cinzel": "5.3.0",

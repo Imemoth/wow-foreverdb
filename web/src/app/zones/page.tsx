@@ -28,7 +28,7 @@ export default async function ZonesPage() {
               <Link href={zonePath(z.mapId)} className="panel block p-5 no-underline transition hover:border-gold-500/70">
                 <span className="block font-[family-name:var(--font-display)] text-lg font-semibold text-gold-300">{z.zoneName}</span>
                 <span className="mt-2 block text-sm text-mist">
-                  {fmtInt(z.sourceCount)} sources · {fmtInt(z.itemCount)} items · {fmtInt(z.observations)} located observations
+                  {fmtInt(z.sourceCount)} sources · {fmtInt(z.itemCount)} related items · {fmtInt(z.observations)} located observations
                 </span>
               </Link>
             </li>

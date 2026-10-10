@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { serverEnv } from "@/lib/env";
 import { API_CSP } from "@/lib/security/headers";
+import { MAX_CHALLENGE_BODY_BYTES, isSameOriginJson, readBoundedJson } from "@/lib/security/challenge";
 import { clientIp, hashIp, signPass } from "@/lib/security/identity";
 
 /**
@@ -17,14 +18,16 @@ export async function POST(req: Request) {
   if (!env.TURNSTILE_SECRET_KEY || !env.CHALLENGE_COOKIE_SECRET) {
     return NextResponse.json({ error: "challenge_not_configured" }, { status: 404, headers });
   }
-  // CSRF / cross-site abuse: same-origin JSON only.
-  const origin = req.headers.get("origin");
-  if (origin !== new URL(env.SITE_URL).origin || !req.headers.get("content-type")?.startsWith("application/json")) {
+  // CSRF / cross-site abuse: same-origin JSON only. (Rate limiting happens in
+  // src/proxy.ts BEFORE this handler runs; see docs/web/api-contract.md.)
+  if (!isSameOriginJson(req.headers, env.SITE_URL)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403, headers });
   }
-  const len = Number(req.headers.get("content-length") ?? "0");
-  if (len > 4096) return NextResponse.json({ error: "payload_too_large" }, { status: 413, headers });
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  // The body ceiling is enforced on the bytes actually read, never on the
+  // client-supplied Content-Length alone.
+  const body = await readBoundedJson(req, MAX_CHALLENGE_BODY_BYTES);
+  if (!body.ok) return NextResponse.json({ error: body.error }, { status: body.status, headers });
+  const parsed = Body.safeParse(body.value);
   if (!parsed.success) return NextResponse.json({ error: "invalid_body" }, { status: 400, headers });
 
   const ip = clientIp(req.headers, env.TRUSTED_IP_HEADER);

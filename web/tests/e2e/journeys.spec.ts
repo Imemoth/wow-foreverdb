@@ -72,6 +72,27 @@ test("zone directory filters and empty states", async ({ page }) => {
   await expect(page.getByText("Nothing observed for this filter yet")).toBeVisible();
 });
 
+test("zone directory never presents a zone-specific count for items (P2)", async ({ page }) => {
+  await page.goto("/zone/1420?type=item");
+  await expect(page.getByRole("columnheader", { name: "Observed in this zone" })).toBeVisible();
+  await expect(page.getByText("In-zone obs.")).toHaveCount(0);
+  await expect(page.getByText(/by inference/)).toBeVisible();
+  const itemCells = await page.locator("tbody td.num").allInnerTexts();
+  expect(itemCells.length).toBeGreaterThan(0);
+  for (const c of itemCells) expect(c).toMatch(/^Not measured/);
+  // Sources keep their genuine, measured in-zone observations.
+  await page.goto("/zone/1420?type=creature");
+  const creatureCells = await page.locator("tbody td.num").allInnerTexts();
+  expect(creatureCells.length).toBeGreaterThan(0);
+  for (const c of creatureCells) expect(c.trim()).toMatch(/^[\d.,\s]+$/);
+});
+
+test("item page presents zones as inferred, without a zone-specific count", async ({ page }) => {
+  await page.goto("/item/2672");
+  await expect(page.getByText(/Inferred: zones where a source of this item was observed/)).toBeVisible();
+  await expect(page.getByText("related observations")).toHaveCount(0);
+});
+
 test("tooltips appear on hover and close with Escape", async ({ page }) => {
   await page.goto("/item/2770");
   await page.getByRole("region", { name: /Observed sources/ }).getByRole("link", { name: "Copper Vein" }).hover();

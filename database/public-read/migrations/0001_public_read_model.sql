@@ -214,6 +214,17 @@ create table pub.zones (
     primary key (publication_id, map_id)
 );
 
+-- Zone membership. SEMANTICS (see docs/web/data-classification.md):
+--   * source rows: association = 'observed'; observations = how often THAT SOURCE
+--     was observed in the zone (measured, location-backed).
+--   * item rows:   association = 'inferred' (linked through a source observed in
+--     the zone). observations is ALWAYS NULL = "not measured": the data cannot
+--     show in which zone an individual drop happened, so a global drop count must
+--     never be stored here, allocated, divided or otherwise stood in.
+--     associated_source_count = distinct sources in the zone that drop the item
+--     (a structural count, not a drop count).
+-- Enforced by table constraints so a defective worker cannot publish a zone-specific
+-- item count even by mistake.
 create table pub.zone_entities (
     publication_id bigint not null,
     map_id bigint not null,
@@ -226,13 +237,17 @@ create table pub.zone_entities (
     name text not null,
     name_norm text not null,
     loot_kinds text[] not null,
-    observations bigint not null check (observations > 0),
+    observations bigint check (observations is null or observations > 0),
+    association text not null check (association in ('observed', 'inferred')),
+    associated_source_count integer check (associated_source_count is null or associated_source_count > 0),
     foreign key (publication_id, map_id)
         references pub.zones (publication_id, map_id) on delete cascade,
     check (
-        (entity_kind = 'item' and item_id is not null and source_type is null)
+        (entity_kind = 'item' and item_id is not null and source_type is null
+            and association = 'inferred' and observations is null and associated_source_count is not null)
         or (entity_kind = 'source' and item_id is null and source_type is not null
-            and source_id is not null and source_level is not null)
+            and source_id is not null and source_level is not null
+            and association = 'observed' and observations is not null and associated_source_count is null)
     )
 );
 create unique index zone_entities_uq on pub.zone_entities (
@@ -643,8 +658,9 @@ begin
                 limit 50) x), '[]'::jsonb),
         'zones', coalesce((
             select jsonb_agg(jsonb_build_object('mapId', z.map_id, 'zoneName', z.zone_name,
-                                                'observations', ze.observations)
-                             order by ze.observations desc)
+                                                'observations', null, 'association', ze.association,
+                                                'sourceCount', ze.associated_source_count)
+                             order by ze.associated_source_count desc, z.zone_name, z.map_id)
             from pub.zone_entities ze
             join pub.zones z on z.publication_id = ze.publication_id and z.map_id = ze.map_id
             where ze.publication_id = v_pub and ze.entity_kind = 'item' and ze.item_id = i.item_id), '[]'::jsonb)
@@ -701,7 +717,7 @@ begin
         ),
         'zones', coalesce((
             select jsonb_agg(jsonb_build_object('mapId', z.map_id, 'zoneName', z.zone_name,
-                                                'observations', q.obs) order by q.obs desc)
+                                                'observations', q.obs, 'association', 'observed') order by q.obs desc)
             from (select ze.map_id, sum(ze.observations) as obs from pub.zone_entities ze
                   where ze.publication_id = v_pub and ze.entity_kind = 'source'
                     and ze.source_type = p_source_type and ze.source_id = p_source_id
@@ -764,7 +780,8 @@ create function web_api.zone_entities(
     p_map_id bigint, p_display_kind text, p_loot_kind text, p_q text, p_limit integer, p_offset integer)
 returns table (
     entity_kind text, display_kind text, item_id bigint, source_type text, source_id bigint,
-    source_level integer, name text, loot_kinds text[], observations bigint, total_count bigint)
+    source_level integer, name text, loot_kinds text[], observations bigint, association text,
+    associated_source_count integer, total_count bigint)
 language plpgsql stable security definer set search_path = ''
 as $$
 #variable_conflict use_column
@@ -782,14 +799,17 @@ begin
     end if;
     return query
     select ze.entity_kind, ze.display_kind, ze.item_id, ze.source_type, ze.source_id, ze.source_level,
-           ze.name, ze.loot_kinds, ze.observations, count(*) over ()
+           ze.name, ze.loot_kinds, ze.observations, ze.association, ze.associated_source_count, count(*) over ()
     from pub.zone_entities ze
     where ze.publication_id = web_api.active_id()
       and ze.map_id = p_map_id
       and (p_display_kind is null or ze.display_kind = p_display_kind)
       and (p_loot_kind is null or ze.loot_kinds @> array[p_loot_kind])
       and (v_q = '' or ze.name_norm like '%' || v_q || '%')
-    order by ze.observations desc, ze.name_norm, ze.entity_kind, ze.item_id nulls last,
+    -- Measured source observations first; items (not measured per zone) follow,
+    -- ordered by how many in-zone sources drop them. Units are never mixed.
+    order by (ze.entity_kind = 'source') desc, ze.observations desc nulls last,
+             ze.associated_source_count desc nulls last, ze.name_norm, ze.entity_kind, ze.item_id nulls last,
              ze.source_type nulls last, ze.source_id nulls last, ze.source_level nulls last
     limit p_limit offset p_offset;
 end;

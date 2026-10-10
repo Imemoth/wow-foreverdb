@@ -416,8 +416,9 @@ Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthet
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
 - [x] Fail-closed publication worker (`publisher/`): strict contract, name sanitization, sample thresholds, Wilson intervals, dominance flag, deterministic hash.
 - [x] Next.js 16 website: search, item/creature/object/fishing/zone pages, news/guides/blog (Markdown), RSS, sitemap, nonce CSP, distributed rate limiting, progressive Turnstile challenge.
-- [x] Local evidence: unit 80/80, SQL security suites, pipeline E2E, Playwright 44/44 (incl. axe WCAG 2.2 AA) on fixture and 16/16 on Postgres adapter.
-- [ ] CI run on GitHub (branch not yet pushed from the authoring session).
+- [x] Local evidence: web unit 115/115, publisher 29/29, SQL security + zone-semantics suites, pipeline E2E, fixture↔PostgreSQL parity 37/37, Playwright 46/46 (incl. axe WCAG 2.2 AA) on fixture and 18/18 on Postgres adapter.
+- [x] PR #22 hardening (implemented, locally tested): dedicated fail-closed rate limit + bounded body for `POST /api/v1/challenge`; zone item statistics no longer present global drop counts as zone-specific (item↔zone is *inferred*, count *not measured*).
+- [ ] GitHub CI on the hardening commit (re-verify after push; earlier head `fde9ae6` reported green by owner).
 - [ ] Provision public DB, Upstash, Vercel, WAF ([infrastructure setup](web/infrastructure-setup.md)).
 - [ ] Production 0010 approval + first real publication.
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.

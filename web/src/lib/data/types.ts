@@ -65,7 +65,16 @@ export interface DropRow {
   dominated: boolean;
 }
 
-export interface ZoneRef { mapId: number; zoneName: string; observations: number }
+/**
+ * A zone linked to an entity.
+ * - Sources: association "observed", observations = measured in-zone observations of the source.
+ * - Items: association "inferred" (via a source observed in the zone), observations is ALWAYS null
+ *   ("not measured") and sourceCount is the number of in-zone sources dropping the item.
+ */
+export interface ZoneRef {
+  mapId: number; zoneName: string; observations: number | null;
+  association: "observed" | "inferred"; sourceCount?: number | null;
+}
 
 export interface ItemDetail {
   item: { id: number; name: string; sourceCount: number; totalDrops: number; lastObservedAt: string | null; indexable: boolean };
@@ -104,6 +113,16 @@ export interface ZoneDetail extends ZoneSummary {
   lootKinds: Partial<Record<LootKind, number>>;
 }
 
+/**
+ * A row of a zone directory. `observations` is the ZONE-SPECIFIC measured count:
+ * a number for sources, null ("not measured") for items. It is never a global count.
+ */
+export interface ZoneEntityRow extends Omit<SearchRow, "observations"> {
+  observations: number | null;
+  association: "observed" | "inferred";
+  associatedSourceCount: number | null;
+}
+
 export interface ZoneEntityQuery {
   mapId: number; displayKind: DisplayKind | null; lootKind: LootKind | null; q: string; page: number; pageSize: number;
 }
@@ -121,7 +140,7 @@ export interface PublicDataAdapter {
   source(type: SourceType, id: number): Promise<SourceDetail | null>;
   zones(): Promise<ZoneSummary[]>;
   zone(mapId: number): Promise<ZoneDetail | null>;
-  zoneEntities(q: ZoneEntityQuery): Promise<Page<SearchRow>>;
+  zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>>;
   recent(limit: number): Promise<RecentRow[]>;
   sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]>;
 }

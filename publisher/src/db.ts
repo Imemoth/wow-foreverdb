@@ -62,7 +62,7 @@ const TABLES: Record<keyof Omit<Projection, "contractVersion" | "sourceDataUpdat
   buckets: cols("source_type:text source_id:bigint source_level:integer loot_kind:text observations:bigint confidence:text"),
   drops: cols("source_type:text source_id:bigint source_level:integer loot_kind:text item_id:bigint drops:bigint quantity:bigint observations:bigint rate:numeric rate_lower:numeric rate_upper:numeric confidence:text dominated:boolean"),
   zones: cols("map_id:bigint zone_name:text observations:bigint source_count:integer item_count:integer"),
-  zone_entities: cols("map_id:bigint entity_kind:text item_id:bigint source_type:text source_id:bigint source_level:integer display_kind:text name:text name_norm:text loot_kinds:text[] observations:bigint"),
+  zone_entities: cols("map_id:bigint entity_kind:text item_id:bigint source_type:text source_id:bigint source_level:integer display_kind:text name:text name_norm:text loot_kinds:text[] observations:bigint association:text associated_source_count:integer"),
   locations: cols("source_type:text source_id:bigint source_level:integer loot_kind:text map_id:bigint subzone_name:text x:numeric y:numeric observations:bigint"),
   search_index: cols("entity_kind:text display_kind:text item_id:bigint source_type:text source_id:bigint source_level:integer name:text name_norm:text loot_kinds:text[] map_ids:bigint[] observations:bigint"),
 };

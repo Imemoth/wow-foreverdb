@@ -10,7 +10,7 @@ import { Pagination } from "@/components/Pagination";
 import { ResultsTable } from "@/components/ResultsTable";
 import { StatTile } from "@/components/StatTile";
 import { data } from "@/lib/data";
-import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type SearchRow, type ZoneEntityQuery } from "@/lib/data/types";
+import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type ZoneEntityQuery, type ZoneEntityRow } from "@/lib/data/types";
 import { DISPLAY_KIND_PLURAL, LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
@@ -29,7 +29,7 @@ export async function generateMetadata({ params, searchParams }: { params: Param
   const z = await load((await params).id);
   if (!z) return { title: "Zone not found", robots: { index: false } };
   const filtered = Object.keys(await searchParams).length > 0;
-  const description = `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} items, from ForeverDB player observations.`;
+  const description = `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} related items (linked through those sources), from ForeverDB player observations.`;
   return {
     title: `${z.zoneName} — Zone`,
     description,
@@ -55,7 +55,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
   const sp = toParams(await searchParams);
 
   let q: ZoneEntityQuery | null = null;
-  let result: Page<SearchRow> | null = null;
+  let result: Page<ZoneEntityRow> | null = null;
   let error: string | null = null;
   try {
     q = parseZoneEntityQuery(z.mapId, sp, "lenient");
@@ -88,7 +88,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
         </div>
         <div className="grid grid-cols-3 gap-3">
           <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
-          <StatTile label="Items" value={fmtInt(z.itemCount)} />
+          <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
           <StatTile label="Located obs." value={fmtInt(z.observations)} />
         </div>
       </header>
@@ -104,7 +104,9 @@ export default async function ZonePage({ params, searchParams }: { params: Param
 
       <DataNote>
         This directory lists only what ForeverDB players have observed in {z.zoneName}. It is not a complete list of
-        everything in the zone. Items are linked to the zone through sources observed here.
+        everything in the zone. Creatures, objects and fishing pools show how often they were observed here. Items are
+        linked to the zone <strong>by inference</strong> through the sources observed here; ForeverDB cannot tell in
+        which zone an individual drop happened, so items have no zone-specific count. Sources are listed first, then items.
       </DataNote>
 
       <form method="get" action={zonePath(z.mapId)} autoComplete="off" aria-label={`Filter ${z.zoneName}`} className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
@@ -137,7 +139,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
             {result.rows.length === 0 ? (
               <EmptyState title="Nothing observed for this filter yet">Try another filter, or help by collecting data with the addon.</EmptyState>
             ) : (
-              <ResultsTable rows={result.rows} zones={zones} caption={`Observed entries in ${z.zoneName}`} observationsLabel="In-zone obs." />
+              <ResultsTable rows={result.rows} zones={zones} caption={`Observed entries in ${z.zoneName}`} observationsLabel="Observed in this zone" />
             )}
             <Pagination page={q.page} pageSize={q.pageSize} total={result.total} maxPage={41} hrefFor={(p) => href({ page: p })} />
           </>
