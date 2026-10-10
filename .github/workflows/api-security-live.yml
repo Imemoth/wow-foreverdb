@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Low-volume production HTTPS JWT boundary
         if: '!inputs.post_lockdown'
         run: python3 tests/api_security_live_smoke.py

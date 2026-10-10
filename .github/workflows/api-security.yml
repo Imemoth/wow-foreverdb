@@ -40,7 +40,7 @@ jobs:
       PGDATABASE: postgres
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Create isolated test roles
         run: psql -X -v ON_ERROR_STOP=1 -f database/tests/api_security_local_bootstrap.sql
