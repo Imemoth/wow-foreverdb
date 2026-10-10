@@ -1,13 +1,60 @@
 version: 2
+
+# Keep routine maintenance reviewable. Dependabot security updates are not
+# restricted by the version-update allow rules or the PR limits below.
+# Major upgrades require a dedicated compatibility/test plan rather than
+# automatic version-update pull requests.
 updates:
   - package-ecosystem: npm
     directory: /web
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      web-nonmajor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: npm
     directory: /publisher
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      publisher-nonmajor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: monthly }
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      actions-nonmajor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
