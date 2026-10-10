@@ -411,7 +411,7 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthetic sample data; nothing provisioned or deployed; production untouched.** Docs: [docs/web/](web/README.md).
 
-- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets. **CODE FIXED / PRODUCTION PENDING** (see below).
+- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets. **Applied to production 2026-10-10 (ledger `20261010151518`); Companion acceptance pending** (see below).
 - [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
 - [x] Fail-closed publication worker (`publisher/`): strict contract, name sanitization, sample thresholds, Wilson intervals, dominance flag, deterministic hash.
@@ -424,14 +424,14 @@ Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthet
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
 
-### F-3 — Companion observed drop-rate denominator (code fixed, production pending)
+### F-3 — Companion observed drop-rate denominator (applied to production; Companion acceptance pending)
 
-Branch `fix/companion-drop-rate-denominator`. **Status: CODE FIXED / PRODUCTION PENDING. Migration `0011` is NOT applied to the production Supabase project; the live Companion still shows the old (inflated) multi-installation rates until the owner approves and applies it.** Record, math, evidence, rollout and rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
+PR #37 merged to `main` as `6d0df83`; migration `0011` applied to production `wow-forever` (`klxhikdlfwgxurdyexdi`) on 2026-10-10 15:15:18 UTC, **ledger `20261010151518 fix_observed_drop_rate_denominator`**. **Status: PRODUCTION SQL VERIFIED / COMPANION ACCEPTANCE PENDING. F-3 is not closed until the manual Windows Companion acceptance passes.** Record, evidence, hashes, rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
 
-- [x] Root cause proven from the live definitions: `private.foreverdb_item_stats`, `foreverdb_source_stats` and the closed legacy `foreverdb_all_stats` inner-joined source stats to item stats per installation, dropping zero-drop installations from the denominator.
-- [x] Forward-only migration `database/migrations/0011_fix_observed_drop_rate_denominator.sql` (function bodies only; owner, ACL, `SECURITY DEFINER`, `search_path` asserted unchanged) and rollback `database/rollback/0011_restore_previous_observed_rate_functions.sql`.
-- [x] Regression suite `database/tests/f3_drop_rate_denominator.sql` (baseline defect reproduced, scenarios A–J, security, rollback round trip) plus the existing API-security suite on the 0011 chain.
-- [ ] **Owner approval, production apply and live verification** (see rollout in the F-3 record). No Companion client change is required.
+- [x] Root cause proven, forward-only migration and verified rollback merged (PR #37); regression suite in CI.
+- [x] Read-only preflight, then `apply_migration` of `0011` only (`0010` not applied); function bodies byte-identical to the reviewed file.
+- [x] Production SQL verification: ledger, hashes, owner/ACL/`SECURITY DEFINER`/`search_path` unchanged, anon denied, wrappers and 0009 gate unchanged, corrected denominators on all 374 buckets, 21 affected (max correction 25.00 points, average 5.88), 353 unchanged, performance in line with baseline.
+- [ ] **Manual Windows Companion acceptance (PENDING):** Shadowgem at Copper Vein (mining) 1/5 = 20.0 % becomes 1/110 = 0.9 %; two further affected cases and an unchanged control are listed in the F-3 record. Only then mark F-3 fully verified.
 
 ## 0.9 — Farming intelligence
 
