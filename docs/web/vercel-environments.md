@@ -73,7 +73,7 @@ These variables are backward compatible with the code currently on `main` (a `pr
 | `package.json` engines (web, publisher) | `>=22` (Vercel warns it "will automatically upgrade when a new major Node.js Version is released") | `22.x` |
 | Vercel runtime | **24.x** (dashboard setting; the live demo currently runs Node 24) | `22.x` via `engines` (Vercel gives `engines.node` precedence over the dashboard setting; Vercel does **not** read `.node-version`) |
 
-Why 22: every verification run on this repository (unit, Playwright, publication pipeline, parity, CodeQL) ran on Node 22; `@types/node` is `22.x`; Next 16.4.0, React 19.3.0, Playwright 1.63.0 and the publisher support it; **no dependency was changed** to get here. Node 24 is a separate migration (a CI matrix PR and a dependency review) to be done before Node 22 leaves maintenance (April 2027). **Merging this change moves the live demo from Node 24 to Node 22** (a deliberate downgrade to the one version all evidence covers; Node 24 was never verified for this app). `.node-version` is the single source for **CI and developers**; **Vercel follows `engines`**, so the two are kept equal by a CI step that fails if the running major, `.node-version` and the `engines` of **both** `web` and `publisher` disagree. Optional owner step: also set Settings → General → Node.js Version to `22.x` so the dashboard agrees. After the merge, confirm in the production build log that the Vercel `engines` warning is gone.
+Why 22: every verification run on this repository (unit, Playwright, publication pipeline, parity, CodeQL) ran on Node 22; `@types/node` is `22.x`; Next 16.4.0, React 19.3.0, Playwright 1.63.0 and the publisher support it; **no dependency was changed** to get here. Node 24 is a separate migration (a CI matrix PR and a dependency review) to be done before Node 22 leaves maintenance (April 2027). **Merging this change moves the live demo from Node 24 to Node 22** (a deliberate downgrade to the one version all evidence covers; Node 24 was never verified for this app). `.node-version` is the single source for **CI and developers**; **Vercel follows `engines`**, so the two are kept equal by a CI step that fails if the running major, `.node-version` and the `engines` of **both** `web` and `publisher` disagree. Optional owner step: also set Settings → General → Node.js Version to `22.x` so the dashboard agrees. **Verified on Vercel (2026-10-10, preview build of this branch):** the build log reads *"Due to `engines: { node: 22.x }` in your `package.json` file, the Node.js Version defined in your Project Settings (\"24.x\") will not apply, Node.js Version \"22.x\" will be used instead."* The old `>=22` warning ("will automatically upgrade when a new major Node.js Version is released") is gone. The production build after the merge should show the same line.
 
 ## 5. Deployment protection policy
 
@@ -126,7 +126,11 @@ Until then: never set `FOREVERDB_DEPLOYMENT=production`; keep the future-product
 
 The canonical and cookie defects are direct consequences of the silent `local` fallback and are fixed by this change (explicit designation, https-derived origin, `__Host-`/`Secure` cookie keyed to the real origin).
 
-## 8. Verification after the owner steps
+## 8. Live fail-closed evidence on Vercel (2026-10-10)
+
+The preview deployments of this branch were built **before** the owner variables exist. They are therefore a real-platform test of the refusal: the preview of commit `5d0086f` (`dpl_2ojaHek5MocYKcnUuQ4Sp7XEMNBf`) answers **HTTP 500, body `Internal Server Error`, no application content, no ForeverDB cookie or header** (only platform headers, including Vercel's own `x-robots-tag: noindex`). That also shows the Preview target currently has no `FOREVERDB_DEPLOYMENT`. Once the owner sets the variables and redeploys, the same URL must serve the synthetic preview (section 9).
+
+## 9. Verification after the owner steps
 
 ```bash
 # 1. the PR's preview (or any deployment) reports the designation:

@@ -49,6 +49,14 @@ A separate reviewer agent (files and dimensions only) found **no critical or hig
 
 Authenticated fetch through the Vercel connector of the live demo: HTTP 200, nonce CSP with `strict-dynamic`, HSTS, `nosniff`, `X-Frame-Options: DENY`, `Cache-Control: private, no-cache, no-store`, `X-Robots-Tag: noindex, nofollow`, synthetic banner; **defects:** canonical `http://localhost:3000` and an `fdb_sid` cookie without `Secure` (the hosted deployment silently ran as `local`). These are what the explicit designation and the origin-keyed cookie fix. The Vercel environment-variable listing and creation both returned HTTP 403, so environment variables could not be read or set from this work.
 
+### Vercel evidence (real platform, 2026-10-10)
+
+| Check | Result |
+| --- | --- |
+| Build log of the branch preview | **PASS** `engines: 22.x` overrides the project's `24.x`: *"Node.js Version \"22.x\" will be used instead"*; the `>=22` auto-upgrade warning is gone |
+| New code on a Vercel preview with no ForeverDB variables | **PASS (fails closed)** HTTP 500, generic body, no application header or cookie |
+| Both branch previews built | READY (`dpl_4kq9vM59…` for `240c8f8`, `dpl_2ojaHek5…` for `5d0086f`) |
+
 ### NOT RUN / PENDING (not claimed as passed)
 
 | Item | Why | What proves it |
