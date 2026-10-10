@@ -424,14 +424,15 @@ Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthet
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
 
-### F-3 — Companion observed drop-rate denominator (code fixed, production pending)
+### F-3 — Companion observed drop-rate denominator (merged, production migration pending)
 
-Branch `fix/companion-drop-rate-denominator`. **Status: CODE FIXED / PRODUCTION PENDING. Migration `0011` is NOT applied to the production Supabase project; the live Companion still shows the old (inflated) multi-installation rates until the owner approves and applies it.** Record, math, evidence, rollout and rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
+PR #37 merged to `main` as `6d0df83`. **Status: MERGED / PRODUCTION MIGRATION PENDING. Migration `0011` is NOT applied to the production Supabase project; the live Companion still shows the old (inflated) multi-installation rates until the owner approves and applies it.** Record, math, evidence, runbook and rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
 
 - [x] Root cause proven from the live definitions: `private.foreverdb_item_stats`, `foreverdb_source_stats` and the closed legacy `foreverdb_all_stats` inner-joined source stats to item stats per installation, dropping zero-drop installations from the denominator.
-- [x] Forward-only migration `database/migrations/0011_fix_observed_drop_rate_denominator.sql` (function bodies only; owner, ACL, `SECURITY DEFINER`, `search_path` asserted unchanged) and rollback `database/rollback/0011_restore_previous_observed_rate_functions.sql`.
-- [x] Regression suite `database/tests/f3_drop_rate_denominator.sql` (baseline defect reproduced, scenarios A–J, security, rollback round trip) plus the existing API-security suite on the 0011 chain.
-- [ ] **Owner approval, production apply and live verification** (see rollout in the F-3 record). No Companion client change is required.
+- [x] Forward-only migration `database/migrations/0011_fix_observed_drop_rate_denominator.sql` (function bodies only; owner, ACL, `SECURITY DEFINER`, `search_path` asserted unchanged) and rollback `database/rollback/0011_restore_previous_observed_rate_functions.sql` (verified identical to production).
+- [x] Regression suite `database/tests/f3_drop_rate_denominator.sql` in the API-security workflow; all CI green on the merged head.
+- [x] Read-only production preflight 2026-10-10: definitions equal the saved baseline, ACL/owner/config as expected, 0009 intact, ledger has no 0011. Baseline: 374 item buckets, 21 would change, max 25.0 points.
+- [ ] **Owner approval, `apply_migration` of 0011 only, postchecks and manual Companion acceptance** (runbook in the F-3 record). No Companion client change is required.
 
 ## 0.9 — Farming intelligence
 

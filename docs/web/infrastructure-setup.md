@@ -26,5 +26,5 @@ Nothing below has been provisioned or configured. Each step names the secret it 
 
 ## Recommended production hygiene (separate approvals)
 - Enable RLS on `private.foreverdb_api_budgets` (advisor finding, see assessment §1).
-- Apply the reviewed F-3 migration `0011_fix_observed_drop_rate_denominator.sql` (denominator fix in `private.foreverdb_item_stats` / `foreverdb_source_stats`). **Code fixed, production pending**; see `docs/f3-observed-rate-denominator.md`.
+- Apply the reviewed F-3 migration `0011_fix_observed_drop_rate_denominator.sql` (denominator fix in `private.foreverdb_item_stats` / `foreverdb_source_stats`). **Merged (PR #37), production migration pending**; see `docs/f3-observed-rate-denominator.md`.
 - Supabase Auth anonymous sign-in rate limits and CAPTCHA (existing roadmap item).

@@ -41,4 +41,4 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | P1 challenge limiter + body cap, P2 zone semantics | Implemented · Locally tested · **GitHub CI verified on `3e463f3`** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)) |
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
 | Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets` | Pending production approval / out of scope of PR #22 |
-| F-3 Companion denominator fix (`0011`) | **CODE FIXED / PRODUCTION PENDING** (separate PR, not applied; see `docs/f3-observed-rate-denominator.md`) |
+| F-3 Companion denominator fix (`0011`) | **MERGED / PRODUCTION MIGRATION PENDING** (PR #37 merged as `6d0df83`, not applied; see `docs/f3-observed-rate-denominator.md`) |

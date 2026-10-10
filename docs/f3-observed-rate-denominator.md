@@ -1,7 +1,9 @@
 # F-3 — Companion observed drop-rate denominator
 
-**Status: CODE FIXED / PRODUCTION PENDING.**
-Migration `0011_fix_observed_drop_rate_denominator.sql` is committed and tested but **has not been applied to the production Supabase project**. The live Companion keeps showing the old (inflated) multi-installation rates until the owner approves and applies it. Merging the PR that carries this change is **not** deployment approval.
+**Status: MERGED / PRODUCTION MIGRATION PENDING.**
+The fix was merged to `main` by PR #37 (squash commit `6d0df83`, 2026-10-10) with all CI green. Migration `0011_fix_observed_drop_rate_denominator.sql` is on `main` but **has not been applied to the production Supabase project** (production ledger still ends at `20261009124630 api_security_rate_limits`). The live Companion keeps showing the old (inflated) multi-installation rates until the owner separately approves and applies it. **Merging was not deployment approval.** F-3 must not be called fixed in production until the postchecks below pass.
+
+Rollout readiness (read-only preflight, 2026-10-10): **READY_FOR_PRODUCTION_APPROVAL**. Nothing below has been executed against production.
 
 Finding origin: `docs/web/00-current-state-assessment.md` (F-3).
 
@@ -123,23 +125,72 @@ Performance (synthetic 160k source rows, 480k item rows, local): item stats ≈ 
 - Behaviour change visible to users: some multi-installation drop rates drop (up to 25 points on current data) and their confidence scores fall with the larger denominators. This is the intended correction.
 - Hidden rows: none. Rows with item stats but no source-stats row are excluded exactly as before (ingest never produces them).
 
-## Production rollout (requires separate owner approval)
+## Production rollout runbook (prepared, NOT executed; needs explicit owner approval)
 
-1. Confirm no other session is changing these functions (single production project, no staging).
-2. Read-only precheck: `pg_get_functiondef` of the three functions equals `database/rollback/0011_restore_previous_observed_rate_functions.sql`, and `proacl` is `{postgres=X/postgres}` on each.
-3. Apply `database/migrations/0011_fix_observed_drop_rate_denominator.sql` with the Supabase migration tool (single transaction; the in-migration assertions abort it on any drift).
-4. Postchecks (read-only): ACL/owner/config unchanged; `anon` cannot execute the RPCs; an authenticated call to `get_foreverdb_item_stats` returns the same 12 columns; re-run the aggregate comparison and confirm `unchanged` buckets are equal and 21 buckets changed.
-5. Windows Companion check: Search → item detail for a multi-installation item; the rate shown equals `drops / total source observations`.
-6. Record the ledger version in `docs/ROADMAP.md` and flip F-3 to **FIXED IN PRODUCTION** only after step 4–5 pass.
+Target: Supabase project `wow-forever`, ref `klxhikdlfwgxurdyexdi` (the only production project; no staging exists). Confirm the ref before any write.
 
-## Rollback
+### Preflight (read-only, recomputed 2026-10-10 from the live database; repeat immediately before applying)
 
-Apply `database/rollback/0011_restore_previous_observed_rate_functions.sql` (verbatim previous definitions; owner and ACL are preserved by `CREATE OR REPLACE`). This reintroduces the F-3 inflation. It is tested in the suite (rollback → defect returns, ACLs identical → 0011 re-applies).
+| Check | Expected (and observed on 2026-10-10) |
+| --- | --- |
+| Migration ledger | 9 rows, latest `20261009124630`; **no** `0011`-like and **no** `0010`-like row |
+| `md5(pg_get_functiondef)` | `foreverdb_all_stats` `8d9d8cf1b0a9f240b430ef4368501e50`, `foreverdb_item_stats` `434fea25fe31e723258d73ec109da932`, `foreverdb_source_stats` `0010ecb56cede1d45ac4dc252593e8f4` (all matched) |
+| `md5(prosrc)` (version-independent) | `all_stats` `5934a662e230a42079eb764e285e330a`, `item_stats` `4aaf9616360e88b70715d11f51ea08bb`, `source_stats` `86d2c5996624927083390f8e461d366d` (all equal the rollback file's bodies) |
+| Owner / `SECURITY DEFINER` / config / ACL | `postgres` / true / `search_path=""` / `{postgres=X/postgres}`; no EXECUTE for `anon`, `authenticated`, `service_role` or PUBLIC |
+| Public wrappers | `get_foreverdb_item_stats`, `get_foreverdb_source_stats`: `SECURITY DEFINER`, `search_path=""`, `statement_timeout=5s`, call `foreverdb_api_gate('detail')`; EXECUTE for `authenticated` and `service_role` only |
+| 0009 intact | `foreverdb_api_gate` and `foreverdb_take_budget` present with owner-only ACL; `foreverdb_api_budgets` present; `anon`/`authenticated`: no `private` schema usage, no SELECT on `items`, `sources`, `installation_source_stats`, `installation_item_stats` |
+
+If **any** value differs, STOP and investigate; do not force the migration.
+
+### Deployment method (only 0011, recorded in the ledger)
+
+`0009` was applied through the Supabase migration tool (`apply_migration`, ledger `20261009124630 api_security_rate_limits`). Use the same path:
+
+- `apply_migration` with `project_id = klxhikdlfwgxurdyexdi`, `name = fix_observed_drop_rate_denominator`, `query` = the exact contents of `database/migrations/0011_fix_observed_drop_rate_denominator.sql` (including its own `begin`/`commit`, as 0009 did).
+- The tool executes only the SQL it is given and writes one ledger row (`<timestamp> fix_observed_drop_rate_denominator`). It is **not** an "apply all pending migrations" command, and `0010` is not under `database/migrations/`, so it cannot be picked up. Do not use `supabase db push` or any command that replays the directory.
+- The migration aborts (nothing applied) if the pre-flight or post-condition assertions fail.
+- Do not execute the SQL through a path that skips the ledger (SQL editor, `execute_sql`); that would leave migration history inconsistent.
+
+### Post-deployment verification plan
+
+| # | Check | Expected |
+| --- | --- | --- |
+| 1 | Ledger | exactly one new row `fix_observed_drop_rate_denominator`; 10 rows total |
+| 2 | Definitions updated | `md5(prosrc)`: `item_stats` `319353a93b82b982cbf435b6e0a347a7`, `source_stats` `ed7220a5d77dff73a12e16afaf0dbb5c`, `all_stats` `d1498eb1e9fc696c8bcf3b95748f97a5` |
+| 3 | Owner/ACL/config unchanged | same owner, `SECURITY DEFINER`, `search_path=""`, `{postgres=X/postgres}`; wrappers unchanged (`md5(pg_get_functiondef)` of the two wrappers equals the preflight values `68a6fbe4…` and `4f37d9f5…`) |
+| 4 | Anonymous access denied | `has_function_privilege('anon', …)` false for all five functions; direct call with the anon key returns 401/403 |
+| 5 | Authenticated access | a real anonymous-auth JWT can call both wrappers; the 0009 budget still counts (`detail:uid:*` bucket increments) |
+| 6 | Response schema | same 12 columns, names and types (`md5(pg_get_function_result)` `c85980c8006ab522b444d8c6e0342327` for all three private functions) |
+| 7 | Corrected denominators | see acceptance pair below; the item row's `observations` includes zero-drop installations |
+| 8 | Unaffected buckets | re-run the aggregate comparison: 353 unchanged buckets keep identical `observations`/rate (a changed count different from 21 needs an explanation: new data only) |
+| 9 | Performance | baseline (old functions, production, 2026-10-10): item stats Shadowgem 8.3 ms, source stats Copper Vein 5.2 ms, item stats Linen Cloth (42 rows) 7.2 ms; the new versions must stay in the same order of magnitude (well below the 5 s wrapper timeout) |
+| 10 | Companion Search | **MANUAL ACCEPTANCE PENDING** (needs the Windows Companion) |
+
+**Manual Companion acceptance pair** (catalog identifiers only, no installation data):
+
+| Item | Source | Before | After |
+| --- | --- | --- | --- |
+| Shadowgem (1210) | Copper Vein (gameobject 1731, level 0, mining) | 1 drop / 5 observations = 20.0 % | 1 / 110 = **0.9 %** |
+| Fractured Canine (3299) | Cursed Darkhound (creature 1548, level 8, mob) | 1 / 3 = 33.3 % | 1 / 12 = **8.3 %** |
+| Putrid Claw (2855) | Rotting Dead (creature 1525, level 6, mob) | 2 / 4 = 50.0 % | 2 / 5 = **40.0 %** |
+
+Unaffected control: Raw Brilliant Smallfish (6291) at Tirisfal Glades fishing: 10 / 28 = 35.7 % before and after. Open the item and the source detail in the Companion: the Observations column and the Rate must show the "After" values, and the item view and source view must agree.
+
+### Rollback (not executed)
+
+- **Preconditions:** a verification check above failed or the corrected rates are judged wrong. The rollback only restores the pre-0011 function bodies; it changes no data and no grants.
+- **Procedure:** `apply_migration` with `name = restore_previous_observed_rate_functions` and `query` = the exact contents of `database/rollback/0011_restore_previous_observed_rate_functions.sql`. `CREATE OR REPLACE` keeps owner and ACL.
+- **History consistency:** the ledger is forward-only. The rollback is recorded as its own new row; the `fix_observed_drop_rate_denominator` row stays. Do not delete ledger rows by hand. A later re-apply uses the migration again under a new name or version.
+- **Verification after rollback:** `md5(prosrc)` equals the baseline values (`5934a662…`, `4aaf9616…`, `86d2c599…`); owner/ACL/config unchanged; the acceptance pair shows the old values again (20.0 % for Shadowgem); anonymous access still denied; authenticated calls still work.
+- **Consequence:** the F-3 inflation returns (multi-installation rates overstated by up to 25 percentage points on current data). No data is lost.
+- The rollback file is verified identical to production (`prosrc` and `pg_get_functiondef` hashes above). The rollback is exercised only on ephemeral databases (the F-3 suite), never on production.
 
 ## Remaining risks
 
-- Production is not changed; the live Companion is still affected until the owner applies 0011.
+- Production is not changed; the live Companion is still affected until the owner approves and applies 0011.
 - The previous function definitions exist only in production and in the rollback file (they were provisioned outside the numbered migrations). The rollback file was verified **byte-identical** to production: md5 of `pg_get_functiondef` equals md5 of the file's definitions for all three functions (`all_stats` 8d9d8cf1…, `item_stats` 434fea25…, `source_stats` 0010ecb5…), read-only, 2026-10-10.
+- Production runs PostgreSQL 17.6; the CI/local suites ran on PostgreSQL 16 (as in the existing CI). The SQL uses only portable constructs; the verification plan compares `prosrc` hashes (formatter-independent) and re-runs the aggregate comparison on production to cover the version difference.
+- Single production database, no staging: the in-migration assertions and the tested rollback are the safety net.
 - Thin contributor base (7 installations): corrected rates are still small-sample figures; the website's sample thresholds remain the honest presentation.
 - The Windows Companion UI was not run in this session (no .NET/Windows runner); the contract argument above is from reading `SearchService.cs`.
 
