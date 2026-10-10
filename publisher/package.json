@@ -4,7 +4,7 @@
   "private": true,
   "description": "One-way, fail-closed publication worker: private aggregate export -> sanitized public read model.",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

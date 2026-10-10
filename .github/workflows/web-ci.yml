@@ -1,55 +1,98 @@
 name: ForeverDB Web & publication pipeline
 
+# Required-check design (see docs/web/release-gates.md):
+#   * No `paths:` filter. A path-filtered workflow never reports on unrelated PRs, and a required
+#     check that never reports blocks the PR forever (or is silently skipped). Every PR reports every check.
+#   * Distinct, stable check names. Do NOT rename a job without updating the repository ruleset.
+#   * `Web release gate` aggregates the others and fails if any of them failed, was cancelled or skipped.
 on:
   pull_request:
-    paths:
-      - 'web/**'
-      - 'publisher/**'
-      - 'database/public-read/**'
-      - 'database/private-export/**'
-      - 'database/tests/**'
-      - 'scripts/public-pipeline-integration.sh'
-      - '.github/workflows/web-ci.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
 jobs:
-  web:
+  # ---------------------------------------------------------------------------------------------
+  web-quality:
+    name: Web code quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Node.js major matches the pinned version (.node-version = package.json engines = Vercel)
+        run: |
+          pinned="$(tr -d '[:space:]' < ../.node-version)"
+          actual="$(node -p "process.versions.node.split('.')[0]")"
+          engines="$(node -p "require('./package.json').engines.node")"
+          echo "pinned=$pinned actual=$actual engines=$engines"
+          test "$actual" = "$pinned" && test "$engines" = "$pinned.x"
+      - run: npm ci
+      - name: Production dependency audit (high and critical fail)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Environment-boundary matrix (local / preview / production, negative configurations)
+        run: npx vitest run tests/unit/env.test.ts tests/unit/env-matrix.test.ts
+      - name: Production build (canary secrets present in the build environment)
+        env:
+          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
+          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+        run: npm run build
+      - name: Bundle-secret scan (no canaries, DB URLs, private project reference or source maps in browser bundles)
+        env:
+          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
+          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+        run: npm run check:bundle-secrets
+
+  # ---------------------------------------------------------------------------------------------
+  web-e2e:
+    name: Web E2E (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults: { run: { working-directory: web } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
       - run: npm ci
-      - name: Production dependency audit (high+ fails)
-        run: npm audit --omit=dev --audit-level=high
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - name: Build with canary secrets present in the build environment
-        env:
-          NEXT_TELEMETRY_DISABLED: '1'
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
-          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
-          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+      - name: Production build
         run: npm run build
-      - name: No secrets or source maps in browser bundles
-        env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
-          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
-          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
-        run: npm run check:bundle-secrets
-      - run: npx playwright install --with-deps chromium
-      - name: E2E (journeys, security, WCAG 2.2 AA automated, SEO, responsive) on fixture data
-        run: npm run test:e2e
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Search and navigation journeys
+        run: npx playwright test --project=desktop tests/e2e/journeys.spec.ts
+      - name: Security headers, CSP, API validation and rate limiting
+        run: npx playwright test --project=desktop tests/e2e/security.spec.ts
+      - name: Preview safety (synthetic banner, noindex, robots, sitemap, headers, cookies, fail-closed configurations)
+        run: npx playwright test --project=preview
+      - name: Accessibility regression (axe WCAG 2.2 AA) and SEO
+        run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
+      - name: Responsive layout (desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }
 
+  # ---------------------------------------------------------------------------------------------
   publisher-and-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -71,7 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version-file: .node-version }
       - name: Publisher unit tests
         working-directory: publisher
         run: npm ci && npm run typecheck && npm test
@@ -82,7 +125,6 @@ jobs:
         env:
           FOREVERDB_DATA_SOURCE: postgres
           PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
-          NEXT_TELEMETRY_DISABLED: '1'
         run: |
           npm ci
           npm run build
@@ -94,6 +136,7 @@ jobs:
           PARITY_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_zone
         run: npm run test:parity
 
+  # ---------------------------------------------------------------------------------------------
   codeql:
     runs-on: ubuntu-latest
     permissions: { contents: read, security-events: write }
@@ -102,3 +145,17 @@ jobs:
       - uses: github/codeql-action/init@v3
         with: { languages: javascript-typescript, queries: security-extended }
       - uses: github/codeql-action/analyze@v3
+
+  # ---------------------------------------------------------------------------------------------
+  web-gate:
+    name: Web release gate
+    if: always()
+    needs: [web-quality, web-e2e, publisher-and-pipeline, codeql]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every upstream job must have succeeded (failed, cancelled and skipped all fail the gate)
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success")' > /dev/null

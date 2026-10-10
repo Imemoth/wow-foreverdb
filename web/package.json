@@ -4,7 +4,7 @@
   "private": true,
   "description": "ForeverDB public website: observed WoW: Forever database, news and guides.",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",

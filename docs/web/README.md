@@ -10,3 +10,6 @@
 8. [Manual infrastructure setup](infrastructure-setup.md) (nothing provisioned)
 9. [Verification results](verification-results.md)
 10. [Go-live checklist](go-live-checklist.md)
+
+- [Vercel environments, deployment protection and release controls](vercel-environments.md) — environment matrix, owner steps, Node decision, promotion control.
+- [CI structure and release gates](release-gates.md) — check names, aggregate gate, required-check ruleset (enforcement PENDING).
