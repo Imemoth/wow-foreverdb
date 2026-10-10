@@ -35,7 +35,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.11.3",
     "@playwright/test": "1.56.1",
-    "@tailwindcss/postcss": "4.1.18",
+    "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.5",
     "@types/pg": "8.15.6",
     "@types/react": "19.2.18",
