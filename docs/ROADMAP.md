@@ -411,7 +411,7 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthetic sample data; nothing provisioned or deployed; production untouched.** Docs: [docs/web/](web/README.md).
 
-- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets (separate fix needed).
+- [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the live Companion stats RPCs under-count the observed-rate denominator for multi-installation buckets. **CODE FIXED / PRODUCTION PENDING** (see below).
 - [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
 - [x] Fail-closed publication worker (`publisher/`): strict contract, name sanitization, sample thresholds, Wilson intervals, dominance flag, deterministic hash.
@@ -423,6 +423,15 @@ Branch `web/foundation-mvp` (2026-10-09). **Status: repo-complete MVP on synthet
 - [ ] Production 0010 approval + first real publication.
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
+
+### F-3 — Companion observed drop-rate denominator (code fixed, production pending)
+
+Branch `fix/companion-drop-rate-denominator`. **Status: CODE FIXED / PRODUCTION PENDING. Migration `0011` is NOT applied to the production Supabase project; the live Companion still shows the old (inflated) multi-installation rates until the owner approves and applies it.** Record, math, evidence, rollout and rollback: [docs/f3-observed-rate-denominator.md](f3-observed-rate-denominator.md).
+
+- [x] Root cause proven from the live definitions: `private.foreverdb_item_stats`, `foreverdb_source_stats` and the closed legacy `foreverdb_all_stats` inner-joined source stats to item stats per installation, dropping zero-drop installations from the denominator.
+- [x] Forward-only migration `database/migrations/0011_fix_observed_drop_rate_denominator.sql` (function bodies only; owner, ACL, `SECURITY DEFINER`, `search_path` asserted unchanged) and rollback `database/rollback/0011_restore_previous_observed_rate_functions.sql`.
+- [x] Regression suite `database/tests/f3_drop_rate_denominator.sql` (baseline defect reproduced, scenarios A–J, security, rollback round trip) plus the existing API-security suite on the 0011 chain.
+- [ ] **Owner approval, production apply and live verification** (see rollout in the F-3 record). No Companion client change is required.
 
 ## 0.9 — Farming intelligence
 

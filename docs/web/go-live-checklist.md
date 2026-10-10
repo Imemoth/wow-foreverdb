@@ -14,7 +14,7 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] **Owner approval** recorded for production 0010. Applied in a maintenance window. In-migration assertions passed. Ledger entry recorded
 - [ ] Projection reader login enabled. `public_projection_export_smoke.sql` checks (privileges only, no seeding) adapted and run read-only on production
 - [ ] First real `publish --dry-run` reviewed (counts, rejections, anomalies), then a real publish
-- [ ] Spot check: item/source pages match Companion figures where denominators agree (beware F-3)
+- [ ] Spot check: item/source pages match Companion figures where denominators agree (beware F-3 until `0011` is applied in production; the website's own figures already use the correct denominator)
 - [ ] Confirm no website env var references the production project
 - [ ] Zone semantics verified on the real public DB: item rows have `observations IS NULL`/`inferred`; `public_read_zone_semantics.sql` adapted to the real data or the schema CHECKs confirmed present. Migration 0001 (edited in place) has not been applied anywhere earlier, otherwise ship a `0002`
 
@@ -40,4 +40,5 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | --- | --- |
 | P1 challenge limiter + body cap, P2 zone semantics | Implemented · Locally tested · **GitHub CI verified on `3e463f3`** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38057207488)) |
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
-| Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets`; F-3 denominator fix | Pending production approval / out of scope of PR #22 |
+| Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets` | Pending production approval / out of scope of PR #22 |
+| F-3 Companion denominator fix (`0011`) | **CODE FIXED / PRODUCTION PENDING** (separate PR, not applied; see `docs/f3-observed-rate-denominator.md`) |

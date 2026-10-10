@@ -67,7 +67,10 @@ jobs:
       - name: Apply API security migration
         run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0009_api_security_rate_limits.sql
 
-      - name: Verify grants, JWT rules, server 429 and query bounds
+      - name: F-3 observed drop-rate denominator (baseline defect, migration 0011, rollback round trip)
+        run: psql -X -v ON_ERROR_STOP=1 -f database/tests/f3_drop_rate_denominator.sql
+
+      - name: Verify grants, JWT rules, server 429 and query bounds (after 0011)
         run: psql -X -v ON_ERROR_STOP=1 -f database/tests/api_security_roles_and_quotas.sql
 
       - name: Verify no unbounded direct anon/private access
