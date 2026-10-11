@@ -44,7 +44,7 @@ Nothing below was done by this work. Items marked **approval** change real setti
 
 ## 4. Explicit non-actions (verified, current)
 
-No account migration exists or was applied; migration `0010` is not applied; the production ledger ends at `0011`; no Supabase setting, email provider, credential, billing or Vercel configuration was changed; `release`, the Vercel Production Branch and Vercel Authentication are untouched; no service-role credential exists in the website; production activation is blocked by code.
+Migration `0012` exists in the repository (PR C) but was applied to **no** real database (only disposable CI databases); migration `0010` is not applied; the production ledger ends at `0011`; no Supabase setting, email provider, credential, billing or Vercel configuration was changed; `release`, the Vercel Production Branch and Vercel Authentication are untouched; no service-role credential exists in the website; production activation is blocked by code.
 
 ## 5. Direct Auth abuse: enforceable acceptance criteria (threat A24)
 

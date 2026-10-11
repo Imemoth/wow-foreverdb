@@ -1,6 +1,6 @@
 # Account System V1 — installation ownership claim protocol
 
-Status: **specification (PR A)**; implemented in PR C (migration `0012`) and PR D (Companion). Nothing here is applied to any real database.
+Status: **specification (PR A)**; implemented in PR C (migration `0012`, see §9) and PR D (Companion). Nothing here is applied to any real database.
 
 Goal: move `public.installations.owner_user_id` from the installation's current owner (typically an **anonymous** Supabase Auth UID) to a **verified registered** account, atomically, without touching a single observation, location, item, source or Guildbook row, and without any way to take over an installation by knowing its ID.
 
@@ -255,3 +255,21 @@ Every function that touches a claim or an installation's ownership first takes *
 ## 8. Anonymous→permanent UID upgrade (evaluated, not used)
 
 Supabase can upgrade an anonymous user in place (`updateUser` with email/password), keeping the UID and therefore all ownership with **no transfer**. It is attractive for a future optimisation but unsuitable as the V1 basis: the website-first user has no anonymous session to upgrade (the account is created on the web, the installation's owner UID lives only in the Companion), it would silently convert anonymous users (forbidden), and it cannot attach two installations owned by different anonymous UIDs to one account. The claim protocol covers all three cases, so the optimisation is recorded as future work.
+
+## 9. Implementation notes (PR C, migration `0012`)
+
+The migration follows this specification; the following points are decisions the specification left open or small, justified extensions. None weakens a contract, the PR A linter or the registry (`contracts.ts`, `migration-conformance.ts` and `ACCOUNT_HELPER_FUNCTIONS` are unchanged).
+
+| Topic | Decision |
+| --- | --- |
+| Budget numbers | start: per-uid `claim_start:uid:<uid>` 3 per 300 s, per-installation `claim_start:inst:<32 hex>` 3 per 300 s (charged only after the owner check), global `claim_start:global` 60 per 300 s; redeem: per-uid 10 per 300 s, global `claim_redeem:global` 120 per 300 s. The existing `private.foreverdb_take_budget` accepts only 60 s or 300 s windows and 1..1000 calls. |
+| Timestamps | claim issue and expiry use `clock_timestamp()` (not `now()`), so a wait behind the advisory lock does not shorten the 10-minute life |
+| Timeouts | `lock_timeout = '5s'` on all six functions as specified, plus `statement_timeout` (10 s for start/redeem, 5 s for reads) |
+| Hashing | `extensions.digest(code, 'sha256')`; entropy from `extensions.gen_random_bytes(16)`; both asserted by the pre-flight |
+| Identity-kind failures | wrong identity kind (registered calling start, anonymous calling redeem/reads, unconfirmed email) raises `PT403`; dead/absent/forged session raises `PT401` |
+| Malformed ids | claim start and link status treat them as ordinary failures (`not_available` / `unknown`); the Guildbook reads raise `PT400` (same convention as the existing read RPCs). Unowned installations return an empty set |
+| Audit | `account_audit.event` additionally allows `ownership_restored` and the table has a nullable `detail` (<= 200 chars), used **only** by the operator recovery script for the operator name and approval reference. The account functions never write `detail`. |
+| Extra index | `account_installations_previous_owner_idx` (the `transferred` lookup) |
+| Professions | the registry has no professions function; PR C does not add one (a contract change) |
+| Session row lock | `FOR SHARE OF s` locks the caller's (and, in redeem, the issuing) **session** row only; a ban does not touch that row, see the deployment document for the accepted window |
+| Redeem failure bookkeeping | a failed re-validation against a *pending* claim increments `attempts` (revoked at 5, audited); consumed or revoked claims are never changed by a failed attempt |
