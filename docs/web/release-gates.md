@@ -1,6 +1,6 @@
 # ForeverDB Web — CI structure and release gates
 
-**Enforcement status: PENDING.** The workflows below run and report, but *a successful workflow does not prove that merging is blocked when it fails.* Required status checks are repository settings (a ruleset or branch protection), not workflow content. They could not be created or read with the tools available for this change (no ruleset or branch-protection API), so nothing here claims the checks are enforced. Apply `.github/rulesets/main-release-gates.json` (instructions below) and then tick the verification box.
+**Enforcement status (2026-10-11): `main` ACTIVE / `release` PENDING.** GitHub API confirmed repository ruleset [#24853899](https://github.com/Imemoth/wow-foreverdb/rules/24853899) applies to the default branch, with all six status checks pinned to GitHub Actions integration ID `15368`, no bypass actors, required PR, deletion and force-push restrictions. A deliberately failing PR has **not** been used to prove merge denial. The new `release` branch exists but its protection and Vercel branch tracking still require owner setup. A repository JSON file cannot change live repository settings by itself.
 
 ## 1. Jobs in `.github/workflows/web-ci.yml`
 
@@ -20,23 +20,25 @@ Design points:
 - Other workflows are intentionally **not** required: `Companion health checks` (Windows, path-filtered to Companion files) and `ForeverDB API security regressions` (`pg-roles-quotas`, path-filtered to `database/**`) only run when relevant, so requiring them would block unrelated PRs. `collector-smoke` runs on every PR and is required.
 - No auto-merge is configured anywhere.
 
-## 2. Required settings (PENDING — owner action)
+## 2. Required settings and verification
 
-Import `.github/rulesets/main-release-gates.json` (GitHub → Settings → Rules → Rulesets → New ruleset → Import a ruleset), or set the same in classic branch protection for `main`:
+- [x] **`main` protected:** ruleset `24853899` Active, targets default branch; six required GitHub Actions checks use `integration_id: 15368`; enforced PR, no force push, no deletion; empty bypass list (GitHub API, 2026-10-11).
+- [ ] **`release` protected:** same active ruleset also targets exact branch `release` (`refs/heads/release`). Branch reports `protected: true`. The versioned `.github/rulesets/main-release-gates.json` now describes both branches, but is **not** automatically applied.
+- [ ] **Failing-check merge denial verified:** use a safe throwaway PR that deliberately fails an existing required test, confirm the merge is blocked, then close it. Do not weaken rules to conduct the test.
+- [ ] **Vercel Production Branch = `release` verified:** details in [vercel-environments §6](vercel-environments.md#6-production-promotion-control).
 
-- Restrict deletions; block force pushes.
-- Require a pull request before merging; require conversation resolution; dismiss stale approvals on push. `required_approving_review_count` is `0` because a single-owner repository cannot approve its own PR; raise it when a second reviewer exists.
-- Require status checks to pass, **branch up to date before merging**, with exactly: `Web release gate`, `Web code quality`, `Web E2E (Playwright)`, `publisher-and-pipeline`, `codeql`, `collector-smoke`.
-- No bypass actors (or, at most, the owner with "for pull requests only").
+The owner should **edit the existing ruleset** rather than create a second overlapping ruleset. In Target branches, keep Default branch and add `release` using Include by pattern. Preserve:
 
-Verification that enforcement is real (tick only with evidence): open a throwaway PR that deliberately fails a unit test; confirm the **Merge** button is disabled and the PR page lists the failing required check; close the PR.
+- Pull request required; review threads resolved; dismiss stale reviews; `required_approving_review_count=0` while the repository has one owner.
+- Deletion and force-push restrictions; no bypass actors.
+- Required checks: `Web release gate`, `Web code quality`, `Web E2E (Playwright)`, `publisher-and-pipeline`, `codeql`, `collector-smoke`, each with expected source **GitHub Actions** (app ID `15368`).
+- Require the branch to be up to date (`strict_required_status_checks_policy=true`). GitHub Actions workflows run for all PRs, including PRs to `release`.
 
-- [ ] Ruleset imported and active
-- [ ] Failing-check merge block demonstrated
+No automatic main-to-release promotion is configured. Release promotion requires a separate, reviewed PR to the protected branch.
 
-## 3. Merge precondition for the hardening PR
+## 3. Completed hardening merge
 
-New code refuses to serve a hosted deployment that has no explicit designation. **Before merging this PR, set `FOREVERDB_DEPLOYMENT=preview` and `FOREVERDB_DATA_SOURCE=fixture` on the Vercel Production and Preview environments** (`docs/web/vercel-environments.md` §3). If the PR is merged first, the production alias will deploy and answer HTTP 500 until the variables are added and the project is redeployed (the previous deployment can be restored with Vercel Instant Rollback).
+PR [#45](https://github.com/Imemoth/wow-foreverdb/pull/45) was squash-merged as `6b49a3f` on 2026-10-11. Vercel Production and Preview targets already declare the required environment variables; effective Preview/fixture behaviour was verified before merge. The post-merge production-target deployment is READY, under Vercel Authentication **All Deployments**. This does **not** authorize `FOREVERDB_DEPLOYMENT=production` or public publication.
 
 ## 4. Operational verification (outside CI)
 

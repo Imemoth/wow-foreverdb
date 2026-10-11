@@ -102,16 +102,21 @@ Hosting-plan notes (Hobby): the available firewall features, log retention (1 ho
 
 ## 6. Production-promotion control
 
-Today `main` auto-deploys to the Vercel **Production** target, so any merge reaches the public alias. With the variables above it serves the protected, noindexed synthetic demo, which is acceptable. It stops being acceptable once **incomplete features** (Account System V1) land on `main`.
+**2026-10-11 snapshot:** the stable `release` branch was created from `6b49a3feb06651334ccb148abec47509b63aef88` (PR #45 squash merge; seven post-merge checks PASS). GitHub `main` is protected by ruleset #24853899; protection of `release` and Vercel Production Branch tracking are **PENDING owner configuration and independent verification**. The repository JSON is a configuration template, not an automatically applied ruleset.
 
-Recommended control (prepared, **not applied — needs owner approval**, it changes the production deployment flow):
+### Required owner actions, in order
 
-1. Create a protected branch `release`. Vercel → Settings → Git → **Production Branch** = `release`.
-2. `main` pushes then build **previews only**; the production alias moves only when the owner fast-forwards `release` after the release gates (`docs/web/release-gates.md`) and the go-live checklist pass.
-3. Rollback: Vercel Instant Rollback to the previous production deployment, or move `release` back.
-4. Do this **before** the first Account System V1 commit is merged.
+1. **Protect `release`:** GitHub → repository Settings → Rules → Rulesets → edit the existing [`main release gates`](https://github.com/Imemoth/wow-foreverdb/settings/rules/24853899). Under Target branches, preserve Default branch and add **Include by pattern: `release`** (API ref `refs/heads/release`). Keep Active, no bypass actors, required PR, force-push/deletion blocks, and the six required GitHub Actions checks pinned to integration ID `15368`. Save, then confirm the `release` branch reports `protected: true` and the active ruleset targets both branches. Do **not** import a duplicate ruleset.
+2. **Change Vercel branch tracking:** project Settings → **Environments → Production → Branch Tracking** → choose `release` → Save. Vercel moved Production Branch tracking to Environments in its current UI; the older Settings → Git instructions may be stale. Verify the dashboard shows `release`, not `main`. This must happen **before any Account System V1 feature is merged to `main`**.
+3. **Preserve the protected demonstration:** `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture` for both Vercel Production and Preview targets, with Vercel Authentication **All Deployments**. The production *target* continues to serve a private, noindexed **synthetic Preview-mode demo**. No private Supabase variables, public database, or real publication must be enabled as part of branch tracking.
+4. **Acceptance:** validate the production alias stays on the approved stable commit, READY and protected; a new `main` commit must produce a **Preview** deployment rather than replacing that alias. Confirm the source SHA/branch through Vercel Deployments and the actual Branch Tracking setting. A controlled docs-only PR can exercise this without releasing unfinished functionality.
 
-Until then: never set `FOREVERDB_DEPLOYMENT=production`; keep the future-production secrets unset.
+### Future promotion and rollback
+
+- Require an owner-reviewed PR **to `release`** with all six GitHub Actions checks passing. Do not push/force-move the protected branch directly. A promotion may use a reviewed release-candidate branch based on `release` with only approved changes cherry-picked from development.
+- **Do not blindly merge the entire `main` branch into `release` once `main` contains unfinished features.** PR requirements and CODEOWNERS policies still apply to release candidates.
+- Rollback uses **Vercel Instant Rollback**, or a reviewed revert PR to `release`; never bypass release-branch protection.
+- Until separate production go-live approval: never set `FOREVERDB_DEPLOYMENT=production`; keep future production secrets unset. Account System V1 is developed in isolated PRs and Preview deployments.
 
 ## 7. Observed state before this change (2026-10-10)
 
