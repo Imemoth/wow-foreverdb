@@ -18,6 +18,11 @@ export interface Violation {
   message: string;
 }
 
+/** Escapes every regular-expression metacharacter, backslash included. */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
 function stripComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
 }
@@ -29,7 +34,7 @@ interface FunctionText {
 
 /** Finds `create [or replace] function <qualified name>(...) ... as $tag$ body $tag$`. */
 function findFunction(sql: string, qualifiedName: string): FunctionText | null {
-  const escaped = qualifiedName.replace(/\./g, "\\.");
+  const escaped = escapeRegExp(qualifiedName);
   const start = new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+${escaped}\\s*\\(`, "i").exec(sql);
   if (!start) return null;
   const rest = sql.slice(start.index);
@@ -44,7 +49,7 @@ function findFunction(sql: string, qualifiedName: string): FunctionText | null {
 
 function hasSearchPath(sql: string, qualifiedName: string, fn: FunctionText): boolean {
   if (/set\s+search_path\s*(?:=|to)\s*(?:''|""|'\s*')/i.test(fn.header)) return true;
-  const escaped = qualifiedName.replace(/\./g, "\\.");
+  const escaped = escapeRegExp(qualifiedName);
   return new RegExp(`alter\\s+function\\s+${escaped}\\s*\\([^)]*\\)\\s+set\\s+search_path\\s*(?:=|to)\\s*''`, "i").test(sql);
 }
 
@@ -109,7 +114,7 @@ export function lintAccountMigration(rawSql: string): Violation[] {
   }
   if (!/revoke\s+all\s+on\s+all\s+functions\s+in\s+schema\s+private\b/i.test(sql)) {
     for (const guard of Object.keys(ACCOUNT_GUARD_FUNCTIONS) as AccountGuard[]) {
-      const name = ACCOUNT_GUARD_FUNCTIONS[guard].replace(/\./g, "\\.");
+      const name = escapeRegExp(ACCOUNT_GUARD_FUNCTIONS[guard]);
       if (!new RegExp(`revoke\\s+all\\s+on\\s+function\\s+${name}\\s*\\([^)]*\\)\\s+from[^;]*\\banon\\b`, "i").test(sql)) {
         add("guard-grants", ACCOUNT_GUARD_FUNCTIONS[guard], "guard must not be callable by clients (revoke from public, anon, authenticated)");
       }
@@ -132,7 +137,7 @@ export function lintAccountMigration(rawSql: string): Violation[] {
     // First statement after the first BEGIN must be the required guard.
     const begin = /\bbegin\b/i.exec(fn.body);
     const afterBegin = begin ? fn.body.slice(begin.index + begin[0].length) : "";
-    const escapedGuard = required.replace(/\./g, "\\.");
+    const escapedGuard = escapeRegExp(required);
     const first = new RegExp(`^\\s*(?:perform\\s+${escapedGuard}\\s*\\(\\s*\\)|[a-z_][a-z0-9_]*\\s*:=\\s*${escapedGuard}\\s*\\(\\s*\\))\\s*;`, "i").exec(afterBegin);
     if (!first) {
       add("guard-first", qualified, `first statement must call ${required}() (live-session identity guard)`);
@@ -144,7 +149,7 @@ export function lintAccountMigration(rawSql: string): Violation[] {
     }
 
     // Grants: revoke from public/anon/authenticated/service_role, grant to authenticated only.
-    const escapedName = qualified.replace(/\./g, "\\.");
+    const escapedName = escapeRegExp(qualified);
     if (!new RegExp(`revoke\\s+all\\s+on\\s+function\\s+${escapedName}\\s*\\([^)]*\\)\\s+from[^;]*\\bpublic\\b[^;]*\\banon\\b`, "i").test(sql)) {
       add("revoke", qualified, "must revoke all from public and anon (and authenticated, service_role) before granting");
     }

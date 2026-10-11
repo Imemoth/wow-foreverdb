@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ACCOUNT_GUARD_FUNCTIONS, ACCOUNT_RPC_GUARDS, ACCOUNT_RPCS } from "@/lib/account/contracts";
-import { lintAccountMigration } from "@/lib/account/migration-conformance";
+import { escapeRegExp, lintAccountMigration } from "@/lib/account/migration-conformance";
 
 /**
  * The account migration (PR C, database/migrations/0012_*.sql) must implement every account function behind a LIVE-SESSION
@@ -78,6 +78,17 @@ function migration(opts: { guards?: Parameters<typeof guardSql>[0]; per?: Partia
 }
 
 const rules = (sql: string) => lintAccountMigration(sql).map((v) => `${v.rule}:${v.target}`);
+
+describe("escapeRegExp", () => {
+  it("escapes every metacharacter including the backslash, so the escaped text matches itself literally", () => {
+    for (const raw of ["public.fdb_x", "a\\b", "a\\.b", "(x)|[y]{2}+*?^$", "private.fdb_caller\\"]) {
+      expect(new RegExp(`^${escapeRegExp(raw)}$`).test(raw), raw).toBe(true);
+    }
+    expect(new RegExp(`^${escapeRegExp("a.b")}$`).test("axb")).toBe(false);
+    expect(new RegExp(`^${escapeRegExp("a\\.b")}$`).test("a\\.b")).toBe(true);
+    expect(new RegExp(`^${escapeRegExp("a\\.b")}$`).test("a\\xb")).toBe(false);
+  });
+});
 
 describe("account migration conformance linter", () => {
   it("accepts a conformant migration", () => {
