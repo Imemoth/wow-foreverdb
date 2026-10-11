@@ -16,12 +16,14 @@ const local: AccountAuthContext = { hosted: false, deployment: "local" };
 const previewCtx: AccountAuthContext = { hosted: true, deployment: "preview", platformEnv: "preview" };
 const demoCtx: AccountAuthContext = { hosted: true, deployment: "preview", platformEnv: "production" };
 
-const localEnv = { ACCOUNT_AUTH_MODE: "local", ACCOUNT_AUTH_URL: "http://127.0.0.1:54321", ACCOUNT_AUTH_PUBLISHABLE_KEY: ANON };
+const CSRF = "c".repeat(40);
+const localEnv = { ACCOUNT_AUTH_MODE: "local", ACCOUNT_AUTH_URL: "http://127.0.0.1:54321", ACCOUNT_AUTH_PUBLISHABLE_KEY: ANON, ACCOUNT_CSRF_SECRET: CSRF };
 const stagingEnv = {
   ACCOUNT_AUTH_MODE: "staging",
   ACCOUNT_AUTH_URL: STAGING_URL,
   ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst",
   ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_publishable_" + "a".repeat(30),
+  ACCOUNT_CSRF_SECRET: CSRF,
 };
 
 const issues = (raw: Record<string, string | undefined>, ctx: AccountAuthContext) => evaluateAccountAuth(raw, ctx).issues.join(" | ");
@@ -106,6 +108,16 @@ describe("account auth configuration: refusals", () => {
   it("rejects an anon key minted for the private project or a different project", () => {
     expect(issues({ ...stagingEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: jwt({ role: "anon", ref: PRIVATE_PRODUCTION_PROJECT_REF }) }, previewCtx)).toMatch(/PRIVATE production project/);
     expect(issues({ ...stagingEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: jwt({ role: "anon", ref: "zzzzzzzzzzzzzzzzzzzz" }) }, previewCtx)).toMatch(/different project/);
+  });
+  it("requires a strong CSRF signing secret and never echoes it", () => {
+    expect(issues({ ...stagingEnv, ACCOUNT_CSRF_SECRET: undefined }, previewCtx)).toMatch(/ACCOUNT_CSRF_SECRET is required/);
+    expect(issues({ ...stagingEnv, ACCOUNT_CSRF_SECRET: "short" }, previewCtx)).toMatch(/at least 32/);
+    expect(issues({ ...stagingEnv, ACCOUNT_CSRF_SECRET: "x y ".repeat(12) }, previewCtx)).toMatch(/malformed/);
+    expect(issues({ ACCOUNT_CSRF_SECRET: "z".repeat(40) }, previewCtx)).toMatch(/ACCOUNT_CSRF_SECRET: configured while/);
+    expect(issues({ ...stagingEnv, ACCOUNT_CSRF_SECRET: "short-secret-VALUE" }, previewCtx)).not.toMatch(/short-secret-VALUE/);
+  });
+  it("rejects a port on the staging origin (host confusion)", () => {
+    expect(issues({ ...stagingEnv, ACCOUNT_AUTH_URL: "https://abcdefghijklmnopqrst.supabase.co:8443" }, previewCtx)).toMatch(/must not carry a port/);
   });
   it("never echoes configuration values in messages", () => {
     const secret = "sb_secret_TOPSECRETVALUE0123456789abcdef";

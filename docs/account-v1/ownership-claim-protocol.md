@@ -31,7 +31,7 @@ stateDiagram-v2
   expired --> [*]
 ```
 
-Expiry is evaluated at redemption time (`expires_at > now()`); a periodic prune deletes terminal claims older than 7 days and audit rows older than 180 days.
+Expiry is evaluated at redemption time (`expires_at > now()`). A periodic prune (which takes the installation advisory lock for each row it touches) deletes only **revoked and never-redeemed expired** claims older than 7 days and audit rows older than 180 days. **Consumed claims are never pruned**: the link row references them, and the `transferred` signal is derived from the link row's `previous_owner_uid`, which has no expiry.
 
 ### Installation ownership
 
@@ -46,29 +46,40 @@ There is deliberately no automatic transition back. Recovery is a documented, ow
 
 ### Companion session
 
-| State | Meaning | Tokens | Remote sync | Remote account features |
-| --- | --- | --- | --- | --- |
-| `LoggedOut` | first run, or explicit sign-out of a registered account | none | off | off |
-| `Anonymous` | explicit anonymous mode (today's behaviour) | anonymous JWT | on (owned installations) | off |
-| `AnonymousClaiming` | anonymous with a pending claim shown | anonymous JWT | on until transfer | off |
-| `Registered` | email/password session, installation owned by this account | registered JWT | on | on |
-| `ReauthRequired` | registered session unusable: refresh rejected, session file unreadable (marker says registered), or ownership transferred and no registered session yet | none usable | **off** | off |
+Two credentials can exist on one machine; they are stored in **two separate DPAPI slots** and never merged:
 
-Transitions (all serialised by the single session gate):
+- the **primary session** (`session.dat`): `Anonymous` or `Registered`;
+- the **legacy owner credential** (`legacy-owner.dat`): the anonymous session that still owns installations. It is created, not deleted, when a registered sign-in happens on a machine that has an anonymous session. It is used **only** for `claim_start`, `fdb_installation_link_status` and syncing installations that are still owned by that anonymous UID, and is removed only when every known installation has been transferred or the user explicitly chooses "forget the anonymous identity" after a warning that unclaimed installations will stop syncing. Without this slot, signing in first would strand every existing installation (the registered UID fails the ingest owner check and no claim could ever be started).
+
+The kind of a stored session is its authenticated truth: the JWT's `is_anonymous` claim (set by Auth), never a flag the user or a file can forge. A plaintext, non-secret marker next to each blob (`kind=registered|anonymous`) exists only so an *unreadable* blob can still be classified; for sessions written by 0.8.x (no marker) the kind is read from the JWT claim.
+
+| State | Meaning | Remote sync | Account features |
+| --- | --- | --- | --- |
+| `LoggedOut` | first run, or explicit sign-out of a registered account | off | off |
+| `Anonymous` | explicit anonymous mode (today's behaviour) | on for installations it owns | off |
+| `AnonymousClaiming` | anonymous with a pending claim shown | on until transfer | off |
+| `Registered` | registered session; installations owned by this account | on for installations owned by the account; installations still owned by the legacy credential keep syncing through it | on |
+| `ReauthRequired` | registered session unusable (refresh definitively rejected, blob unreadable with `kind=registered`, or ownership transferred and no registered session yet) | **off** for the account's installations; legacy-owned installations keep syncing | off |
+| `AnonymousIdentityLost` | the anonymous refresh token was **definitively** rejected | off | off; no new anonymous identity is created without an explicit user confirmation that explains the consequence |
+
+Transitions (all serialised by the single session gate; the gate must be machine-wide, a named `Mutex`, so two Companion instances cannot race):
 
 | From | Event | To | Notes |
 | --- | --- | --- | --- |
 | `LoggedOut` | user chooses "Use without an account" | `Anonymous` | the only way an anonymous identity is ever created |
-| `LoggedOut` / `Anonymous` | registered sign-in succeeds | `Registered` | anonymous tokens are discarded locally only after the registered session is stored |
+| `Anonymous` | registered sign-in succeeds | `Registered` | the anonymous session moves to the legacy slot, it is not discarded |
+| `LoggedOut` | registered sign-in succeeds | `Registered` | no legacy slot |
 | `Anonymous` | start claim | `AnonymousClaiming` | code shown once |
-| `AnonymousClaiming` | status poll returns `transferred` | `ReauthRequired` | message: "ownership moved to your account, sign in" |
+| `AnonymousClaiming` | status poll returns `transferred` | prompts sign-in if not `Registered` | message: "ownership moved to your account" |
 | `Registered` | refresh succeeds | `Registered` | rotated refresh token persisted atomically |
-| `Registered` | refresh rejected / network ok | `ReauthRequired` | **never** `Anonymous`; never creates an identity |
-| `Registered` | refresh fails for network reasons | `Registered` (retry) | transient; sync pauses, session kept |
-| `Registered` | explicit sign-out | `LoggedOut` | server-side revoke; local file removed; **not** `Anonymous` |
-| any | session file unreadable and kind marker = registered | `ReauthRequired` | corruption never downgrades identity |
-| any | session file unreadable and marker absent/anonymous | `Anonymous` only if the user previously chose anonymous mode, else `LoggedOut` | |
-| `Registered` | status for the installation is not `owned` | stay `Registered`, installation sync disabled | different account signed in: explain, do not ingest |
+| any | refresh fails with a **transient** error (offline, timeout, 5xx, storage `IOException`, parse error) | unchanged | **never** `Clear()`; retry later; sync pauses |
+| `Registered` | refresh **definitively** rejected (HTTP 400/401 with `invalid_grant` / session not found) | `ReauthRequired` | never `Anonymous`; no identity is created |
+| `Anonymous` | refresh **definitively** rejected | `AnonymousIdentityLost` | today this silently creates a new anonymous user and orphans the installations; that behaviour is removed |
+| `Registered` | explicit sign-out | `LoggedOut` | server-side revoke with `scope=local` only (the website session is unaffected); local slot removed; **not** `Anonymous`; the legacy slot is kept |
+| any | primary blob unreadable | state from the plaintext marker; `ReauthRequired` for `registered`; for `anonymous` or a missing marker, classify from the legacy blob/JWT, otherwise `LoggedOut` | corruption never downgrades identity |
+| `Registered` | `fdb_installation_link_status` for an installation is not `owned` with the registered token | that installation's sync stays off | a different account is signed in; explain, never ingest |
+
+Credential choice per installation: ask `fdb_installation_link_status` with the registered token first (`owned` ⇒ use it), then with the legacy token (`owned` ⇒ use it; `transferred` ⇒ prompt for registered sign-in); never create an owner implicitly.
 
 Anonymous local collection (reading SavedVariables, local search and Guildbook view) keeps working in every state; only remote sync and account features are gated.
 
@@ -91,7 +102,7 @@ create table private.installation_claims (
 create unique index installation_claims_one_pending
   on private.installation_claims (installation_id) where status = 'pending';
 
-create table private.account_installations (     -- the verified, active link; PK = one active owner
+create table private.account_installations (     -- provenance of a CLAIMED transfer (ownership itself is installations.owner_user_id)
   installation_id    text primary key references public.installations(id) on delete restrict,
   account_uid        uuid not null,
   linked_at          timestamptz not null default now(),
@@ -110,7 +121,7 @@ create table private.account_audit (               -- minimal: no code, email, I
 );
 ```
 
-`public.installations` and every child table are **not altered**. `on delete restrict` on the link prevents an installation delete from silently erasing the link record.
+`public.installations` and every child table are **not altered**. **The source of truth for ownership remains `installations.owner_user_id`.** `account_installations` records provenance only (when, through which claim, from whom) and powers the `transferred` signal and the audited restore; installations first ingested by a registered Companion are owned by that account with no link row and are listed and authorised exactly like claimed ones. `on delete restrict` on the link prevents an installation delete from silently erasing the provenance record.
 
 ## 4. Function contracts (all `SECURITY DEFINER`, `set search_path = ''`, every object schema-qualified; `revoke all ... from public, anon, authenticated, service_role; grant execute ... to authenticated`)
 
@@ -121,12 +132,14 @@ Shared guards (in `private`, not callable by clients):
 
 | Function | Caller | Behaviour |
 | --- | --- | --- |
-| `fdb_account_claim_start(p_installation_id text) → jsonb` | current owner, **anonymous** | validate id shape; budgets: `claim_start:uid:<uid>` 3 per 300 s, `claim_start:inst:<id>` 3 per 300 s, global 60 per 300 s; `pg_advisory_xact_lock(hashtextextended(id,0))` (**same key as ingest**); `select … from public.installations where id = $1 for update`; owner must equal `auth.uid()` and the caller must be anonymous; revoke previous pending claim (audit `claim_revoked`); generate `upper(encode(extensions.gen_random_bytes(16),'hex'))`, store `extensions.digest(code,'sha256')`, `expires_at = now()+10 min`; audit `claim_started`; return `{ok:true, code, expires_at}`. Any precondition failure returns `{ok:false,error:'not_available'}`. |
-| `fdb_account_claim_redeem(p_code text) → jsonb` | **registered** | `fdb_registered_caller()`; budgets `claim_redeem:uid:<uid>` 10 per 300 s, global 300 per 300 s; format check `^[0-9A-F]{32}$`; hash; look up the claim by hash (no lock) → none ⇒ audit `redeem_rejected`, `{ok:false,error:'invalid_claim'}`; take the **advisory lock for the claim's installation**; re-select the claim `for update` and the installation `for update`; require `status='pending' and expires_at > now()`, installation exists, `owner_user_id = claim.initiator_uid`, `auth.uid() <> initiator_uid`, account's active links < 50, else increment `attempts` (revoke at 5), audit, `{ok:false,error:'invalid_claim'}`; then **in the same transaction** set `installations.owner_user_id = auth.uid()`, insert `account_installations (previous_owner_uid = initiator_uid)`, mark the claim `consumed`, audit `claim_redeemed`; return `{ok:true, installation_id, linked_at}`. |
-| `fdb_installation_link_status(p_installation_id text) → jsonb` | any authenticated | `{state:'owned'}` if the caller is the installation's owner; `{state:'transferred'}` if a consumed claim exists with `initiator_uid = auth.uid()` for that installation (only the previous owner learns anything); otherwise `{state:'unknown'}`. Used by the Companion to detect the transfer and to check which account owns the installation. |
-| `fdb_account_installations() → setof` | registered | the caller's own links joined with `installations` where `owner_user_id = auth.uid()`; max 50 rows; columns `installation_id, linked_at, last_seen_at, guild_count` only. |
-| `fdb_account_guildbook_guilds(p_installation_id text)` | registered | ownership re-derived in SQL (`account_installations.account_uid = auth.uid() and installations.owner_user_id = auth.uid()`); returns an **empty set** for installations not owned (indistinguishable from owned-but-empty); charged to the existing `detail` budget; no `member_guid`. |
-| `fdb_account_guildbook_members(p_installation_id, p_guild_key, p_limit, p_offset)` | registered | same ownership derivation; `p_limit` clamped to 1..200, `p_offset` 0..100000; stable order `(rank_index, member_name)`; selected columns exclude `installation_id` and `member_guid`. PR C extends the registry with a professions function after reviewing its columns. |
+| `fdb_account_claim_start(p_installation_id text) → jsonb` | current owner, **anonymous** | validate id shape; take the per-**uid** budget `claim_start:uid:<uid>` (3 per 300 s) and the global ceiling; `pg_advisory_xact_lock(hashtextextended(id,0))` (**same key as ingest**); `select … from public.installations where id = $1 for update`; owner must equal `auth.uid()` and the caller must still be anonymous (`auth.users.is_anonymous`); **only then** charge the per-installation budget (key `claim_start:inst:` ‖ first 32 hex of `sha256(id)`: the existing budget function rejects keys over 140 characters and installation IDs may be 128, and charging before the owner check would let anyone who knows an ID exhaust the owner's budget); revoke the previous pending claim (audit `claim_revoked`); generate `upper(encode(extensions.gen_random_bytes(16),'hex'))`, store `sha256(code)`, `expires_at = now()+10 min`; audit `claim_started`; return `{ok:true, code, expires_at}`. Any precondition failure returns `{ok:false,error:'not_available'}`. |
+| `fdb_account_claim_redeem(p_code text) → jsonb` | **registered** | `fdb_registered_caller()`; budgets `claim_redeem:uid:<uid>` 10 per 300 s and the global ceiling; format check `^[0-9A-F]{32}$`; hash; look up the claim by hash (no lock) → none ⇒ audit `redeem_rejected`, `{ok:false,error:'invalid_claim'}`; take the **advisory lock for the claim's installation**; re-select the claim `for update` and the installation `for update`; require `status='pending' and expires_at > now()`, installation exists, `owner_user_id = claim.initiator_uid`, **the initiator is still anonymous** (`auth.users.is_anonymous` — an owner that upgraded itself to a permanent account between start and redeem must not be movable by a leaked code), `auth.uid() <> initiator_uid`; otherwise increment `attempts` (revoke at 5), audit, `{ok:false,error:'invalid_claim'}`. If the claim is valid but the account already owns 50 installations, return `{ok:false,error:'account_limit'}` **without consuming the code** (only a caller holding a valid code learns this). Then **in the same transaction** set `installations.owner_user_id = auth.uid()`, insert `account_installations (previous_owner_uid = initiator_uid)`, mark the claim `consumed`, audit `claim_redeemed`; return `{ok:true, installation_id, linked_at}`. |
+| `fdb_installation_link_status(p_installation_id text) → jsonb` | any authenticated | gated by the existing `foreverdb_api_gate('detail')` (existing per-UID read budgets; no new quota). `{state:'owned'}` if the caller is the installation's owner; `{state:'transferred'}` if `account_installations.previous_owner_uid = auth.uid()` for that installation (never pruned, so a Companion offline for months still learns it); otherwise `{state:'unknown'}`. |
+| `fdb_account_installations() → setof` | registered | gated by `foreverdb_api_gate('detail')`; installations where `installations.owner_user_id = auth.uid()` (claimed or first-ingested by this account); max 50 rows; `linked_at` is the link's `linked_at` or the installation's `first_seen_at`; columns `installation_id, linked_at, last_seen_at, guild_count` only. |
+| `fdb_account_guildbook_guilds(p_installation_id text)` | registered | gated by `foreverdb_api_gate('detail')`; ownership re-derived in SQL (`installations.owner_user_id = auth.uid()`); returns an **empty set** for installations not owned (indistinguishable from owned-but-empty); no `member_guid`. |
+| `fdb_account_guildbook_members(p_installation_id, p_guild_key, p_limit, p_offset)` | registered | same gate and ownership derivation; `p_limit` clamped to 1..200, `p_offset` 0..100000; stable order `(rank_index, member_name)`; selected columns exclude `installation_id` and `member_guid`. PR C extends the registry with a professions function after reviewing its columns. |
+
+All six functions set `lock_timeout = '5s'` (a redeem can queue behind a 15-second ingest and must fail cleanly rather than hang). Wrong-code guesses cannot be charged to a claim (nothing matches), so the per-redeemer budget is the control; `attempts` only counts failed re-validations against a *found* claim.
 
 Contracts for these are frozen in `web/src/lib/account/contracts.ts` (PR A). Quotas are the **existing** ones; no registered tier exists in V1. A registered UID shares one per-UID budget across all of its installations (e.g. ingest 5 per 300 s per UID), a known limitation recorded for the later tiering milestone.
 
@@ -140,7 +153,7 @@ Contracts for these are frozen in `web/src/lib/account/contracts.ts` (PR A). Quo
 
 ## 5. Concurrency
 
-Lock order is always **advisory lock (installation) → claim row → installation row**, identical to ingest's *advisory lock → installation upsert*. A single total order means no deadlock between claim start, redeem and ingest.
+Every function that touches a claim or an installation's ownership first takes **`pg_advisory_xact_lock(hashtextextended(installation_id, 0))`**, the exact key the private ingest implementation takes (`0005`: `perform pg_advisory_xact_lock(hashtextextended(installation, 0))`), and only then row locks (`claim` then `installation` in redeem, `installation` then `claim` in start). The row-lock orders differ, which is safe only because the advisory lock serialises everything per installation; therefore **any future code that locks these rows without the advisory lock (including the prune job) breaks the guarantee** and must not exist. (Ingest charges its budget rows before the advisory lock inside the private implementation; budgets are keyed by UID, not installation, so they cannot form a cycle with these locks.) `lock_timeout` bounds waiting.
 
 | Race | Outcome |
 | --- | --- |
@@ -149,7 +162,9 @@ Lock order is always **advisory lock (installation) → claim row → installati
 | `claim_start` while a redeem runs | Serialised; if start wins, the old claim is `revoked` and the redeem fails; if redeem wins, start sees a non-anonymous owner and returns `not_available`. |
 | Ingest running during redeem | Ingest holds the advisory lock for its whole transaction; redeem waits, the snapshot lands under the old owner, then ownership flips. No lost or duplicated rows (children are keyed by `installation_id`, untouched). |
 | Anonymous ingest after redeem | Rejected by the existing owner check; no new identity or row is created. |
-| Redeem for an installation deleted after the claim | `on delete cascade` removes the claim; the lookup finds nothing: `invalid_claim`. |
+| Redeem for an installation deleted after the claim | `on delete cascade` removes a pending claim; the lookup finds nothing: `invalid_claim`. (A *consumed* claim is protected by the link's `on delete restrict`.) |
+| Owner upgrades itself to a permanent account between start and redeem | redeem rechecks `is_anonymous` for the initiator: `invalid_claim`; a leaked code cannot move a registered owner's installation. |
+| Cheap accounts exhaust the global claim ceilings | accepted residual (denial of the claim feature only, never of ingest or reads); upstream Auth per-IP limits and the per-uid budgets apply; the ceilings are alarms |
 
 ## 6. Failure modes
 
@@ -165,7 +180,11 @@ Lock order is always **advisory lock (installation) → claim row → installati
 
 ## 7. Deployment safety, rollback and incident recovery
 
-**Pre-flight** (`do $$` block that raises, read-only): ledger shows `0011` and not `0012`; `private` schema, `private.foreverdb_take_budget`, `private.foreverdb_api_gate` exist; `extensions.gen_random_bytes` and `extensions.digest` exist (`pgcrypto`); `auth.users` and `auth.sessions` have the columns used; the ingest owner check text is present; reports (does not fail on) ownerless installations. **Idempotent** (`create … if not exists`, `create or replace`), forward-only, new ledger entry `account_ownership_claims`. `0010` is untouched and not applied.
+**Pre-flight** (`do $$` block that raises, read-only): ledger shows `0011` and not `0012`; `private` schema, `private.foreverdb_take_budget`, `private.foreverdb_api_gate` exist; `extensions.gen_random_bytes` and `extensions.digest` exist (`pgcrypto`); `auth.users` and `auth.sessions` have the columns used and `has_table_privilege` confirms the migration role can read both (Supabase's `auth.sessions.not_after` is usually null, so only a non-null past value counts as expired); the ingest owner check text is present; reports (does not fail on) ownerless installations. **Idempotent** (`create … if not exists`, `create or replace`), forward-only, new ledger entry `account_ownership_claims`. After every `create function` the migration explicitly revokes `execute` from `public`, `anon`, `authenticated` and `service_role` and then grants `authenticated` only, because Supabase default privileges can re-grant on new functions. `0010` is untouched and not applied.
+
+**Numbering policy.** The repository file number orders review; the production ledger records timestamped names. `0010` (public projection export) is reserved and unapplied; `0011` is applied; `0012` is next. Applying `0012` before `0010` is safe because they are independent (the pre-flight does not require `0010` and `0010` does not require `0012`). The migration never reuses or renumbers `0010`.
+
+**Why pgcrypto.** `gen_random_uuid()` is a v4 UUID with only 122 random bits and fixed nibbles, below the 128-bit requirement; `extensions.gen_random_bytes` is the straightforward CSPRNG and ships in the Supabase `extensions` schema. The pre-flight asserts it exists.
 
 **Post-apply verification** (read-only): six functions present with expected ACLs; tables empty; ingest/search/stats `prosrc` hashes unchanged; anon denied; one smoke claim in a throwaway database, never in production data.
 

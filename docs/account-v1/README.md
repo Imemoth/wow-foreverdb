@@ -22,10 +22,10 @@ Out of scope: higher registered quotas (current anonymous and registered quota l
 ## Decisions at a glance
 
 1. **Shared identity, isolated data.** The existing private Supabase Auth is the only identity provider; the separate public PostgreSQL is untouched. No second user database.
-2. **Auth-only web boundary (ADR-015):** an isolated `/account` route group plus `/api/account/*`, a server-side backend-for-frontend using the *publishable* key and the *user's own* JWT. A closed allowlist of Auth endpoints and of database RPCs. No service-role credential, no database driver, no generic forwarding, no tokens in browser JavaScript.
-3. **Narrow, separately validated Auth configuration (ADR-016):** `ACCOUNT_AUTH_MODE=disabled|local|staging|production`. `production` is hard-blocked in V1 by a code constant; `staging` never targets the private production project or Vercel's production target. The global private-project guard is unchanged. Implemented and tested in PR A (`web/src/lib/account/config.ts`).
+2. **Auth-only web boundary (ADR-015):** an isolated route group under the single prefix `/account` (pages and `/account/api/*`), a server-side backend-for-frontend using the *publishable* key and the *user's own* JWT. A closed allowlist of Auth endpoints and of database RPCs. No service-role credential, no database driver, no generic forwarding, no tokens in browser JavaScript.
+3. **Narrow, separately validated Auth configuration (ADR-016):** `ACCOUNT_AUTH_MODE=disabled|local|staging|production`. `production` is hard-blocked in V1 by a code constant; `staging` never targets the private production project or Vercel's production target. Five variables: the four `ACCOUNT_AUTH_*` plus a signing secret `ACCOUNT_CSRF_SECRET`. The global private-project guard is unchanged. Implemented and tested in PR A (`web/src/lib/account/config.ts`).
 4. **Ownership by single-use claim code (ADR-017):** the Companion's current owner (typically an anonymous UID) requests a 128-bit single-use code (10 minutes, hash only stored); a verified registered user redeems it; ownership moves in one transaction guarded by the same advisory lock the ingest function uses. An installation ID alone proves nothing.
-5. **Companion fails closed (ADR-018):** a registered session never falls back to a new anonymous identity; explicit session kinds; atomic DPAPI persistence with a plaintext kind marker so a corrupt registered session cannot silently degrade to anonymous.
+5. **Companion fails closed (ADR-018):** a registered session never falls back to a new anonymous identity; explicit session kinds; the anonymous session is kept in a separate legacy slot after registered sign-in so existing installations can still be claimed and synced; transient errors never clear a session; atomic DPAPI persistence with a plaintext kind marker.
 6. **Registered quotas unchanged.** One registered UID shares today's per-UID budgets across its installations; that limitation is documented, not "fixed" in V1.
 
 ## PR plan and dependencies
@@ -63,6 +63,32 @@ Legend: **IMPLEMENTED** (code in the PR) · **CI VERIFIED** (GitHub Actions on t
 | Ownership claim backend, account Guildbook RPCs | BLOCKED / PENDING (PR C) | — |
 | Companion registered accounts | BLOCKED / PENDING (PR D) | — |
 | Real Auth/email/two-account acceptance | BLOCKED / PENDING (needs owner staging, PR E) | — |
+| Production facts used by the audit (7 installations, 0 permanent users, ledger at `0011`) | read-only queries executed through the Supabase connector in this session; reproducible from [architecture.md §7](architecture.md) | — |
 | Any production activation | BLOCKED (no owner approval; code constant false) | — |
 
 No capability is called complete on mocks alone; see [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md).
+
+## Review record
+
+**PR A, independent review (fresh-context reviewer, static, no prior conclusions supplied):** no Critical; 5 High, 10 Medium, 6 Low. All High and all Medium findings were fixed in this PR or turned into binding PR B/C/D requirements in the specification; deviations are stated.
+
+| Finding | Outcome |
+| --- | --- |
+| H1 registered sign-in would strand anonymous-owned installations | specification fixed: separate legacy owner credential slot, kind from the JWT claim (protocol §2) |
+| H2 pre-existing bare `catch { Clear(); }` orphans installations for offline anonymous users | recorded in the audit; PR D requirement with regression tests; transient vs definitive failure rules in the state machine |
+| H3 claim prune vs foreign key and the `transferred` signal | consumed claims never pruned; `transferred` derived from `previous_owner_uid` |
+| H4 registered-owner gap, missing initiator-anonymous recheck | ownership source of truth is `owner_user_id`; redeem rechecks `is_anonymous` |
+| H5 Supabase CAPTCHA breaks the Companion | decision: no Supabase CAPTCHA on a Companion-facing project; website-side Turnstile; staging test of the Companion under the exact settings |
+| M1 budget key length; M2 budget DoS; M3 unbudgeted functions; M4 attempts; M5 lock order | fixed in the function contracts (hashed key, charge after owner check, `foreverdb_api_gate('detail')`, `account_limit` without consuming, `lock_timeout`, lock-order statement) |
+| M6 logout scope, unpinned query, body-less sign-up | fixed in code: query pinning, `scope=local`, strict `AUTH_BODIES` (tests) |
+| M7 route/cookie contradiction, CSRF cookie, proxy gaps | unified on `/account/api/*`; signed CSRF token with `ACCOUNT_CSRF_SECRET` (validator + tests); proxy changes listed for PR B; static test forbids `app/api/account` |
+| M8 refresh on serverless, single-session setting | design no longer relies on single-flight; settings that couple sessions must be off |
+| M9 referrer/token leakage | `no-referrer`, `replaceState`, no query logging |
+| M10 weak boundary tests | AST import scan (`ts.preProcessFile`), all source extensions, `NEXT_PUBLIC` and `accountAuth` bans, URL-builder allowlists, mutation-tested |
+| L1 port in staging origin | fixed (tests) |
+| L2 opaque publishable key cannot be bound to a project | accepted: the URL/ref confirmation is the binding; the staging project's key is owner-supplied |
+| L3 production branch is a stub | intentional in V1 (it always refuses); activating it is a separate reviewed change |
+| L4 plaintext marker deletable; per-process gate | marker is only a hint, truth comes from the JWT claim; machine-wide named `Mutex` required |
+| L5 grants/pre-flight details | in the migration plan (explicit revokes after create, `has_table_privilege`, `not_after` semantics) |
+| L6 pgcrypto not needed | rejected with reason: built-in UUIDs carry 122 random bits, below the 128-bit requirement |
+| Documentation faults | fixed: dangling reference, 50 vs 100 rows, global-guard wording, audit queries recorded (§7 of the architecture), migration numbering policy |

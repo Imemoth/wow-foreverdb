@@ -9,6 +9,7 @@
  *   ACCOUNT_AUTH_URL              origin of the Supabase Auth/API gateway (no path, no credentials)
  *   ACCOUNT_AUTH_PUBLISHABLE_KEY  publishable/anon key ONLY (public by design, never a secret)
  *   ACCOUNT_AUTH_PROJECT_REF      staging only: must equal the project ref in the URL (double confirmation)
+ *   ACCOUNT_CSRF_SECRET           >= 32 characters; signs the CSRF token (a server secret, NOT a Supabase credential)
  *
  * Rules (each one has a negative test in tests/unit/account-config.test.ts):
  *   - `production` is NOT available in V1. Activation needs owner approval AND a reviewed code
@@ -40,6 +41,8 @@ export interface AccountAuthConfig {
   projectRef: string | null;
   /** Publishable (anon) key. Public by design; still never logged or sent to the browser by this app. */
   publishableKey: string;
+  /** Keys the signed CSRF token (the account cookies cannot use the __Host- prefix because they are path-scoped). */
+  csrfSecret: string;
 }
 
 export interface AccountAuthContext {
@@ -59,6 +62,7 @@ const ALLOWED_VARIABLES = new Set([
   "ACCOUNT_AUTH_URL",
   "ACCOUNT_AUTH_PUBLISHABLE_KEY",
   "ACCOUNT_AUTH_PROJECT_REF",
+  "ACCOUNT_CSRF_SECRET",
 ]);
 
 const MODES = new Set(["disabled", "local", "staging", "production"]);
@@ -100,8 +104,8 @@ export function evaluateAccountAuth(raw: Record<string, string | undefined>, ctx
   const present = (name: string) => raw[name] !== undefined && raw[name] !== "";
 
   for (const name of Object.keys(raw)) {
-    if (/^ACCOUNT_AUTH_/i.test(name) && !ALLOWED_VARIABLES.has(name) && present(name)) {
-      fail(`${name}: unknown account-auth variable (only MODE, URL, PUBLISHABLE_KEY and PROJECT_REF are accepted)`);
+    if (/^ACCOUNT_(AUTH|CSRF)_/i.test(name) && !ALLOWED_VARIABLES.has(name) && present(name)) {
+      fail(`${name}: unknown account-auth variable (only ACCOUNT_AUTH_MODE, _URL, _PUBLISHABLE_KEY, _PROJECT_REF and ACCOUNT_CSRF_SECRET are accepted)`);
     }
   }
 
@@ -113,7 +117,7 @@ export function evaluateAccountAuth(raw: Record<string, string | undefined>, ctx
   const mode = modeRaw as AccountAuthMode;
 
   if (mode === "disabled") {
-    for (const name of ["ACCOUNT_AUTH_URL", "ACCOUNT_AUTH_PUBLISHABLE_KEY", "ACCOUNT_AUTH_PROJECT_REF"]) {
+    for (const name of ["ACCOUNT_AUTH_URL", "ACCOUNT_AUTH_PUBLISHABLE_KEY", "ACCOUNT_AUTH_PROJECT_REF", "ACCOUNT_CSRF_SECRET"]) {
       if (present(name)) fail(`${name}: configured while ACCOUNT_AUTH_MODE is disabled`);
     }
     return { config: null, issues };
@@ -156,6 +160,7 @@ export function evaluateAccountAuth(raw: Record<string, string | undefined>, ctx
     }
     if (u) {
       if (u.username || u.password) fail("ACCOUNT_AUTH_URL must not contain credentials");
+      if (mode === "staging" && u.port) fail("ACCOUNT_AUTH_URL must not carry a port in staging mode");
       if ((u.pathname !== "/" && u.pathname !== "") || u.search || u.hash) fail("ACCOUNT_AUTH_URL must be an origin only (no path, query or fragment)");
       const hostName = u.hostname.toLowerCase();
       if (mode === "local") {
@@ -200,9 +205,13 @@ export function evaluateAccountAuth(raw: Record<string, string | undefined>, ctx
     }
   }
 
+  const csrf = raw.ACCOUNT_CSRF_SECRET ?? "";
+  if (csrf.length < 32) fail("ACCOUNT_CSRF_SECRET is required and must be at least 32 characters");
+  else if (/\s/.test(csrf) || csrf.length > 512) fail("ACCOUNT_CSRF_SECRET is malformed");
+
   if (issues.length) return { config: null, issues };
   return {
-    config: { mode, authOrigin: origin, projectRef: ref, publishableKey: key },
+    config: { mode, authOrigin: origin, projectRef: ref, publishableKey: key, csrfSecret: csrf },
     issues,
   };
 }

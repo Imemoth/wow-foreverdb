@@ -18,10 +18,10 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 
 | ID | Threat | Mitigation | Verified by (PR) |
 | --- | --- | --- | --- |
-| A1 | Website reaches the private project through a configuration slip | closed `ACCOUNT_AUTH_*` validator; `production` hard-blocked; private ref rejected in URL, key and every other variable in all spellings; service-role keys and names refused; accounts refused on Vercel's production target | unit matrix (PR A) |
+| A1 | Website reaches the private project through a configuration slip | closed `ACCOUNT_AUTH_*` validator; `production` hard-blocked; private ref rejected in the Auth URL and key in all spellings and, by the global guard, in the variables it scans (`FOREVERDB_*`, `PUBLIC_*`, `SITE_URL`, `UPSTASH_*`, `RATE_LIMIT*`, `TURNSTILE_*`, `CHALLENGE_*`, `NEXT_PUBLIC_*`, `TRUSTED_*`, and database/Supabase-named variables); service-role keys and names refused; accounts refused on Vercel's production target | unit matrix (PR A) |
 | A2 | Public adapter or rate limiter gains private-database access | static import-boundary tests; no driver in account zone; account zone cannot import `lib/data` | static tests (PR A) |
 | A3 | Browser JavaScript steals a token (XSS) | tokens only in HttpOnly cookies scoped to `/account`; nonce CSP unchanged; Auth origin/key never in bundles (bundle scan) | Playwright + bundle scan (PR B) |
-| A4 | CSRF, including login CSRF | Origin equality, `Sec-Fetch-Site`, double-submit token, `SameSite=Lax` session, POST-only mutations | Playwright (PR B) |
+| A4 | CSRF, including login CSRF | Origin equality, `Sec-Fetch-Site`, HMAC-signed double-submit token (`ACCOUNT_CSRF_SECRET`), `SameSite=Lax` session, POST-only mutations | Playwright (PR B) |
 | A5 | Open redirect via `next`/callback | exact-pathname allowlist, encodings at any depth, query/fragment dropped | unit (PR A) + Playwright (PR B) |
 | A6 | Mail scanner consumes the one-time confirmation/recovery token | GET interstitial without side effects, POST to verify | Playwright with captured mail (PR B) |
 | A7 | Account enumeration | identical responses for sign-up/login/recovery, per-IP and per-email throttles | Playwright (PR B) |
@@ -38,7 +38,9 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 | A18 | Sync under the wrong account after switching | single session gate, per-account local caches, in-flight response discard, status check before ingest | .NET tests (PR D) |
 | A19 | Account code promoted to the production alias | validator refuses accounts on Vercel's production target; `release` is the only production branch and is not changed | unit (PR A) + release gates |
 | A20 | Account data in public caches, sitemap, logs | `private, no-store`, noindex everywhere, excluded from sitemap, no PII logging | Playwright header checks (PR B) |
-| A21 | Mass sign-up or anonymous sign-up abuse | Auth rate limits, CAPTCHA, SMTP limits, anonymous sign-in limits (below) | staging (owner) |
+| A21 | Mass sign-up or anonymous sign-up abuse | Auth rate limits, website-side Turnstile before Auth, SMTP limits, anonymous sign-in limits (below) | staging (owner) |
+| A22 | An Auth setting silently breaks the Companion (project-wide CAPTCHA, single-session-per-user, session time-box, short inactivity timeout) | documented as forbidden for a project the Companion uses; staging acceptance runs the Companion's anonymous sign-in and refresh under the exact settings | staging (owner) + Win (PR E) |
+| A23 | Claim feature exhausted by cheap accounts | per-uid budgets are the control; per-installation budget charged only after the owner check; global ceilings are alarms; denial is limited to claiming | SQL (PR C) |
 
 ## 3. Authentication abuse prevention (review)
 
@@ -47,10 +49,11 @@ These are Supabase project settings; none is changed by this work. Values below 
 - **Email verification stays on.** "Confirm email" must be enabled; the specification and tests assume unverified users never obtain a session.
 - **Do not use the default mail sender for public registration.** The built-in SMTP is intended for testing with very low limits and restricted recipients. Staging and any future production need an owner-chosen custom SMTP provider (SPF/DKIM/DMARC) and a deliverability test.
 - **Auth rate limits:** review the per-IP limits for sign-up/sign-in, token refresh, OTP verification, email sends and anonymous sign-ins; confirm they suit the Companion population (anonymous sign-ups come from user machines, many behind shared NAT) and a public website.
-- **CAPTCHA:** enable CAPTCHA protection (Turnstile or hCaptcha) on sign-up and password recovery in staging; the website sends the token with the Auth request (PR B includes the optional integration, disabled without keys). Do not configure real keys without owner approval.
+- **CAPTCHA:** Supabase's CAPTCHA protection is **project-wide** (sign-up, anonymous sign-in, password sign-in, recovery) and the Companion cannot supply a token, so enabling it on a project the Companion uses would break anonymous and registered Companion sign-in. Decision for V1: **do not enable Supabase CAPTCHA** on a Companion-facing project; instead the website verifies Turnstile server-side (existing challenge code) before it calls Auth for sign-up and recovery, and relies on Auth per-IP limits, custom SMTP and email verification. Real Turnstile keys need owner approval.
 - **Leaked-password protection:** the project advisor currently reports it **disabled** on the production project; enable it in staging and plan it for production (owner).
 - **Password policy:** minimum length and requirements set in Auth; the website also enforces length and rejects obviously weak input locally for early feedback.
 - **Refresh-token rotation and reuse interval:** keep rotation enabled; the default reuse interval tolerates concurrent refreshes.
+- **Settings that couple sessions:** *single session per user*, session time-box and inactivity timeout must stay **off/long** so website and Companion sessions remain independent (requirement of the product).
 - **Redirect URLs and Site URL:** restricted to the exact callback URL(s) of the isolated environment (wildcards only for the owner's own preview host pattern in staging).
 - **Anonymous sign-ins stay enabled** (the Companion needs them) but remain distinct from registered users in every check.
 

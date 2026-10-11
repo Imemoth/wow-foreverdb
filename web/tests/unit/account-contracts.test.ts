@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_RPCS,
+  AUTH_BODIES,
   AUTH_ENDPOINTS,
   classifyClaims,
   formatClaimCode,
@@ -43,6 +44,38 @@ describe("auth endpoint allowlist", () => {
     expect(isAllowedAuthRequest("GET", "/auth/v1/user")).toBe(true);
     expect(isAllowedAuthRequest("GET", "/auth/v1/.well-known/jwks.json")).toBe(true);
     expect(AUTH_ENDPOINTS.length).toBe(9);
+  });
+  it("pins query parameters: logout is always scope=local (never global, so the Companion session survives)", () => {
+    expect(isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local")).toBe(true);
+    for (const p of ["/auth/v1/logout", "/auth/v1/logout?scope=global", "/auth/v1/logout?scope=others", "/auth/v1/logout?scope=local&scope=global", "/auth/v1/logout?scope=local&x=1"]) {
+      expect(isAllowedAuthRequest("POST", p), p).toBe(false);
+    }
+  });
+  it("accepts redirect_to only when it equals the server-computed callback URL", () => {
+    const cb = "https://app.example/account/auth/confirm";
+    const enc = encodeURIComponent(cb);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/signup?redirect_to=${enc}`, { callbackUrl: cb })).toBe(true);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/recover?redirect_to=${enc}`, { callbackUrl: cb })).toBe(true);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/signup?redirect_to=${enc}`)).toBe(false);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/signup?redirect_to=${encodeURIComponent("https://evil.example/")}`, { callbackUrl: cb })).toBe(false);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/signup?redirect_to=${enc}&redirect_to=${enc}`, { callbackUrl: cb })).toBe(false);
+    expect(isAllowedAuthRequest("POST", `/auth/v1/verify?redirect_to=${enc}`, { callbackUrl: cb })).toBe(false);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/signup?anything=1")).toBe(false);
+    expect(isAllowedAuthRequest("GET", "/auth/v1/user?x=1")).toBe(false);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/token?grant_type=password&redirect_to=x")).toBe(false);
+  });
+  it("freezes strict request bodies: no user_metadata, no extra fields, bounded password", () => {
+    const ok = { email: "  User@Example.COM ", password: "correct horse battery" };
+    expect(AUTH_BODIES.signup.parse(ok)).toEqual({ email: "user@example.com", password: "correct horse battery" });
+    expect(AUTH_BODIES.signup.safeParse({ ...ok, data: { role: "admin" } }).success).toBe(false);
+    expect(AUTH_BODIES.signup.safeParse({ ...ok, password: "short" }).success).toBe(false);
+    expect(AUTH_BODIES.signup.safeParse({ ...ok, password: "x".repeat(73) }).success).toBe(false);
+    expect(AUTH_BODIES.signup.safeParse({ ...ok, password: "é".repeat(40) }).success).toBe(false); // 80 bytes
+    expect(AUTH_BODIES.signup.safeParse({ email: "not-an-email", password: ok.password }).success).toBe(false);
+    expect(AUTH_BODIES.signup.safeParse({ password: ok.password }).success).toBe(false); // bodyless/anonymous signup is not possible
+    expect(AUTH_BODIES.update_password.safeParse({ password: ok.password, email: "x@y.example" }).success).toBe(false); // no email change in V1
+    expect(AUTH_BODIES.verify.safeParse({ type: "magiclink", token_hash: "x".repeat(20) }).success).toBe(false);
+    expect(AUTH_BODIES.recover.safeParse({ email: ok.email, gotrue_meta_security: {} }).success).toBe(false);
   });
   it("refuses everything else: admin API, other grants, wrong method, other paths, absolute URLs", () => {
     for (const [m, p] of [
@@ -104,6 +137,7 @@ describe("RPC contract registry", () => {
     expect(start.safeParse({ ok: false, error: "not_available" }).success).toBe(true);
     expect(start.safeParse({ ok: false, error: "not_owner" }).success).toBe(false);
     expect(redeem.safeParse({ ok: false, error: "invalid_claim" }).success).toBe(true);
+    expect(redeem.safeParse({ ok: false, error: "account_limit" }).success).toBe(true);
     for (const reason of ["expired", "consumed", "wrong_owner", "not_found", "revoked"]) {
       expect(redeem.safeParse({ ok: false, error: reason }).success, reason).toBe(false);
     }
@@ -116,6 +150,9 @@ describe("RPC contract registry", () => {
     expect(out.safeParse([row]).success).toBe(true);
     expect(out.safeParse([{ ...row, member_guid: "Player-1-ABC" }]).success).toBe(false);
     expect(out.safeParse(Array(201).fill(row)).success).toBe(false);
+    const inst = { installation_id: "i1", linked_at: "2026-10-11T10:00:00Z", last_seen_at: null, guild_count: 0 };
+    expect(ACCOUNT_RPCS.fdb_account_installations.output.safeParse(Array(50).fill(inst)).success).toBe(true);
+    expect(ACCOUNT_RPCS.fdb_account_installations.output.safeParse(Array(51).fill(inst)).success).toBe(false);
   });
 });
 

@@ -9,7 +9,7 @@
  *
  * There is deliberately no generic "call any RPC" or "call any URL" helper. Anything not
  * listed here cannot be reached through the account boundary. Specification:
- * docs/account-v1/web-auth-boundary.md and docs/account-v1/ownership-claim-protocol.md.
+ * docs/account-v1/architecture.md (sections 4 and 5) and docs/account-v1/ownership-claim-protocol.md.
  */
 import { z } from "zod";
 
@@ -22,22 +22,32 @@ export interface AuthEndpoint {
   path: string;
   /** Required `grant_type` query value for the token endpoint. */
   grantTypes?: readonly string[];
+  /** Query parameters that must be present with exactly this value (e.g. logout is always `scope=local`). */
+  fixedQuery?: Readonly<Record<string, string>>;
+  /** `redirect_to` is accepted only when it equals the single, server-computed callback URL. */
+  allowRedirectTo?: boolean;
 }
 
 export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
-  { method: "POST", path: "/auth/v1/signup" },
+  { method: "POST", path: "/auth/v1/signup", allowRedirectTo: true },
   { method: "POST", path: "/auth/v1/token", grantTypes: ["password", "refresh_token", "pkce"] },
   { method: "POST", path: "/auth/v1/verify" },
-  { method: "POST", path: "/auth/v1/recover" },
-  { method: "POST", path: "/auth/v1/resend" },
-  { method: "POST", path: "/auth/v1/logout" },
+  { method: "POST", path: "/auth/v1/recover", allowRedirectTo: true },
+  { method: "POST", path: "/auth/v1/resend", allowRedirectTo: true },
+  // Web logout ends THIS session only. GoTrue's default is global scope, which would also sign the Companion
+  // out (sessions must stay independent), so the scope is pinned and never taken from a caller.
+  { method: "POST", path: "/auth/v1/logout", fixedQuery: { scope: "local" } },
   { method: "GET", path: "/auth/v1/user" },
   { method: "PUT", path: "/auth/v1/user" },
   { method: "GET", path: "/auth/v1/.well-known/jwks.json" },
 ];
 
-/** True only for an exactly-listed method + path (+ grant type). Query strings are validated, not forwarded blindly. */
-export function isAllowedAuthRequest(method: string, pathAndQuery: string): boolean {
+/**
+ * True only for an exactly-listed method + path whose query string contains nothing but the parameters that endpoint
+ * permits (pinned values, the grant type, a `redirect_to` equal to `opts.callbackUrl`). Duplicate or unknown
+ * parameters are refused, so the backend can never be steered into e.g. a global logout or an arbitrary redirect.
+ */
+export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts: { callbackUrl?: string } = {}): boolean {
   let url: URL;
   try {
     url = new URL(pathAndQuery, "https://auth.invalid");
@@ -47,12 +57,37 @@ export function isAllowedAuthRequest(method: string, pathAndQuery: string): bool
   if (url.origin !== "https://auth.invalid") return false;
   const ep = AUTH_ENDPOINTS.find((e) => e.method === method.toUpperCase() && e.path === url.pathname);
   if (!ep) return false;
-  if (ep.grantTypes) {
-    const grant = url.searchParams.get("grant_type");
-    return grant !== null && ep.grantTypes.includes(grant);
+  const keys = [...url.searchParams.keys()];
+  if (new Set(keys).size !== keys.length) return false;
+  for (const key of keys) {
+    const value = url.searchParams.get(key) ?? "";
+    const ok =
+      (key === "grant_type" && ep.grantTypes !== undefined && ep.grantTypes.includes(value)) ||
+      (ep.fixedQuery !== undefined && ep.fixedQuery[key] === value) ||
+      (key === "redirect_to" && ep.allowRedirectTo === true && opts.callbackUrl !== undefined && value === opts.callbackUrl);
+    if (!ok) return false;
   }
+  if (ep.grantTypes && !url.searchParams.has("grant_type")) return false;
+  if (ep.fixedQuery) for (const k of Object.keys(ep.fixedQuery)) if (!url.searchParams.has(k)) return false;
   return true;
 }
+
+/** Request bodies the backend may send. Strict: no `data`/user_metadata, no extra fields, no email change in V1. */
+const authEmail = z.string().trim().toLowerCase().email().max(254);
+const authPassword = z
+  .string()
+  .min(12)
+  .max(72)
+  .refine((v) => Buffer.byteLength(v, "utf8") <= 72, "password too long (bcrypt limit is 72 bytes)");
+export const AUTH_BODIES = {
+  signup: z.object({ email: authEmail, password: authPassword }).strict(),
+  password_grant: z.object({ email: authEmail, password: authPassword }).strict(),
+  refresh_grant: z.object({ refresh_token: z.string().min(10).max(2048) }).strict(),
+  verify: z.object({ type: z.enum(["signup", "email", "recovery"]), token_hash: z.string().min(10).max(512) }).strict(),
+  recover: z.object({ email: authEmail }).strict(),
+  resend: z.object({ type: z.literal("signup"), email: authEmail }).strict(),
+  update_password: z.object({ password: authPassword }).strict(),
+} as const;
 
 // ---------------------------------------------------------------------------------------------
 // Installation claim code
@@ -114,7 +149,8 @@ export const ACCOUNT_RPCS = {
     input: z.object({ p_code: z.string().regex(/^[0-9A-F]{32}$/) }).strict(),
     output: z.discriminatedUnion("ok", [
       z.object({ ok: z.literal(true), installation_id: installationIdSchema, linked_at: isoTimestamp }).strict(),
-      z.object({ ok: z.literal(false), error: z.literal("invalid_claim") }).strict(),
+      // `account_limit` is only ever returned to a registered caller who holds an otherwise VALID code (nothing is consumed).
+      z.object({ ok: z.literal(false), error: z.enum(["invalid_claim", "account_limit"]) }).strict(),
     ]),
   },
   /** Caller: any authenticated session (the Companion). Only the previous owner learns `transferred`. */
@@ -122,7 +158,7 @@ export const ACCOUNT_RPCS = {
     input: z.object({ p_installation_id: installationIdSchema }).strict(),
     output: z.object({ state: z.enum(["owned", "transferred", "unknown"]) }).strict(),
   },
-  /** Caller: a REGISTERED user. Lists the caller's own linked installations only. */
+  /** Caller: a REGISTERED user. Lists the installations the caller OWNS (ownership is installations.owner_user_id). */
   fdb_account_installations: {
     input: z.object({}).strict(),
     output: z
@@ -136,7 +172,7 @@ export const ACCOUNT_RPCS = {
           })
           .strict(),
       )
-      .max(100),
+      .max(50),
   },
   fdb_account_guildbook_guilds: {
     input: z.object({ p_installation_id: installationIdSchema }).strict(),
