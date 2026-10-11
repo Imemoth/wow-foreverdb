@@ -63,7 +63,7 @@ jobs:
       - name: Apply 0012 (pre-flight, forward migration, in-migration privilege assertions)
         run: database/tests/account/stack.sh apply
 
-      - name: Re-apply the 0012 body (idempotent body; the CI ledger fixture has no 0012 entry. A real ledger refuses a second run: see 09_ledger_rollback_restore)
+      - name: Re-apply the 0012 body (idempotent body; the CI ledger fixture has no 0012 entry; a real ledger refuses a second run, see test 09)
         run: database/tests/account/stack.sh apply
 
       - name: Conformance tripwire (LS-10) on the real migration
