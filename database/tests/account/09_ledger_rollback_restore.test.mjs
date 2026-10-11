@@ -391,7 +391,7 @@ describe("0013 gates in isolation, drifted retained tables, ledger-less database
     ["the one-pending partial unique index dropped", "drop index private.installation_claims_one_pending", "create unique index installation_claims_one_pending on private.installation_claims (installation_id) where status = 'pending'", /lost a primary key, unique index, check or foreign key/],
     ["a permissive policy added", "create policy leak on private.account_audit using (true)", "drop policy leak on private.account_audit", /policy/],
     ["row level security disabled", "alter table private.account_audit disable row level security", "alter table private.account_audit enable row level security", /row level security off/],
-    ["a foreign owner", "alter table private.account_installations owner to fdb_ci", "alter table private.account_installations owner to fdb_migrator", /foreign owner|lacks column/],
+    ["a foreign owner", `alter table private.account_installations owner to ${process.env.PGUSER}`, "alter table private.account_installations owner to fdb_migrator", /foreign owner|lacks column/],
   ];
   for (const [name, tamper, revert, pattern] of TAMPERS) {
     it(`pre-flight refuses retained tables with ${name}, and applies nothing`, async () => {
