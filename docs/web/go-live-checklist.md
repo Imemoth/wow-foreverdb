@@ -55,3 +55,13 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | Preview hardening (explicit designation, noindex everywhere, fail-closed hosted config, CI split + aggregate gate, Node 24 pin) | **Implemented · Locally tested** · GitHub CI result recorded in `verification-results.md` |
 | Vercel variables, Production Branch, unauthenticated protection test, ruleset enforcement | **PENDING owner action** (connector cannot read or write variables; no ruleset API) |
 | Production mode (`FOREVERDB_DEPLOYMENT=production`) | **BLOCKED** until A–C are ✅ |
+
+## Account System V1 gate (added 2026-10-11 — BLOCKED / PENDING)
+
+Accounts are **not part of the first public release** unless the owner approves them separately. Before any production activation of accounts: the staging acceptance in [docs/account-v1/acceptance-and-owner-actions.md](../account-v1/acceptance-and-owner-actions.md) is STAGING VERIFIED and WINDOWS VERIFIED; the production migration has an approved dry-run, rollback and recovery runbook; production Auth hardening (confirm email, custom SMTP with domain authentication, CAPTCHA, leaked-password protection, rate-limit review) is done and approved; the code constant `PRODUCTION_ACCOUNT_AUTH_APPROVED` is flipped in a reviewed PR; accounts are never enabled on the Vercel production target of the demonstration.
+
+- [ ] PR A–E merged and accepted
+- [ ] Staging Auth verified end to end (real email)
+- [ ] Windows Companion acceptance recorded (two accounts, preserved history)
+- [ ] Owner approval for production migration `0012` and Auth settings
+- [ ] Direct Auth API abuse (threat A24) addressed: Auth rate limits reviewed, sign-up/anonymous-creation monitoring with thresholds, SMTP quotas and daily cap, incident runbook. Website-side Turnstile does **not** satisfy this item (it cannot protect GoTrue calls made directly with the public key).

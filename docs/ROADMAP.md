@@ -428,9 +428,16 @@ PR #22 merged to `main` (2026-10-10). **Website status: repo-complete foundation
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
 
-### Next milestone — ForeverDB Account System V1 (planned; not started)
+### Milestone — ForeverDB Account System V1 (specification in review; production BLOCKED)
 
-Separate PR(s) after the hardening PR is merged and accepted. Scope: real user registration, email confirmation, login and logout, password recovery, a secure session lifecycle, a basic account profile, and preparation for **verified Companion installation linking** (ownership proven by a claim code from the Companion, never inferred from an installation or guild ID). Architecture (ADR-012): two physically separate databases (private Supabase `wow-forever` for Companion data, authentication, installation ownership, Guildbook and account-bound data; a separate public PostgreSQL for sanitised aggregates). Accounts use the existing private Supabase Auth **through a separately reviewed security boundary** (own origin or route group, `private, no-store`, its own threat model, a deliberate and reviewed relaxation of the "no Supabase variables on the website" rule). Public loot browsing stays anonymous and keeps using the isolated public read database. **Prerequisites:** hardening PR merged; Vercel Production Branch moved to a `release` branch so incomplete account features cannot reach the public alias; Supabase Auth signup throttling/CAPTCHA reviewed.
+Unified identity for the website and the Windows Companion with independent sessions, verified installation ownership and account-scoped Guildbook access. Specification and ledger: [docs/account-v1/](account-v1/README.md). Five independently reviewable PRs, none merged automatically:
+
+- [x] **PR A — specification and security foundation** (`account/v1-spec-foundation`): audit of `main`, ADR-015..018, threat model, claim protocol and migration `0012` plan, Auth-only configuration validator (`production` hard-blocked), closed endpoint/RPC/redirect contracts, static boundary tests. **IMPLEMENTED; CI VERIFIED when the PR checks pass; independent review recorded in the PR.**
+- [ ] **PR B — Web Auth:** registration, verification, login/logout, recovery, sessions, profile; real-GoTrue CI job. BLOCKED on PR A.
+- [ ] **PR C — Ownership and Guildbook backend:** forward-only `0012`, claim/consume, account RPCs, SQL negative matrix. BLOCKED on PR A.
+- [ ] **PR D — Companion registered accounts:** session states, fail-closed refresh, claim display, DPAPI hardening, `0.9.0-alpha`. BLOCKED on PR C contracts.
+- [ ] **PR E — End-to-end acceptance:** needs an owner-provided isolated staging project and a Windows run.
+- [ ] **Production activation: BLOCKED** (owner approval, dry-run, rollback; code constant `PRODUCTION_ACCOUNT_AUTH_APPROVED` is false). Migration `0010` stays unapplied; registered quota tiers are a separate later milestone.
 
 ### F-3 — Companion observed drop-rate denominator (F3_FULLY_VERIFIED — 2026-10-10)
 
