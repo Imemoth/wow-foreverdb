@@ -77,10 +77,17 @@ for (const [name, mutate, files] of mutants) {
   const sql = mutate(original);
   if (sql === original) throw new Error(`mutation did not change the migration: ${name}`);
   await cloneDb();
-  const tmp = path.join(os.tmpdir(), `mut-${Date.now()}.sql`);
-  fs.writeFileSync(tmp, sql);
-  const apply = spawnSync("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-h", HOST, "-p", String(PORT), "-U", "fdb_migrator", "-d", CLONE, "-f", tmp], { env: { ...process.env, PGPASSWORD: "local-test-password" }, encoding: "utf8" });
-  fs.unlinkSync(tmp);
+  // The mutated SQL is written to a private (0700) directory created by mkdtemp, with an exclusive (wx) 0600 file, and the directory
+  // is removed in `finally` on every path (success, psql failure, exception). Arguments are passed as an array: no shell is involved.
+  const privateDir = fs.mkdtempSync(path.join(os.tmpdir(), "fdb-mutation-"));
+  let apply;
+  try {
+    const file = path.join(privateDir, "mutated.sql");
+    fs.writeFileSync(file, sql, { flag: "wx", mode: 0o600 });
+    apply = spawnSync("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-h", HOST, "-p", String(PORT), "-U", "fdb_migrator", "-d", CLONE, "-f", file], { env: { ...process.env, PGPASSWORD: "local-test-password" }, encoding: "utf8" });
+  } finally {
+    fs.rmSync(privateDir, { recursive: true, force: true });
+  }
   if (apply.status !== 0) {
     report.push(`KILLED (migration refuses to apply): ${name}`);
     continue;

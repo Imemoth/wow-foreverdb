@@ -1,14 +1,14 @@
 name: ForeverDB account ownership backend (SQL + real GoTrue)
 
-# Account System V1, PR C (migration 0012). Disposable PostgreSQL + a real GoTrue built from a pinned upstream commit; never a real
+# Account System V1, PR C (migration 0012). Disposable PostgreSQL + a real GoTrue built from the pinned upstream release tag; never a real
 # Supabase project. See database/tests/account/README.md. No production migration is applied or authorised by this workflow.
+# Designed to be a REQUIRED status check (check name: "Account ownership SQL + real GoTrue"): like web-ci.yml and
+# account-web-auth.yml there is deliberately NO `paths:` filter, so it reports on every pull request and every push to main and can
+# never leave a required check pending. The slow mutation suite stays manual (workflow_dispatch); the core SQL acceptance is mandatory.
 on:
   pull_request:
-    paths:
-      - 'database/**'
-      - 'web/src/lib/account/**'
-      - 'docs/account-v1/**'
-      - '.github/workflows/account-ownership-sql.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       mutation_check:
@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+
+concurrency:
+  group: account-ownership-sql-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,7 +54,7 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build real GoTrue (pinned upstream commit)
+      - name: Build real GoTrue (pinned upstream release tag, same as the web-auth suite)
         run: database/tests/account/build-gotrue.sh
 
       - name: Stack up (roles, real GoTrue, repository migrations 0001-0011 as a non-superuser migration role)
@@ -59,7 +63,7 @@ jobs:
       - name: Apply 0012 (pre-flight, forward migration, in-migration privilege assertions)
         run: database/tests/account/stack.sh apply
 
-      - name: Idempotent re-apply
+      - name: Re-apply the 0012 body (idempotent body; the CI ledger fixture has no 0012 entry. A real ledger refuses a second run: see 09_ledger_rollback_restore)
         run: database/tests/account/stack.sh apply
 
       - name: Conformance tripwire (LS-10) on the real migration

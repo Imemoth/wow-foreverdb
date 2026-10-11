@@ -326,3 +326,41 @@ export async function commitTimestamp(admin, xid) {
   const r = await admin.query("select pg_xact_commit_timestamp($1::text::xid) as ts", [xid]);
   return r.rows[0].ts;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// psql runner and database cloning (clones are disposable copies of the integration database)
+// ---------------------------------------------------------------------------------------------------------------------
+import { spawnSync } from "node:child_process";
+
+/** Runs a SQL file with psql as the migration role (array arguments: no shell). */
+export function psqlFile(database, file, vars = {}) {
+  const args = ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-h", HOST, "-p", String(PORT), "-U", "fdb_migrator", "-d", database, "-f", file, ...Object.entries(vars).flatMap(([k, v]) => ["-v", `${k}=${v}`])];
+  const r = spawnSync("psql", args, { env: { ...process.env, PGPASSWORD: "local-test-password" }, encoding: "utf8" });
+  return { status: r.status, out: `${r.stdout}${r.stderr}` };
+}
+
+export async function cloneDatabase(source, target) {
+  const sup = await connectSuper("postgres");
+  try {
+    await sup.query(`drop database if exists ${target} with (force)`);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await sup.query("select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()", [source]);
+      try {
+        await sup.query(`create database ${target} template ${source}`);
+        return;
+      } catch (error) {
+        if (!/being accessed by other users/.test(error.message)) throw error;
+        await sleep(300);
+      }
+    }
+    throw new Error("could not clone the template database");
+  } finally {
+    await sup.end();
+  }
+}
+
+export async function dropDatabase(name) {
+  const sup = await connectSuper("postgres");
+  await sup.query(`drop database if exists ${name} with (force)`);
+  await sup.end();
+}

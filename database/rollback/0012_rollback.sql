@@ -5,10 +5,14 @@
 -- source of truth for ownership and is not touched, so every already-transferred installation stays with its registered account.
 --
 -- The three private tables are dropped ONLY when ALL of them are empty. If any claim, transfer or audit row exists, they are RETAINED, so provenance (previous_owner_uid, needed for an audited restore), the claim history and the audit
--- trail survive the rollback. Re-applying the forward migration 0012 afterwards is safe (idempotent) and reconnects to them.
+-- trail survive the rollback. The restoration migration (0013, see LEDGER below) reconnects to them.
 --
--- Ledger: after a successful run, record the rollback in the migration ledger (see docs/account-v1/0012-deployment-and-recovery.md).
--- Run as the migration role. Prefer the kill switch (database/rollback/0012_kill_switch.sql) first.
+-- LEDGER: this script never reads, rewrites or deletes migration-ledger entries; the `account_ownership_claims` entry of 0012 STAYS.
+-- After it completes, record the rollback with `psql -v name=rollback_account_ownership_claims -f database/ops/0012_record_migration_ledger.sql`
+-- (or let your apply tool record it). Because the ledger keeps 0012, re-running 0012 is refused by its pre-flight BY DESIGN; the way back is the
+-- forward restoration migration database/restore/0013_account_ownership_claims_restore.sql (docs/account-v1/0012-deployment-and-recovery.md 5.2).
+-- This is NOT the kill switch (database/rollback/0012_kill_switch.sql), which drops nothing and is lifted with 0012_kill_switch_restore.sql.
+-- Run as the migration role. Prefer the kill switch first.
 begin;
 set local lock_timeout = '10s';
 

@@ -6,9 +6,11 @@ Files:
 
 | File | Purpose |
 | --- | --- |
-| `database/migrations/0012_account_ownership_claims.sql` | forward-only, idempotent migration (pre-flight, objects, post-apply assertions), one transaction |
+| `database/migrations/0012_account_ownership_claims.sql` | forward-only migration whose body is written idempotently, but which a production ledger will refuse to run twice (pre-flight, objects, post-apply assertions), one transaction |
 | `database/rollback/0012_kill_switch.sql` / `0012_kill_switch_restore.sql` | instant, non-destructive stop / re-enable of all six account RPCs |
-| `database/rollback/0012_rollback.sql` | safe rollback: drops functions; drops tables only when all are empty; never moves ownership, never deletes data |
+| `database/rollback/0012_rollback.sql` | safe full rollback: drops functions; drops tables only when all are empty; never moves ownership, never deletes data, never touches the ledger |
+| `database/restore/0013_account_ownership_claims_restore.sql` | **ledger-consistent restoration** after a completed, recorded rollback (forward migration, ledger name `account_ownership_claims_restore`) |
+| `database/ops/0012_record_migration_ledger.sql` | append-only ledger recorder for steps applied with psql (not needed with `apply_migration`) |
 | `database/rollback/0012_recovery_restore_owner.sql` | operator-run, owner-approved restore of **one** installation to its previous owner, with audit |
 | `database/ops/0012_prune_account_claims.sql` | bounded retention prune (revoked/expired-pending claims > 7 days, audit > 180 days; never consumed claims) |
 | `database/tests/account/` | disposable integration stack (PostgreSQL + **real GoTrue**) and the test suite |
@@ -37,7 +39,7 @@ An empty `auth.sessions` proves little about locking, so the CI suite also locks
 1. Backup/point-in-time marker; announce a short window (the migration is metadata-only and takes seconds; it takes `ACCESS EXCLUSIVE` locks only on the new objects).
 2. Dry-run on the **isolated staging project** (never production first): `psql -v ON_ERROR_STOP=1 -f database/migrations/0012_account_ownership_claims.sql`, then the full suite of this PR against staging data copy if available.
 3. Apply as the migration role (Supabase `postgres`). Because the migration is one transaction with post-apply assertions, a failure leaves nothing behind.
-4. **Ledger:** record exactly one entry named `account_ownership_claims` (Supabase `apply_migration` does this itself; for SQL-editor/`psql` applications insert it manually: `insert into supabase_migrations.schema_migrations (version, name) values (to_char(now() at time zone 'utc', 'YYYYMMDDHH24MISS'), 'account_ownership_claims')`). Never reuse or renumber `0010`; `0012` may be applied before `0010` (they are independent).
+4. **Ledger (append-only).** Record exactly one entry named `account_ownership_claims`: Supabase `apply_migration` does this itself; for `psql`/SQL-editor applications run `psql -X -v ON_ERROR_STOP=1 -v name=account_ownership_claims -f database/ops/0012_record_migration_ledger.sql` (it only INSERTS, refuses duplicates and out-of-order names). **0012's pre-flight refuses to run again once that entry exists; this is deliberate and is never bypassed.** Never reuse or renumber `0010`; `0012` may be applied before `0010` (they are independent).
 5. Post-apply verification (read-only): the six functions and three guards exist with the expected ACLs (`anon`/`public`/`service_role` cannot execute; `authenticated` can execute the six, nobody the guards); tables empty; `prosrc` hash of every pre-existing function unchanged; one smoke claim in a **throwaway** database, never in production data.
 6. No client can use the feature until Companion/website releases enable it; the RPCs are inert for anonymous callers that never start a claim.
 
@@ -45,11 +47,31 @@ An empty `auth.sessions` proves little about locking, so the CI suite also locks
 
 `database/rollback/0012_kill_switch.sql` revokes `EXECUTE` on all six functions from every client role. Effects: no claim can start or complete, account Guildbook/installation reads and link status stop. **Unchanged:** `installations.owner_user_id`, every link/claim/audit row, every observation, Guildbook and statistics row, and the existing ingest/search/stats RPCs. Lift with `0012_kill_switch_restore.sql`. Use it first in any incident; it is safe to run repeatedly and takes effect for the next PostgREST request (`notify pgrst, 'reload schema'` is sent).
 
-## 5. Rollback
+## 5. Full rollback and ledger-consistent restoration
 
-`database/rollback/0012_rollback.sql`: revokes the functions, drops the six RPCs and three guards, then drops the three private tables **only if all of them are empty** (otherwise they are retained, so provenance, claim history and the audit trail survive). It asserts that installation ownership and the row counts of the history tables are unchanged. After it, ingest, search and statistics work exactly as before; already-transferred installations **stay with their registered accounts** (ownership lives in `installations.owner_user_id`, which no rollback touches). Re-applying `0012` afterwards is safe and reconnects to the retained tables (rehearsed in the suite).
+Two different procedures exist and must not be confused: the **kill switch** (section 4: nothing dropped, no ledger entry, lifted with `0012_kill_switch_restore.sql`) and the **full rollback + restoration** below.
 
-**Ledger:** record the rollback as its own entry (e.g. `rollback_account_ownership_claims`) and keep the `account_ownership_claims` entry; do not delete ledger rows.
+### 5.1 Full rollback
+
+`database/rollback/0012_rollback.sql`: revokes the functions, drops the six RPCs and three guards, then drops the three private tables **only if all of them are empty** (otherwise they are retained, so provenance, claim history and the audit trail survive). It asserts that installation ownership and the row counts of the history tables are unchanged. After it, ingest, search and statistics work exactly as before; already-transferred installations **stay with their registered accounts** (ownership lives in `installations.owner_user_id`, which no rollback touches). **It does not read or write the migration ledger: the `account_ownership_claims` entry stays.** Then record the rollback (append-only): `psql -X -v ON_ERROR_STOP=1 -v name=rollback_account_ownership_claims -f database/ops/0012_record_migration_ledger.sql` (or let your apply tool record it).
+
+### 5.2 Restoration after a recorded rollback (the only supported way back)
+
+Because the ledger keeps `account_ownership_claims`, **re-running 0012 is refused** by its unchanged pre-flight (tested: `09_ledger_rollback_restore`). The way back is a **new forward migration with its own ledger name**: `database/restore/0013_account_ownership_claims_restore.sql` (`0013` was checked against every remote branch and the reserved `0010`; it is unused). Order:
+
+1. `0012` applied and recorded (`account_ownership_claims`).
+2. Full rollback (5.1) and its ledger record (`rollback_account_ownership_claims`).
+3. Apply `0013` (owner approval needed anywhere real). Its pre-flight READS the ledger and refuses unless 0012 and the rollback are recorded and the restoration is not; refuses if any account function still exists (use the kill-switch restore instead) and if the private tables are only partially present; verifies the retained tables' columns; then repeats the dependency, `auth.*` and privilege checks of 0012.
+4. Record `account_ownership_claims_restore` (only if the applying tool does not).
+
+What 0013 does: recreates the three guards and six RPCs with **byte-identical** 0012 bodies (sections 2-6 of both files are identical; a unit test enforces it), creates the private tables only if the rollback dropped them (retained tables and all their rows are untouched), re-grants `EXECUTE` to `authenticated` only, and runs the same in-migration post-assertions (ACLs, SECURITY DEFINER, search_path, VOLATILE guards, closed private tables, every pre-existing function's `prosrc`/ACL unchanged, exactly nine account functions). It never moves ownership, never deletes or rewrites a row, never writes the ledger, and aborts with nothing applied if any assertion fails. It lives in `database/restore/` (not `database/migrations/`) because the account conformance gate lints `database/migrations` as one unit, where a second definition of the same functions would be a duplicate; the restore file is linted on its own (`web/tests/unit/account-restore-migration.test.ts`).
+
+**Tested behaviour** (ledger fixture `supabase_migrations.schema_migrations`, `09_ledger_rollback_restore.test.mjs`):
+
+- *Scenario A, no transfers:* record 0012; re-running 0012 is refused; rollback drops the empty tables and keeps the ledger entry; restore is refused until the rollback is recorded and refused with partially present tables; 0013 restores nine functions (identical bodies, exact ACLs) and three empty tables; a full claim cycle works; a second restore is refused; the ledger only gained the three account entries.
+- *Scenario B, existing transfers made through the authenticated RPCs:* rollback retains the tables; owners, observation/Guildbook hashes, link rows (provenance), claims and audit rows are identical before and after rollback and after restoration; while rolled back the account API is gone but ingest still works for the registered owner and is closed to the former owner; after restoration authorization, Guildbook, ingest and new claims work; the kill switch is a separate, ledger-free procedure.
+
+In a **disposable database without a ledger** the 0012 body is idempotent and can be re-applied; the repository tests still do that in two places (`07_rollback_recovery`, labelled "no ledger entry", and the CI re-apply step) to prove the body, but **a production ledger will not allow it** and no procedure here relies on it.
 
 ## 6. Incident recovery: mistaken or malicious claim (operator-approved, never automatic)
 
@@ -82,7 +104,11 @@ After recovery the previous owner's Companion sees `owned` again (the `transferr
 
 `database/ops/0012_prune_account_claims.sql` (operator or scheduled): deletes revoked and never-redeemed expired claims older than 7 days (each under the installation advisory lock, at most 500 per run) and audit rows older than 180 days. **Consumed claims are never pruned**: the link row references them and the `transferred` signal is derived from the link row, which has no expiry.
 
-## 8. Known limits and deferred items (see the review record in the PR)
+## 8. Auth versions and integrated acceptance
+
+The web-auth suite (PR #49, `account-web-auth.yml`) and this suite both build real GoTrue from the same pinned upstream tag, **`supabase/auth v2.197.0`** (`GOTRUE_TAG` / `database/tests/account/build-gotrue.sh`; bump both together). Earlier revisions of this PR were verified against upstream master of 2026-09-22 and the gap is closed by re-running the whole suite on `v2.197.0` (the session/refresh-token semantics the guards depend on are covered by LS-9, LS-9b). Neither suite runs PostgREST, Kong or the hosted Supabase Auth, and the two suites run in separate stacks: **integrated PostgREST behaviour, hosted-GoTrue version equality and website-to-database acceptance are NOT shown by the separate green checks.** Integrated staging acceptance (owner-provisioned, isolated Supabase project) must use `v2.197.0`-equivalent hosted Auth (owner to confirm the hosted Auth version, which Supabase manages) and must repeat LS-1..LS-9b through real PostgREST (including `db-tx-end = commit`).
+
+## 9. Known limits and deferred items (see the review record in the PR)
 
 - **Ban/delete race window of one statement.** `FOR SHARE` locks the *session* row only (the specification's choice; also avoiding a lock cycle with GoTrue's own transactions on `auth.users`). A user ban commits without touching the session row, so a ban racing exactly between the unlocked user check and the end of the transaction is not serialised. Deleting a user deletes its sessions (blocked by the share lock) and is covered. Mitigation: bans are rare administrative actions; the claim code is 10 minutes and single use; the previous-owner record and audit allow recovery.
 - **Budget rows.** The per-UID budget row is charged before the advisory lock (the order ingest uses); the global ceiling after it, so a claim queued behind a long ingest cannot stall unrelated claims. `lock_timeout = 5s` bounds the wait and returns `55P03` cleanly (its budget charge rolls back).

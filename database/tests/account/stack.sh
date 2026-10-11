@@ -59,6 +59,9 @@ case "${1:-}" in
     su_psql "$DB" -v db="$DB" -f "$HERE/01_bootstrap_db.sql"
     gotrue_start
     su_psql "$DB" -f "$HERE/02_auth_functions.sql"
+    # Realistic Supabase migration ledger (schema/table as the platform creates them) holding the entries production has through 0011.
+    # 0012 is deliberately NOT recorded here; the ledger-backed rollback/restore tests record it on clones.
+    su_psql "$DB" -f "$HERE/04_migration_ledger.sql"
     as_migrator -f "$HERE/03_historical_stubs.sql" > /dev/null
     for m in 0001_initial_schema 0002_sync_safety 0003_companion_auth 0004_remove_legacy_ingest 0005_guildbook_v1 0006_companion_search_zone; do
       as_migrator -f "$REPO/database/migrations/$m.sql" > /dev/null

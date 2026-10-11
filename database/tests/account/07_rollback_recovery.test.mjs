@@ -125,7 +125,7 @@ describe("kill switch, rollback with transfers present, re-apply, recovery, prun
     await expectCode(rpc(w.client, t.owner.claims, "ingest_foreverdb_snapshot_auth", [snapshot(t.inst, { updatedAt: 4000 })]), "P0001");
   });
 
-  it("forward re-apply after a rollback is safe and reconnects to the retained provenance", async () => {
+  it("[disposable database WITHOUT a ledger entry] re-applying the 0012 body after a rollback reconnects to the retained provenance (with a production ledger this is refused: see 09_ledger_rollback_restore)", async () => {
     const re = psql(CLONES[0], MIGRATION);
     assert.equal(re.status, 0, re.out);
     await w.fx.resetBudgets();
@@ -247,7 +247,7 @@ describe("rollback on a database with no transfers (clone 2): private tables are
   });
   after(() => w.close());
 
-  it("rollback drops functions and the empty tables, changes no ownership and no data; re-apply recreates everything", async () => {
+  it("[no ledger entry] rollback drops functions and the empty tables, changes no ownership and no data; re-applying the 0012 body recreates everything", async () => {
     const owners = await allOwners(w.admin);
     const rb = psql(CLONES[1], ROLLBACK("0012_rollback.sql"));
     assert.equal(rb.status, 0, rb.out);
