@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  PASSWORD, authDirect, clearMail, countMail, json, jwtClaims, newClient, post, setCookies, signedInClient, sleep, uniqueEmail, waitForMail,
+  PASSWORD, authDirect, clearMail, clientWithCookie, cookieOf, countMail, json, jwtClaims, newClient, post, setCookies, signedInClient, sleep, uniqueEmail, waitForMail,
 } from "./helpers";
 
 /**
@@ -91,6 +91,17 @@ test("4. valid login, server-confirmed profile, closed redirect allowlist for `n
     expect((await json<{ redirect: string }>(r)).redirect, next).toBe(want);
   }
   await c.dispose();
+});
+
+test("4b. signing in again in the same browser revokes the session it replaces (no orphaned live session)", async ({ playwright }) => {
+  const { c, email, password } = await signedInClient(playwright, "replace");
+  const first = (await cookieOf(c))!.value;
+  expect((await post(c, "/account/api/login", { email, password })).status()).toBe(200);
+  const second = (await cookieOf(c))!.value;
+  expect(second).not.toBe(first);
+  expect((await c.get("/account/api/me")).status()).toBe(200);
+  const old = await clientWithCookie(playwright, first);
+  expect((await old.get("/account/api/me")).status()).toBe(401); // the replaced session is dead server-side
 });
 
 test("5. invalid login: one generic answer, per-email throttle independent of IP, per-IP edge throttle", async ({ playwright }) => {

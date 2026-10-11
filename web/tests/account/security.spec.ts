@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   ANON_KEY, AUTH_URL, CSRF_SECRET, ORIGINS, PASSWORD, SITES, authDirect, clearMail, clientWithCookie, countMail, csrfToken, json, newClient, post, setCookies,
-  signedInClient, sleep, uniqueEmail, uniqueIp,
+  signedInClient, sleep, uniqueEmail, uniqueIp, waitForMail,
 } from "./helpers";
 import { hmacB64, randomToken } from "../../src/lib/account/crypto";
 
@@ -93,7 +93,6 @@ test.describe("11. CSRF", () => {
     const c = await newClient(playwright);
     const anon = await csrfToken(c);
     // register + confirm through captured mail, then sign in with the OLD anonymous token still in the cookie jar
-    const { waitForMail } = await import("./helpers");
     await post(c, "/account/api/register", { email, password: PASSWORD }, { csrf: anon });
     const mail = await waitForMail(email, /confirm/i);
     expect((await post(c, "/account/api/confirm", { type: mail.type, token_hash: mail.tokenHash }, { csrf: anon })).status()).toBe(200);
@@ -137,9 +136,16 @@ test.describe("12. redirects", () => {
     // A cross-site navigation is not even processed.
     const cross = await c.get("/account/api/session/refresh?next=/account/guildbook", { maxRedirects: 0, headers: { "sec-fetch-site": "cross-site" } });
     expect(cross.headers().location).toBe("http://localhost:3210/account");
-    // The e-mail callback target the website hands to Auth is exactly one URL: Auth rejects or ignores any other redirect_to.
-    const bad = await authDirect(`/auth/v1/recover?redirect_to=${encodeURIComponent("https://evil.example/account/auth/confirm")}`, { body: { email: uniqueEmail("redir") } });
-    expect([200, 400, 422]).toContain(bad.status); // the allowlist is Auth's own; the website never builds such a URL
+    // The e-mail callback is exactly one URL, computed by the website from SITE_URL. Even if someone calls Auth directly with a foreign
+    // redirect_to (the website never does), real GoTrue ignores it for the link: the template builds it from the configured Site URL,
+    // and the redirect allow list holds only the exact callback of each test server.
+    const { email } = await signedInClient(playwright, "redir");
+    await clearMail();
+    const bad = await authDirect(`/auth/v1/recover?redirect_to=${encodeURIComponent("https://evil.example/account/auth/confirm")}`, { body: { email } });
+    expect(bad.status).toBe(200);
+    const mail = await waitForMail(email, /reset|password/i);
+    expect(mail.link.startsWith("http://localhost:3210/account/auth/confirm?token_hash=")).toBe(true);
+    expect(mail.html).not.toContain("evil.example");
   });
 });
 
@@ -207,7 +213,6 @@ test.describe("14. cookies", () => {
     const csrf = await c.get("/account/api/csrf", { headers: { "sec-fetch-site": "same-origin" } });
     const cs = setCookies(csrf).find((x) => x.name === "fdb_csrf")!;
     expect(cs.flags).toMatchObject({ path: "/account", httponly: true, samesite: "Strict", "max-age": "3600" });
-    const { waitForMail } = await import("./helpers");
     await post(c, "/account/api/register", { email, password: PASSWORD });
     const mail = await waitForMail(email, /confirm/i);
     const conf = await post(c, "/account/api/confirm", { type: mail.type, token_hash: mail.tokenHash });

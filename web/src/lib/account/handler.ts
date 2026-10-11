@@ -2,6 +2,7 @@ import "server-only";
 import type { NextRequest, NextResponse } from "next/server";
 import type { ZodType } from "zod";
 import { readBoundedJson } from "@/lib/security/challenge";
+import { auth } from "./auth-client";
 import { verifyCsrf } from "./csrf";
 import { accountLog, failure, jsonResponse } from "./http";
 import { chargeEmail, type EmailAction } from "./limits";
@@ -99,6 +100,16 @@ export async function guardMailRoute(
   } catch {
     return { response: failure(503, "temporarily_unavailable", {}, { "Retry-After": "30" }) };
   }
+}
+
+/**
+ * A new sign-in replaces the cookie of an earlier web session in this browser. Revoke that earlier Auth session (scope=local, this
+ * browser's own session only) so it does not stay alive, unreachable, until its refresh token is eventually used. Best effort: an
+ * expired access token or an outage just leaves the old session to expire on its own.
+ */
+export async function revokeReplacedSession(c: RouteContext): Promise<void> {
+  if (!c.stored) return;
+  await auth.logout(c.ac.cfg, c.stored.at).catch(() => undefined);
 }
 
 export { jsonResponse };

@@ -59,7 +59,7 @@ export interface PostOptions {
   raw?: string;
 }
 
-export async function csrfToken(c: APIRequestContext, site: keyof typeof SITES = "main"): Promise<string> {
+export async function csrfToken(c: APIRequestContext): Promise<string> {
   const r = await c.get("/account/api/csrf", { headers: { "sec-fetch-site": "same-origin" } });
   if (r.status() !== 200) throw new Error(`csrf endpoint answered ${r.status()}`);
   return ((await r.json()) as { token: string }).token;
@@ -73,7 +73,7 @@ export async function post(c: APIRequestContext, path: string, body: unknown, o:
   if (origin !== null) headers.origin = origin;
   const fs = o.fetchSite === undefined ? "same-origin" : o.fetchSite;
   if (fs !== null) headers["sec-fetch-site"] = fs;
-  const token = o.csrf === "none" ? null : o.csrf && o.csrf !== "auto" ? o.csrf : await csrfToken(c, site);
+  const token = o.csrf === "none" ? null : o.csrf && o.csrf !== "auto" ? o.csrf : await csrfToken(c);
   if (token) headers["x-fdb-csrf"] = token;
   return c.post(path, { headers, data: o.raw ?? JSON.stringify(body) });
 }

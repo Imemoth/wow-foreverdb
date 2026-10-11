@@ -47,6 +47,10 @@ Every DB call maps 1:1 to a `web_api.*` function. The functions re-validate the 
 | `api_detail` | other `/api/v1/*` (incl. tooltips) | 120 | 120 | 10,000 | — |
 | `page_db` | `/database`, `/item/*`, `/creature/*`, `/object/*`, `/fishing/*`, `/zone/*` | 90 | 90 | 15,000 | 60 |
 | `api_challenge` | `POST /api/v1/challenge` only | 6 / **10 min** | not used | 600 / 10 min | — |
+| `account_auth` | `POST /account/api/{register,login,confirm,forgot-password,resend,reset-password}` (Account System V1; off unless accounts are enabled) | 10 / **5 min** | not used | 300 / 5 min | — |
+| `account_light` | other `/account/api/*` (CSRF token, profile, refresh, logout) | 60 | not used | 6,000 | — |
+
+`account_auth` and `account_light` use the strict two-phase check of `api_challenge` (hashed IP only, fail closed with 503 when the store is down, cross-site POSTs refused before counting); see [account-v1/web-auth.md](../account-v1/web-auth.md).
 
 Exceeding any counter returns **429** with `Retry-After` (seconds to the window end). API calls get JSON. HTML gets a minimal static page.
 

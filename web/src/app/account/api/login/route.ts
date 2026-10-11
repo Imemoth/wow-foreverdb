@@ -1,6 +1,6 @@
 import { auth } from "@/lib/account/auth-client";
 import { safeNext } from "@/lib/account/contracts";
-import { accountApi } from "@/lib/account/handler";
+import { accountApi, revokeReplacedSession } from "@/lib/account/handler";
 import { accountLog, failure, jsonResponse } from "@/lib/account/http";
 import { INPUTS } from "@/lib/account/inputs";
 import { chargeEmail } from "@/lib/account/limits";
@@ -29,6 +29,7 @@ export const POST = accountApi({ route: "login", mutating: true, body: INPUTS.lo
   const session = fromAuthSession(r.data, { kind: "user", now });
   if (!acceptableUser(r.data.user, session)) return failure(401, "invalid_credentials"); // anonymous / unverified: never a web session
   const res = jsonResponse({ ok: true, redirect: safeNext(body.next) });
+  await revokeReplacedSession(c);
   await writeSession(c.ac.cfg.csrfSecret, res.headers, c.jar, c.ac.https, session);
   return res;
 });
