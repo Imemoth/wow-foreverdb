@@ -32,6 +32,8 @@ const stack = loadStackEnv();
 for (const [k, v] of Object.entries(stack)) if (/^(ACCOUNT_STACK_|MAILPIT_URL|STACK_)/.test(k)) process.env[k] = v;
 const AUTH_URL = stack.ACCOUNT_STACK_URL ?? "http://127.0.0.1:54321";
 const ANON = stack.ACCOUNT_STACK_ANON_KEY ?? "";
+// Never run against "nothing": without the stack coordinates the suite is BLOCKED, not green and not mocked.
+if (!ANON) throw new Error("Auth stack not found: start tests/auth-stack/up.sh (or set ACCOUNT_STACK_ENV_FILE). Acceptance is BLOCKED without a real Auth stack.");
 export const CSRF_SECRET = "acceptance-csrf-secret-0123456789abcdefghijklmnop";
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 

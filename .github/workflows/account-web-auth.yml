@@ -102,6 +102,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Real-GoTrue acceptance (registration, confirmation, login, logout, recovery, sessions, CSRF, redirects, Turnstile, cookies, headers, leakage, public regression, fail-closed modes, browser UI, accessibility, client bundle)
+        env:
+          ACCOUNT_STACK_ENV_FILE: ${{ github.workspace }}/.stack/env
         run: npx playwright test -c playwright.account.config.ts
       - name: Summarise
         if: always()
