@@ -224,9 +224,16 @@ export async function resolveSession(cfg: AccountAuthConfig, jar: CookieJar, htt
   return { state: "authenticated", user, session: s, rotated };
 }
 
-/** `dead`: Auth answered and refused (4xx other than 429): the credential is invalid. Anything else is transient. */
+/**
+ * `dead`: Auth answered with a refusal that says THIS credential or session is gone. Anything else (5xx, 429, an unknown or
+ * code-less 4xx such as a rotated API key or a misconfiguration) is transient: it must never sign every user out at once.
+ */
+const DEAD_CODES = new Set([
+  "refresh_token_not_found", "refresh_token_already_used", "session_not_found", "session_expired", "bad_jwt", "invalid_jwt", "no_authorization",
+  "user_not_found", "user_banned",
+]);
 function failureClass(f: AuthFailure): "dead" | "transient" {
-  return f.kind === "rejected" ? "dead" : "transient";
+  return f.kind === "rejected" && f.code !== null && DEAD_CODES.has(f.code) ? "dead" : "transient";
 }
 
 /** True while a RECOVERY session cookie is within its lifetime (a presence check for pages; Auth is asked on the POST). */

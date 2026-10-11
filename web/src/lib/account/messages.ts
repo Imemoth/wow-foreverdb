@@ -6,6 +6,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   weak_password: "That password is not accepted. Choose a longer, less common password.",
   same_password: "Choose a password that is different from your current one.",
   invalid_input: "Please check the highlighted fields and try again.",
+  already_signed_in: "You are already signed in on this browser. Sign out first, then open the link again.",
   invalid_or_expired: "This link is invalid or has expired. Links work once; request a new one.",
   recovery_required: "Your password-reset link has expired. Request a new one.",
   challenge_required: "Please complete the human check and try again.",

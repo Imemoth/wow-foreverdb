@@ -11,6 +11,11 @@ export function LogoutButton() {
     setBusy(true);
     setError(null);
     const r = await postJson("/account/api/logout", {});
+    if (r.data.ok && r.data.revoked === false) {
+      setBusy(false);
+      setError("This browser is signed out, but we could not confirm the sign-out on the server. Please sign out again later, or change your password if this is a shared computer.");
+      return;
+    }
     if (r.data.ok) {
       const to = "/account/login?reason=signed_out";
       window.location.assign(new URL(to, window.location.origin).toString());

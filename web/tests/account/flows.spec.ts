@@ -230,3 +230,30 @@ test("resend confirmation is generic and sends one mail only for a pending addre
   while ((await countMail(email)) < 2 && Date.now() - start < 8000) await sleep(250);
   expect(await countMail(email)).toBe(2);
 });
+
+test("confirm never silently replaces a live session (a phished link cannot swap the victim into another account)", async ({ playwright }) => {
+  const victim = await signedInClient(playwright, "victim");
+  const attackerEmail = uniqueEmail("attacker");
+  await post(await newClient(playwright), "/account/api/register", { email: attackerEmail, password: PASSWORD });
+  const mail = await waitForMail(attackerEmail, /confirm/i);
+  const refused = await post(victim.c, "/account/api/confirm", { type: mail.type, token_hash: mail.tokenHash });
+  expect(refused.status()).toBe(409);
+  expect((await json(refused)).error).toBe("already_signed_in");
+  expect(setCookies(refused).filter((x) => x.name.startsWith("fdb_acct"))).toEqual([]);
+  expect(((await json(await victim.c.get("/account/api/me"))).user as { email: string }).email).toBe(victim.email);
+  // The token was not consumed: after signing out, the link still works.
+  expect((await post(victim.c, "/account/api/logout", {})).status()).toBe(200);
+  expect((await post(victim.c, "/account/api/confirm", { type: mail.type, token_hash: mail.tokenHash })).status()).toBe(200);
+});
+
+test("documented limitation: Auth treats `type` loosely, so a recovery token presented as type=email yields a normal session (no new power: the link holder could reset the password anyway)", async ({ playwright }) => {
+  const { email } = await signedInClient(playwright, "rectype");
+  await clearMail();
+  await post(await newClient(playwright), "/account/api/forgot-password", { email });
+  const mail = await waitForMail(email, /reset|password/i);
+  const c = await newClient(playwright);
+  const r = await post(c, "/account/api/confirm", { type: "email", token_hash: mail.tokenHash });
+  expect(r.status()).toBe(200);
+  expect((await json(r)).kind).toBe("user"); // the website cannot tell the token's real purpose; honest links carry type=recovery
+  expect((await c.get("/account/api/me")).status()).toBe(200);
+});

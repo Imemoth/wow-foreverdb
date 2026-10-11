@@ -2,7 +2,7 @@ import { auth } from "@/lib/account/auth-client";
 import { accountApi, revokeReplacedSession } from "@/lib/account/handler";
 import { accountLog, failure, jsonResponse } from "@/lib/account/http";
 import { INPUTS } from "@/lib/account/inputs";
-import { acceptableUser, fromAuthSession, writeSession } from "@/lib/account/session";
+import { acceptableUser, fromAuthSession, resolveSession, writeSession } from "@/lib/account/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,12 @@ export const dynamic = "force-dynamic";
  * has no side effect, so a mail scanner that prefetches the link cannot use the token up).
  */
 export const POST = accountApi({ route: "confirm", mutating: true, body: INPUTS.confirm }, async (c, body) => {
+  // A one-time link is not bound to the browser that asked for it (it may be opened on another device), so it must never silently
+  // REPLACE a live session: a phished link would otherwise sign the victim into the attacker's account. Sign out first.
+  if (c.stored) {
+    const current = await resolveSession(c.ac.cfg, c.jar, c.ac.https, { kind: c.stored.k, canWrite: false });
+    if (current.state === "authenticated" || current.state === "needs_refresh") return failure(409, "already_signed_in");
+  }
   const r = await auth.verify(c.ac.cfg, { type: body.type, token_hash: body.token_hash });
   if (!r.ok) {
     if (r.kind === "rate_limited") return failure(429, "rate_limited", {}, { "Retry-After": "60" });

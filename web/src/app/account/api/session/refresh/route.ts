@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
     for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
     return u;
   };
-  if (req.headers.get("sec-fetch-site") === "cross-site") return redirectResponse(to("/account"));
+  const site = req.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin" && site !== "none") return redirectResponse(to("/account")); // cross-site and same-site (sibling) navigations are not processed
 
   const jar = jarFrom(() => req.cookies.getAll());
   const r = await resolveSession(ac.cfg, jar, ac.https, { kind: "user", canWrite: true });

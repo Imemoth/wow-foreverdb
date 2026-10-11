@@ -112,4 +112,11 @@ export async function revokeReplacedSession(c: RouteContext): Promise<void> {
   await auth.logout(c.ac.cfg, c.stored.at).catch(() => undefined);
 }
 
+/** Fixed minimum duration for the mail routes, so "an e-mail was sent" and "nothing to send" take about the same time. */
+export const MAIL_ROUTE_MIN_MS = 700;
+export async function padMailRoute(startedAt: number): Promise<void> {
+  const wait = MAIL_ROUTE_MIN_MS - (Date.now() - startedAt);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+}
+
 export { jsonResponse };

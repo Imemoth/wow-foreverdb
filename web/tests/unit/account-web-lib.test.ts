@@ -209,6 +209,16 @@ describe("resolveSession (stubbed Auth): who is signed in, refresh, failure clas
       expect((await resolve(stored({ ex: NOW + 1 }))).state, `refresh ${JSON.stringify(reply)}`).toBe("unavailable");
     }
   });
+  it("only refusals that name a dead credential end a session; a code-less or unknown 4xx (rotated key, misconfiguration) never signs anyone out", async () => {
+    for (const reply of [{ status: 401, body: { message: "Invalid API key" } }, { status: 400, body: { error_code: "validation_failed" } }, { status: 403, body: { error_code: "something_new" } }]) {
+      stubAuth({ "/auth/v1/user": reply, "/auth/v1/token": reply });
+      expect((await resolve(stored())).state, JSON.stringify(reply)).toBe("unavailable");
+    }
+    for (const code of ["refresh_token_already_used", "session_not_found", "bad_jwt"]) {
+      stubAuth({ "/auth/v1/user": { status: 403, body: { error_code: code } }, "/auth/v1/token": { status: 400, body: { error_code: code } } });
+      expect((await resolve(stored())).state, code).toBe("ended");
+    }
+  });
   it("a redirect or an oversized / malformed Auth answer is an outage, never an identity", async () => {
     for (const reply of [{ status: 302, raw: "" }, { status: 200, raw: "x".repeat(70_000) }, { status: 200, raw: "{not json" }, { status: 200, body: { id: 5 } }]) {
       stubAuth({ "/auth/v1/user": reply });
@@ -382,6 +392,7 @@ describe("abuse controls", () => {
     // L-2 (docs/account-v1/acceptance-and-owner-actions.md): Auth sign-in/sign-up <= 30 per 5 minutes per IP; the website must be stricter (L-8).
     expect(rules.account_auth.windowSec).toBe(300);
     expect(rules.account_auth.perIp).toBeLessThan(30);
+    expect(rules.account_auth.global).toBeLessThanOrEqual(30); // the website as a whole never exceeds Auth's per-IP bucket (shared egress, L-8)
   });
 });
 

@@ -44,10 +44,11 @@ export const DEFAULT_RULES: Record<RuleName, Rule> = {
    * POST /account/api/{register,login,confirm,forgot-password,resend,reset-password}: each allowed request makes a
    * server-side call to Supabase Auth. Strict, per hashed IP only (the session cookie is never an identity here), and
    * deliberately STRICTER than the Auth per-IP limits recorded in docs/account-v1 (L-2: <= 30 per 5 min), because the
-   * website calls Auth from shared egress addresses (L-8): one visitor must not be able to exhaust Auth's bucket.
+   * website calls Auth from shared egress addresses (L-8): the website as a whole must never exceed Auth's bucket, so the GLOBAL
+   * ceiling (25 per 5 min) is below it. Trade-off accepted and documented: a distributed flood can hold the ceiling (web-auth.md W-2).
    * `perSession` is part of the shared schema but is never consulted for this rule.
    */
-  account_auth: { windowSec: 300, perIp: 10, perSession: 10, global: 300 },
+  account_auth: { windowSec: 300, perIp: 10, perSession: 10, global: 25 },
   /** Cheap account routes: CSRF token, profile, session refresh, logout. Strict two-phase check as well. */
   account_light: { windowSec: 60, perIp: 60, perSession: 60, global: 6_000 },
 };

@@ -23,14 +23,16 @@ export interface AccountContext {
 
 export type AccountRuntime =
   | { state: "disabled" }
-  | { state: "unavailable"; reason: "rate_limiter" | "turnstile" }
+  | { state: "unavailable"; reason: "rate_limiter" | "turnstile" | "https" }
   | { state: "ready"; ctx: AccountContext };
 
 export function accountRuntime(): AccountRuntime {
   const env = serverEnv();
   const cfg = env.accountAuth;
   if (!cfg) return { state: "disabled" };
-  if (env.hosted) {
+  // Protections are required on EVERY non-local deployment (not only Vercel): a preview on another host is just as public.
+  if (env.hosted || env.FOREVERDB_DEPLOYMENT !== "local") {
+    if (!env.SITE_URL.startsWith("https://")) return { state: "unavailable", reason: "https" };
     if (env.RATE_LIMIT_BACKEND !== "upstash") return { state: "unavailable", reason: "rate_limiter" };
     if (!env.TURNSTILE_SECRET_KEY || !env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) return { state: "unavailable", reason: "turnstile" };
   }
