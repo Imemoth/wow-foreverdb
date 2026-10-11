@@ -36,5 +36,20 @@ export const BASE_SECURITY_HEADERS: Record<string, string> = {
 
 export const HSTS = "max-age=63072000; includeSubDomains";
 
+export type DeploymentKindName = "local" | "preview" | "production";
+
+/**
+ * Headers that identify the ForeverDB deployment designation and keep every
+ * non-production response out of search indexes (HTML, APIs and error responses).
+ * `X-ForeverDB-Deployment` lets operators and tests tell a preview from a real
+ * production release at the HTTP level, regardless of the Vercel target.
+ */
+export function deploymentHeaders(kind: DeploymentKindName): Record<string, string> {
+  return {
+    "X-ForeverDB-Deployment": kind,
+    ...(kind === "production" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
+  };
+}
+
 export const PUBLIC_API_CACHE = "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
 export const NO_STORE = "no-store";

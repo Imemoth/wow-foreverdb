@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
-import { BASE_SECURITY_HEADERS, HSTS, buildPageCsp } from "@/lib/security/headers";
+import { BASE_SECURITY_HEADERS, HSTS, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
 import {
@@ -39,9 +39,10 @@ function log(event: string, data: Record<string, unknown>) {
   console.info(JSON.stringify({ at: new Date().toISOString(), event, ...data }));
 }
 
-function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean): NextResponse {
+function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean, kind: DeploymentKindName): NextResponse {
   const headers: Record<string, string> = {
     ...BASE_SECURITY_HEADERS,
+    ...deploymentHeaders(kind),
     "Retry-After": String(retryAfter),
     "Cache-Control": "no-store",
   };
@@ -68,7 +69,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
   const https = env.SITE_URL.startsWith("https://");
-  const sidCookie = env.FOREVERDB_DEPLOYMENT === "local" ? "fdb_sid" : "__Host-fdb_sid";
+  const kind = env.FOREVERDB_DEPLOYMENT;
+  const stamp = deploymentHeaders(kind);
+  // The __Host- prefix (and Secure) follows the real origin: never a Secure-less cookie on an https site.
+  const sidCookie = https ? "__Host-fdb_sid" : "fdb_sid";
 
   const ipHash = hashIp(clientIp(request.headers, env.TRUSTED_IP_HEADER), env.RATE_LIMIT_SALT);
   const sessionId = validSessionId(request.cookies.get(sidCookie)?.value);
@@ -85,7 +89,7 @@ export async function proxy(request: NextRequest) {
       if (!isSameOriginJson(request.headers, env.SITE_URL)) {
         return NextResponse.json({ error: "forbidden" }, {
           status: 403,
-          headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
+          headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
         });
       }
       try {
@@ -94,14 +98,14 @@ export async function proxy(request: NextRequest) {
         const decision = await checkStrictLimit(counterStore(), ruleName, rules[ruleName], ipHash);
         if (!decision.allowed) {
           log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
-          return tooMany(true, decision.retryAfterSec, decision.reason, https);
+          return tooMany(true, decision.retryAfterSec, decision.reason, https, kind);
         }
       } catch (e) {
         // FAIL CLOSED: without a working limiter we must not expose the
         // outbound Siteverify call. Data routes are unaffected.
         log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
         return NextResponse.json({ error: "temporarily_unavailable" }, {
-          status: 503, headers: { ...BASE_SECURITY_HEADERS, "Retry-After": "30", "Cache-Control": "no-store" },
+          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": "no-store" },
         });
       }
     }
@@ -114,7 +118,7 @@ export async function proxy(request: NextRequest) {
       }, { challengeEnabled: Boolean(env.TURNSTILE_SECRET_KEY) });
       if (!decision.allowed) {
         log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
-        return tooMany(isApi, decision.retryAfterSec, decision.reason, https);
+        return tooMany(isApi, decision.retryAfterSec, decision.reason, https, kind);
       }
     } catch (e) {
       // Store outage: APIs fail closed; HTML pages fail open (still behind WAF,
@@ -122,7 +126,7 @@ export async function proxy(request: NextRequest) {
       log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
       if (isApi) {
         return NextResponse.json({ error: "temporarily_unavailable" }, {
-          status: 503, headers: { ...BASE_SECURITY_HEADERS, "Retry-After": "30", "Cache-Control": "no-store" },
+          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": "no-store" },
         });
       }
     }
@@ -130,7 +134,7 @@ export async function proxy(request: NextRequest) {
 
   if (isApi) {
     const res = NextResponse.next();
-    for (const [k, v] of Object.entries(BASE_SECURITY_HEADERS)) res.headers.set(k, v);
+    for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
     if (https) res.headers.set("Strict-Transport-Security", HSTS);
     return res;
   }
@@ -147,12 +151,11 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
-  for (const [k, v] of Object.entries(BASE_SECURITY_HEADERS)) res.headers.set(k, v);
+  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
-  if (env.FOREVERDB_DEPLOYMENT !== "production") res.headers.set("X-Robots-Tag", "noindex, nofollow");
   if (!sessionId && request.method === "GET") {
     res.cookies.set(sidCookie, newSessionId(), {
-      httpOnly: true, secure: sidCookie.startsWith("__Host-"), sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true, secure: https, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30,
     });
   }
   return res;

@@ -8,6 +8,10 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] Code review by the owner, including `publisher/src/contract.ts` (allowlist) and both SQL files
 - [ ] Editorial review of `web/content/*`. Flip `sample: false` only on reviewed articles
 
+- [ ] **Hardening PR (`web/vercel-preview-hardening`)**: `Web release gate` green; Vercel variables `FOREVERDB_DEPLOYMENT=preview` and `FOREVERDB_DATA_SOURCE=fixture` set on Production and Preview **before merging** (`vercel-environments.md` §3)
+- [ ] **Required checks enforced** (PENDING): ruleset `.github/rulesets/main-release-gates.json` imported and a deliberately failing PR shown unmergeable (`release-gates.md` §2)
+- [ ] Node.js: CI, `engines` and Vercel runtime all 24.x (owner decision); the Vercel build log shows Node 24 and no `engines` auto-upgrade warning
+
 ## B. Data boundary (security-critical)
 - [ ] Separate public DB provisioned, Data API disabled (`infrastructure-setup.md` 1–4)
 - [ ] `public_read_model_security.sql` PASS on the real public DB
@@ -26,6 +30,11 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] Freshness monitor and alerting live. Rollback rehearsed with `pub_admin.activate_publication`
 - [ ] Security headers verified on the production domain (CSP, HSTS, nosniff, frame-ancestors)
 
+- [ ] Deployment protection **tested from outside**: `node web/scripts/verify-deployment.mjs <url> --expect protected` passes for the production alias, a branch preview, `/api/v1/meta` and the search API (PENDING: not testable from the connector sandbox)
+- [ ] No custom domain attached to the project until every item in A–C is ✅ (with `all_except_custom_domains` it would be public)
+- [ ] Production-promotion control in place: Production Branch moved to a protected `release` branch **before** Account System V1 code reaches `main` (prepared, needs owner approval)
+- [ ] Production-mode verification with `verify-deployment.mjs --expect production` after go-live, including `X-ForeverDB-Deployment: production`, no synthetic banner, real publication banner
+
 ## D. Product quality
 - [ ] Manual screen-reader pass of home, search, item, creature, zone
 - [ ] Lighthouse ≥ 90 on performance/accessibility/SEO for home and item pages
@@ -42,3 +51,6 @@ Accounts, Guildbook on web, comments/UGC, map artwork, quest catalog.
 | Live Upstash, live Turnstile, staging load test | Pending infrastructure (no PASS claimed) |
 | Apply `0010` to production; enable RLS on `private.foreverdb_api_budgets` | Pending production approval / out of scope of PR #22 |
 | F-3 Companion denominator fix (`0011`) | **F3_FULLY_VERIFIED** (2026-10-10; PR #37 merged as `6d0df83`; production ledger `20261010151518`; 5/5 Windows Companion Search UI checks PASS; see `docs/f3-observed-rate-denominator.md`) |
+| Preview hardening (explicit designation, noindex everywhere, fail-closed hosted config, CI split + aggregate gate, Node 24 pin) | **Implemented · Locally tested** · GitHub CI result recorded in `verification-results.md` |
+| Vercel variables, Production Branch, unauthenticated protection test, ruleset enforcement | **PENDING owner action** (connector cannot read or write variables; no ruleset API) |
+| Production mode (`FOREVERDB_DEPLOYMENT=production`) | **BLOCKED** until A–C are ✅ |

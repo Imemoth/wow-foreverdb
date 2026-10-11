@@ -7,7 +7,7 @@ import { DatasetBanner } from "@/components/DatasetBanner";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { serverEnv } from "@/lib/env";
+import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -22,7 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
     twitter: { card: "summary" },
     alternates: { types: { "application/rss+xml": "/news/rss.xml" } },
     // Preview/local builds are never indexed.
-    robots: env.FOREVERDB_DEPLOYMENT === "production" ? { index: true, follow: true } : { index: false, follow: false },
+    robots: isIndexable(env) ? { index: true, follow: true } : { index: false, follow: false },
+    // Lets tests and operators tell a preview from a real production release in the HTML itself.
+    other: { "foreverdb-deployment": env.FOREVERDB_DEPLOYMENT },
     icons: { icon: "/icon.svg" },
   };
 }

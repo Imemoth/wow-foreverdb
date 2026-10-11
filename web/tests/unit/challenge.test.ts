@@ -17,7 +17,7 @@ type Handlers = {
 };
 
 const baseEnv: Record<string, string> = {
-  FOREVERDB_DEPLOYMENT: "local",
+  FOREVERDB_DEPLOYMENT: "preview",
   FOREVERDB_DATA_SOURCE: "fixture",
   SITE_URL: SITE,
   RATE_LIMIT_BACKEND: "memory",
