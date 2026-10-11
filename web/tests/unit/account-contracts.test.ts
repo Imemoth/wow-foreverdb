@@ -67,9 +67,23 @@ describe("contracts.ts is browser-safe (no Node globals or built-ins)", () => {
     expect(signup("a".repeat(71) + "é")).toBe(false); // 73 mixed
   });
 
-  it("the 12-character minimum counts characters while the 72 limit counts bytes", () => {
+  it("the 12-character minimum counts code POINTS while the 72 limit counts bytes", () => {
     expect(signup("é".repeat(11))).toBe(false); // 11 characters
     expect(signup("é".repeat(12))).toBe(true); // 12 characters, 24 bytes
+    expect(signup("😀".repeat(6))).toBe(false); // 6 characters (12 UTF-16 code units must not count as 12)
+    expect(signup("😀".repeat(11))).toBe(false); // 11 characters, 44 bytes
+    expect(signup("😀".repeat(12))).toBe(true); // 12 characters, 48 bytes
+    expect(signup("a".repeat(10) + "😀")).toBe(false); // 11 characters
+    expect(signup("a".repeat(11) + "😀")).toBe(true); // 12 characters
+  });
+
+  it("sign-in bounds the password but never applies the sign-up minimum", () => {
+    const login = (password: string) => AUTH_BODIES.password_grant.safeParse({ email: "a@b.example", password }).success;
+    expect(login("short")).toBe(true);
+    expect(login("")).toBe(false);
+    expect(login("a".repeat(72))).toBe(true);
+    expect(login("a".repeat(73))).toBe(false);
+    expect(login("😀".repeat(19))).toBe(false); // 76 bytes
   });
 
   it("the same results hold with Buffer removed from the global scope", () => {

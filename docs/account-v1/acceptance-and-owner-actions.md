@@ -38,7 +38,7 @@ Nothing below was done by this work. Items marked **approval** change real setti
 | 3 | Staging Auth settings: confirm email **on**, custom SMTP with SPF/DKIM/DMARC, email templates using `token_hash` links to `/account/auth/confirm`, redirect URLs limited to the preview host pattern, leaked-password protection on, **Supabase CAPTCHA off** (it is project-wide and the Companion cannot satisfy it; the website uses its own Turnstile check, keys need approval), single-session-per-user / session time-box / inactivity timeout **off**, review Auth rate limits and anonymous sign-in limits, refresh-token rotation on | before PR B staging run | **approval** |
 | 4 | Provide a Windows machine session for Companion acceptance (PR D/E) | PR D/E | — |
 | 5 | Keep Vercel Authentication on the demonstration; keep Production Branch = `release`; do not merge account PRs into `release` | always | — |
-| 5a | Meet the **direct Auth abuse criteria** L-1..L-7, M-1..M-8, the runbook and the staging drill AT-1..AT-6 in §5 (threat A24, OPEN until evidenced; website Turnstile does not count) | staging, then before any production plan | **approval** |
+| 5a | Meet the **direct Auth abuse criteria** L-1..L-8, M-1..M-8, the runbook and the staging drill AT-1..AT-7 in §5 (threat A24, OPEN until evidenced; website Turnstile does not count) | staging, then before any production plan | **approval** |
 | 6 | Before any production consideration: review the migration dry-run, rollback and recovery runbook; production leaked-password protection, SMTP, rate limits and CAPTCHA; decide quotas/tiering separately | later milestone | **approval** |
 | 7 | Flipping `PRODUCTION_ACCOUNT_AUTH_APPROVED` and setting `FOREVERDB_DEPLOYMENT=production` | **not in V1** | **approval** + reviewed code change |
 
@@ -60,6 +60,7 @@ Model and rationale: [security.md §3.1](security.md) (six layers). **The websit
 | L-4 | OTP / token verification | recorded limit ≤ 30 per 5 minutes per IP | same |
 | L-5 | Email sends | custom SMTP in use (not the built-in sender); project email-send limit recorded; provider **hard daily cap** set at or below the owner's budgeted number | settings + provider console |
 | L-6 | Sender authentication | SPF, DKIM and DMARC pass for the sending domain; a test confirmation and a test recovery email land in the inbox (not spam) | header evidence |
+| L-8 | **IP attribution for server-side calls** | recorded evidence of how Auth derives the client IP for requests the website makes server-side (from shared Vercel egress addresses): either calls are attributed to the real client IPs, or the website's own per-IP throttle (layer 1) is strictly stricter than the Auth per-IP limits so one attacker cannot exhaust a shared Auth bucket through the website and lock real users out | AT-7 result + written note |
 | L-7 | Account hygiene | confirm-email on; leaked-password protection on; password policy recorded; refresh-token rotation on; **CAPTCHA off, single-session-per-user off, session time-box off, inactivity timeout off/long** | settings export |
 
 ### 5.2 Monitoring and alerting (layer 6)
@@ -98,9 +99,10 @@ Run only against the owner's isolated staging Auth project, from a single IP, wi
 | AT-3 | repeated sign-up and recovery requests to one address | the mail limit blocks further sends; no provider cap breach |
 | AT-4 | the Companion's anonymous sign-in and token refresh **under the final settings** | succeeds (this is the check that proves CAPTCHA and session-coupling settings are really off) |
 | AT-5 | M-8 alert delivery | alert reaches the named responder |
+| AT-7 | from source A, exhaust the website's sign-up/sign-in throttle; from a second source B, sign in through the website | B still succeeds (no shared bucket); if B is refused, L-8 is not met and PR B must lower its own per-IP limits below Auth's |
 | AT-6 | the website's Turnstile cannot be bypassed on `/account/api/*`, and a direct GoTrue call is stopped only by L-1..L-5 | documents, with evidence, exactly what layer 1 covers and what it does not |
 
 ### 5.5 Gates
 
-- **Staging gate (before PR E can be called STAGING VERIFIED):** L-1..L-7 evidenced, AT-1..AT-6 recorded, M-1..M-8 configured on staging.
-- **Production gate (before any production plan):** L-1..L-7 and M-1..M-8 evidenced on the **production** configuration by read-only export (no abuse drill is run against production without a separate explicit approval), the runbook rehearsed, the responders named, and the owner's written approval. Until then threat A24 is **OPEN** and production activation of accounts is BLOCKED.
+- **Staging gate (before PR E can be called STAGING VERIFIED):** L-1..L-8 evidenced, AT-1..AT-7 recorded, M-1..M-8 configured on staging.
+- **Production gate (before any production plan):** L-1..L-8 and M-1..M-8 evidenced on the **production** configuration by read-only export (no abuse drill is run against production without a separate explicit approval), the runbook rehearsed, the responders named, and the owner's written approval. Until then threat A24 is **OPEN** and production activation of accounts is BLOCKED.

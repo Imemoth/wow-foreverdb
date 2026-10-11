@@ -76,12 +76,19 @@ export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts:
 const authEmail = z.string().trim().toLowerCase().email().max(254);
 const authPassword = z
   .string()
-  .min(12)
+  .max(72) // UTF-16 code units: never stricter than the byte limit below, and cheap to reject early
+  // 12 characters means code POINTS (a surrogate pair is one character), while the 72 limit counts UTF-8 BYTES.
+  .refine((v) => Array.from(v).length >= 12, "password too short (12 characters minimum)")
+  .refine((v) => new TextEncoder().encode(v).length <= 72, "password too long (bcrypt limit is 72 bytes)");
+/** Sign-in never enforces the sign-up policy (a policy change must not lock existing users out); it only bounds the input. */
+const loginPassword = z
+  .string()
+  .min(1)
   .max(72)
   .refine((v) => new TextEncoder().encode(v).length <= 72, "password too long (bcrypt limit is 72 bytes)");
 export const AUTH_BODIES = {
   signup: z.object({ email: authEmail, password: authPassword }).strict(),
-  password_grant: z.object({ email: authEmail, password: authPassword }).strict(),
+  password_grant: z.object({ email: authEmail, password: loginPassword }).strict(),
   refresh_grant: z.object({ refresh_token: z.string().min(10).max(2048) }).strict(),
   verify: z.object({ type: z.enum(["signup", "email", "recovery"]), token_hash: z.string().min(10).max(512) }).strict(),
   recover: z.object({ email: authEmail }).strict(),
