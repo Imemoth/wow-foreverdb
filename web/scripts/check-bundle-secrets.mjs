@@ -20,8 +20,14 @@ const FORBIDDEN = [
   /sb_secret_/,
   /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{20,}/, // JWT-looking literal
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  // Account System V1: the Auth origin/key, the CSRF/seal secret and the session cookie name are server-only.
+  /ACCOUNT_CSRF_SECRET/,
+  /ACCOUNT_AUTH_(MODE|URL|PUBLISHABLE_KEY|PROJECT_REF)/,
+  /sb_publishable_/,
+  /fdb_acct/,
+  /\/auth\/v1\//, // no Auth endpoint path may be shipped to the browser (the browser only ever calls /account/api/*)
 ];
-const SECRET_ENV = ["PUBLIC_READ_DATABASE_URL", "UPSTASH_REDIS_REST_TOKEN", "RATE_LIMIT_SALT", "CHALLENGE_COOKIE_SECRET", "TURNSTILE_SECRET_KEY"];
+const SECRET_ENV = ["PUBLIC_READ_DATABASE_URL", "UPSTASH_REDIS_REST_TOKEN", "RATE_LIMIT_SALT", "CHALLENGE_COOKIE_SECRET", "TURNSTILE_SECRET_KEY", "ACCOUNT_CSRF_SECRET", "ACCOUNT_AUTH_PUBLISHABLE_KEY", "ACCOUNT_AUTH_URL"];
 const values = SECRET_ENV.map((k) => process.env[k]).filter((v) => v && v.length >= 8);
 
 function* walk(dir) {
