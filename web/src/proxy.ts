@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
-import { BASE_SECURITY_HEADERS, HSTS, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
-import { isSameOriginJson } from "@/lib/security/challenge";
+import { API_CSP, BASE_SECURITY_HEADERS, HSTS, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
+import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
 import {
   MemoryStore,
@@ -9,6 +9,9 @@ import {
   checkRateLimit,
   checkStrictLimit,
   classifyRequest,
+  isAccountApiPath,
+  isAccountPath,
+  isStrictRule,
   loadRules,
   validSessionId,
   type CounterStore,
@@ -39,12 +42,13 @@ function log(event: string, data: Record<string, unknown>) {
   console.info(JSON.stringify({ at: new Date().toISOString(), event, ...data }));
 }
 
-function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean, kind: DeploymentKindName): NextResponse {
+function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean, kind: DeploymentKindName, extra: Record<string, string> = {}): NextResponse {
   const headers: Record<string, string> = {
     ...BASE_SECURITY_HEADERS,
     ...deploymentHeaders(kind),
     "Retry-After": String(retryAfter),
     "Cache-Control": "no-store",
+    ...extra,
   };
   if (https) headers["Strict-Transport-Security"] = HSTS;
   if (isApi) {
@@ -67,7 +71,17 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   const { pathname } = request.nextUrl;
-  const isApi = pathname.startsWith("/api/");
+  const isApi = pathname.startsWith("/api/") || isAccountApiPath(pathname);
+  // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
+  // deployment, production included), never leaks a referrer, and never receives the anonymous rate-limit cookie.
+  const isAccount = isAccountPath(pathname);
+  const accountHeaders: Record<string, string> = isAccount
+    ? {
+        "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer",
+        // API responses carry no markup; pages get the nonce CSP below.
+        ...(isAccountApiPath(pathname) ? { "Content-Security-Policy": API_CSP } : {}),
+      }
+    : {};
   const https = env.SITE_URL.startsWith("https://");
   const kind = env.FOREVERDB_DEPLOYMENT;
   const stamp = deploymentHeaders(kind);
@@ -78,34 +92,35 @@ export async function proxy(request: NextRequest) {
   const sessionId = validSessionId(request.cookies.get(sidCookie)?.value);
 
   const ruleName = classifyRequest(pathname, request.method);
-  if (ruleName === "api_challenge") {
-    // Outbound-call endpoint (Cloudflare Siteverify). Nothing below may reach
-    // the route handler without first passing the origin pre-check and the
-    // strict per-IP + global budget. Not applicable until Turnstile is
-    // configured (the route answers 404 for free).
-    if (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET) {
-      // Cross-site POSTs are refused BEFORE counting so a hostile page cannot
-      // burn a victim's budget from their browser.
-      if (!isSameOriginJson(request.headers, env.SITE_URL)) {
+  if (ruleName && isStrictRule(ruleName)) {
+    // Endpoints with costly side effects (outbound calls to Cloudflare Siteverify or to Supabase Auth). Nothing below
+    // may reach the route handler without first passing the origin pre-check and the strict per-IP + global budget.
+    // api_challenge applies only once Turnstile is configured (the route answers 404 for free otherwise); the account
+    // rules always apply (a disabled account area answers 404 after the handler, which costs nothing outbound).
+    const account = ruleName !== "api_challenge";
+    if (account || (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET)) {
+      // Cross-site POSTs are refused BEFORE counting so a hostile page cannot burn a victim's budget from their browser.
+      const sameOrigin = account
+        ? request.method !== "POST" || isSameOriginRequest(request.headers, env.SITE_URL)
+        : isSameOriginJson(request.headers, env.SITE_URL);
+      if (!sameOrigin) {
         return NextResponse.json({ error: "forbidden" }, {
           status: 403,
-          headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
+          headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": account ? "private, no-store" : "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
         });
       }
       try {
-        // Identity: trusted-header IP hash only. The session cookie is
-        // client-controlled and deliberately NOT part of this decision.
+        // Identity: trusted-header IP hash only. The session cookie is client-controlled and deliberately NOT part of this decision.
         const decision = await checkStrictLimit(counterStore(), ruleName, rules[ruleName], ipHash);
         if (!decision.allowed) {
           log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
-          return tooMany(true, decision.retryAfterSec, decision.reason, https, kind);
+          return tooMany(true, decision.retryAfterSec, decision.reason, https, kind, accountHeaders);
         }
       } catch (e) {
-        // FAIL CLOSED: without a working limiter we must not expose the
-        // outbound Siteverify call. Data routes are unaffected.
+        // FAIL CLOSED: without a working limiter we must not expose the outbound call. Data routes are unaffected.
         log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
         return NextResponse.json({ error: "temporarily_unavailable" }, {
-          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": "no-store" },
+          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": account ? "private, no-store" : "no-store" },
         });
       }
     }
@@ -134,7 +149,7 @@ export async function proxy(request: NextRequest) {
 
   if (isApi) {
     const res = NextResponse.next();
-    for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
+    for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders })) res.headers.set(k, v);
     if (https) res.headers.set("Strict-Transport-Security", HSTS);
     return res;
   }
@@ -151,9 +166,10 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
-  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
+  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
-  if (!sessionId && request.method === "GET") {
+  // The anonymous rate-limit cookie is for public browsing only: account pages neither receive nor issue it.
+  if (!isAccount && !sessionId && request.method === "GET") {
     res.cookies.set(sidCookie, newSessionId(), {
       httpOnly: true, secure: https, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30,
     });

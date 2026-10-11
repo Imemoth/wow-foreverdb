@@ -10,6 +10,7 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [ownership-claim-protocol.md](ownership-claim-protocol.md) | Claim and session state machines, private schema, function contracts, concurrency, failure and recovery, migration `0012` plan, rollback |
 | [security.md](security.md) | Account-specific threat model, abuse prevention, negative-test matrix mapped to the 20 mandatory tests |
 | [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md) | Evidence ledger rules, per-PR acceptance, the owner action checklist, and the enforceable direct-Auth-abuse criteria (§5) |
+| [web-auth.md](web-auth.md) | PR B as built: routes, session/CSRF/callback design, verified GoTrue behaviour, acceptance mapping, findings, owner actions |
 | [pr-obligations.md](pr-obligations.md) | Binding obligations for PR B and PR C, including the mandatory live-session negative tests (proof set LS-1..LS-9 and LS-11; LS-10 is the tripwire) |
 
 Related: [ADR-015..018](../web/architecture-decisions.md), [web threat model](../web/threat-model.md), [go-live checklist](../web/go-live-checklist.md), [release gates](../web/release-gates.md), [ROADMAP](../ROADMAP.md).
@@ -60,7 +61,7 @@ Legend: **IMPLEMENTED** (code in the PR) · **CI VERIFIED** (GitHub Actions on t
 | --- | --- | --- |
 | Specification, ADRs, threat model | IMPLEMENTED (PR A) | this directory |
 | Account Auth configuration validator + closed contracts + boundary tests | IMPLEMENTED (PR A); CI VERIFIED when PR A checks pass | `web/src/lib/account/`, `web/tests/unit/account-*.test.ts` |
-| Web registration, verification, login, recovery | BLOCKED / PENDING (PR B) | — |
+| Web registration, verification, login, logout, recovery, sessions, profile | IMPLEMENTED (PR B); CI VERIFIED against real GoTrue when the `Account web auth (real GoTrue)` check passes; STAGING VERIFIED needs the owner's staging project (AT-7) | [web-auth.md](web-auth.md), `web/tests/account/`, `web/src/app/account/` |
 | Ownership claim backend, account Guildbook RPCs | BLOCKED / PENDING (PR C) | — |
 | Companion registered accounts | BLOCKED / PENDING (PR D) | — |
 | Real Auth/email/two-account acceptance | BLOCKED / PENDING (needs owner staging, PR E) | — |
