@@ -28,6 +28,8 @@ function loadStackEnv(): Record<string, string> {
   return { ...out, ...Object.fromEntries(Object.entries(process.env).filter(([k, v]) => /^(ACCOUNT_STACK_|MAILPIT_URL|STACK_)/.test(k) && v !== undefined)) as Record<string, string> };
 }
 const stack = loadStackEnv();
+// Test workers inherit the environment of this process: hand them the stack coordinates (helpers.ts reads process.env only).
+for (const [k, v] of Object.entries(stack)) if (/^(ACCOUNT_STACK_|MAILPIT_URL|STACK_)/.test(k)) process.env[k] = v;
 const AUTH_URL = stack.ACCOUNT_STACK_URL ?? "http://127.0.0.1:54321";
 const ANON = stack.ACCOUNT_STACK_ANON_KEY ?? "";
 export const CSRF_SECRET = "acceptance-csrf-secret-0123456789abcdefghijklmnop";

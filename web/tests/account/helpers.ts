@@ -1,22 +1,9 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { APIRequestContext, APIResponse, PlaywrightWorkerArgs } from "@playwright/test";
 
 type Playwright = PlaywrightWorkerArgs["playwright"];
 
-/** Stack coordinates (real GoTrue behind the gateway shim, Mailpit). Same source as playwright.account.config.ts. */
-function stackEnv(): Record<string, string> {
-  const file = process.env.ACCOUNT_STACK_ENV_FILE ?? resolve(__dirname, "../auth-stack/.stack/env");
-  const out: Record<string, string> = {};
-  try {
-    for (const line of readFileSync(file, "utf8").split("\n")) {
-      const m = /^([A-Z_]+)=(.*)$/.exec(line.trim());
-      if (m) out[m[1]!] = m[2]!;
-    }
-  } catch { /* env vars below */ }
-  return { ...out, ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) as Record<string, string> };
-}
-const env = stackEnv();
+/** Stack coordinates (real GoTrue behind the gateway shim, Mailpit). playwright.account.config.ts exports them into the environment. */
+const env = process.env as Record<string, string | undefined>;
 export const AUTH_URL = env.ACCOUNT_STACK_URL ?? "http://127.0.0.1:54321";
 export const ANON_KEY = env.ACCOUNT_STACK_ANON_KEY ?? "";
 export const MAILPIT = env.MAILPIT_URL ?? "http://127.0.0.1:54324";

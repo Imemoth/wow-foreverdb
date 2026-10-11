@@ -36,19 +36,16 @@ http
   })
   .listen(gatewayPort, "127.0.0.1", () => console.log(`gateway on ${gatewayPort}`));
 
+// The templates are read ONCE at start-up into a fixed table; a request can only select a key of that table (never a path).
+const templates = new Map(["confirmation", "recovery"].map((n) => [`/${n}.html`, readFileSync(join(here, "templates", `${n}.html`))]));
 http
   .createServer((req, res) => {
-    const name = (req.url ?? "").replace(/^\//, "");
-    if (!/^[a-z]+\.html$/.test(name)) {
+    const body = templates.get(req.url ?? "");
+    if (!body) {
       res.writeHead(404);
       return res.end();
     }
-    try {
-      res.writeHead(200, { "content-type": "text/html" });
-      res.end(readFileSync(join(here, "templates", name)));
-    } catch {
-      res.writeHead(404);
-      res.end();
-    }
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(body);
   })
   .listen(templatePort, "127.0.0.1");

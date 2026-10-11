@@ -75,7 +75,7 @@ describe("account web zone (static)", () => {
     const fetchers = zone.filter((f) => /\bfetch\s*\(/.test(code(f))).map(rel).sort();
     expect(fetchers).toEqual(["lib/account/auth-client.ts", "lib/account/client.ts"]); // turnstile.ts calls an injected fetchImpl (default: fetch)
     expect(code(join(SRC, "lib/account/turnstile.ts"))).toMatch(/fetchImpl: typeof fetch = fetch/);
-    expect(code(join(SRC, "lib/account/turnstile.ts"))).toMatch(/https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/);
+    expect(code(join(SRC, "lib/account/turnstile.ts"))).toContain("https://challenges.cloudflare.com/turnstile/v0/siteverify");
     for (const m of code(join(SRC, "lib/account/client.ts")).matchAll(/fetch\(\s*([^,)]+)/g)) expect(m[1], "client fetch target").toMatch(/^("\/account\/api\/|path\b)/);
     // the wrapper checks every request against the closed allowlist
     const wrapper = code(join(SRC, "lib/account/auth-client.ts"));
