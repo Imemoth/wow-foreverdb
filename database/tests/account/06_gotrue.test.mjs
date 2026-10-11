@@ -112,6 +112,30 @@ if (!available) {
       assert.equal((await call({ token: r.json.access_token }, "fdb_account_claim_start", [inst])).ok, true);
     });
 
+    it("LS-9b: after GoTrue's refresh-token REUSE DETECTION revokes the session family (the session row stays), the unexpired access token is refused", async () => {
+      const a = await anonymousSignup();
+      const inst = uniq("reuse");
+      await ingestOwnedBy(a, inst);
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      const r2 = await gotrue("/token?grant_type=refresh_token", { body: { refresh_token: a.refresh } });
+      assert.equal(r2.status, 200, r2.text);
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      const r3 = await gotrue("/token?grant_type=refresh_token", { body: { refresh_token: r2.json.refresh_token } });
+      assert.equal(r3.status, 200, r3.text);
+      await fx.resetBudgets();
+      assert.equal((await call({ token: r3.json.access_token }, "fdb_account_claim_start", [inst])).ok, true, "the legitimate, rotated token works");
+      await new Promise((resolve) => setTimeout(resolve, 11_000)); // GoTrue's default refresh-token reuse interval is 10 s
+      const stolen = await gotrue("/token?grant_type=refresh_token", { body: { refresh_token: a.refresh } }); // the OLD token is replayed
+      assert.equal(stolen.status, 400, stolen.text);
+      assert.equal(await sessionRow(a.sid), 1, "GoTrue keeps the session row: only the refresh tokens are revoked (assumption the guard must not make)");
+      const live = (await admin.query("select count(*)::int n from auth.refresh_tokens where session_id = $1 and not revoked", [a.sid])).rows[0].n;
+      assert.equal(live, 0, "every refresh token of the family is revoked");
+      assert.doesNotThrow(() => verifyJwt(r3.json.access_token));
+      await fx.resetBudgets();
+      await expectCode(call({ token: r3.json.access_token }, "fdb_account_claim_start", [inst]), "PT401");
+      await expectCode(call({ token: r3.json.access_token }, "fdb_installation_link_status", [inst]), "PT401");
+    });
+
     it("documented residual, unchanged by V1: ingest and read RPCs only check the JWT, so a revoked-but-unexpired token can still ingest (it can no longer change ownership)", async () => {
       const a = await anonymousSignup();
       const inst = uniq("residual");

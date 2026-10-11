@@ -218,8 +218,17 @@ describe("kill switch, rollback with transfers present, re-apply, recovery, prun
     await w.admin.query("update private.installation_claims set created_at = now() - interval '8 days', expires_at = now() - interval '8 days' where installation_id = $1", [inst]);
     const consumedBefore = (await w.admin.query("select count(*)::int n from private.installation_claims where status = 'consumed'")).rows[0].n;
     await w.admin.query("update private.account_audit set at = now() - interval '200 days' where installation_id = $1", [inst]);
+    // an old pending claim that a (stale) link row references must be skipped, not abort the whole run
+    const o2 = await w.fx.identity({ anonymous: true });
+    const inst2 = uniq("prune-linked");
+    await w.fx.installation(inst2, o2.uid);
+    await rpc(w.client, o2.claims, "fdb_account_claim_start", [inst2]);
+    const linkedClaim = (await w.fx.claimRows(inst2))[0];
+    await w.admin.query("insert into private.account_installations (installation_id, account_uid, claim_id, previous_owner_uid) values ($1, $2, $3, $4)", [inst2, (await w.fx.identity()).uid, linkedClaim.id, o2.uid]);
+    await w.admin.query("update private.installation_claims set created_at = now() - interval '8 days', expires_at = now() - interval '8 days' where id = $1", [linkedClaim.id]);
     const r = psql(CLONES[0], PRUNE);
     assert.equal(r.status, 0, r.out);
+    assert.equal((await w.fx.claimRows(inst2)).length, 1, "a claim referenced by a link row is never pruned");
     assert.equal((await w.fx.claimRows(inst)).length, 0, "revoked and expired-pending claims removed");
     assert.equal((await w.admin.query("select count(*)::int n from private.installation_claims where status = 'consumed'")).rows[0].n, consumedBefore, "consumed claims are never pruned");
     assert.equal((await w.fx.audit(inst)).length, 0, "old audit rows removed");

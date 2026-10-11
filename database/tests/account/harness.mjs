@@ -143,6 +143,8 @@ export class Fixtures {
   async session(uid, { notAfter = null } = {}) {
     const sid = randomUUID();
     await this.admin.query(`insert into auth.sessions (id, user_id, created_at, updated_at, not_after) values ($1, $2, now(), now(), $3)`, [sid, uid, notAfter]);
+    // A live GoTrue session always owns one non-revoked refresh token (rotation revokes the old one and inserts the new one atomically).
+    await this.admin.query(`insert into auth.refresh_tokens (token, user_id, session_id, revoked, created_at, updated_at) values ($1, $2, $3, false, now(), now())`, [randomUUID(), uid, sid]);
     return sid;
   }
 

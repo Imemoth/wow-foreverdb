@@ -235,6 +235,17 @@ describe("claim redeem", () => {
     assert.deepEqual(await redeem(owner, code), INVALID);
   });
 
+  it("a stale link row (manual intervention) makes the redeem fail closed with invalid_claim and change nothing", async () => {
+    const { owner, inst } = await ownerWithInstallation();
+    const reg = await fx.identity();
+    const { code } = await start(owner, inst);
+    const claim = (await fx.claimRows(inst))[0];
+    await admin.query("insert into private.account_installations (installation_id, account_uid, claim_id, previous_owner_uid) values ($1, $2, $3, $4)", [inst, (await fx.identity()).uid, claim.id, owner.uid]);
+    assert.deepEqual(await redeem(reg, code), INVALID);
+    assert.equal(await fx.owner(inst), owner.uid);
+    assert.equal((await fx.claimRows(inst))[0].status, "pending");
+  });
+
   it("account limit: a valid code is NOT consumed when the account already owns 50 installations", async () => {
     const { owner, inst } = await ownerWithInstallation();
     const reg = await fx.identity();
@@ -344,7 +355,7 @@ describe("link status", () => {
     const { owner, inst } = await ownerWithInstallation();
     const reg = await fx.identity();
     await redeem(reg, (await start(owner, inst)).code);
-    await admin.query("update private.installation_claims set created_at = now() - interval '400 days', expires_at = now() - interval '400 days'");
+    await admin.query("update private.installation_claims set created_at = now() - interval '400 days', expires_at = now() - interval '400 days' where installation_id = $1", [inst]);
     await admin.query("delete from private.account_audit where at < now()");
     assert.deepEqual(await status(owner, inst), { state: "transferred" });
   });

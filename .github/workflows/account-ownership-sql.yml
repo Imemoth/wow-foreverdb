@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mutation_check:
-        description: 'Also run the 24-mutant check (slow)'
+        description: 'Also run the 28-mutant check (slow)'
         required: false
         type: boolean
         default: false

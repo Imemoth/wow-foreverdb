@@ -105,6 +105,45 @@ describe("simultaneous redemption", () => {
   });
 });
 
+describe("account cap and global budgets", () => {
+  it("two redeems of DIFFERENT installations by the same account at 49 owned: exactly one succeeds, the other gets account_limit, the cap holds", async () => {
+    for (let round = 0; round < 10; round += 1) {
+      await fx.resetBudgets();
+      const reg = await fx.identity();
+      for (let i = 0; i < 49; i += 1) await fx.installation(uniq("cap"), reg.uid);
+      const a = await setup();
+      const b = await setup();
+      const ca = (await start(A, a.owner, a.inst)).code;
+      const cb = (await start(B, b.owner, b.inst)).code;
+      const [x, y] = await Promise.all([settle(redeem(C, reg, ca)), settle(redeem(D, reg, cb))]);
+      assert.ok(x.ok && y.ok, JSON.stringify([x.error?.message, y.error?.message]));
+      const outcomes = [x.value, y.value].map((r) => (r.ok ? "ok" : r.error)).sort();
+      assert.deepEqual(outcomes, ["account_limit", "ok"]);
+      const n = await admin.query("select count(*)::int n from public.installations where owner_user_id = $1", [reg.uid]);
+      assert.equal(n.rows[0].n, 50);
+    }
+  });
+
+  it("a redeem queued behind a long ingest-style lock does NOT stall unrelated redeems (global budget is charged after the lock)", async () => {
+    const x = await setup();
+    const y = await setup();
+    const regX = await fx.identity();
+    const regY = await fx.identity();
+    const cx = (await start(A, x.owner, x.inst)).code;
+    const cy = (await start(B, y.owner, y.inst)).code;
+    const hold = await holdInstallationLock(x.inst);
+    const stalled = settle(redeem(C, regX, cx));
+    await waitUntilBlocked(admin, C);
+    const t0 = Date.now();
+    const other = await redeem(D, regY, cy);
+    const elapsed = Date.now() - t0;
+    assert.equal(other.ok, true);
+    assert.ok(elapsed < 1500, `unrelated redeem took ${elapsed}ms`);
+    await hold.release();
+    assert.equal((await stalled).value.ok, true);
+  });
+});
+
 describe("claim issuance races", () => {
   it("parallel claim issuance for one installation: both succeed serially, exactly one pending claim remains, the loser's code is dead", async () => {
     const { owner, inst } = await setup();

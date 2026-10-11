@@ -30,7 +30,8 @@ describe("function privileges", () => {
       assert.equal(p.provolatile, "v");
       assert.equal(p.o, "fdb_migrator");
       assert.ok(p.proconfig.includes('search_path=""'));
-      assert.ok(p.proconfig.some((c) => c.startsWith("lock_timeout=")) && p.proconfig.some((c) => c.startsWith("statement_timeout=")));
+      assert.ok(p.proconfig.some((c) => c.startsWith("lock_timeout=5s")));
+      assert.ok(!p.proconfig.some((c) => c.startsWith("statement_timeout=")), "a function-level statement_timeout is inert in PostgreSQL and is deliberately not set");
     });
   }
   for (const sig of GUARDS) {

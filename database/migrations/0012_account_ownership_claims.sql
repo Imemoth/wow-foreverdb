@@ -7,7 +7,8 @@
 --
 -- SECURITY MODEL (summary)
 --   * Every account function runs a LIVE-SESSION identity guard as its first statement (private.fdb_caller and the
---     anonymous/registered variants): the JWT's session_id must exist in auth.sessions for the same user, be unexpired, and
+--     anonymous/registered variants): the JWT's session_id must exist in auth.sessions for the same user, be unexpired, still
+--     own a non-revoked refresh token (GoTrue's reuse detection revokes the token family but leaves the session row), and
 --     the user must be neither deleted nor banned. Signature validity and `exp` alone are never trusted.
 --   * claim_start and claim_redeem take the SAME per-installation advisory lock as ingest, then re-verify the session row(s)
 --     with FOR SHARE so a concurrent sign-out either waits for the transaction or makes it fail.
@@ -77,6 +78,12 @@ begin
         end if;
     end loop;
 
+    foreach v_col in array array['session_id', 'revoked'] loop
+        if not exists (select 1 from information_schema.columns where table_schema = 'auth' and table_name = 'refresh_tokens' and column_name = v_col) then
+            raise exception '0012 pre-flight: auth.refresh_tokens.% is missing', v_col;
+        end if;
+    end loop;
+
     if to_regclass('public.installations') is null or to_regclass('public.installation_guilds') is null
        or to_regclass('public.installation_guild_members') is null then
         raise exception '0012 pre-flight: installations / Guildbook tables are missing';
@@ -88,7 +95,8 @@ begin
     -- The migration role must be able to read AND row-lock auth.sessions (FOR SHARE needs UPDATE) and must not be subject to RLS.
     if not has_table_privilege(current_user, 'auth.sessions', 'SELECT')
        or not has_table_privilege(current_user, 'auth.sessions', 'UPDATE')
-       or not has_table_privilege(current_user, 'auth.users', 'SELECT') then
+       or not has_table_privilege(current_user, 'auth.users', 'SELECT')
+       or not has_table_privilege(current_user, 'auth.refresh_tokens', 'SELECT') then
         raise exception '0012 pre-flight: role % lacks SELECT/UPDATE on auth.sessions or SELECT on auth.users', current_user;
     end if;
     if (select c.relrowsecurity from pg_class c where c.oid = 'auth.sessions'::regclass)
@@ -195,6 +203,7 @@ begin
         where s.id = v_sid::uuid
           and s.user_id = v_uid
           and (s.not_after is null or s.not_after > now())
+          and exists (select 1 from auth.refresh_tokens r where r.session_id = s.id and not r.revoked)
           and u.deleted_at is null
           and (u.banned_until is null or u.banned_until <= now())
     ) then
@@ -279,9 +288,12 @@ begin
     end if;
 
     perform private.foreverdb_take_budget('claim_start:uid:' || v_uid::text, 300, 3);
-    perform private.foreverdb_take_budget('claim_start:global', 300, 60);
 
     perform pg_advisory_xact_lock(hashtextextended(p_installation_id, 0));
+
+    -- The global ceiling is charged AFTER the per-installation lock: its row lock lasts to the end of the transaction, and holding
+    -- it while queued behind a long ingest would stall every other claim in the system.
+    perform private.foreverdb_take_budget('claim_start:global', 300, 60);
 
     -- Re-verify liveness under a row lock: a sign-out committing concurrently waits for this transaction or makes it fail.
     perform 1
@@ -289,6 +301,7 @@ begin
     join auth.users u on u.id = s.user_id
     where s.id = v_sid and s.user_id = v_uid
       and (s.not_after is null or s.not_after > now())
+      and exists (select 1 from auth.refresh_tokens r where r.session_id = s.id and not r.revoked)
       and u.deleted_at is null and (u.banned_until is null or u.banned_until <= now())
       and u.is_anonymous
     for share of s;
@@ -359,9 +372,9 @@ begin
     v_sid := (auth.jwt() ->> 'session_id')::uuid;
 
     perform private.foreverdb_take_budget('claim_redeem:uid:' || v_uid::text, 300, 10);
-    perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);
 
     if p_code is null or p_code !~ '^[0-9A-F]{32}$' then
+        perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);
         insert into private.account_audit (event, account_uid) values ('redeem_rejected', v_uid);
         return jsonb_build_object('ok', false, 'error', 'invalid_claim');
     end if;
@@ -372,11 +385,13 @@ begin
     from private.installation_claims c
     where c.code_hash = v_hash;
     if not found then
+        perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);
         insert into private.account_audit (event, account_uid) values ('redeem_rejected', v_uid);
         return jsonb_build_object('ok', false, 'error', 'invalid_claim');
     end if;
 
     perform pg_advisory_xact_lock(hashtextextended(v_installation, 0));
+    perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);
 
     -- The redeemer's own session must still be live now that we hold the lock (row-locked against a concurrent sign-out).
     perform 1
@@ -384,6 +399,7 @@ begin
     join auth.users u on u.id = s.user_id
     where s.id = v_sid and s.user_id = v_uid
       and (s.not_after is null or s.not_after > now())
+      and exists (select 1 from auth.refresh_tokens r where r.session_id = s.id and not r.revoked)
       and u.deleted_at is null and (u.banned_until is null or u.banned_until <= now())
       and not u.is_anonymous and u.email_confirmed_at is not null
     for share of s;
@@ -423,6 +439,7 @@ begin
         from auth.sessions s
         where s.id = v_initiator_sid and s.user_id = v_initiator
           and (s.not_after is null or s.not_after > now())
+          and exists (select 1 from auth.refresh_tokens r where r.session_id = s.id and not r.revoked)
         for share of s;
         v_valid := found;
     end if;
@@ -443,18 +460,28 @@ begin
         return jsonb_build_object('ok', false, 'error', 'invalid_claim');
     end if;
 
-    -- A valid code is NOT consumed when the account is full (only a holder of a valid code learns this).
+    -- A valid code is NOT consumed when the account is full (only a holder of a valid code learns this). The per-account lock
+    -- (always taken AFTER the installation lock, never while holding anything else) keeps the cap exact for concurrent redeems of
+    -- different installations by the same account.
+    perform pg_advisory_xact_lock(hashtextextended('fdb-account:' || v_uid::text, 0));
     select count(*) into v_owned from public.installations i where i.owner_user_id = v_uid;
     if v_owned >= 50 then
         return jsonb_build_object('ok', false, 'error', 'account_limit');
     end if;
 
-    -- The only data change to an existing table: the ownership column. Nothing else about the installation is touched.
-    update public.installations set owner_user_id = v_uid where id = v_installation;
-
     insert into private.account_installations (installation_id, account_uid, claim_id, previous_owner_uid)
     values (v_installation, v_uid, v_claim_id, v_initiator)
+    on conflict (installation_id) do nothing
     returning linked_at into v_linked;
+    if v_linked is null then
+        -- A stale link row exists (manual intervention): fail closed with the single failure shape, change nothing.
+        insert into private.account_audit (event, account_uid, installation_id, claim_id)
+        values ('redeem_rejected', v_uid, v_installation, v_claim_id);
+        return jsonb_build_object('ok', false, 'error', 'invalid_claim');
+    end if;
+
+    -- The only data change to an existing table: the ownership column. Nothing else about the installation is touched.
+    update public.installations set owner_user_id = v_uid where id = v_installation;
 
     update private.installation_claims
     set status = 'consumed', consumed_at = clock_timestamp(), consumed_by = v_uid
@@ -601,21 +628,15 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------------------------------------------------
--- 5. Timeouts and privileges. Supabase default privileges can re-grant EXECUTE on new functions, so every function is
+-- 5. Lock timeouts and privileges. (A function-level statement_timeout would NOT re-arm PostgreSQL's statement timer, so none is set.) Supabase default privileges can re-grant EXECUTE on new functions, so every function is
 --    revoked explicitly and then granted to `authenticated` only (guards: nobody).
 -- ---------------------------------------------------------------------------------------------------------------------
 alter function public.fdb_account_claim_start(text) set lock_timeout = '5s';
-alter function public.fdb_account_claim_start(text) set statement_timeout = '10s';
 alter function public.fdb_account_claim_redeem(text) set lock_timeout = '5s';
-alter function public.fdb_account_claim_redeem(text) set statement_timeout = '10s';
 alter function public.fdb_installation_link_status(text) set lock_timeout = '5s';
-alter function public.fdb_installation_link_status(text) set statement_timeout = '5s';
 alter function public.fdb_account_installations() set lock_timeout = '5s';
-alter function public.fdb_account_installations() set statement_timeout = '5s';
 alter function public.fdb_account_guildbook_guilds(text) set lock_timeout = '5s';
-alter function public.fdb_account_guildbook_guilds(text) set statement_timeout = '5s';
 alter function public.fdb_account_guildbook_members(text, text, integer, integer) set lock_timeout = '5s';
-alter function public.fdb_account_guildbook_members(text, text, integer, integer) set statement_timeout = '5s';
 
 revoke all on function private.fdb_caller() from public, anon, authenticated, service_role;
 revoke all on function private.fdb_anonymous_caller() from public, anon, authenticated, service_role;
@@ -675,9 +696,8 @@ begin
             end if;
         elsif not has_function_privilege('authenticated', v_sig, 'execute') then
             raise exception '0012 post-condition: authenticated cannot execute %', v_sig;
-        elsif not exists (select 1 from unnest(v_after.config) c where c like 'lock_timeout=%')
-           or not exists (select 1 from unnest(v_after.config) c where c like 'statement_timeout=%') then
-            raise exception '0012 post-condition: % lacks lock_timeout / statement_timeout', v_sig;
+        elsif not exists (select 1 from unnest(v_after.config) c where c like 'lock_timeout=%') then
+            raise exception '0012 post-condition: % lacks lock_timeout', v_sig;
         end if;
     end loop;
 

@@ -72,6 +72,13 @@ for (const [fn, guard] of Object.entries(REGISTRY)) {
       }
     });
 
+    it("LS-1b: a session whose refresh tokens were all revoked (GoTrue reuse detection leaves the session row) is refused with PT401", async () => {
+      const c = await caller(kind);
+      await admin.query("update auth.refresh_tokens set revoked = true where session_id = $1", [c.sid]);
+      assert.equal((await admin.query("select 1 from auth.sessions where id = $1", [c.sid])).rowCount, 1, "the session row is still there");
+      await expectCode(call(c), "PT401");
+    });
+
     it("LS-2: a token without a session_id claim is refused with PT401", async () => {
       const c = await caller(kind);
       await expectCode(call(c, claimsFor({ uid: c.uid, sid: c.sid, anonymous: kind === "anonymous", omit: ["session_id"] })), "PT401");
