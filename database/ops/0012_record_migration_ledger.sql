@@ -19,7 +19,9 @@ declare
     v_at timestamp := date_trunc('second', clock_timestamp() at time zone 'utc');
     v_version text;
     v_max text;
+    v_present integer;
 begin
+    perform pg_advisory_xact_lock(hashtextextended('fdb-account-ledger', 0));
     if v_name not in ('account_ownership_claims', 'rollback_account_ownership_claims', 'account_ownership_claims_restore') then
         raise exception 'ledger: unknown name %', v_name;
     end if;
@@ -36,6 +38,19 @@ begin
     if v_name = 'account_ownership_claims_restore'
        and not exists (select 1 from supabase_migrations.schema_migrations where name = 'rollback_account_ownership_claims') then
         raise exception 'ledger: rollback_account_ownership_claims must be recorded before the restore';
+    end if;
+    -- The ledger must describe the database: the nine account functions exist for `account_ownership_claims` and
+    -- `account_ownership_claims_restore`, and none exists for `rollback_account_ownership_claims`.
+    v_present := (select count(*) from pg_proc p where p.oid = any (array[
+        to_regprocedure('public.fdb_account_claim_start(text)'), to_regprocedure('public.fdb_account_claim_redeem(text)'),
+        to_regprocedure('public.fdb_installation_link_status(text)'), to_regprocedure('public.fdb_account_installations()'),
+        to_regprocedure('public.fdb_account_guildbook_guilds(text)'), to_regprocedure('public.fdb_account_guildbook_members(text,text,integer,integer)'),
+        to_regprocedure('private.fdb_caller()'), to_regprocedure('private.fdb_anonymous_caller()'), to_regprocedure('private.fdb_registered_caller()')]::oid[]));
+    if v_name = 'rollback_account_ownership_claims' and v_present <> 0 then
+        raise exception 'ledger: the rollback is not complete (% account function(s) still exist)', v_present;
+    end if;
+    if v_name <> 'rollback_account_ownership_claims' and v_present <> 9 then
+        raise exception 'ledger: % requires all nine account functions to exist (found %)', v_name, v_present;
     end if;
     -- versions are second-resolution timestamps and must stay unique and increasing: never go below the newest existing version
     select max(version) into v_max from supabase_migrations.schema_migrations where version ~ '^[0-9]{14}$';

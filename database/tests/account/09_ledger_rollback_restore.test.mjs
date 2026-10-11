@@ -14,7 +14,7 @@ const KILL = R("database/rollback/0012_kill_switch.sql");
 const KILL_RESTORE = R("database/rollback/0012_kill_switch_restore.sql");
 const RESTORE = R("database/restore/0013_account_ownership_claims_restore.sql");
 const LEDGER = R("database/ops/0012_record_migration_ledger.sql");
-const CLONES = { A: `${DB}_lga`, B: `${DB}_lgb` };
+const CLONES = { A: `${DB}_lga`, B: `${DB}_lgb`, C: `${DB}_lgc` };
 
 const NINE = [
   "public.fdb_account_claim_start(text)", "public.fdb_account_claim_redeem(text)", "public.fdb_installation_link_status(text)",
@@ -185,6 +185,36 @@ describe("Scenario A: no ownership transfers", () => {
     assert.match(r.out, /account_ownership_claims_restore|still exists/);
   });
 
+  it("differential: the restored objects are identical to a FRESH 0012 (function definitions, ACLs, owners, config, table ACLs, constraints, indexes)", async () => {
+    const dump = async (db) => {
+      const c = await connect(db);
+      try {
+        const fns = (await c.query(`select p.oid::regprocedure::text sig, pg_get_functiondef(p.oid) def, coalesce(p.proacl::text, '') acl, pg_get_userbyid(p.proowner) o, p.proconfig, p.provolatile v, p.prosecdef d
+                                     from pg_proc p where p.oid = any($1::regprocedure[]) order by 1`, [NINE])).rows;
+        const tabs = (await c.query(`select c.oid::regclass::text t, coalesce(c.relacl::text, '') acl, c.relrowsecurity rls, pg_get_userbyid(c.relowner) o,
+                                       (select json_agg(pg_get_constraintdef(k.oid) order by pg_get_constraintdef(k.oid)) from pg_constraint k where k.conrelid = c.oid) cons,
+                                       (select json_agg(pg_get_indexdef(i.indexrelid) order by pg_get_indexdef(i.indexrelid)) from pg_index i where i.indrelid = c.oid) idx,
+                                       (select json_agg(a.attname || ':' || a.atttypid::regtype::text order by a.attnum) from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped) cols
+                                     from pg_class c where c.oid = any(array['private.installation_claims'::regclass, 'private.account_installations'::regclass, 'private.account_audit'::regclass]) order by 1`)).rows;
+        return { fns, tabs };
+      } finally {
+        await c.end();
+      }
+    };
+    assert.deepEqual(await dump(CLONES.A), await dump(DB));
+  });
+
+  it("a SECOND full rollback is refused after the restoration cycle was used (no ledger-consistent way back); explicit acknowledgement is required", async () => {
+    const r = psqlFile(CLONES.A, ROLLBACK);
+    assert.notEqual(r.status, 0);
+    assert.match(r.out, /restoration cycle was already used/);
+    for (const sig of NINE) assert.notEqual((await w.admin.query("select to_regprocedure($1) r", [sig])).rows[0].r, null, "nothing was dropped");
+  });
+
+  it("the ledger recorder ties ledger state to database state (cannot record 0012 / restore while the functions are gone, nor the rollback while they exist)", () => {
+    assert.notEqual(record(CLONES.A, "rollback_account_ownership_claims").status, 0);
+  });
+
   it("the ledger history is append-only across the whole scenario: the original entries are unchanged, exactly three account entries exist", async () => {
     const rows = await ledgerRows(w.admin);
     assert.deepEqual(rows.filter((x) => /account_ownership_claims/.test(x.name)).map((x) => x.name), ["account_ownership_claims", "rollback_account_ownership_claims", "account_ownership_claims_restore"]);
@@ -312,5 +342,76 @@ describe("Scenario B: existing ownership transfers (tables retained; nothing los
     const rows = await ledgerRows(w.admin);
     assert.deepEqual(rows.slice(0, 3).map((x) => x.name), ["restrict_legacy_public_stats", "api_security_rate_limits", "fix_observed_drop_rate_denominator"]);
     assert.deepEqual(rows.filter((x) => /account_ownership_claims/.test(x.name)).map((x) => x.name), ["account_ownership_claims", "rollback_account_ownership_claims", "account_ownership_claims_restore"]);
+  });
+});
+
+
+describe("0013 gates in isolation, drifted retained tables, ledger-less database (clone C)", () => {
+  let w;
+  before(async () => {
+    await cloneDatabase(DB, CLONES.C);
+    w = await world(CLONES.C);
+  });
+  after(async () => {
+    await w.close();
+    await dropDatabase(CLONES.C);
+  });
+  const sup = async (sql) => {
+    const c = await connectSuper(CLONES.C);
+    try {
+      await c.query(sql);
+    } finally {
+      await c.end();
+    }
+  };
+
+  it("function-exists gate in isolation: with a clean ledger (0012 + rollback recorded) but the feature live, 0013 says 'still exists'", async () => {
+    await sup("insert into supabase_migrations.schema_migrations (version, name) values ('20270101000001', 'account_ownership_claims'), ('20270101000002', 'rollback_account_ownership_claims')");
+    const r = psqlFile(CLONES.C, RESTORE);
+    assert.notEqual(r.status, 0);
+    assert.match(r.out, /still exists; nothing to restore/);
+    await sup("delete from supabase_migrations.schema_migrations where name in ('account_ownership_claims', 'rollback_account_ownership_claims')");
+  });
+
+  it("ledger gates in isolation: restore already recorded is refused with its own message", async () => {
+    assert.equal(record(CLONES.C, "account_ownership_claims").status, 0);
+    assert.equal(psqlFile(CLONES.C, ROLLBACK).status, 0);
+    assert.equal(record(CLONES.C, "rollback_account_ownership_claims").status, 0);
+    await sup("insert into supabase_migrations.schema_migrations (version, name) values ('20270101000003', 'account_ownership_claims_restore')");
+    const r = psqlFile(CLONES.C, RESTORE);
+    assert.notEqual(r.status, 0);
+    assert.match(r.out, /ledger already shows account_ownership_claims_restore/);
+    await sup("delete from supabase_migrations.schema_migrations where version = '20270101000003'");
+  });
+
+  const TAMPERS = [
+    ["a column type changed", "alter table private.installation_claims alter column attempts drop default, alter column attempts type text", "alter table private.installation_claims alter column attempts type integer using attempts::integer, alter column attempts set default 0", /unexpected type/],
+    ["the code_hash unique constraint dropped", "alter table private.installation_claims drop constraint installation_claims_code_hash_key", "alter table private.installation_claims add constraint installation_claims_code_hash_key unique (code_hash)", /lost a primary key, unique index, check or foreign key/],
+    ["the audit event CHECK dropped", "alter table private.account_audit drop constraint account_audit_event_check", "alter table private.account_audit add constraint account_audit_event_check check (event in ('claim_started', 'claim_redeemed', 'claim_revoked', 'redeem_rejected', 'ownership_restored'))", /lost a primary key, unique index, check or foreign key/],
+    ["the one-pending partial unique index dropped", "drop index private.installation_claims_one_pending", "create unique index installation_claims_one_pending on private.installation_claims (installation_id) where status = 'pending'", /lost a primary key, unique index, check or foreign key/],
+    ["a permissive policy added", "create policy leak on private.account_audit using (true)", "drop policy leak on private.account_audit", /policy/],
+    ["row level security disabled", "alter table private.account_audit disable row level security", "alter table private.account_audit enable row level security", /row level security off/],
+    ["a foreign owner", "alter table private.account_installations owner to fdb_ci", "alter table private.account_installations owner to fdb_migrator", /foreign owner/],
+  ];
+  for (const [name, tamper, revert, pattern] of TAMPERS) {
+    it(`pre-flight refuses retained tables with ${name}, and applies nothing`, async () => {
+      await sup(tamper);
+      try {
+        const r = psqlFile(CLONES.C, RESTORE);
+        assert.notEqual(r.status, 0, "restore must refuse");
+        assert.match(r.out, pattern);
+        assert.equal((await w.admin.query("select to_regprocedure('public.fdb_account_claim_start(text)') r")).rows[0].r, null, "nothing applied");
+      } finally {
+        await sup(revert);
+      }
+    });
+  }
+
+  it("restore without a ledger (disposable database): the function/table gates still apply and the restore succeeds on a clean rolled-back state", async () => {
+    await sup("drop schema supabase_migrations cascade");
+    const r = psqlFile(CLONES.C, RESTORE);
+    assert.equal(r.status, 0, r.out);
+    assert.notEqual((await w.admin.query("select to_regprocedure('public.fdb_account_claim_start(text)') r")).rows[0].r, null);
+    assert.notEqual(psqlFile(CLONES.C, RESTORE).status, 0, "a second run is refused by the function gate even without a ledger");
   });
 });

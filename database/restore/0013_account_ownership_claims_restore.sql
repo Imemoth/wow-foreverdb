@@ -82,6 +82,41 @@ begin
                 raise exception '0013 pre-flight: retained private.account_audit lacks column %', v_col;
             end if;
         end loop;
+
+        -- Structure, not just names: a retained table that drifted (types, constraints, policies, owner) is refused, because the
+        -- `create table if not exists` of section 2 would silently keep the drifted version.
+        if (select count(*) from pg_attribute a where a.attrelid = 'private.installation_claims'::regclass and not a.attisdropped
+              and (a.attname, a.atttypid::regtype::text) in (('attempts', 'integer'), ('code_hash', 'bytea'), ('status', 'text'),
+                   ('expires_at', 'timestamp with time zone'), ('initiator_session_id', 'uuid'), ('initiator_uid', 'uuid'),
+                   ('installation_id', 'text'), ('consumed_by', 'uuid'), ('id', 'uuid'))) <> 9
+           or (select count(*) from pg_attribute a where a.attrelid = 'private.account_installations'::regclass and not a.attisdropped
+              and (a.attname, a.atttypid::regtype::text) in (('installation_id', 'text'), ('account_uid', 'uuid'), ('claim_id', 'uuid'),
+                   ('previous_owner_uid', 'uuid'), ('linked_at', 'timestamp with time zone'))) <> 5
+           or (select count(*) from pg_attribute a where a.attrelid = 'private.account_audit'::regclass and not a.attisdropped
+              and (a.attname, a.atttypid::regtype::text) in (('event', 'text'), ('account_uid', 'uuid'), ('installation_id', 'text'),
+                   ('claim_id', 'uuid'), ('detail', 'text'), ('id', 'bigint'), ('at', 'timestamp with time zone'))) <> 7 then
+            raise exception '0013 pre-flight: a retained private table has a column with an unexpected type';
+        end if;
+        if not exists (select 1 from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey)
+                        where i.indrelid = 'private.installation_claims'::regclass and i.indisunique and i.indnatts = 1 and a.attname = 'code_hash')
+           or not exists (select 1 from pg_index i where i.indrelid = 'private.installation_claims'::regclass and i.indisunique and i.indpred is not null)
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.installation_claims'::regclass and c.contype = 'p')
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.installation_claims'::regclass and c.contype = 'c' and pg_get_constraintdef(c.oid) like '%pending%')
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.installation_claims'::regclass and c.contype = 'f')
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.account_installations'::regclass and c.contype = 'p')
+           or (select count(*) from pg_constraint c where c.conrelid = 'private.account_installations'::regclass and c.contype = 'f') <> 2
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.account_audit'::regclass and c.contype = 'p')
+           or not exists (select 1 from pg_constraint c where c.conrelid = 'private.account_audit'::regclass and c.contype = 'c' and pg_get_constraintdef(c.oid) like '%ownership_restored%') then
+            raise exception '0013 pre-flight: a retained private table lost a primary key, unique index, check or foreign key';
+        end if;
+        foreach v_sig in array array['private.installation_claims', 'private.account_installations', 'private.account_audit'] loop
+            if not (select c.relrowsecurity from pg_class c where c.oid = v_sig::regclass)
+               or exists (select 1 from pg_policy pol where pol.polrelid = v_sig::regclass)
+               or exists (select 1 from pg_trigger t where t.tgrelid = v_sig::regclass and not t.tgisinternal)
+               or pg_get_userbyid((select c.relowner from pg_class c where c.oid = v_sig::regclass)) <> current_user then
+                raise exception '0013 pre-flight: retained table % has row level security off, a policy, a trigger or a foreign owner', v_sig;
+            end if;
+        end loop;
     end if;
 
     if to_regnamespace('private') is null then

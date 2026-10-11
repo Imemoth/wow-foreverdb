@@ -7,10 +7,12 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAG="${GOTRUE_TAG:-v2.197.0}"
+SHA="${GOTRUE_SHA:-4eee58f296d9698a1c2c0ae14d7a0b379c7622d3}"   # commit the tag must resolve to (a moved tag is refused)
 OUT="${1:-$HERE/.run/gotrue}"
 mkdir -p "$(dirname "$OUT")"
 WORK="$(mktemp -d)"
 trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 git clone -q --depth 1 --branch "$TAG" https://github.com/supabase/auth "$WORK/src"
+test "$(git -C "$WORK/src" rev-parse HEAD)" = "$SHA" || { echo "tag $TAG no longer resolves to the pinned commit $SHA" >&2; exit 3; }
 ( cd "$WORK/src" && go build -o "$OUT" . )
 echo "built GoTrue $TAG -> $OUT"

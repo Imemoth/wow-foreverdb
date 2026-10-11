@@ -13,8 +13,25 @@
 -- forward restoration migration database/restore/0013_account_ownership_claims_restore.sql (docs/account-v1/0012-deployment-and-recovery.md 5.2).
 -- This is NOT the kill switch (database/rollback/0012_kill_switch.sql), which drops nothing and is lifted with 0012_kill_switch_restore.sql.
 -- Run as the migration role. Prefer the kill switch first.
+-- ONE restoration cycle per ledger history: once `account_ownership_claims_restore` is recorded, a second full rollback would leave NO
+-- ledger-consistent way back (0012 and 0013 are both refused by their pre-flights; only a NEW restoration migration with new ledger
+-- names, cloned from 0013, could restore). Use the kill switch instead, or acknowledge explicitly:  -v acknowledge_second_cycle=yes
+\if :{?acknowledge_second_cycle} \else \set acknowledge_second_cycle no \endif
 begin;
 set local lock_timeout = '10s';
+select set_config('fdb.ack_second_cycle', :'acknowledge_second_cycle', true) \g /dev/null
+do $guard$
+begin
+    if to_regclass('supabase_migrations.schema_migrations') is not null then
+        if exists (select 1 from supabase_migrations.schema_migrations where name = 'account_ownership_claims_restore')
+           and current_setting('fdb.ack_second_cycle') <> 'yes' then
+            raise exception 'rollback refused: the restoration cycle was already used (ledger shows account_ownership_claims_restore); a second rollback has no ledger-consistent way back. Use the kill switch, or pass -v acknowledge_second_cycle=yes and plan a new restoration migration';
+        end if;
+        if not exists (select 1 from supabase_migrations.schema_migrations where name = 'account_ownership_claims') then
+            raise notice 'WARNING: the ledger does not show account_ownership_claims (0012 recorded?); continuing because a rollback must stay available in an emergency';
+        end if;
+    end if;
+end $guard$;
 
 -- Stop clients immediately, before anything is dropped.
 revoke all on function public.fdb_account_claim_start(text) from public, anon, authenticated, service_role;

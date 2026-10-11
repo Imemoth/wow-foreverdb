@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { lintAccountMigration } from "@/lib/account/migration-conformance";
+import { lintAccountMigration, scanSql } from "@/lib/account/migration-conformance";
 
 /**
  * The ledger-consistent restoration migration (database/restore/0013_*.sql) redefines the same account functions as 0012 on purpose
@@ -33,6 +33,33 @@ describe("0013 restoration migration", () => {
   it("lives outside database/migrations so the combined conformance gate never sees a duplicate definition", () => {
     const files = readdirSync(resolve(root, "migrations")).filter((f) => f.startsWith("0013"));
     expect(files).toEqual([]);
+  });
+
+  it("the WHOLE file equals 0012 apart from its header comments and the pre-flight block (no DML hides outside sections 2-6)", () => {
+    const stripped = (sql: string): string => {
+      const a = sql.indexOf("do $preflight$");
+      const b = sql.indexOf("end $preflight$;");
+      expect(a).toBeGreaterThan(0);
+      expect(b).toBeGreaterThan(a);
+      return scanSql(sql.slice(0, a) + sql.slice(b + "end $preflight$;".length)).code.replace(/\s+/g, " ").trim();
+    };
+    expect(stripped(m0013)).toBe(stripped(m0012));
+  });
+
+  it("the 0013 pre-flight block is read-only: no DML/DDL, no dynamic SQL, no ledger write (denylist over its code, strings masked)", () => {
+    const a = m0013.indexOf("do $preflight$");
+    const b = m0013.indexOf("end $preflight$;");
+    const code = scanSql(m0013.slice(a, b)).bodies.join("\n");
+    const masked = scanSql(code).code.toLowerCase();
+    expect(masked).not.toMatch(/\b(insert|update|delete|truncate|drop|alter|create|grant|revoke|copy|execute|set)\b/);
+    expect(masked).not.toMatch(/supabase_migrations\.schema_migrations\s+(set|values)/);
+  });
+
+  it("every file in database/restore that mentions an account function is linted on its own", () => {
+    const dir = resolve(root, "restore");
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && /fdb_account_|fdb_installation_link_status|fdb_caller|fdb_anonymous_caller|fdb_registered_caller/.test(readFileSync(resolve(dir, f), "utf8")));
+    expect(files.length).toBeGreaterThan(0);
+    for (const f of files) expect(lintAccountMigration(readFileSync(resolve(dir, f), "utf8")), f).toEqual([]);
   });
 
   it("only reads the migration ledger (never writes, updates or deletes it) and checks the recorded rollback first", () => {
