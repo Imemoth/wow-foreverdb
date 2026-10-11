@@ -25,7 +25,7 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 | A5 | Open redirect via `next`/callback | exact-pathname allowlist, encodings at any depth, query/fragment dropped | unit (PR A) + Playwright (PR B) |
 | A6 | Mail scanner consumes the one-time confirmation/recovery token | GET interstitial without side effects, POST to verify | Playwright with captured mail (PR B) |
 | A7 | Account enumeration | identical responses for sign-up/login/recovery, per-IP and per-email throttles | Playwright (PR B) |
-| A8 | Stolen or revoked session still accepted, **including a revoked-but-unexpired anonymous token starting a claim** | server-confirmed user on every private page/API; **every** account function runs a live-session guard (`auth.sessions` row for the JWT's `session_id`, same user, not expired, user not deleted/banned); a tripwire linter makes the obvious weak implementations fail CI (the SQL tests are the proof) | SQL tests LS-1..LS-9 (PR C), Playwright (PR B), linter (PR A) |
+| A8 | Stolen or revoked session still accepted, **including a revoked-but-unexpired anonymous token starting a claim** | server-confirmed user on every private page/API; **every** account function runs a live-session guard (`auth.sessions` row for the JWT's `session_id`, same user, not expired, user not deleted/banned); a tripwire linter makes the obvious weak implementations fail CI (the SQL tests are the proof) | SQL tests LS-1..LS-9 and LS-11 (PR C), Playwright (PR B), tripwire linter (PR A) |
 | A9 | Unverified or anonymous caller reads account data or claims | `private.fdb_registered_caller()` (built on the live-session guard); anon JWT denied; unconfirmed email denied | SQL matrix (PR C) |
 | A10 | Takeover with a leaked installation ID | IDs are never proof; redemption by code only; `claim_start` requires being the owner | SQL (PR C) |
 | A11 | Code guessing, replay, expiry bypass | 128-bit code, hash at rest, single use, 10 min, attempts per claim, 10 redeems per 5 min per account, one failure shape | SQL (PR C) |
@@ -83,7 +83,7 @@ Nothing here changes any Supabase setting; production Auth configuration is unto
 | Access JWT validity window (default 1 h) | DB session check makes revoked sessions ineffective for account RPCs; existing public RPCs only need a valid JWT (unchanged) |
 | `auth.sessions` is a Supabase-internal table | pre-flight check in the migration, CI and staging suites run against real GoTrue; documented as the one version dependency |
 | Direct Auth API abuse: anonymous sign-up, password-auth and mail (A24) | the six-layer model in §3.1 and the criteria in the acceptance document (per-IP limits, thresholds, mail quotas, monitoring, incident runbook); **OPEN until evidenced**, tracked in the go-live checklist |
-| An **active** stolen anonymous bearer can start a permanent claim (V1 adds a persistent takeover capability that ingest alone never had) | a revoked, deleted or banned session cannot (live-session guard, tests LS-1..LS-9); single-use short-lived code; audit and previous-owner record; the legitimate Companion sees `transferred`; owner-approved restore runbook. Residual window = lifetime of an undetected, still-active token |
+| An **active** stolen anonymous bearer can start a permanent claim (V1 adds a persistent takeover capability that ingest alone never had) | a revoked, deleted or banned session cannot (live-session guard, tests LS-1..LS-9 and LS-11); single-use short-lived code; audit and previous-owner record; the legitimate Companion sees `transferred`; owner-approved restore runbook. Residual window = lifetime of an undetected, still-active token |
 | Mail delivery/phishing of confirmation emails | custom SMTP with domain authentication; no secrets in email bodies |
 
 ## 5. Mandatory-test map (the 20 required checks)
@@ -128,7 +128,7 @@ Checks 1, 3, 4, 16 need a real Auth server; they are never marked passed on mock
 | LS-7 | Initiator revoked after issuing a claim: redeem returns `invalid_claim`, nothing consumed | C | SQL |
 | LS-8 | LS-1..LS-5 parameterised over `ACCOUNT_RPC_GUARDS` (no function can be forgotten) | C | SQL |
 | LS-9 | Real GoTrue: anonymous token contains `session_id`; after `/auth/v1/logout` the unexpired token is refused | C, E | CI real stack, staging |
-| LS-10 | `lintAccountMigration` tripwire passes on every migration that mentions an account function (tested with every demonstrated bypass in PR A; not a proof) | A, C | unit/CI |
+| LS-10 | `lintAccountMigration` tripwire passes on every migration that mentions an account function (a canonical-style whitelist tested with every demonstrated bypass in PR A and mutation-checked; **not** an integration test and not a proof) | A, C | unit/CI |
 | LS-11 | Concurrent revocation vs `claim_start` (row lock) | C | SQL, parallel sessions |
 | PW-1 | Password validation: ASCII, multibyte, boundary lengths, and with no `Buffer` global; contracts bundled for the browser run in a bare context | A | unit (done) |
 | AT-1..AT-7 | Auth abuse drill and monitoring criteria ([acceptance §5](acceptance-and-owner-actions.md)) | owner | staging (not code) |

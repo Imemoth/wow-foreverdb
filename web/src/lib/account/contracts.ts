@@ -241,6 +241,12 @@ export const ACCOUNT_RPC_GUARDS: Readonly<Record<AccountRpcName, AccountGuard>> 
   fdb_installation_link_status: "any_live_session",
 };
 
+/**
+ * Helper functions the account migration may define besides the registered RPCs and guards. Empty today: adding one is a
+ * reviewed change to this list (and its test), so a migration cannot smuggle in an unreviewed callable function.
+ */
+export const ACCOUNT_HELPER_FUNCTIONS: readonly string[] = [];
+
 /** The private (client-unreachable) function that implements each guard. */
 export const ACCOUNT_GUARD_FUNCTIONS: Readonly<Record<AccountGuard, string>> = {
   any_live_session: "private.fdb_caller",
