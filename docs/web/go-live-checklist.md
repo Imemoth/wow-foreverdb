@@ -64,3 +64,4 @@ Accounts are **not part of the first public release** unless the owner approves 
 - [ ] Staging Auth verified end to end (real email)
 - [ ] Windows Companion acceptance recorded (two accounts, preserved history)
 - [ ] Owner approval for production migration `0012` and Auth settings
+- [ ] Direct Auth API abuse (threat A24) addressed: Auth rate limits reviewed, sign-up/anonymous-creation monitoring with thresholds, SMTP quotas and daily cap, incident runbook. Website-side Turnstile does **not** satisfy this item (it cannot protect GoTrue calls made directly with the public key).

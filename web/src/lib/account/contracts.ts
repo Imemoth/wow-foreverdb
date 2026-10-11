@@ -78,7 +78,7 @@ const authPassword = z
   .string()
   .min(12)
   .max(72)
-  .refine((v) => Buffer.byteLength(v, "utf8") <= 72, "password too long (bcrypt limit is 72 bytes)");
+  .refine((v) => new TextEncoder().encode(v).length <= 72, "password too long (bcrypt limit is 72 bytes)");
 export const AUTH_BODIES = {
   signup: z.object({ email: authEmail, password: authPassword }).strict(),
   password_grant: z.object({ email: authEmail, password: authPassword }).strict(),

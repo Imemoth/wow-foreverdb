@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import {
   ACCOUNT_RPCS,
   AUTH_BODIES,
@@ -33,6 +35,24 @@ describe("claim code format", () => {
       expect(normalizeClaimCode(bad), String(bad)).toBeNull();
     }
     expect(() => formatClaimCode("nope")).toThrow();
+  });
+});
+
+describe("contracts.ts is browser-safe (no Node globals or built-ins)", () => {
+  const source = readFileSync(resolve(__dirname, "../../src/lib/account/contracts.ts"), "utf8");
+  it("does not reference Buffer, process or node: built-ins", () => {
+    expect(source).not.toMatch(/\bBuffer\b|\bprocess\.|from\s+["']node:|require\(/);
+  });
+  it("validates multibyte passwords without Buffer being defined", () => {
+    vi.stubGlobal("Buffer", undefined);
+    try {
+      expect(typeof Buffer).toBe("undefined");
+      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "é".repeat(36) }).success).toBe(true); // 72 bytes
+      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "é".repeat(37) }).success).toBe(false); // 74 bytes
+      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "😀".repeat(19) }).success).toBe(false); // 76 bytes
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

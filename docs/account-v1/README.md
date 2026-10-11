@@ -92,3 +92,11 @@ No capability is called complete on mocks alone; see [acceptance-and-owner-actio
 | L5 grants/pre-flight details | in the migration plan (explicit revokes after create, `has_table_privilege`, `not_after` semantics) |
 | L6 pgcrypto not needed | rejected with reason: built-in UUIDs carry 122 random bits, below the 128-bit requirement |
 | Documentation faults | fixed: dangling reference, 50 vs 100 rows, global-guard wording, audit queries recorded (§7 of the architecture), migration numbering policy |
+
+**PR A, owner review of `89c58b0` (MERGE HOLD until addressed):**
+
+| Finding | Outcome |
+| --- | --- |
+| **High:** a revoked but unexpired anonymous bearer could start a claim (no live-session check on `claim_start`) | fixed in the specification: `fdb_caller()` requires a live `auth.sessions` row for every account function including `claim_start`; redeem also requires the initiator to still exist and hold a live session; negative tests required in PR C; the "adds no new power" statement is replaced by an explicit residual-risk entry for an *active* stolen bearer |
+| **Medium:** `AUTH_BODIES` used `Buffer` in a module documented as isomorphic | fixed: `TextEncoder`; a test runs the schema with `Buffer` removed and a static test forbids `Buffer`/Node built-ins in `contracts.ts` |
+| **Medium:** direct GoTrue abuse bypasses the website's Turnstile | recorded as an open residual risk (A24) with required operational controls and a go-live checklist item; not claimed as resolved |
