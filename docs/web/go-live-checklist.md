@@ -8,9 +8,10 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] Code review by the owner, including `publisher/src/contract.ts` (allowlist) and both SQL files
 - [ ] Editorial review of `web/content/*`. Flip `sample: false` only on reviewed articles
 
-- [ ] **Hardening PR (`web/vercel-preview-hardening`)**: `Web release gate` green; Vercel variables `FOREVERDB_DEPLOYMENT=preview` and `FOREVERDB_DATA_SOURCE=fixture` set on Production and Preview **before merging** (`vercel-environments.md` §3)
-- [ ] **Required checks enforced** (PENDING): ruleset `.github/rulesets/main-release-gates.json` imported and a deliberately failing PR shown unmergeable (`release-gates.md` §2)
-- [ ] Node.js: CI, `engines` and Vercel runtime all 24.x (owner decision); the Vercel build log shows Node 24 and no `engines` auto-upgrade warning
+- [x] **Hardening PR #45 merged** as `6b49a3f` (2026-10-11). All seven merge-commit checks PASS; Vercel Node 24 production-target deployment READY, protected by Vercel Authentication All Deployments; continues as synthetic Preview-mode demo (`vercel-environments.md` §3 and §6).
+- [x] **Required checks enforced on `main`:** existing active ruleset #24853899 pins six checks to GitHub Actions (app ID 15368); branch protected. Separate intentionally failing PR verification remains OPEN (`release-gates.md` §2).
+- [ ] **Required checks enforced on `release`:** add the `release` branch to existing ruleset, verify protected state.
+- [x] Node.js 24.x aligned across `.node-version`, web/publisher engines, CI and Vercel; validated on PR #45 with Node 24 build and tests.
 
 ## B. Data boundary (security-critical)
 - [ ] Separate public DB provisioned, Data API disabled (`infrastructure-setup.md` 1–4)
@@ -30,9 +31,9 @@ Mark an item ✅ only with linked evidence (CI run URL, screenshot, command outp
 - [ ] Freshness monitor and alerting live. Rollback rehearsed with `pub_admin.activate_publication`
 - [ ] Security headers verified on the production domain (CSP, HSTS, nosniff, frame-ancestors)
 
-- [ ] Deployment protection **tested from outside**: `node web/scripts/verify-deployment.mjs <url> --expect protected` passes for the production alias, a branch preview, `/api/v1/meta` and the search API (PENDING: not testable from the connector sandbox)
-- [ ] No custom domain attached to the project until every item in A–C is ✅ (with `all_except_custom_domains` it would be public)
-- [ ] Production-promotion control in place: Production Branch moved to a protected `release` branch **before** Account System V1 code reaches `main` (prepared, needs owner approval)
+- [ ] Deployment protection **full scripted external test** remains PENDING: `node web/scripts/verify-deployment.mjs <url> --expect protected`. Owner's 2026-10-11 anonymous/incognito browser checks **PASS** on production alias homepage, `/api/v1/meta`, and PR #45 Preview (all required Vercel login); this does not cover every path.
+- [ ] No custom domain attached until the approved go-live. Vercel Authentication currently uses **All Deployments**, but new-domain access and indexing must still be reverified before public release.
+- [ ] Production-promotion control: `release` branch CREATED at stable #45 commit `6b49a3f`; GitHub release protection and Vercel Production Branch tracking still require owner setup and confirmation **before** Account System V1 changes reach `main`.
 - [ ] Production-mode verification with `verify-deployment.mjs --expect production` after go-live, including `X-ForeverDB-Deployment: production`, no synthetic banner, real publication banner
 
 ## D. Product quality
