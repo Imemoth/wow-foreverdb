@@ -16,7 +16,7 @@ these files is test-container-only.
 | `06_gotrue.test.mjs` | **LS-9** and real session semantics with tokens issued by real GoTrue (signup, logout, refresh, ban, delete, confirmation) |
 | `07_rollback_recovery.test.mjs` | rehearsal on clones: kill switch, rollback (tables retained / dropped), forward re-apply, operator recovery and its refusals, prune |
 | `08_existing_regression.test.mjs` | the repository's existing SQL regression files still pass after 0012 |
-| `mutation_check.mjs` | 28 deliberately weakened copies of 0012; every one must be caught by the suite (not part of the PR gate) |
+| `mutation_check.mjs` | 27 deliberately weakened copies of 0012; every one must be caught by the suite (not part of the PR gate) |
 
 Only PostgREST is emulated: `harness.mjs` verifies the HS256 signature and `exp` and hands the claims to the database exactly as PostgREST does
 (`SET LOCAL ROLE authenticated` + `request.jwt.claims`). LS-10 (the conformance tripwire) runs in `web/tests/unit/account-migration-conformance.test.ts`.

@@ -20,7 +20,9 @@ const mutants = [
   ["guard: ignores deleted_at", (s) => s.replace("          and u.deleted_at is null\n          and (u.banned_until", "          and (u.banned_until"), ["02_live_session.test.mjs"]],
   ["guard: session of ANY user accepted (user_id not compared)", (s) => s.replace("          and s.user_id = v_uid\n          and (s.not_after", "          and (s.not_after"), ["02_live_session.test.mjs"]],
   ["guard: refresh-token liveness not required (reuse-detection revoked session accepted)", (s) => s.replace("          and exists (select 1 from auth.refresh_tokens r where r.session_id = s.id and not r.revoked)\n          and u.deleted_at is null\n          and (u.banned_until", "          and u.deleted_at is null\n          and (u.banned_until"), ["02_live_session.test.mjs"]],
-  ["claim_redeem: per-account lock removed (cap race)", (s) => s.replace("    perform pg_advisory_xact_lock(hashtextextended('fdb-account:' || v_uid::text, 0));\n", ""), ["04_concurrency.test.mjs"]],
+  // Equivalent mutant, deliberately not listed: removing the per-account advisory lock is NOT observable because the redeemer's own
+  // per-uid budget row (charged first, held to commit) also serialises that account's redeems. The lock is defence in depth; the cap test
+  // (04) proves the property either way.
   ["claim_redeem: global budget charged BEFORE the installation lock (stall)", (s) => s.replace("    perform pg_advisory_xact_lock(hashtextextended(v_installation, 0));\n    perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);\n", "    perform private.foreverdb_take_budget('claim_redeem:global', 300, 120);\n    perform pg_advisory_xact_lock(hashtextextended(v_installation, 0));\n"), ["04_concurrency.test.mjs"]],
   ["claim_redeem: stale link row raises a raw error", (s) => s.replace("    on conflict (installation_id) do nothing\n", ""), ["03_claims.test.mjs"]],
   ["registered guard: email confirmation not required", (s) => s.replace("where u.id = v_uid and not u.is_anonymous and u.email_confirmed_at is not null", "where u.id = v_uid and not u.is_anonymous"), ["02_live_session.test.mjs"]],
