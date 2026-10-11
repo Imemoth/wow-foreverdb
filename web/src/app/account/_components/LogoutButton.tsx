@@ -1,0 +1,29 @@
+"use client";
+
+import { useState } from "react";
+import { postJson } from "@/lib/account/client";
+import { messageFor } from "@/lib/account/messages";
+
+export function LogoutButton() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function logout() {
+    setBusy(true);
+    setError(null);
+    const r = await postJson("/account/api/logout", {});
+    if (r.data.ok) {
+      const to = "/account/login?reason=signed_out";
+      window.location.assign(new URL(to, window.location.origin).toString());
+      return;
+    }
+    setBusy(false);
+    setError(messageFor(r.data.error));
+  }
+  return (
+    <div className="space-y-2">
+      <button type="button" className="btn-ghost" onClick={logout} disabled={busy} aria-busy={busy}>{busy ? "Signing out…" : "Sign out"}</button>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <p className="text-xs text-mist">Signing out ends this browser session only. Other devices and the Companion stay signed in.</p>
+    </div>
+  );
+}

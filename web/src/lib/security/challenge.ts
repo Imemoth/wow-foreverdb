@@ -60,3 +60,16 @@ export async function readBoundedJson(req: Request, maxBytes = MAX_CHALLENGE_BOD
     return { ok: false, status: 400, error: "invalid_body" };
   }
 }
+
+/**
+ * Cheap same-origin pre-check for state-changing account requests (run by the proxy BEFORE any counter is touched, so a
+ * hostile page cannot burn a victim's budget): the exact site origin, or no Origin with Sec-Fetch-Site: same-origin.
+ * The route handler repeats this check and adds the signed CSRF token.
+ */
+export function isSameOriginRequest(headers: Headers, siteUrl: string): boolean {
+  const origin = headers.get("origin");
+  const site = headers.get("sec-fetch-site");
+  if (origin !== null && origin !== new URL(siteUrl).origin) return false;
+  if (site !== null && site !== "same-origin") return false;
+  return origin !== null || site !== null;
+}
