@@ -43,3 +43,7 @@ PR [#45](https://github.com/Imemoth/wow-foreverdb/pull/45) was squash-merged as 
 ## 4. Operational verification (outside CI)
 
 `web/scripts/verify-deployment.mjs` checks a *running* deployment (protected, preview, or future production). CI proves the code; this proves the deployment. Usage and the PENDING unauthenticated-access test are in `docs/web/vercel-environments.md` §5.
+
+## Account System V1 additions (planned)
+
+PR B adds a CI job that runs the Supabase local stack (GoTrue, PostgREST, Postgres, Mailpit) inside GitHub Actions for account acceptance; it joins the aggregate `Web release gate` once it is stable (a new required context needs the ruleset edited by the owner, with the same GitHub Actions app pin). PR D adds a Windows `dotnet test` job. Until then PR A only extends `Web code quality` (account unit and static boundary tests run inside `npm test`).

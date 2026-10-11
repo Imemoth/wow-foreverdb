@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { evaluateAccountAuth, type AccountAuthConfig } from "./account/config";
 
 /**
  * Server-only runtime configuration. Validated once; the process refuses to
@@ -69,6 +70,11 @@ export interface ServerEnv {
   TURNSTILE_SECRET_KEY?: string;
   NEXT_PUBLIC_TURNSTILE_SITE_KEY?: string;
   CHALLENGE_COOKIE_SECRET?: string;
+  /**
+   * Account System V1 Auth-only boundary (null = disabled, the default). Validated by its own rules in
+   * account/config.ts; it is the ONLY place an Auth origin is configured and it never reaches the public adapters.
+   */
+  accountAuth: AccountAuthConfig | null;
   /** True on a hosted (Vercel) deployment or production/preview environment. */
   hosted: boolean;
   /** Vercel's own environment (production | preview), when hosted on Vercel. */
@@ -211,6 +217,10 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
     }
   }
 
+  // 4b. Account Auth boundary (disabled by default; separate, stricter rules) ----
+  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv });
+  for (const issue of account.issues) fail(issue);
+
   // 5. Site URL --------------------------------------------------------------
   let siteUrlRaw = b.SITE_URL;
   if (!siteUrlRaw) {
@@ -279,6 +289,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
     env: {
       ...b,
       TRUSTED_IP_HEADER: trustedIp,
+      accountAuth: account.config,
       FOREVERDB_DEPLOYMENT: deployment,
       FOREVERDB_DATA_SOURCE: dataSource,
       SITE_URL: siteUrl,
