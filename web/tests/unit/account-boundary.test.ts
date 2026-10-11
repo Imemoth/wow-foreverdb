@@ -77,8 +77,8 @@ describe("account boundary (static)", () => {
     expect(files.filter((f) => /\/auth\/v1\//.test(read(f)) && !AUTH_ALLOWED.has(rel(f))).map(rel)).toEqual([]);
     expect(files.filter((f) => /\/rest\/v1/.test(read(f)) && !RPC_ALLOWED.has(rel(f))).map(rel)).toEqual([]);
   });
-  it("no service-role / secret key handling exists anywhere in the website source", () => {
-    const offenders = files.filter((f) => /service_role|SERVICE_ROLE|sb_secret_/.test(read(f)) && !/^lib\/(env|account\/config)\.ts$/.test(rel(f))).map(rel);
+  it("no service-role / secret key handling exists anywhere in the website source (the validators and the SQL linter only NAME the role to refuse or revoke it)", () => {
+    const offenders = files.filter((f) => /service_role|SERVICE_ROLE|sb_secret_/.test(read(f)) && !/^lib\/(env|account\/config|account\/migration-conformance)\.ts$/.test(rel(f))).map(rel);
     expect(offenders).toEqual([]);
   });
   it("the private project reference is defined only by the two validators", () => {

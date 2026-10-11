@@ -9,7 +9,8 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [architecture.md](architecture.md) | Audit of the actual `main`, data flows, trust boundaries, the Auth-boundary decision (options evaluated), web session design, environments |
 | [ownership-claim-protocol.md](ownership-claim-protocol.md) | Claim and session state machines, private schema, function contracts, concurrency, failure and recovery, migration `0012` plan, rollback |
 | [security.md](security.md) | Account-specific threat model, abuse prevention, negative-test matrix mapped to the 20 mandatory tests |
-| [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md) | Evidence ledger rules, per-PR acceptance, the owner action checklist (the things only the owner can do or approve) |
+| [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md) | Evidence ledger rules, per-PR acceptance, the owner action checklist, and the enforceable direct-Auth-abuse criteria (§5) |
+| [pr-obligations.md](pr-obligations.md) | Binding obligations for PR B and PR C, including the mandatory live-session negative tests LS-1..LS-10 |
 
 Related: [ADR-015..018](../web/architecture-decisions.md), [web threat model](../web/threat-model.md), [go-live checklist](../web/go-live-checklist.md), [release gates](../web/release-gates.md), [ROADMAP](../ROADMAP.md).
 
@@ -100,3 +101,11 @@ No capability is called complete on mocks alone; see [acceptance-and-owner-actio
 | **High:** a revoked but unexpired anonymous bearer could start a claim (no live-session check on `claim_start`) | fixed in the specification: `fdb_caller()` requires a live `auth.sessions` row for every account function including `claim_start`; redeem also requires the initiator to still exist and hold a live session; negative tests required in PR C; the "adds no new power" statement is replaced by an explicit residual-risk entry for an *active* stolen bearer |
 | **Medium:** `AUTH_BODIES` used `Buffer` in a module documented as isomorphic | fixed: `TextEncoder`; a test runs the schema with `Buffer` removed and a static test forbids `Buffer`/Node built-ins in `contracts.ts` |
 | **Medium:** direct GoTrue abuse bypasses the website's Turnstile | recorded as an open residual risk (A24) with required operational controls and a go-live checklist item; not claimed as resolved |
+
+**PR A security remediation (owner request, same PR, review of `89c58b0` and follow-up):** the three findings are resolved as follows; every claim below is backed by a test or by a binding obligation, and none changes migrations, routes, Supabase or Vercel.
+
+| Finding | Resolution | Proof |
+| --- | --- | --- |
+| **High**: revoked anonymous bearer can start an ownership claim | Normative live-session guards ([protocol §4.1](ownership-claim-protocol.md)): the JWT's `session_id` claim must match a live `auth.sessions` row of the same user, not expired, user not deleted or banned, for **every** account function; claim start uses the anonymous guard, redeem the registered guard plus the initiator's liveness; the residual-risk statement now says an *active* stolen bearer gains a persistent takeover capability | `ACCOUNT_RPC_GUARDS` registry + `lintAccountMigration()` (14 tests incl. the exact weak designs) enforced in CI on the future `0012`; mandatory LS-1..LS-10 in [pr-obligations.md](pr-obligations.md) |
+| **Medium**: `Buffer` in an isomorphic module | `TextEncoder`; 72-byte limit unchanged | password tests (ASCII, 2/3/4-byte, boundaries, no `Buffer` global) and a test that bundles `contracts.ts` for the browser and runs it in a bare context |
+| **Medium**: website Turnstile does not protect direct GoTrue access | six-layer model; CAPTCHA stays off; threat A24 OPEN with enforceable criteria L-1..L-7, M-1..M-8, runbook, staging drill AT-1..AT-6 and gates | [security.md §3](security.md), [acceptance §5](acceptance-and-owner-actions.md); owner-run, not claimed resolved |

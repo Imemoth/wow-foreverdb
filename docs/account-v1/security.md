@@ -25,8 +25,8 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 | A5 | Open redirect via `next`/callback | exact-pathname allowlist, encodings at any depth, query/fragment dropped | unit (PR A) + Playwright (PR B) |
 | A6 | Mail scanner consumes the one-time confirmation/recovery token | GET interstitial without side effects, POST to verify | Playwright with captured mail (PR B) |
 | A7 | Account enumeration | identical responses for sign-up/login/recovery, per-IP and per-email throttles | Playwright (PR B) |
-| A8 | Stolen or revoked session still accepted | server-confirmed user on every private page/API; DB re-checks `auth.sessions` for the JWT's session | SQL + Playwright (PR B, C) |
-| A9 | Unverified or anonymous caller reads account data or claims | `fdb_registered_caller()`; anon JWT denied; unconfirmed email denied | SQL matrix (PR C) |
+| A8 | Stolen or revoked session still accepted, **including a revoked-but-unexpired anonymous token starting a claim** | server-confirmed user on every private page/API; **every** account function runs a live-session guard (`auth.sessions` row for the JWT's `session_id`, same user, not expired, user not deleted/banned); linter makes a weaker implementation fail CI | SQL tests LS-1..LS-9 (PR C), Playwright (PR B), linter (PR A) |
+| A9 | Unverified or anonymous caller reads account data or claims | `private.fdb_registered_caller()` (built on the live-session guard); anon JWT denied; unconfirmed email denied | SQL matrix (PR C) |
 | A10 | Takeover with a leaked installation ID | IDs are never proof; redemption by code only; `claim_start` requires being the owner | SQL (PR C) |
 | A11 | Code guessing, replay, expiry bypass | 128-bit code, hash at rest, single use, 10 min, attempts per claim, 10 redeems per 5 min per account, one failure shape | SQL (PR C) |
 | A12 | Concurrent claims produce two owners | shared advisory lock with ingest, `for update`, partial unique index, PK on link | concurrent SQL test (PR C) |
@@ -38,26 +38,40 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 | A18 | Sync under the wrong account after switching | single session gate, per-account local caches, in-flight response discard, status check before ingest | .NET tests (PR D) |
 | A19 | Account code promoted to the production alias | validator refuses accounts on Vercel's production target; `release` is the only production branch and is not changed | unit (PR A) + release gates |
 | A20 | Account data in public caches, sitemap, logs | `private, no-store`, noindex everywhere, excluded from sitemap, no PII logging | Playwright header checks (PR B) |
-| A21 | Mass sign-up or anonymous sign-up abuse | Auth rate limits, website-side Turnstile before Auth, SMTP limits, anonymous sign-in limits (below) | staging (owner) |
-| A24 | **Direct Auth API abuse bypassing the website**: the Companion ships the project URL and publishable key and needs anonymous sign-up, so anyone can call GoTrue directly (anonymous and email sign-ups, recovery/confirmation mail) without touching the BFF or its Turnstile check | **Not resolved by V1 code; recorded as a residual risk with required operational controls (below).** Website-side Turnstile protects only the website routes. | owner Auth settings + monitoring (staging, before any production plan) |
+| A21 | Mass sign-up or anonymous sign-up abuse through the website | website Turnstile + per-IP/per-email throttles (layer 1 only; direct Auth access is A24) | Playwright (PR B) |
+| A24 | **Direct Auth API abuse bypassing the website**: the Companion ships the project URL and publishable key and needs anonymous sign-up, so anyone can call GoTrue directly (anonymous sign-ups, password sign-in/stuffing, sign-up and recovery mail) without touching the BFF or its Turnstile check | **OPEN. Not resolved by any V1 code.** Layers 2, 5 and 6 of §3.1 (owner-managed) with enforceable criteria in the acceptance document | owner Auth settings + monitoring + staging drill (before any production plan) |
 | A22 | An Auth setting silently breaks the Companion (project-wide CAPTCHA, single-session-per-user, session time-box, short inactivity timeout) | documented as forbidden for a project the Companion uses; staging acceptance runs the Companion's anonymous sign-in and refresh under the exact settings | staging (owner) + Win (PR E) |
 | A23 | Claim feature exhausted by cheap accounts | per-uid budgets are the control; per-installation budget charged only after the owner check; global ceilings are alarms; denial is limited to claiming | SQL (PR C) |
 
 ## 3. Authentication abuse prevention (review)
 
-These are Supabase project settings; none is changed by this work. Values below are statements to **verify on the staging project and then on production before activation** (Supabase changes documented defaults over time):
+Nothing here changes any Supabase setting; production Auth configuration is untouched. The Supabase values below are **criteria to verify on the staging project and again on production before activation** (documented defaults change over time); enforceable thresholds and the staging drill are in [acceptance-and-owner-actions.md §5](acceptance-and-owner-actions.md).
 
-- **Email verification stays on.** "Confirm email" must be enabled; the specification and tests assume unverified users never obtain a session.
-- **Do not use the default mail sender for public registration.** The built-in SMTP is intended for testing with very low limits and restricted recipients. Staging and any future production need an owner-chosen custom SMTP provider (SPF/DKIM/DMARC) and a deliverability test.
-- **Auth rate limits:** review the per-IP limits for sign-up/sign-in, token refresh, OTP verification, email sends and anonymous sign-ins; confirm they suit the Companion population (anonymous sign-ups come from user machines, many behind shared NAT) and a public website.
-- **Direct-API abuse is an Auth-project problem, not a website one.** Because the key and URL are public in the Companion, anonymous and email account creation and confirmation/recovery mail can be triggered **directly against Auth**, bypassing the website's Turnstile check. Before any production plan the owner must review and record: (1) Auth per-IP rate limits for sign-up, anonymous sign-in, sign-in, token refresh, OTP verification and email sends, sized for the Companion population behind shared NAT; (2) **monitoring of account creation**: scheduled read-only counts of `auth.users` created per hour split anonymous/permanent, with alert thresholds and a named responder; (3) SMTP provider quotas, bounce/complaint monitoring and a hard daily cap; (4) incident thresholds and a runbook (tighten rate limits, disable email sign-up temporarily, purge abusive unconfirmed users, rotate the publishable key if ever required). Anonymous sign-ins already exist today with the same exposure; V1 adds email sign-up and mail to it.
-- **CAPTCHA:** Supabase's CAPTCHA protection is **project-wide** (sign-up, anonymous sign-in, password sign-in, recovery) and the Companion cannot supply a token, so enabling it on a project the Companion uses would break anonymous and registered Companion sign-in. Decision for V1: **do not enable Supabase CAPTCHA** on a Companion-facing project; instead the website verifies Turnstile server-side (existing challenge code) before it calls Auth for sign-up and recovery. **This protects the website routes only, it is not a substitute for project-wide CAPTCHA**, and direct Auth abuse (A24) stays an open, owner-managed residual risk covered by the controls in the previous bullet. Real Turnstile keys need owner approval.
-- **Leaked-password protection:** the project advisor currently reports it **disabled** on the production project; enable it in staging and plan it for production (owner).
-- **Password policy:** minimum length and requirements set in Auth; the website also enforces length and rejects obviously weak input locally for early feedback.
-- **Refresh-token rotation and reuse interval:** keep rotation enabled; the default reuse interval tolerates concurrent refreshes.
-- **Settings that couple sessions:** *single session per user*, session time-box and inactivity timeout must stay **off/long** so website and Companion sessions remain independent (requirement of the product).
-- **Redirect URLs and Site URL:** restricted to the exact callback URL(s) of the isolated environment (wildcards only for the owner's own preview host pattern in staging).
-- **Anonymous sign-ins stay enabled** (the Companion needs them) but remain distinct from registered users in every check.
+### 3.1 Six distinct layers (they protect different things and none substitutes for another)
+
+| # | Layer | What it protects | What it does **not** protect | Owner of the control |
+| --- | --- | --- | --- | --- |
+| 1 | **Website-level bot protection**: server-side Turnstile verification in the `/account/api/*` sign-up and recovery handlers, per-IP and per-email throttles through the existing limiter | requests that reach **the website** | anything sent straight to Supabase Auth. The Companion ships the project URL and publishable key (and needs anonymous sign-up), so anyone can call GoTrue directly and never touch the website. **Layer 1 is not a CAPTCHA for Auth.** | code (PR B) |
+| 2 | **Supabase Auth project-wide limits**: per-IP rate limits for sign-up, sign-in, token refresh, OTP verification, email sends and anonymous sign-ins; confirm-email requirement; password policy; leaked-password protection | all Auth endpoints, including direct calls, per source IP | distributed or rotating-IP abuse; shared-NAT false positives (many Companion users behind one IP) | owner (Auth settings) |
+| 3 | **Direct anonymous-signup abuse**: creating anonymous users in bulk (each one is a valid `authenticated` JWT that passes the existing API gate and gets its own per-UID budgets) | nothing in code; bounded only by layer 2 | the per-UID budgets are not an abuse control against account creation. The global ceilings in migration `0009` bound the cost, at the price of denial of service for everyone. | owner (limits + monitoring) |
+| 4 | **Direct password-auth abuse**: credential stuffing and brute force against `/auth/v1/token?grant_type=password`; mass sign-up | layer 2 limits; email verification; leaked-password protection; the generic error shape | a determined distributed attacker; a strong-password policy does not stop stuffing | owner (limits + monitoring) |
+| 5 | **Mail delivery and sign-up quotas**: confirmation and recovery email can be triggered directly, costing money and sender reputation and enabling mail-bombing of third parties | provider quotas, hard daily cap, bounce and complaint monitoring, custom SMTP with SPF/DKIM/DMARC | nothing if the default built-in sender is used: it is for testing, severely rate limited and restricted | owner (SMTP provider) |
+| 6 | **Monitoring, alerting and incident response** | detection and containment of 3 to 5 | prevention | owner (named responder) |
+
+**Decision (V1): Supabase project-wide CAPTCHA stays off** on any project the Companion uses, because CAPTCHA protection applies to anonymous sign-in and password sign-in and the Companion cannot supply a token; enabling it would break anonymous and registered Companion sign-in. This is a conscious trade-off: layers 2, 5 and 6 carry the load that CAPTCHA would otherwise share. Revisit only together with a Companion release that can present a CAPTCHA token.
+
+**Threat A24 (direct GoTrue abuse) stays OPEN.** PR B and PR C code cannot resolve it. It is closed only by the owner-run criteria in the acceptance document being evidenced on staging and, before any production plan, on the production configuration.
+
+### 3.2 Settings the product requires
+
+- **Confirm email: on.** Specification and tests assume unverified users never obtain a session.
+- **Custom SMTP** with domain authentication; never the built-in sender for public registration.
+- **Leaked-password protection: on** (the project advisor currently reports it **disabled** on the production project).
+- **Password policy** set in Auth; the website also enforces length locally for early feedback.
+- **Refresh-token rotation: on**, default reuse interval kept.
+- **Session-coupling settings off/long:** single session per user, session time-box, inactivity timeout. Otherwise a website login or logout would affect the Companion, which the product forbids.
+- **Redirect URLs and Site URL** restricted to the exact callback URL(s) of the isolated environment (wildcards only for the owner's own preview host pattern in staging).
+- **Anonymous sign-ins stay enabled** (the Companion needs them) and remain distinct from registered users in every check.
 
 ## 4. Residual risks (accepted for V1, with mitigation)
 
@@ -68,8 +82,8 @@ These are Supabase project settings; none is changed by this work. Values below 
 | One registered UID shares the per-UID ingest budget across installations | documented; quotas deliberately unchanged in V1 |
 | Access JWT validity window (default 1 h) | DB session check makes revoked sessions ineffective for account RPCs; existing public RPCs only need a valid JWT (unchanged) |
 | `auth.sessions` is a Supabase-internal table | pre-flight check in the migration, CI and staging suites run against real GoTrue; documented as the one version dependency |
-| Direct Auth API sign-up/mail abuse (A24) | owner-reviewed Auth rate limits, creation monitoring with thresholds, SMTP quotas and an incident runbook before any production plan; **not resolved**, tracked in the go-live checklist |
-| Active stolen anonymous bearer can start a permanent claim | live-session check, single-use short-lived code, audit and previous-owner record, restore runbook; residual window = lifetime of an undetected active token |
+| Direct Auth API abuse: anonymous sign-up, password-auth and mail (A24) | the six-layer model in §3.1 and the criteria in the acceptance document (per-IP limits, thresholds, mail quotas, monitoring, incident runbook); **OPEN until evidenced**, tracked in the go-live checklist |
+| An **active** stolen anonymous bearer can start a permanent claim (V1 adds a persistent takeover capability that ingest alone never had) | a revoked, deleted or banned session cannot (live-session guard, tests LS-1..LS-9); single-use short-lived code; audit and previous-owner record; the legitimate Companion sees `transferred`; owner-approved restore runbook. Residual window = lifetime of an undetected, still-active token |
 | Mail delivery/phishing of confirmation emails | custom SMTP with domain authentication; no secrets in email bodies |
 
 ## 5. Mandatory-test map (the 20 required checks)
@@ -100,3 +114,20 @@ State legend: tier of evidence the check needs to be called passed. **Unit/stati
 | 20 | Preview cannot promote account code or private data to the production alias | A | unit (validator refuses Vercel production target) + release policy |
 
 Checks 1, 3, 4, 16 need a real Auth server; they are never marked passed on mocks. The CI job started in PR B runs the Supabase local stack (GoTrue, PostgREST, Postgres, Mailpit) inside GitHub Actions, which is isolated and disposable.
+
+### Additional negative tests required by the independent reviews
+
+| ID | Check | PR | Tier |
+| --- | --- | --- | --- |
+| **LS-1** | **Revoked-but-unexpired anonymous JWT cannot start a claim even when its UID still equals `installations.owner_user_id`** | C | SQL |
+| LS-2 | JWT without `session_id` is refused by every account function | C | SQL |
+| LS-3 | `session_id` of another user is refused | C | SQL |
+| LS-4 | Expired session (`not_after` in the past) is refused | C | SQL |
+| LS-5 | Deleted or banned user with a still-present session row is refused | C | SQL |
+| LS-6 | Revoked registered token cannot redeem; the claim stays pending | C | SQL |
+| LS-7 | Initiator revoked after issuing a claim: redeem returns `invalid_claim`, nothing consumed | C | SQL |
+| LS-8 | LS-1..LS-5 parameterised over `ACCOUNT_RPC_GUARDS` (no function can be forgotten) | C | SQL |
+| LS-9 | Real GoTrue: anonymous token contains `session_id`; after `/auth/v1/logout` the unexpired token is refused | C, E | CI real stack, staging |
+| LS-10 | `lintAccountMigration` passes on the real `0012` (already CI-enforced, tested with weak fixtures in PR A) | A, C | unit/CI |
+| PW-1 | Password validation: ASCII, multibyte, boundary lengths, and with no `Buffer` global; contracts bundled for the browser run in a bare context | A | unit (done) |
+| AT-1..AT-6 | Auth abuse drill and monitoring criteria ([acceptance §5](acceptance-and-owner-actions.md)) | owner | staging (not code) |

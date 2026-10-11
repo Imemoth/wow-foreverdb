@@ -216,6 +216,31 @@ export const ACCOUNT_RPCS = {
 
 export type AccountRpcName = keyof typeof ACCOUNT_RPCS;
 
+/**
+ * The identity guard EVERY account function must run as its first statement (ownership-claim-protocol.md section 4).
+ * Each guard includes a LIVE-SESSION check: the JWT's `session_id` must exist in `auth.sessions` for the same user
+ * and not be expired, and the user must not be deleted or banned. Signature validity and `exp` alone are never enough:
+ * Auth access tokens stay cryptographically valid after sign-out or revocation. A function guarded only by
+ * `auth.uid()` and `is_anonymous` is non-conformant (see migration-conformance.ts and its CI test).
+ */
+export type AccountGuard = "any_live_session" | "anonymous_owner_live_session" | "registered_live_session";
+
+export const ACCOUNT_RPC_GUARDS: Readonly<Record<AccountRpcName, AccountGuard>> = {
+  fdb_account_claim_start: "anonymous_owner_live_session",
+  fdb_account_claim_redeem: "registered_live_session",
+  fdb_account_installations: "registered_live_session",
+  fdb_account_guildbook_guilds: "registered_live_session",
+  fdb_account_guildbook_members: "registered_live_session",
+  fdb_installation_link_status: "any_live_session",
+};
+
+/** The private (client-unreachable) function that implements each guard. */
+export const ACCOUNT_GUARD_FUNCTIONS: Readonly<Record<AccountGuard, string>> = {
+  any_live_session: "private.fdb_caller",
+  anonymous_owner_live_session: "private.fdb_anonymous_caller",
+  registered_live_session: "private.fdb_registered_caller",
+};
+
 export function isAccountRpc(name: string): name is AccountRpcName {
   return Object.prototype.hasOwnProperty.call(ACCOUNT_RPCS, name);
 }

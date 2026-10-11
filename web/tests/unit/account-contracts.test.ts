@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import vm from "node:vm";
+import { buildSync } from "esbuild";
 import { describe, expect, it, vi } from "vitest";
 import {
   ACCOUNT_RPCS,
@@ -39,20 +41,84 @@ describe("claim code format", () => {
 });
 
 describe("contracts.ts is browser-safe (no Node globals or built-ins)", () => {
-  const source = readFileSync(resolve(__dirname, "../../src/lib/account/contracts.ts"), "utf8");
+  const entry = resolve(__dirname, "../../src/lib/account/contracts.ts");
+  const source = readFileSync(entry, "utf8");
+  const signup = (password: string) => AUTH_BODIES.signup.safeParse({ email: "a@b.example", password }).success;
+
   it("does not reference Buffer, process or node: built-ins", () => {
     expect(source).not.toMatch(/\bBuffer\b|\bprocess\.|from\s+["']node:|require\(/);
   });
-  it("validates multibyte passwords without Buffer being defined", () => {
+
+  it("ASCII passwords: 12..72 bytes accepted, 11 and 73 refused", () => {
+    expect(signup("a".repeat(11))).toBe(false);
+    expect(signup("a".repeat(12))).toBe(true);
+    expect(signup("a".repeat(72))).toBe(true);
+    expect(signup("a".repeat(73))).toBe(false);
+  });
+
+  it("multibyte UTF-8 passwords are limited by BYTES (72), not characters", () => {
+    expect(signup("é".repeat(36))).toBe(true); // 2 bytes each = 72
+    expect(signup("é".repeat(37))).toBe(false); // 74
+    expect(signup("€".repeat(24))).toBe(true); // 3 bytes each = 72
+    expect(signup("€".repeat(25))).toBe(false); // 75
+    expect(signup("😀".repeat(18))).toBe(true); // 4 bytes each = 72
+    expect(signup("😀".repeat(19))).toBe(false); // 76
+    expect(signup("a".repeat(70) + "é")).toBe(true); // 72 mixed
+    expect(signup("a".repeat(71) + "é")).toBe(false); // 73 mixed
+  });
+
+  it("the 12-character minimum counts characters while the 72 limit counts bytes", () => {
+    expect(signup("é".repeat(11))).toBe(false); // 11 characters
+    expect(signup("é".repeat(12))).toBe(true); // 12 characters, 24 bytes
+  });
+
+  it("the same results hold with Buffer removed from the global scope", () => {
     vi.stubGlobal("Buffer", undefined);
     try {
       expect(typeof Buffer).toBe("undefined");
-      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "é".repeat(36) }).success).toBe(true); // 72 bytes
-      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "é".repeat(37) }).success).toBe(false); // 74 bytes
-      expect(AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: "😀".repeat(19) }).success).toBe(false); // 76 bytes
+      expect(signup("é".repeat(36))).toBe(true);
+      expect(signup("é".repeat(37))).toBe(false);
+      expect(signup("😀".repeat(19))).toBe(false);
+      expect(signup("a".repeat(72))).toBe(true);
+      expect(signup("a".repeat(73))).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("the module bundled for the BROWSER executes in a context with only web-platform globals", () => {
+    const out = buildSync({
+      entryPoints: [entry],
+      bundle: true,
+      platform: "browser",
+      format: "iife",
+      globalName: "Contracts",
+      write: false,
+      logLevel: "silent",
+      define: { "process.env.NODE_ENV": '"production"' },
+    });
+    const code = out.outputFiles[0]?.text ?? "";
+    expect(code).not.toMatch(/node:|require\("/);
+    // A bare context: standard JavaScript intrinsics plus the web-platform classes the module uses. No Buffer, no process.
+    const sandbox: Record<string, unknown> = { TextEncoder, TextDecoder, URL, URLSearchParams };
+    const ctx = vm.createContext(sandbox);
+    expect(vm.runInContext("typeof Buffer + typeof process + typeof require + typeof module", ctx)).toBe("undefinedundefinedundefinedundefined");
+    const C = vm.runInContext(`${code}\nContracts`, ctx) as {
+      AUTH_BODIES: typeof AUTH_BODIES;
+      normalizeClaimCode: typeof normalizeClaimCode;
+      isAllowedAuthRequest: typeof isAllowedAuthRequest;
+      safeNext: typeof safeNext;
+    };
+    const ok = (pw: string) => C.AUTH_BODIES.signup.safeParse({ email: "a@b.example", password: pw }).success;
+    expect(ok("a".repeat(72))).toBe(true);
+    expect(ok("a".repeat(73))).toBe(false);
+    expect(ok("é".repeat(36))).toBe(true);
+    expect(ok("é".repeat(37))).toBe(false);
+    expect(ok("😀".repeat(19))).toBe(false);
+    expect(C.normalizeClaimCode("0123456789abcdef0123456789abcdef")).toBe("0123456789ABCDEF0123456789ABCDEF");
+    expect(C.isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local")).toBe(true);
+    expect(C.isAllowedAuthRequest("POST", "/auth/v1/logout?scope=global")).toBe(false);
+    expect(C.safeNext("//evil.example")).toBe("/account");
   });
 });
 

@@ -7,8 +7,8 @@ Goal: move `public.installations.owner_user_id` from the installation's current 
 ## 1. Design rules
 
 1. **An installation ID is an identifier, never proof.** Redemption takes the *code only*; the installation is looked up from the claim.
-2. **Only the current owner can issue a claim**, from its own JWT, and only an **anonymous** owner (a registered owner moving to a different account is a cross-account transfer and is out of V1).
-3. **Only a registered, email-confirmed, active-session user can redeem.**
+2. **Only the current owner can issue a claim**, from its own JWT **and its own live session** (a revoked but unexpired token is refused, §4.1), and only an **anonymous** owner (a registered owner moving to a different account is a cross-account transfer and is out of V1).
+3. **Only a registered, email-confirmed user with a live session can redeem, and only while the issuing identity is still live.**
 4. **128-bit code, 10-minute life, single use, hash only at rest** (SHA-256 of the 32-hex-character code; with 128 bits of entropy a plain digest is sufficient, no salt or pepper needed).
 5. **One live code per installation:** issuing a new code revokes the previous pending one.
 6. **Business failures are results, not exceptions.** A PostgreSQL exception rolls back the rate-limit counter written in the same transaction. Failures (wrong code, expired, replay, wrong owner) therefore return `{ok:false}` so the throttle and attempt counters persist. Exceptions are reserved for authentication/authorization (`PT401`/`PT403`) and budget exhaustion (`PT429`).
@@ -125,15 +125,69 @@ create table private.account_audit (               -- minimal: no code, email, I
 
 ## 4. Function contracts (all `SECURITY DEFINER`, `set search_path = ''`, every object schema-qualified; `revoke all ... from public, anon, authenticated, service_role; grant execute ... to authenticated`)
 
-Shared guards (in `private`, not callable by clients):
+### 4.1 Live-session identity guards (normative)
 
-- `fdb_caller()` — role `authenticated`, `auth.uid()` not null (anonymous allowed) **and a live session**: the JWT carries a `session_id` and a row with that id and `user_id = auth.uid()` exists in `auth.sessions` and is not expired (`not_after` null or in the future); the user exists, `deleted_at is null`, `banned_until` null or past. A JWT without `session_id` is refused (fail closed). **This applies to every account function, including `fdb_account_claim_start` for the anonymous owner**: Auth access tokens stay cryptographically valid until `exp` after sign-out or revocation, so without a live-session check a stolen but *revoked* anonymous token could still mint a claim code and permanently move the installation to an attacker's account.
-- `fdb_registered_caller()` — everything in `fdb_caller()` **plus** `auth.users.is_anonymous = false` and `email_confirmed_at is not null`. A captured registered token is therefore also useless as soon as its session is revoked. (Checked against real GoTrue in the CI and staging suites; `auth.sessions` semantics and the presence of `session_id` in anonymous-session JWTs are the Supabase-version dependencies, so the migration's pre-flight asserts the table and columns and the CI suite asserts the claim on a real anonymous token.)
+Three guards in schema `private` (never callable by clients: `revoke all on all functions in schema private from public, anon, authenticated`) implement every identity decision. **Every public account function calls its guard as its first statement, and gets the caller's UID only from the guard's return value.** A function that derives identity from `auth.uid()` and `is_anonymous` alone is non-conformant; this is enforced by a linter and a test (below), not by review alone.
+
+| Guard | Used by | Checks, in order |
+| --- | --- | --- |
+| `private.fdb_caller()` | `fdb_installation_link_status` | the live-session check below |
+| `private.fdb_anonymous_caller()` | `fdb_account_claim_start` | `fdb_caller()`, then `auth.users.is_anonymous = true` for that UID |
+| `private.fdb_registered_caller()` | `fdb_account_claim_redeem`, `fdb_account_installations`, `fdb_account_guildbook_guilds`, `fdb_account_guildbook_members` | `fdb_caller()`, then `auth.users.is_anonymous = false` and `auth.users.email_confirmed_at is not null` |
+
+**Where the session identifier comes from.** GoTrue puts the session's UUID in the **`session_id` claim** of every access token it issues (anonymous and registered alike). PostgREST verifies the JWT signature and `exp`, then exposes the verified claims to SQL as `auth.jwt()`; the function reads `auth.jwt() ->> 'session_id'`. The identifier is **never** a function parameter and never comes from a cookie or request body.
+
+**How it is verified.** `fdb_caller()` must, in this order, fail closed with `sqlstate 'PT401'` (generic message `ForeverDB authenticated session required`) unless all of the following hold:
+
+1. `auth.role() = 'authenticated'` and `auth.uid()` is not null;
+2. `auth.jwt() ->> 'session_id'` is present and a well-formed UUID (a token without it is refused, never treated as "no session to check");
+3. a row exists in `auth.sessions` with `id = <session_id>` **and** `user_id = auth.uid()` (a session id belonging to another user is refused) **and** (`not_after is null or not_after > now()`);
+4. the user row in `auth.users` exists, `deleted_at is null`, and `banned_until is null or banned_until <= now()`.
+
+**Required fields (these are Supabase-internal tables, so they are asserted, not assumed):**
+
+| Source | Fields | Use |
+| --- | --- | --- |
+| JWT claims (`auth.jwt()`) | `sub` (through `auth.uid()`), `role`, `session_id` | identity and the session handle; `is_anonymous` in the JWT is informational only, the database truth is `auth.users.is_anonymous` |
+| `auth.sessions` | `id`, `user_id`, `not_after` (nullable) | liveness: a revoked or signed-out session has **no row** (sign-out, admin sign-out and user deletion delete the row and revoke its refresh tokens) |
+| `auth.users` | `id`, `is_anonymous`, `email_confirmed_at`, `deleted_at`, `banned_until` | anonymity, confirmed email, soft-deleted or banned users |
+
+**Why signature and expiry are not enough.** Auth access tokens remain cryptographically valid until `exp` after the session has been revoked. Without step 3, a stolen but revoked anonymous token whose UID still equals `installations.owner_user_id` could start a claim and permanently move the installation to an attacker's registered account.
+
+**Reference shape** (the migration must be at least this strict; the linter in `web/src/lib/account/migration-conformance.ts` checks the structure):
+
+```sql
+create function private.fdb_caller() returns uuid
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_uid uuid := auth.uid();
+  v_sid text := auth.jwt() ->> 'session_id';
+begin
+  if auth.role() is distinct from 'authenticated' or v_uid is null
+     or v_sid is null or v_sid !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     or not exists (
+       select 1 from auth.sessions s join auth.users u on u.id = s.user_id
+        where s.id = v_sid::uuid and s.user_id = v_uid
+          and (s.not_after is null or s.not_after > now())
+          and u.deleted_at is null and (u.banned_until is null or u.banned_until <= now()))
+  then raise sqlstate 'PT401' using message = 'ForeverDB authenticated session required';
+  end if;
+  return v_uid;
+end $$;
+```
+
+**Redeem additionally requires the initiator's liveness.** At redemption the claim's `initiator_uid` must still exist, not be deleted or banned, and still have at least one non-expired row in `auth.sessions`; revoking or deleting the owner identity cancels its pending claims (result `invalid_claim`, nothing consumed).
+
+**Enforcement that PR C cannot bypass.**
+
+- `ACCOUNT_RPC_GUARDS` in `contracts.ts` fixes which guard each function must use; the `session_id`-based live check is part of every guard.
+- `lintAccountMigration()` (CI, runs in `npm test`) fails the build if `0012_account_*.sql` defines an account function whose **first statement** is not its guard call, reads `auth.uid()`/`auth.jwt()`/`is_anonymous` before the guard, uses a weaker guard than the registry demands, defines a guard that does not query `auth.sessions` (same `id` and `user_id`, `not_after`, `deleted_at`, `banned_until`), omits SECURITY DEFINER / `search_path = ''` / plpgsql, or lacks the `revoke … from public, anon, authenticated, service_role` / `grant execute … to authenticated` pair. It is tested against the exact weak designs (`auth.uid()` + `is_anonymous` only; a guard that declares `session_id` but never queries it).
+- The mandatory negative integration tests LS-1 to LS-10 in [pr-obligations.md](pr-obligations.md), including a revoked-but-unexpired anonymous JWT whose UID still owns the installation.
 
 | Function | Caller | Behaviour |
 | --- | --- | --- |
-| `fdb_account_claim_start(p_installation_id text) → jsonb` | current owner, **anonymous**, with a **live session** (`fdb_caller()`) | validate id shape; take the per-**uid** budget `claim_start:uid:<uid>` (3 per 300 s) and the global ceiling; `pg_advisory_xact_lock(hashtextextended(id,0))` (**same key as ingest**); `select … from public.installations where id = $1 for update`; owner must equal `auth.uid()` and the caller must still be anonymous (`auth.users.is_anonymous`); **only then** charge the per-installation budget (key `claim_start:inst:` ‖ first 32 hex of `sha256(id)`: the existing budget function rejects keys over 140 characters and installation IDs may be 128, and charging before the owner check would let anyone who knows an ID exhaust the owner's budget); revoke the previous pending claim (audit `claim_revoked`); generate `upper(encode(extensions.gen_random_bytes(16),'hex'))`, store `sha256(code)`, `expires_at = now()+10 min`; audit `claim_started`; return `{ok:true, code, expires_at}`. Any precondition failure returns `{ok:false,error:'not_available'}`. |
-| `fdb_account_claim_redeem(p_code text) → jsonb` | **registered** | `fdb_registered_caller()`; budgets `claim_redeem:uid:<uid>` 10 per 300 s and the global ceiling; format check `^[0-9A-F]{32}$`; hash; look up the claim by hash (no lock) → none ⇒ audit `redeem_rejected`, `{ok:false,error:'invalid_claim'}`; take the **advisory lock for the claim's installation**; re-select the claim `for update` and the installation `for update`; require `status='pending' and expires_at > now()`, installation exists, `owner_user_id = claim.initiator_uid`, **the initiator is still anonymous** (`auth.users.is_anonymous` — an owner that upgraded itself to a permanent account between start and redeem must not be movable by a leaked code), **the initiator still exists, is not banned or deleted and still has a live session** (so revoking or deleting the owner identity cancels its pending claims), `auth.uid() <> initiator_uid`; otherwise increment `attempts` (revoke at 5), audit, `{ok:false,error:'invalid_claim'}`. If the claim is valid but the account already owns 50 installations, return `{ok:false,error:'account_limit'}` **without consuming the code** (only a caller holding a valid code learns this). Then **in the same transaction** set `installations.owner_user_id = auth.uid()`, insert `account_installations (previous_owner_uid = initiator_uid)`, mark the claim `consumed`, audit `claim_redeemed`; return `{ok:true, installation_id, linked_at}`. |
+| `fdb_account_claim_start(p_installation_id text) → jsonb` | current owner, **anonymous**, with a **live session** (`private.fdb_anonymous_caller()`, first statement) | validate the id shape (1 to 128 characters, `^[A-Za-z0-9][A-Za-z0-9._:-]*$`); take the per-**uid** budget `claim_start:uid:<uid>` (3 per 300 s) and the global ceiling; `pg_advisory_xact_lock(hashtextextended(id,0))` (**same key as ingest**); `select … from public.installations where id = $1 for update`; owner must equal `auth.uid()` and the caller must still be anonymous (`auth.users.is_anonymous`); **only then** charge the per-installation budget (key `claim_start:inst:` ‖ first 32 hex of `sha256(id)`: the existing budget function rejects keys over 140 characters and installation IDs may be 128, and charging before the owner check would let anyone who knows an ID exhaust the owner's budget); revoke the previous pending claim (audit `claim_revoked`); generate `upper(encode(extensions.gen_random_bytes(16),'hex'))`, store `sha256(code)`, `expires_at = now()+10 min`; audit `claim_started`; return `{ok:true, code, expires_at}`. Any precondition failure returns `{ok:false,error:'not_available'}`. |
+| `fdb_account_claim_redeem(p_code text) → jsonb` | **registered**, live session | `private.fdb_registered_caller()` (first statement); budgets `claim_redeem:uid:<uid>` 10 per 300 s and the global ceiling; format check `^[0-9A-F]{32}$`; hash; look up the claim by hash (no lock) → none ⇒ audit `redeem_rejected`, `{ok:false,error:'invalid_claim'}`; take the **advisory lock for the claim's installation**; re-select the claim `for update` and the installation `for update`; require `status='pending' and expires_at > now()`, installation exists, `owner_user_id = claim.initiator_uid`, **the initiator is still anonymous** (`auth.users.is_anonymous` — an owner that upgraded itself to a permanent account between start and redeem must not be movable by a leaked code), **the initiator still exists, is not banned or deleted and still has a live session** (so revoking or deleting the owner identity cancels its pending claims), `auth.uid() <> initiator_uid`; otherwise increment `attempts` (revoke at 5), audit, `{ok:false,error:'invalid_claim'}`. If the claim is valid but the account already owns 50 installations, return `{ok:false,error:'account_limit'}` **without consuming the code** (only a caller holding a valid code learns this). Then **in the same transaction** set `installations.owner_user_id = auth.uid()`, insert `account_installations (previous_owner_uid = initiator_uid)`, mark the claim `consumed`, audit `claim_redeemed`; return `{ok:true, installation_id, linked_at}`. |
 | `fdb_installation_link_status(p_installation_id text) → jsonb` | any authenticated | gated by the existing `foreverdb_api_gate('detail')` (existing per-UID read budgets; no new quota). `{state:'owned'}` if the caller is the installation's owner; `{state:'transferred'}` if `account_installations.previous_owner_uid = auth.uid()` for that installation (never pruned, so a Companion offline for months still learns it); otherwise `{state:'unknown'}`. |
 | `fdb_account_installations() → setof` | registered | gated by `foreverdb_api_gate('detail')`; installations where `installations.owner_user_id = auth.uid()` (claimed or first-ingested by this account); max 50 rows; `linked_at` is the link's `linked_at` or the installation's `first_seen_at`; columns `installation_id, linked_at, last_seen_at, guild_count` only. |
 | `fdb_account_guildbook_guilds(p_installation_id text)` | registered | gated by `foreverdb_api_gate('detail')`; ownership re-derived in SQL (`installations.owner_user_id = auth.uid()`); returns an **empty set** for installations not owned (indistinguishable from owned-but-empty); no `member_guid`. |
