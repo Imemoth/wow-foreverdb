@@ -126,6 +126,100 @@ describe("account auth configuration: refusals", () => {
   });
 });
 
+
+describe("single-project Auth pilot and production candidate: owner-gated policies", () => {
+  const PRIVATE_URL = "https://" + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co";
+  const modernKey = "sb_publishable_" + "z".repeat(40);
+  const privateAuth = {
+    ACCOUNT_AUTH_URL: PRIVATE_URL,
+    ACCOUNT_AUTH_PROJECT_REF: PRIVATE_PRODUCTION_PROJECT_REF,
+    ACCOUNT_AUTH_PUBLISHABLE_KEY: modernKey,
+    ACCOUNT_CSRF_SECRET: CSRF,
+  };
+  const pilot = { ...privateAuth, ACCOUNT_AUTH_MODE: "pilot" };
+  const production = { ...privateAuth, ACCOUNT_AUTH_MODE: "production" };
+  const ownerPilot = { pilot: true, production: false };
+  const ownerProduction = { pilot: false, production: true };
+  const releaseCtx: AccountAuthContext = { hosted: true, deployment: "production", platformEnv: "production" };
+
+  it("refuses both modes by default, even with every env var present", () => {
+    expect(issues(pilot, previewCtx)).toMatch(/owner-approved code change/);
+    expect(issues(production, releaseCtx)).toMatch(/owner-approved code change/);
+    // The actual production evaluator uses compiled false flags, never an env-based approval.
+    const fakeApproval = { ...pilot, ACCOUNT_AUTH_PILOT_APPROVED: "true" };
+    expect(issues(fakeApproval, previewCtx)).toMatch(/unknown account-auth variable/);
+    expect(issues(fakeApproval, previewCtx)).toMatch(/owner-approved code change/);
+  });
+
+  it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
+    const r = evaluateAccountAuth(pilot, previewCtx, ownerPilot);
+    expect(r.issues).toEqual([]);
+    expect(r.config).toMatchObject({
+      mode: "pilot", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
+    });
+    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+  });
+
+  it("accepts production only after separate code approval and matching real Vercel Production signals", () => {
+    const r = evaluateAccountAuth(production, releaseCtx, ownerProduction);
+    expect(r.issues).toEqual([]);
+    expect(r.config).toMatchObject({
+      mode: "production", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
+    });
+    expect(evaluateAccountAuth(production, previewCtx, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    expect(evaluateAccountAuth(production, demoCtx, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    expect(evaluateAccountAuth(production, local, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    // Pilot approval must not authorize production and vice versa.
+    expect(evaluateAccountAuth(production, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/owner-approved/);
+    expect(evaluateAccountAuth(pilot, previewCtx, ownerProduction).issues.join(" ")).toMatch(/owner-approved/);
+  });
+
+  it("allows no other Supabase project or alternate host in either approved private mode", () => {
+    for (const [authEnv, context, approval] of [
+      [pilot, previewCtx, ownerPilot],
+      [production, releaseCtx, ownerProduction],
+    ] as const) {
+      const badHost = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: STAGING_URL, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, context, approval);
+      expect(badHost.issues.join(" ")).toMatch(/approved PRIVATE production project/);
+      const badRef = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, context, approval);
+      expect(badRef.issues.join(" ")).toMatch(/PROJECT_REF must equal/);
+      const wrongHost = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: PRIVATE_URL + ".attacker.example" }, context, approval);
+      expect(wrongHost.issues.join(" ")).toMatch(/supabase\.co origin/);
+      const withPath = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: PRIVATE_URL + "/auth/v1" }, context, approval);
+      expect(withPath.issues.join(" ")).toMatch(/origin only/);
+      const withSecret = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_secret_" + "a".repeat(32) }, context, approval);
+      expect(withSecret.issues.join(" ")).toMatch(/SECRET key/);
+      const legacyKey = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: jwt({ role: "anon", ref: PRIVATE_PRODUCTION_PROJECT_REF }) }, context, approval);
+      expect(legacyKey.issues.join(" ")).toMatch(/modern publishable key/);
+      const blankPublishable = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_publishable_" }, context, approval);
+      expect(blankPublishable.issues.join(" ")).toMatch(/well-formed/);
+    }
+  });
+
+  it("leaves real deployments fail-closed without source-code approval, even if full public release settings are present", () => {
+    const base: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
+      FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
+      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      SITE_URL: "https://wow-foreverdb.vercel.app",
+      RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
+      UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
+      TRUSTED_IP_HEADER: "x-real-ip",
+    };
+    const r = evaluateEnv({ ...base, ...production });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
+    const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
+    expect(rp.ok).toBe(false);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/owner-approved code change/);
+    const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
+    expect(x.ok).toBe(false);
+    expect(!x.ok && x.issues.join(" ")).toMatch(/NEXT_PUBLIC_ACCOUNT_BACKEND: references the PRIVATE/);
+  });
+});
+
 describe("integration with the global environment validator", () => {
   const demo: RawEnv = {
     VERCEL: "1",
