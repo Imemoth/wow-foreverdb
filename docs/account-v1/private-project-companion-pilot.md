@@ -1,6 +1,6 @@
 # Companion registered Auth on the existing private Supabase project — owner-only pilot
 
-**Status:** DRAFT CODE / NOT Windows-verified / NOT merged. This is an exception for the owner's *existing private* ForeverDB Auth project, not permission to enable registered accounts in a public Companion release.
+**Status:** DRAFT / NOT MERGED. Owner's Windows test confirms successful registered login and retained login after completely closing and restarting the private-pilot Companion (2026-10-12, build 9c58560). Original anonymous credential preservation and negative-write runtime checks remain pending. This is an exception for the owner's *existing private* ForeverDB Auth project, not permission to enable registered accounts in a public Companion release.
 
 ## What the owner approved
 
