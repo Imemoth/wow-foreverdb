@@ -151,10 +151,13 @@ public partial class MainWindow
                 status.VerifiedEmail);
         AccountDetailText.Text =
             AccountMessages.Detail(status);
+        var privatePilot = account.Gate.Environment == AccountEnvironment.PrivatePilot;
         AccountEnvironmentText.Text =
-            enabled
-                ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
-                : "Account features are off in this build. ForeverDB works anonymously, exactly like before.";
+            privatePilot
+                ? "Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
+                : enabled
+                    ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
+                    : "Account features are off in this build. ForeverDB works anonymously, exactly like before.";
 
         var loggedOut = status.State == SessionState.LoggedOut;
         var lost = status.State == SessionState.AnonymousIdentityLost;
@@ -188,7 +191,7 @@ public partial class MainWindow
                 ? "Sign in to a ForeverDB account (keeps this identity)"
                 : "Sign in to a ForeverDB account";
         AccountUseAnonymousButton.Visibility =
-            loggedOut
+            loggedOut && !privatePilot
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
@@ -291,22 +294,23 @@ public partial class MainWindow
                     ? Visibility.Collapsed
                     : Visibility.Visible,
             ClaimVisibility =
-                enabled && anonymousOwned
+                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && anonymousOwned
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             CheckVisibility =
                 enabled &&
+                !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) &&
                 (record.ClaimPending ||
                  ownership == InstallationOwnership.Unchecked ||
                  ownership == InstallationOwnership.TransferredSignInRequired)
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAccountVisibility =
-                enabled && selection && status.State == SessionState.Registered
+                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && selection && status.State == SessionState.Registered
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAnonymousVisibility =
-                enabled && selection && anonymousAvailable
+                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && selection && anonymousAvailable
                     ? Visibility.Visible
                     : Visibility.Collapsed
         };
@@ -329,6 +333,9 @@ public partial class MainWindow
 
     private async Task ResyncAfterIdentityChangeAsync()
     {
+        // Signing in to the real project for the first owner pilot must NOT
+        // auto-upload existing installations, even if AutoSync was enabled.
+        if (_account?.Gate.Environment == AccountEnvironment.PrivatePilot) return;
         var service = _syncService;
         var watcher = _watcher;
 
