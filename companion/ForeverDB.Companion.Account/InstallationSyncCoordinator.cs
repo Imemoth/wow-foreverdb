@@ -14,6 +14,7 @@ public sealed class InstallationSyncCoordinator
     private readonly OwnershipRouter _router;
     private readonly OwnershipRpcClient _rpc;
     private readonly TimeProvider _clock;
+    private readonly bool _allowUploads;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _installationGates = new(StringComparer.Ordinal);
     // Keyed by installation AND owner AND identity generation: an upload under one identity is never "synced" for another.
     private readonly ConcurrentDictionary<(string Installation, string Owner, long Generation), long> _lastSynced = new();
@@ -21,8 +22,9 @@ public sealed class InstallationSyncCoordinator
     private CancellationTokenSource _generationCts = new();
     private readonly object _ctsLock = new();
 
-    public InstallationSyncCoordinator(AccountSessionManager manager, OwnershipRouter router, OwnershipRpcClient rpc, TimeProvider? clock = null)
+    public InstallationSyncCoordinator(AccountSessionManager manager, OwnershipRouter router, OwnershipRpcClient rpc, TimeProvider? clock = null, bool allowUploads = true)
     {
+        _allowUploads = allowUploads;
         _manager = manager;
         _router = router;
         _rpc = rpc;
@@ -51,6 +53,7 @@ public sealed class InstallationSyncCoordinator
 
     public void SelectOwner(string installationId, OwnerChoice choice)
     {
+        if (!_allowUploads) return;
         _router.SelectOwner(installationId, choice);
         Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, LastBlock = BlockReason.None });
     }
@@ -91,6 +94,10 @@ public sealed class InstallationSyncCoordinator
         CancellationToken ct)
     {
         NoteLocalInstallation(installationId);
+        // No server call, token acquisition or owner selection during the
+        // registered-login-only private-project pilot, regardless of AutoSync.
+        if (!_allowUploads)
+            return SyncAttempt.Blocked(BlockReason.FeatureDisabled, InstallationOwnership.Unchecked);
         var gate = _installationGates.GetOrAdd(installationId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
