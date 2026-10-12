@@ -1,5 +1,8 @@
 # Account System V1 — acceptance and owner actions
 
+> **Candidate alternative, not an achieved gate:** [Single-project pilot/production candidate](single-project-candidate.md) (draft PR #53) is an expressly chosen alternative to creating a second permanent Supabase staging project. The original staging/production requirements below remain the historical V1 acceptance plan; until the new pilot has separate owner approval, protected-host checks, migration evidence and A24 abuse verification, **all hosted and production gates remain PENDING**. No project settings were changed by the PR.
+
+
 ## 1. Evidence ledger rules
 
 Each capability carries exactly one state; it only moves forward when the named evidence exists.
