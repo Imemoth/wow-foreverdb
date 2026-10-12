@@ -29,8 +29,17 @@
  * ONLY allowlisted account origin and publishable key.
  */
 
-/** Owner + security review only. Neither flag is controlled by deployment environment variables. */
-export const SINGLE_PROJECT_PILOT_APPROVED = false as boolean;
+/**
+ * TEMPORARY OWNER-APPROVED PRIVATE PILOT, 2026-10-12. This may run ONLY on a
+ * Vercel-SSO-protected Preview branch and ONLY with the exact existing private
+ * Supabase Auth project. Environment variables must still be explicitly supplied;
+ * without ACCOUNT_AUTH_MODE, all account routes remain disabled.
+ *
+ * SECURITY RELEASE GATE: This flag MUST be reverted to false before merging
+ * this PR to main. Public production approval remains separate and OFF.
+ * Do not promote a pilot build or its configuration to the production target.
+ */
+export const SINGLE_PROJECT_PILOT_APPROVED = true as boolean;
 export const PRODUCTION_ACCOUNT_AUTH_APPROVED = false as boolean;
 
 /** The existing private Supabase project: only an approved account boundary may contact it. */
