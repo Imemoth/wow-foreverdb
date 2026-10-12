@@ -41,7 +41,7 @@ public static class AccountFeatureGate
 
     // TEMPORARY owner-approved single-project pilot, not a public release flag.
     // Revert this flag before merging this PR into main/release.
-    public const bool PrivateProjectPilotApproved = true;
+    public static readonly bool PrivateProjectPilotApproved = true;
 
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
