@@ -46,6 +46,7 @@ public enum ForgetOutcome
     RevocationFailedKept,
     /// <summary>The user explicitly discarded the credential without server confirmation (residual risk).</summary>
     DiscardedUnrevoked,
+    FeatureDisabled,
     StorageFailure,
     LockTimeout
 }
