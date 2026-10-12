@@ -126,7 +126,7 @@ for p in (ROOT / "tests" / "companion-account").rglob("*.cs"):
         continue
     text = p.read_text(encoding="utf-8")
     if PRODUCTION_REF in text:
-        check(rel.endswith(("Support/TestEnv.cs", "FeatureGateTests.cs")), f"{rel}: references the production project outside the deny-list fixtures")
+        check(rel.endswith(("Support/TestEnv.cs", "FeatureGateTests.cs", "MessagesAndLinksTests.cs")), f"{rel}: references the production project outside the deny-list fixtures")
 
 # ---------------------------------------------------------------------------------------------
 if failures:

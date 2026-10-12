@@ -380,6 +380,12 @@ public sealed class GoTrueClient
                 email = user.TryGetProperty("email", out var em) && em.ValueKind == JsonValueKind.String ? em.GetString() : null;
             }
 
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                // Some replies omit the user object; the access token's subject names the same account.
+                userId = JwtInspector.TryDecode(access)?.Subject ?? "";
+            }
+
             if (string.IsNullOrWhiteSpace(access) || string.IsNullOrWhiteSpace(refresh) || !Guid.TryParse(userId, out _))
             {
                 return false;

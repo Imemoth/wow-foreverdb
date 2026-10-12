@@ -28,6 +28,21 @@ public class SessionManagerTests
     }
 
     [Fact]
+    public async Task Upgrade_from_082_session_stored_without_a_user_id_is_still_usable()
+    {
+        using var rig = new Rig(accountsEnabled: false);
+        var user = rig.Server.AddAnonymousUser();
+        var session = rig.Server.IssueSession(user.Id);
+        rig.SeedLegacy082Session(new AuthSession { AccessToken = session.AccessToken, RefreshToken = session.RefreshToken, ExpiresAt = session.ExpiresAt, UserId = "" });
+
+        var status = await rig.Sessions.InitializeAsync();
+        Assert.Equal(SessionState.Anonymous, status.State);
+        var token = await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary);
+        Assert.True(token.Ok);
+        Assert.Equal(user.Id, token.UserId);
+    }
+
+    [Fact]
     public async Task Upgrade_from_082_with_expired_token_refreshes_the_same_identity_and_persists_rotation()
     {
         using var rig = new Rig(accountsEnabled: false);

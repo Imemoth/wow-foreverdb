@@ -238,6 +238,13 @@ public sealed class CredentialSlot
             try
             {
                 var session = JsonSerializer.Deserialize<AuthSession>(Encoding.UTF8.GetString(plain));
+                if (session is not null && string.IsNullOrWhiteSpace(session.UserId))
+                {
+                    // 0.8.x stored an empty UserId when the Auth reply carried no user object; the token's subject
+                    // identifies the same account and keeps that session usable after the upgrade.
+                    session.UserId = JwtInspector.TryDecode(session.AccessToken)?.Subject ?? "";
+                }
+
                 if (session is null || string.IsNullOrWhiteSpace(session.AccessToken) ||
                     string.IsNullOrWhiteSpace(session.RefreshToken) || string.IsNullOrWhiteSpace(session.UserId))
                 {
