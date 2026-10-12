@@ -198,6 +198,61 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     }
   });
 
+  it("requires Upstash, CSRF and Turnstile for an approved PRIVATE project pilot", () => {
+    const preview: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "account-preview.example.vercel.app",
+      FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture",
+      ...pilot,
+    };
+    const withoutLimiter = evaluateEnv(preview, ownerPilot);
+    expect(withoutLimiter.ok).toBe(false);
+    expect(!withoutLimiter.ok && withoutLimiter.issues.join(" ")).toMatch(/pilot requires the upstash/);
+
+    const withLimiter: RawEnv = {
+      ...preview,
+      RATE_LIMIT_BACKEND: "upstash", UPSTASH_REDIS_REST_URL: "https://x.upstash.io",
+      UPSTASH_REDIS_REST_TOKEN: "t".repeat(40), RATE_LIMIT_SALT: "s".repeat(40),
+    };
+    const missingCaptcha = evaluateEnv(withLimiter, ownerPilot);
+    expect(missingCaptcha.ok).toBe(false);
+    expect(!missingCaptcha.ok && missingCaptcha.issues.join(" ")).toMatch(/pilot requires server-side Turnstile/);
+
+    const valid: RawEnv = {
+      ...withLimiter, TURNSTILE_SECRET_KEY: "t".repeat(40),
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "p".repeat(40), CHALLENGE_COOKIE_SECRET: "c".repeat(40),
+    };
+    const accepted = evaluateEnv(valid, ownerPilot);
+    expect(accepted.ok).toBe(true);
+    expect(accepted.ok && accepted.env.accountAuth?.mode).toBe("pilot");
+    expect(accepted.ok && accepted.env.FOREVERDB_DATA_SOURCE).toBe("fixture");
+    const publicLeak = evaluateEnv({ ...valid, NEXT_PUBLIC_SUPABASE_URL: PRIVATE_URL }, ownerPilot);
+    expect(publicLeak.ok).toBe(false);
+    expect(!publicLeak.ok && publicLeak.issues.join(" ")).toMatch(/NEXT_PUBLIC_SUPABASE_URL: private backend credentials/);
+  });
+
+  it("accepts production policy ONLY with separate public read DB and full release controls", () => {
+    const prod: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
+      FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
+      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      SITE_URL: "https://wow-foreverdb.vercel.app",
+      RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
+      UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
+      TRUSTED_IP_HEADER: "x-real-ip", TURNSTILE_SECRET_KEY: "t".repeat(40),
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "p".repeat(40), CHALLENGE_COOKIE_SECRET: "c".repeat(40),
+      ...production,
+    };
+    const good = evaluateEnv(prod, ownerProduction);
+    expect(good.ok).toBe(true);
+    expect(good.ok && good.env.accountAuth?.mode).toBe("production");
+    const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
+    expect(fixture.ok).toBe(false);
+    expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);
+    const privateDb = evaluateEnv({ ...prod, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
+    expect(privateDb.ok).toBe(false);
+    expect(!privateDb.ok && privateDb.issues.join(" ")).toMatch(/PRIVATE production database/);
+  });
+
   it("leaves real deployments fail-closed without source-code approval, even if full public release settings are present", () => {
     const base: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
