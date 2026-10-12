@@ -4,6 +4,16 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — single existing Supabase project candidate (2026-10-12)
+
+- [x] Separate code-only branch for a **protected, owner-only account pilot** using the existing private Supabase Auth project and for eventual production-compatible Auth configuration.
+- [x] Compile-time flags remain **OFF** (`SINGLE_PROJECT_PILOT_APPROVED = false`, `PRODUCTION_ACCOUNT_AUTH_APPROVED = false`); no environment variable can activate either without a reviewed source change.
+- [x] Scoped Auth-only publishable-key boundary and fail-closed pilot/production configuration matrix; public data isolation unchanged.
+- [ ] CI on final PR head and independent security review (no merge or deployment until approved).
+- [ ] Owner-run hosted abuse, email/DMARC, Auth URL, database migration/rollback, Windows and cross-account acceptance.
+- [ ] Separate explicit approvals for pilot activation and final public production activation.
+- See [single-project candidate runbook](account-v1/single-project-candidate.md) and [Issue #52](https://github.com/Imemoth/wow-foreverdb/issues/52). Prior isolated-staging runbook remains an available safer alternative.
+
 ## Current baseline
 
 ### Addon
