@@ -141,7 +141,11 @@ function referencesPrivateProject(value: string): boolean {
  * Pure, side-effect-free evaluation of the environment. Returns the resolved
  * configuration or the list of violated rules (variable names only).
  */
-export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: false; issues: string[] } {
+/** Approval is injected only by pure policy tests; serverEnv() always uses compiled OFF flags. */
+export function evaluateEnv(
+  raw: RawEnv,
+  accountApproval?: Readonly<{ pilot: boolean; production: boolean }>,
+): { ok: true; env: ServerEnv } | { ok: false; issues: string[] } {
   const issues: string[] = [];
   const fail = (m: string) => issues.push(m);
 
@@ -221,7 +225,7 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
 
   // 4b. Closed, server-only Account Auth boundary (disabled unless a reviewed source flag approves).
   // Nothing in this exception relaxes the PUBLIC read adapter or NEXT_PUBLIC_* protections above.
-  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv });
+  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv }, accountApproval);
   for (const issue of account.issues) fail(issue);
   if (account.config?.mode === "pilot") {
     // Preview designation normally permits memory limiting and no CAPTCHA, but the private-project
