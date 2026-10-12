@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows regression suite for Companion Account System V1 (runs with `dotnet test` on windows-latest).
+    The TFM is net8.0-windows on Windows so DPAPI acceptance tests run against the real thing; on other
+    platforms (developer/review sandboxes) it falls back to net8.0 and the DPAPI-only tests are skipped.
+  -->
+  <PropertyGroup>
+    <TargetFramework Condition="$([MSBuild]::IsOSPlatform('Windows'))">net8.0-windows</TargetFramework>
+    <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>ForeverDB.Companion.Account.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Worker/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../companion/ForeverDB.Companion.Account/ForeverDB.Companion.Account.csproj" />
+    <ProjectReference Include="Worker/Companion.Account.Worker.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Existing Companion sources reused unchanged (the established pattern of the health/guildbook tests). -->
+  <ItemGroup>
+    <Compile Include="../../companion/ForeverDB.Companion/Models/CompanionSettings.cs" Link="Linked/CompanionSettings.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Models/ForeverDbSnapshot.cs" Link="Linked/ForeverDbSnapshot.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/ForeverDbExportParser.cs" Link="Linked/ForeverDbExportParser.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SyncService.cs" Link="Linked/SyncService.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SyncHealthState.cs" Link="Linked/SyncHealthState.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/SearchRequestEpoch.cs" Link="Linked/SearchRequestEpoch.cs" />
+  </ItemGroup>
+
+</Project>

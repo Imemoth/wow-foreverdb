@@ -32,10 +32,10 @@ Scope: the Auth-only web boundary, the installation-claim protocol, account Guil
 | A12 | Concurrent claims produce two owners | shared advisory lock with ingest, `for update`, partial unique index, PK on link | concurrent SQL test (PR C) |
 | A13 | Former owner keeps writing | existing ingest owner check rejects it | SQL (PR C) + Companion (PR D) |
 | A14 | Cross-account read of Guildbook or installation metadata | ownership re-derived from `auth.uid()` inside every function, empty set for non-owned, bounded paging, no GUIDs, no direct table grants | two-account + anonymous matrix (PR C, E) |
-| A15 | Companion silently becomes a new anonymous owner | no anonymous fallback for registered sessions; kind marker; `ReauthRequired` | .NET tests (PR D) |
-| A16 | Torn/corrupt session file downgrades identity | atomic write (temp + replace), marker, `ReauthRequired` | .NET tests (PR D) |
-| A17 | Credentials in `settings.json`, logs or diagnostics | none stored there; log redaction tests | .NET tests (PR D) |
-| A18 | Sync under the wrong account after switching | single session gate, per-account local caches, in-flight response discard, status check before ingest | .NET tests (PR D) |
+| A15 | Companion silently becomes a new anonymous owner | no anonymous fallback for registered sessions; kind marker; `ReauthRequired`; classified refresh failures (only a verified GoTrue session-gone reply changes identity state); the only anonymous sign-up is the explicit user action | .NET tests (PR D): `tests/companion-account`, [companion.md §3, §11](companion.md); WINDOWS VERIFIED pending |
+| A16 | Torn/corrupt session file downgrades identity | atomic write (temp + replace), marker, `ReauthRequired` | .NET tests (PR D, `tests/companion-account`, [companion.md §11](companion.md)); WINDOWS VERIFIED pending |
+| A17 | Credentials in `settings.json`, logs or diagnostics | none stored there; log redaction tests | .NET tests (PR D, `tests/companion-account`, [companion.md §11](companion.md)); WINDOWS VERIFIED pending |
+| A18 | Sync under the wrong account after switching | single session gate, per-account local caches, in-flight response discard, status check before ingest | .NET tests (PR D, `tests/companion-account`, [companion.md §11](companion.md)); WINDOWS VERIFIED pending |
 | A19 | Account code promoted to the production alias | validator refuses accounts on Vercel's production target; `release` is the only production branch and is not changed | unit (PR A) + release gates |
 | A20 | Account data in public caches, sitemap, logs | `private, no-store`, noindex everywhere, excluded from sitemap, no PII logging | Playwright header checks (PR B) |
 | A21 | Mass sign-up or anonymous sign-up abuse through the website | website Turnstile + per-IP/per-email throttles (layer 1 only; direct Auth access is A24) | Playwright (PR B) |

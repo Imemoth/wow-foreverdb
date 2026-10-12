@@ -49,7 +49,7 @@ flowchart LR
 | **A** | `account/v1-spec-foundation` | This specification set, ADR-015..018, threat model, account-auth configuration validator, closed RPC/endpoint/redirect contracts, claim-code format, static boundary tests | independent architecture + security review |
 | **B** | `account/v1-web-auth` | Registration, verification, login/logout, recovery, session management, profile; CI job with a real isolated Auth stack and captured email | A merged; no ownership or Guildbook access yet |
 | **C** | `account/v1-ownership-backend` | Forward-only migration `0012` (claims, links, audit, account RPCs), SQL integration suite, negative authorization matrix | A merged; owner approval only needed later to *apply* anywhere real |
-| **D** | `account/v1-companion` | WPF sign-in, session states, claim display, DPAPI hardening, regression suite, new alpha build (`0.9.0-alpha`) | C's contract; Windows CI |
+| **D** | `account/v1-companion-auth` | WPF sign-in, session states, claim display, DPAPI hardening, regression suite, new alpha build (`0.9.0-alpha`) | C's contract; Windows CI |
 | **E** | `account/v1-acceptance` | Cross-component acceptance, real Windows + web evidence, documentation completion | B, C, D merged; owner-provided isolated staging |
 
 Each PR is independently reviewable, ends with an independent security review and is **never merged automatically**. B, C and D can proceed in parallel after A; B's linking UI and D's claim flow depend on C's function contracts (already frozen in PR A).
@@ -64,7 +64,7 @@ Legend: **IMPLEMENTED** (code in the PR) · **CI VERIFIED** (GitHub Actions on t
 | Account Auth configuration validator + closed contracts + boundary tests | IMPLEMENTED (PR A); CI VERIFIED when PR A checks pass | `web/src/lib/account/`, `web/tests/unit/account-*.test.ts` |
 | Web registration, verification, login, logout, recovery, sessions, profile | IMPLEMENTED (PR B); CI VERIFIED against real GoTrue when the `Account web auth (real GoTrue)` check passes; STAGING VERIFIED needs the owner's staging project (AT-7) | [web-auth.md](web-auth.md), `web/tests/account/`, `web/src/app/account/` |
 | Ownership claim backend, account Guildbook RPCs (migration `0012`) | IMPLEMENTED (PR C), isolated-CI verified: real PostgreSQL + real GoTrue; **applied nowhere real**; awaiting independent review | `database/migrations/0012_account_ownership_claims.sql`, `database/tests/account/`, [0012-deployment-and-recovery.md](0012-deployment-and-recovery.md) |
-| Companion registered accounts | BLOCKED / PENDING (PR D) | — |
+| Companion registered accounts, identity-loss fix, ownership-aware sync, claim initiation (Companion `0.9.0-alpha`) | IMPLEMENTED (PR D); CI VERIFIED when `Companion account auth (Windows)` passes; **WINDOWS VERIFIED pending** (owner); redemption on the website, real Auth/PostgREST integration and staging: BLOCKED on PR E; production: BLOCKED (`ProductionAccountAuthApproved = false`, gate closed by default) | [companion.md](companion.md), `companion/ForeverDB.Companion.Account/`, `tests/companion-account/` |
 | Real Auth/email/two-account acceptance | BLOCKED / PENDING (needs owner staging, PR E) | — |
 | Production facts used by the audit (7 installations, 0 permanent users, ledger at `0011`) | read-only queries executed through the Supabase connector in this session; reproducible from [architecture.md §7](architecture.md) | — |
 | Any production activation | BLOCKED (no owner approval; code constant false) | — |

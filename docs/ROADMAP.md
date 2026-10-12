@@ -24,7 +24,7 @@ polish and distribution work.
   detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
-- Version: **0.8.2-alpha**
+- Version: **0.9.0-alpha** (Account System V1 authentication; account features OFF by default, production blocked)
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -435,7 +435,7 @@ Unified identity for the website and the Windows Companion with independent sess
 - [x] **PR A — specification and security foundation** (`account/v1-spec-foundation`): audit of `main`, ADR-015..018, threat model, claim protocol and migration `0012` plan, Auth-only configuration validator (`production` hard-blocked), closed endpoint/RPC/redirect contracts, static boundary tests. **IMPLEMENTED; CI VERIFIED when the PR checks pass; independent review recorded in the PR.**
 - [ ] **PR B — Web Auth:** registration, verification, login/logout, recovery, sessions, profile; real-GoTrue CI job. BLOCKED on PR A.
 - [ ] **PR C — Ownership and Guildbook backend:** forward-only `0012`, claim/consume, account RPCs, SQL negative matrix. BLOCKED on PR A.
-- [ ] **PR D — Companion registered accounts:** session states, fail-closed refresh, claim display, DPAPI hardening, `0.9.0-alpha`. BLOCKED on PR C contracts.
+- [x] **PR D — Companion registered accounts** (`account/v1-companion-auth`, [companion.md](account-v1/companion.md)): fixed the anonymous identity-loss defect, six session states, DPAPI slots with atomic writes and a machine-wide lock, registered sign-in/sign-out, ownership-aware per-installation sync, claim initiation, closed feature gate (production OFF), Windows regression suite and workflow, Companion `0.9.0-alpha`. **IMPLEMENTED; CI VERIFIED when `Companion account auth (Windows)` passes on the final head; real-Windows UI acceptance PENDING; redemption on the website and end-to-end acceptance remain PR E.**
 - [ ] **PR E — End-to-end acceptance:** needs an owner-provided isolated staging project and a Windows run.
 - [ ] **Production activation: BLOCKED** (owner approval, dry-run, rollback; code constant `PRODUCTION_ACCOUNT_AUTH_APPROVED` is false). Migration `0010` stays unapplied; registered quota tiers are a separate later milestone.
 

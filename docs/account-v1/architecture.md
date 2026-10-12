@@ -39,6 +39,8 @@ Status: **specification (PR A)**. Facts below were verified against `main` @ `2c
 | Public adapters (`lib/data`) use a PostgreSQL read model; no Auth. | Public browsing stays anonymous; static tests forbid account code reaching it. |
 | GitHub ruleset on `main` is active; `release` controls Vercel Production (PR #46). | Account PRs target `main`; nothing is promoted to `release`. |
 
+> **Implementation status (PR D):** the Companion findings above are resolved in Companion `0.9.0-alpha`; see [companion.md](companion.md) for the as-built design, the deviations (a third `pending-revoke.dat` slot, poll-based lock wait), and the test mapping.
+
 ## 2. Data flow
 
 ### Registration, verification, login (website)

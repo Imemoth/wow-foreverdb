@@ -4,13 +4,17 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.8.2-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
 - automatic WoW Forever path detection
 - SavedVariables watcher and automatic authenticated sync
-- Supabase anonymous authentication with an encrypted local session
+- Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
+  the existing anonymous identity keeps working after the upgrade and is never replaced
+  silently; ForeverDB account sign-in/claim features are **off by default** and are only
+  available against an explicit local/staging test project
+  ([Account System V1 — Companion](../docs/account-v1/companion.md))
 - item and source search
 - item/source detail navigation with Back / Forward / breadcrumb history
 - acquisition tabs for loot, skinning, mining, herbalism, fishing, pools,
