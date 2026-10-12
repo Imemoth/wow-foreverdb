@@ -174,13 +174,18 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
   const ownerProduction = { pilot: false, production: true };
   const releaseCtx: AccountAuthContext = { hosted: true, deployment: "production", platformEnv: "production" };
 
-  it("refuses both modes by default, even with every env var present", () => {
-    expect(issues(pilot, previewCtx)).toMatch(/owner-approved code change/);
+  it("allows only the explicitly source-approved Preview pilot, while production stays code-blocked", () => {
+    expect(issues(pilot, previewCtx)).toBe("");
     expect(issues(production, releaseCtx)).toMatch(/owner-approved code change/);
-    // The actual production evaluator uses compiled false flags, never an env-based approval.
-    const fakeApproval = { ...pilot, ACCOUNT_AUTH_PILOT_APPROVED: "true" };
+    // The approval is compiled into this TEMPORARY protected-pilot branch, not controlled by environment flags.
+    // A simulation with compiled approval revoked must stay closed for either mode.
+    expect(evaluateAccountAuth(pilot, previewCtx, { pilot: false, production: false }).issues.join(" "))
+      .toMatch(/owner-approved code change/);
+    const fakeApproval = { ...pilot, ACCOUNT_AUTH_PILOT_APPROVED: "false" };
     expect(issues(fakeApproval, previewCtx)).toMatch(/unknown account-auth variable/);
-    expect(issues(fakeApproval, previewCtx)).toMatch(/owner-approved code change/);
+    // No environment var may approve public production.
+    const productionSpoof = { ...production, ACCOUNT_AUTH_PRODUCTION_APPROVED: "true" };
+    expect(issues(productionSpoof, releaseCtx)).toMatch(/owner-approved code change/);
   });
 
   it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
@@ -285,7 +290,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(!privateDb.ok && privateDb.issues.join(" ")).toMatch(/PRIVATE production database/);
   });
 
-  it("leaves real deployments fail-closed without source-code approval, even if full public release settings are present", () => {
+  it("blocks public production and any pilot on the wrong Vercel target despite deployment environment values", () => {
     const base: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
       FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
@@ -300,7 +305,8 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
     const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
     expect(rp.ok).toBe(false);
-    expect(!rp.ok && rp.issues.join(" ")).toMatch(/owner-approved code change/);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/protected Vercel preview/);
+    // The pilot's source-code approval must not create public access or a public backend credential.
     const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
     expect(x.ok).toBe(false);
     expect(!x.ok && x.issues.join(" ")).toMatch(/NEXT_PUBLIC_ACCOUNT_BACKEND: references the PRIVATE/);
