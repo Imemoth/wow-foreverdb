@@ -7,6 +7,7 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | Document | Content |
 | --- | --- |
 | [architecture.md](architecture.md) | Audit of the actual `main`, data flows, trust boundaries, the Auth-boundary decision (options evaluated), web session design, environments |
+| [0012-deployment-and-recovery.md](0012-deployment-and-recovery.md) | Migration 0012 pre-flight, apply, kill switch, rollback, incident recovery runbook, retention, known limits |
 | [ownership-claim-protocol.md](ownership-claim-protocol.md) | Claim and session state machines, private schema, function contracts, concurrency, failure and recovery, migration `0012` plan, rollback |
 | [security.md](security.md) | Account-specific threat model, abuse prevention, negative-test matrix mapped to the 20 mandatory tests |
 | [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md) | Evidence ledger rules, per-PR acceptance, the owner action checklist, and the enforceable direct-Auth-abuse criteria (§5) |
@@ -62,7 +63,7 @@ Legend: **IMPLEMENTED** (code in the PR) · **CI VERIFIED** (GitHub Actions on t
 | Specification, ADRs, threat model | IMPLEMENTED (PR A) | this directory |
 | Account Auth configuration validator + closed contracts + boundary tests | IMPLEMENTED (PR A); CI VERIFIED when PR A checks pass | `web/src/lib/account/`, `web/tests/unit/account-*.test.ts` |
 | Web registration, verification, login, logout, recovery, sessions, profile | IMPLEMENTED (PR B); CI VERIFIED against real GoTrue when the `Account web auth (real GoTrue)` check passes; STAGING VERIFIED needs the owner's staging project (AT-7) | [web-auth.md](web-auth.md), `web/tests/account/`, `web/src/app/account/` |
-| Ownership claim backend, account Guildbook RPCs | BLOCKED / PENDING (PR C) | — |
+| Ownership claim backend, account Guildbook RPCs (migration `0012`) | IMPLEMENTED (PR C), isolated-CI verified: real PostgreSQL + real GoTrue; **applied nowhere real**; awaiting independent review | `database/migrations/0012_account_ownership_claims.sql`, `database/tests/account/`, [0012-deployment-and-recovery.md](0012-deployment-and-recovery.md) |
 | Companion registered accounts | BLOCKED / PENDING (PR D) | — |
 | Real Auth/email/two-account acceptance | BLOCKED / PENDING (needs owner staging, PR E) | — |
 | Production facts used by the audit (7 installations, 0 permanent users, ledger at `0011`) | read-only queries executed through the Supabase connector in this session; reproducible from [architecture.md §7](architecture.md) | — |
