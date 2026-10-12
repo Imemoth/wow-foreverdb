@@ -938,6 +938,9 @@ public sealed class AccountSessionManager
     /// </summary>
     public async Task<ForgetOutcome> ForgetLegacyOwnerAsync(bool confirmed, bool discardIfRevocationFails, CancellationToken ct = default)
     {
+        // Never revoke the original anonymous production identity from a claim
+        // experiment. The legacy slot is a copy, not an ownership transfer.
+        if (!_allowLegacyRefreshOrRevoke) return ForgetOutcome.FeatureDisabled;
         if (!confirmed)
         {
             return ForgetOutcome.ConfirmationRequired;
