@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Account System V1 core for the Windows Companion: credential vault, session
+    state machine, GoTrue/PostgREST clients and ownership-aware sync routing.
+    Deliberately UI-free (no WPF) so it is unit-testable and cannot touch
+    SavedVariables parsing or Search.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ForeverDB.Companion.Account</AssemblyName>
+    <RootNamespace>ForeverDB.Companion.Account</RootNamespace>
+    <Version>0.9.0-alpha</Version>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,219 @@
+using System.Text.RegularExpressions;
+
+namespace ForeverDB.Companion.Account;
+
+public enum AccountEnvironment
+{
+    /// <summary>Production behaviour of 0.8.x: anonymous sessions only. Account System V1 is OFF.</summary>
+    ProductionAnonymousOnly,
+    Local,
+    Staging
+}
+
+/// <summary>Where Companion Auth and RPC traffic goes (the same project for both, never mixed).</summary>
+public sealed record AccountEndpoint(string BaseUrl, string PublishableKey, string Label)
+{
+    public Uri BaseUri => new(BaseUrl.TrimEnd('/') + "/");
+    public override string ToString() => $"AccountEndpoint({Label})";
+}
+
+public sealed record AccountGateDecision(
+    AccountEnvironment Environment,
+    bool AccountsEnabled,
+    AccountEndpoint? Endpoint,
+    string CredentialSubdirectory,
+    string Reason);
+
+/// <summary>
+/// Fail-closed capability gate for Account System V1 (registered login, claims, ownership routing).
+///
+/// The Companion ships the private production Supabase URL, but production account activation is a
+/// reviewed owner decision that has not been taken: <see cref="ProductionAccountAuthApproved"/> is a
+/// compile-time constant that no setting, file or environment variable can flip. Activation for
+/// development/test needs an explicit process environment variable (never settings.json) AND an endpoint
+/// that validates as an isolated local or staging project that is provably not the production project.
+/// </summary>
+public static class AccountFeatureGate
+{
+    /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
+    public const bool ProductionAccountAuthApproved = false;
+
+    public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
+
+    public const string ModeVariable = "FOREVERDB_ACCOUNT_MODE";
+    public const string UrlVariable = "FOREVERDB_ACCOUNT_SUPABASE_URL";
+    public const string KeyVariable = "FOREVERDB_ACCOUNT_SUPABASE_KEY";
+    public const string ProjectRefVariable = "FOREVERDB_ACCOUNT_PROJECT_REF";
+
+    private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
+
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable)
+    {
+        var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
+
+        if (mode.Length == 0 || mode == "disabled")
+        {
+            return Off("Account features are disabled (default).");
+        }
+
+        if (mode == "production")
+        {
+            // Never honoured, whatever else is set.
+            return Off(ProductionAccountAuthApproved
+                ? "Production account mode is not available from the environment."
+                : "Production account activation is not approved; account features stay off.");
+        }
+
+        if (mode is not ("local" or "staging"))
+        {
+            return Off("Unknown account mode; account features stay off.");
+        }
+
+        var url = (getVariable(UrlVariable) ?? "").Trim();
+        var key = (getVariable(KeyVariable) ?? "").Trim();
+
+        if (url.Length == 0 || key.Length == 0)
+        {
+            return Off("Account test endpoint is incomplete; account features stay off.");
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment) ||
+            (uri.AbsolutePath != "/" && uri.AbsolutePath.Length != 0))
+        {
+            return Off("Account test endpoint must be a bare origin; account features stay off.");
+        }
+
+        if (ContainsProductionReference(url) || ContainsProductionReference(key))
+        {
+            return Off("Account test endpoint refers to the production project; refused.");
+        }
+
+        var keyReason = ValidatePublishableKey(key);
+        if (keyReason is not null)
+        {
+            return Off(keyReason);
+        }
+
+        var host = uri.IdnHost.ToLowerInvariant();
+
+        if (mode == "local")
+        {
+            var loopback = host is "localhost" or "127.0.0.1" or "[::1]" or "::1";
+            if (!loopback || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return Off("Local account mode requires a loopback endpoint; refused.");
+            }
+
+            var sub = $"account-test{Path.DirectorySeparatorChar}local-{uri.Port}";
+            return new AccountGateDecision(
+                AccountEnvironment.Local, true,
+                new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, "local"),
+                sub, "Local account test mode.");
+        }
+
+        // staging
+        if (uri.Scheme != Uri.UriSchemeHttps || !host.EndsWith(".supabase.co", StringComparison.Ordinal))
+        {
+            return Off("Staging account mode requires an https <ref>.supabase.co endpoint; refused.");
+        }
+
+        var projectRef = host[..^".supabase.co".Length];
+        if (!ProjectRefPattern.IsMatch(projectRef) ||
+            projectRef.Equals(ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+        {
+            return Off("Staging project reference is invalid or the production project; refused.");
+        }
+
+        var confirmed = (getVariable(ProjectRefVariable) ?? "").Trim().ToLowerInvariant();
+        if (!string.Equals(confirmed, projectRef, StringComparison.Ordinal))
+        {
+            return Off("Staging project reference was not confirmed twice; account features stay off.");
+        }
+
+        return new AccountGateDecision(
+            AccountEnvironment.Staging, true,
+            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, "staging"),
+            $"account-test{Path.DirectorySeparatorChar}staging-{projectRef}",
+            "Staging account test mode.");
+    }
+
+    public static AccountGateDecision EvaluateFromEnvironment() =>
+        Evaluate(name => Environment.GetEnvironmentVariable(name));
+
+    private static AccountGateDecision Off(string reason) =>
+        new(AccountEnvironment.ProductionAnonymousOnly, false, null, "", reason);
+
+    private static bool ContainsProductionReference(string value) =>
+        value.Contains(ProductionProjectRef, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ValidatePublishableKey(string key)
+    {
+        if (key.StartsWith("sb_publishable_", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (key.StartsWith("sb_secret_", StringComparison.Ordinal))
+        {
+            return "A secret key was supplied; refused.";
+        }
+
+        var claims = JwtInspectorRole.TryRole(key);
+        return claims == "anon"
+            ? null
+            : "Account endpoint key must be a publishable/anon key; refused.";
+    }
+}
+
+internal static class JwtInspectorRole
+{
+    public static string? TryRole(string jwt)
+    {
+        var parts = jwt.Split('.');
+        if (parts.Length != 3)
+        {
+            return null;
+        }
+
+        try
+        {
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            using var doc = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(payload));
+            return doc.RootElement.TryGetProperty("role", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String
+                ? r.GetString()
+                : null;
+        }
+        catch (Exception ex) when (ex is FormatException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>
+/// Last line of defence against test traffic reaching production: every request made by the account
+/// clients passes through this handler, which refuses the production project host and any URL that
+/// mentions the production project reference, regardless of what the configuration said.
+/// </summary>
+public sealed class ProductionHostGuardHandler : DelegatingHandler
+{
+    private readonly bool _enforce;
+
+    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce) : base(inner)
+    {
+        _enforce = enforce;
+    }
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (_enforce && request.RequestUri is { } uri &&
+            uri.ToString().Contains(AccountFeatureGate.ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Account traffic to the production project is blocked.");
+        }
+
+        return base.SendAsync(request, cancellationToken);
+    }
+}

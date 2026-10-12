@@ -5,3 +5,7 @@ Thumbs.db
 .env.*
 !.env.example
 sync-config.json
+
+# .NET build output
+bin/
+obj/
