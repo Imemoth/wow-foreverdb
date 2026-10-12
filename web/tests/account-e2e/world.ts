@@ -1,3 +1,4 @@
+import { randomBytes, randomInt } from "node:crypto";
 import type { APIRequestContext, APIResponse, PlaywrightWorkerArgs } from "@playwright/test";
 import { PASSWORD, cookieOf, json, newClient, openSessionCookie, post, signedInClient, uniqueEmail, waitForMail } from "../account/helpers";
 import { anonymous, claimsOf, ingest, relaxFixtureCeilings, rpc, snapshot, type Identity, uniq } from "./stack";
@@ -10,7 +11,7 @@ export interface WebUser { c: APIRequestContext; email: string; password: string
 /** Registers on the website, confirms through the CAPTURED e-mail, and returns the signed-in website client (a real web session). */
 export async function webUser(playwright: Playwright, tag: string): Promise<WebUser> {
   // every account gets its OWN password (a shared constant would make "the password of account B" indistinguishable from A's)
-  const { c, email, password } = await signedInClient(playwright, tag, `${PASSWORD} ${tag} ${Math.random().toString(36).slice(2, 10)}`);
+  const { c, email, password } = await signedInClient(playwright, tag, `${PASSWORD} ${tag} ${randomBytes(5).toString("hex")}`);
   const ck = await cookieOf(c);
   const s = await openSessionCookie(ck!.value);
   if (!s) throw new Error("web session cookie could not be opened");
@@ -55,7 +56,7 @@ export async function link(c: APIRequestContext, code: string, password: string,
 export { claimsOf };
 
 /** A client that presents exactly this session cookie (a thief with a copied browser state), with a working CSRF cookie jar of its own. */
-export async function clientWithSessionCookie(playwright: Playwright, value: string, ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`): Promise<APIRequestContext> {
+export async function clientWithSessionCookie(playwright: Playwright, value: string, ip = `203.0.113.${randomInt(1, 251)}`): Promise<APIRequestContext> {
   return playwright.request.newContext({
     baseURL: "http://localhost:3210",
     extraHTTPHeaders: { "x-forwarded-for": ip },

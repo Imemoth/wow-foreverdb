@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { cookieOf, json, newClient, post } from "../account/helpers";
 import { clientWithSessionCookie, companionWithInstallation, link, startClaim, webUser, type WebUser } from "./world";
@@ -22,7 +23,7 @@ test.afterAll(async () => { await chaos("pass"); await db.end(); });
 async function onChaosSite(playwright: Playwright, u: WebUser): Promise<APIRequestContext> {
   return playwright.request.newContext({
     baseURL: ORIGIN_CHAOS,
-    extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200) + 20}` },
+    extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${randomInt(20, 220)}` },
     storageState: { cookies: [{ name: "fdb_acct", value: (await cookieOf(u.c))!.value, domain: "localhost", path: "/account", httpOnly: true, secure: false, sameSite: "Lax", expires: -1 }], origins: [] },
   });
 }

@@ -151,7 +151,7 @@ test("a person with no installation sees helpful empty states; an anonymous visi
   const p = await anon.newPage();
   for (const path of ["/account/link", "/account/installations", "/account/guildbook"]) {
     await p.goto(path);
-    await expect(p).toHaveURL(new RegExp(`/account/login\\?next=${encodeURIComponent(path).replace(/%/g, "%")}`));
+    await expect(p).toHaveURL(new RegExp(`/account/login\\?next=${encodeURIComponent(path)}`));
   }
   await anon.close();
 });
