@@ -167,20 +167,21 @@ Upgrade: install 0.9.0-alpha over 0.8.x. `session.dat` is read as is; the anonym
 
 ## 13. Pending real-Windows acceptance (owner)
 
-Not claimed as passed by CI. Run on a Windows machine against the owner's isolated staging project (see `acceptance-and-owner-actions.md`), with `FOREVERDB_ACCOUNT_MODE=staging` and the URL/key/ref variables set:
+Not claimed as passed by CI. **Environment rule:** with `FOREVERDB_ACCOUNT_MODE=staging` the Companion uses a *separate* vault `%LOCALAPPDATA%\ForeverDB\account-test\staging-<ref>\` and talks only to the owner's isolated staging project; it neither reads nor upgrades the real production `session.dat`. With the gate closed (no variables) the Companion is the 0.8.x production-anonymous client: **AutoSync must be OFF and no Sync now may be pressed**, so no write reaches the private production service during acceptance. Evidence is recorded with separate statuses; the live production identity is never claimed to be remotely verified under staging.
 
-| # | Scenario | Result |
-| --- | --- | --- |
-| W1 | Upgrade a real 0.8.2 install over itself: starts, syncs, same identity, no prompt | pending |
-| W2 | Start offline with an expired token; reconnect; identity unchanged, no new user in Auth | pending |
-| W3 | First run without a session: the choice is shown, nothing is created until chosen | pending |
-| W4 | Sign in with a confirmed website account; e-mail shown; legacy identity preserved; installation still syncs under it | pending |
-| W5 | Sign out; website session still signed in; legacy still syncs | pending |
-| W6 | Two Companion windows/processes started together; one identity, no re-auth | pending |
-| W7 | Start a claim; code shown once; copy; expiry; hide; no code in `%LOCALAPPDATA%\ForeverDB` | pending |
-| W8 | (needs PR E) redeem on the website; Companion shows *transferred*, asks to sign in, then syncs with the account | blocked |
-| W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | pending |
-| W10 | Gate closed (no variables): ACCOUNT tab shows features off; anonymous sync unchanged; no Auth request except the 0.8.x ones | pending |
+| # | Scenario | Environment / fixture | Network allowed | Result |
+| --- | --- | --- | --- | --- |
+| W1a | **Production-vault upgrade safety**: back up the real `%LOCALAPPDATA%\ForeverDB\session.dat`, install 0.9.0-alpha over 0.8.x, start with the gate closed, AutoSync OFF; Account tab shows anonymous mode; file bytes/identity unchanged (compare backup; no `.lost-*`, no new files except a marker); optionally start with the network disabled to prove an expired token keeps the identity | real production vault, gate closed, AutoSync OFF | **none to production** (offline, or no sync/search action) | pending |
+| W1b | **Staging legacy-format upgrade fixture**: write a staging-owned 0.8.x-format session (bare DPAPI blob, no marker) into the staging vault, start under `staging`; identity preserved, refresh rotates and persists, ingest of a test installation succeeds against staging only | staging vault, staging project | staging only | pending |
+| W2 | Offline start with an expired staging token; reconnect; identity unchanged, no new Auth user | staging vault | staging only | pending |
+| W3 | First run with an empty staging vault: the choice is shown, nothing is created until chosen | staging vault | staging only after the choice | pending |
+| W4 | Sign in with a confirmed staging website account; e-mail shown; legacy identity preserved; its installation still syncs under it | staging, test account | staging only | pending |
+| W5 | Sign out; staging website session still signed in; legacy still syncs | staging | staging only | pending |
+| W6 | Two Companion windows/processes started together; one identity, no re-auth | staging vault | staging only | pending |
+| W7 | Start a claim; code shown once; copy; expiry; hide; no code in the vault directory or settings | staging, test installation | staging only | pending |
+| W8 | Redeem on the website; Companion shows *transferred*, asks to sign in, then syncs with the account | staging + PR E | — | **BLOCKED on PR E** |
+| W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | either; no sync needed | none | pending |
+| W10 | Gate closed: ACCOUNT tab shows features off; no account request is made (inspect with a proxy/firewall rule that blocks the production host: the Companion must stay usable offline) | production vault, AutoSync OFF | none | pending |
 
 ## 14a. Independent security review (PR D)
 
@@ -203,7 +204,9 @@ Accepted/info: `fdb_installation_link_status` requires exactly `{state}` (an add
 
 ## 14. Owner actions and PR E dependencies
 
-* Provide the isolated staging Supabase project, apply `0010`/`0012`/`0013` **there only**, and the Windows acceptance session (see [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md)).
+* Provide the isolated staging Supabase project and apply, **there only**, the verified chain the 0012 pre-flight requires: the existing migrations through `0009` (API gate/ingest) and `0011` (`fix_observed_drop_rate_denominator`), then `0012` (`account_ownership_claims`). `0010` is reserved for the public projection export and is **not** an Account System V1 dependency (do not apply it for this). `0013` is **recovery-only**: it exists solely to restore after a successfully recorded full `0012` rollback and its pre-flight refuses an initial setup. See [0012-deployment-and-recovery.md](0012-deployment-and-recovery.md). Nothing in this PR authorizes applying any migration anywhere.
+* Add the exact required status check `Companion account auth (Windows)` (GitHub Actions app, integration ID 15368) to ruleset `24853899` next to the existing eight, and verify the readback shows nine unique checks (owner governance action; not done by this PR).
+* Provide the Windows acceptance session (see [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md)).
 * Auth settings that would break the Companion must stay off (project-wide CAPTCHA, single session per user, session time-box, short inactivity timeout); staging acceptance AT-4 runs the Companion under the final settings.
 * PR E: `/account/link` redemption with the pre-hijack protection, the cross-component run, the Windows evidence, and the decision whether account features may ever be enabled for production (flipping `ProductionAccountAuthApproved`).
 
