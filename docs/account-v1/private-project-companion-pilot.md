@@ -30,6 +30,13 @@ The compiled `ProductionAccountAuthApproved` remains **false**. Only the deliber
 
 **Negative/stop conditions:** new anonymous identity, changed production-vault credential without explicit refresh, missing installation history, new owner link/claim, outgoing ingest/claim RPC in this pilot, wrong endpoint, missing site session, or a storage error. Stop, do not repeatedly sign in, retain logs with keys/IDs/tokens redacted. Do not claim W4/W7/W8 PASS without their own owner-run evidence.
 
+## Owner Windows pilot evidence - 2026-10-12
+
+- **Login: PASS (owner screenshot).** The private-pilot Companion shows the registered ForeverDB account while the local anonymous installation remains listed as `Not checked yet`. Account claim, owner selection and upload controls are disabled.
+- **Restart persistence: PASS (owner report plus screenshot).** Owner closed the Companion, relaunched the same pilot binary with the process-scoped project parameters, and remained signed in without entering the account password again. This is local credential persistence, **not** a forced refresh-token rotation test.
+- **Supabase read-only check after restart:** 7 installations, 2 guilds, 46 guild-member records, 8 anonymous Auth identities, 1 registered Auth user and **0 ownership links**. The count check alone is not a bytewise local vault verification.
+- **Still open:** compare the archived and current original `session.dat` SHA-256 with the app closed; demonstrate normal anonymous mode after unsetting pilot variables; separately verify token rotation, no-write traces, and a future disposable installation claim.
+
 ## Next explicitly separate phase
 
 After this pilot proves local credential separation and registered sign-in, review a **throwaway installation** claim and end-to-end Guildbook retrieval with the operator. Any enabling of `ClaimService` or ingest for the existing private project requires another reviewed change and explicit, scoped approval. Never use one of the seven valuable existing installations as the first claim.
