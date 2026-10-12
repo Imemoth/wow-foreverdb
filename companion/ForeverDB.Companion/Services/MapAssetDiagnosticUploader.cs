@@ -34,7 +34,7 @@ public static class MapAssetDiagnosticUploader
     /// </summary>
     public static AccountRuntime? Runtime { get; set; }
 
-    private static readonly HttpClient HttpClient = new()
+    private static readonly HttpClient HttpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
     {
         Timeout = TimeSpan.FromSeconds(12)
     };

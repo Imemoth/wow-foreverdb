@@ -106,7 +106,7 @@ public class SessionManagerTests
         var s = rig.Server.IssueSession(anon.Id);
         var forged = new AuthSession
         {
-            AccessToken = FakeSupabase.MakeJwt(new FakeSupabase.User { Id = anon.Id, Anonymous = false }, Guid.NewGuid().ToString(), s.ExpiresAt),
+            AccessToken = FakeSupabase.MakeJwt(new FakeSupabase.User { Id = anon.Id, Anonymous = false }, JwtInspector.TryDecode(s.AccessToken)!.SessionId!, s.ExpiresAt),
             RefreshToken = s.RefreshToken, ExpiresAt = s.ExpiresAt, UserId = anon.Id
         };
         rig.Vault().Primary.Write(forged, SlotMarker.For(SessionKind.Registered));

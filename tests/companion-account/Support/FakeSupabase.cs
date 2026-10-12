@@ -196,14 +196,14 @@ public sealed class FakeSupabase
                 {
                     return ValidateLocked(bearer, out var user, out _)
                         ? Ok(UserJson(user!))
-                        : Error(401, "bad_jwt", "invalid JWT");
+                        : InvalidTokenLocked(bearer);
                 }
             case ("POST", "/auth/v1/logout"):
                 lock (_gate)
                 {
                     if (!ValidateLocked(bearer, out _, out var sid))
                     {
-                        return Error(401, "bad_jwt", "invalid JWT");
+                        return InvalidTokenLocked(bearer);
                     }
 
                     _sessions[sid!].Alive = false;
@@ -229,6 +229,19 @@ public sealed class FakeSupabase
             default:
                 return new FakeResponse(404, "{\"message\":\"not found\"}");
         }
+    }
+
+    // GoTrue: an expired/unparsable JWT is bad_jwt; a well-formed token whose session was revoked is session_not_found.
+    private FakeResponse InvalidTokenLocked(string? bearer)
+    {
+        var claims = JwtInspector.TryDecode(bearer);
+        var expired = claims?.ExpiresAt is { } e && e < DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (!expired && claims?.SessionId is { } sid && _sessions.TryGetValue(sid, out var rec) && !rec.Alive)
+        {
+            return Error(403, "session_not_found", "Session from session_id claim in JWT does not exist");
+        }
+
+        return Error(401, "bad_jwt", "invalid JWT");
     }
 
     private FakeResponse Refresh(string body)

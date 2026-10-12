@@ -193,7 +193,7 @@ public partial class MainWindow
                 : Visibility.Collapsed;
 
         AccountSignedInPanel.Visibility =
-            registered
+            registered || reauth
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
@@ -964,7 +964,19 @@ public partial class MainWindow
 
         try
         {
-            Clipboard.SetText(offer.DisplayCode);
+            // Keep the code out of Windows clipboard history and cloud sync.
+            var data = new DataObject();
+            data.SetText(offer.DisplayCode);
+            data.SetData(
+                "ExcludeClipboardContentFromMonitorProcessing",
+                new MemoryStream(BitConverter.GetBytes(1)));
+            data.SetData(
+                "CanIncludeInClipboardHistory",
+                new MemoryStream(BitConverter.GetBytes(0)));
+            data.SetData(
+                "CanUploadToCloudClipboard",
+                new MemoryStream(BitConverter.GetBytes(0)));
+            Clipboard.SetDataObject(data, true);
             _clipboardCode = offer.DisplayCode;
             ShowAccountMessage("Code copied. It is removed from the clipboard after two minutes.");
 

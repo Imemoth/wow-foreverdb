@@ -52,7 +52,7 @@ public sealed class AccountRuntime
         }
 
         var http = new HttpClient(
-            new ProductionHostGuardHandler(handler ?? new HttpClientHandler(), enforce: gate.AccountsEnabled));
+            new ProductionHostGuardHandler(handler ?? new HttpClientHandler { AllowAutoRedirect = false }, enforce: gate.AccountsEnabled));
         var vault = new SessionVault(directory, protector ?? CreateDefaultProtector());
         var sessions = new AccountSessionManager(
             vault, new CrossProcessSessionGate(directory), new GoTrueClient(http, endpoint, requestTimeout), gate.AccountsEnabled, clock);

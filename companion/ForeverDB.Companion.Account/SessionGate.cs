@@ -144,7 +144,18 @@ public sealed class CrossProcessSessionGate : ISessionGate
             };
             thread.Start();
 
-            var outcome = await acquired.Task.ConfigureAwait(false);
+            (bool Owned, bool Abandoned, bool Cancelled) outcome;
+            try
+            {
+                outcome = await acquired.Task.ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The mutex itself could not be used (access denied, handle limits): report as a lock failure.
+                releaseSignal.Dispose();
+                throw new SessionLockTimeoutException();
+            }
+
             if (!outcome.Owned)
             {
                 thread.Join();

@@ -168,6 +168,17 @@ public sealed class InstallationSyncCoordinator
         progress.IngestSent = true;
         var result = await _rpc.IngestAsync(token.AccessToken, json, ct).ConfigureAwait(false);
 
+        if (!result.Ok && result.Failure == RpcFailure.Unauthorized && _manager.Generation == generation)
+        {
+            // The server refused a token our clock still thought valid: refresh the SAME credential once and retry
+            // once. Never another credential.
+            var renewed = await _manager.RefreshNowAsync(route.Role!.Value, ct).ConfigureAwait(false);
+            if (renewed.Ok && renewed.UserId == route.UserId && renewed.Generation == generation)
+            {
+                result = await _rpc.IngestAsync(renewed.AccessToken, json, ct).ConfigureAwait(false);
+            }
+        }
+
         if (_manager.Generation != generation)
         {
             // Login/logout/switch happened while the request was in flight: do not mark anything synced.

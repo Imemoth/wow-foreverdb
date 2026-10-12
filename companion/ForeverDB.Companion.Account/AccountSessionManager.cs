@@ -89,7 +89,7 @@ public sealed class AccountSessionManager
     private readonly Dictionary<SlotRole, SessionFault> _faults = new();
     // A refresh the server accepted but we could not persist yet. Kept in memory only so this process continues
     // with the NEW refresh token (the old one is spent) and retries the write.
-    private readonly Dictionary<SlotRole, (AuthSession Session, SlotMarker Marker)> _unpersisted = new();
+    private readonly Dictionary<SlotRole, (AuthSession Session, SlotMarker Marker, string Replaced)> _unpersisted = new();
 
     private AccountStatus _status;
     private string? _verifiedUserId;
@@ -195,6 +195,29 @@ public sealed class AccountSessionManager
     }
 
     /// <summary>
+    /// One forced refresh of the slot's own credential (a token the server refused although the local clock thinks it
+    /// is valid). Never switches identity.
+    /// </summary>
+    public async Task<TokenResult> RefreshNowAsync(SlotRole role, CancellationToken ct = default)
+    {
+        SessionLease lease;
+        try
+        {
+            lease = await _gate.AcquireAsync(_lockTimeout, ct).ConfigureAwait(false);
+        }
+        catch (SessionLockTimeoutException)
+        {
+            SetFault(role, SessionFault.LockTimeout);
+            return TokenResult.Fail(role, SessionFault.LockTimeout, Status.State, Generation);
+        }
+
+        using (lease)
+        {
+            return await AcquireLockedAsync(role, ct, forceRefresh: true).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Token for read-only RPCs (Search, stats, detail): the primary credential when usable, otherwise the
     /// preserved legacy owner credential. Never creates an identity.
     /// </summary>
@@ -210,13 +233,49 @@ public sealed class AccountSessionManager
         return legacy.Ok ? legacy : primary;
     }
 
-    private async Task<TokenResult> AcquireLockedAsync(SlotRole role, CancellationToken ct)
+    /// <summary>
+    /// The not-yet-persisted rotated session for the slot, but only while the disk still holds exactly the
+    /// credential it replaced. Anything else (another process or an identity change wrote the slot) makes it stale
+    /// and it is dropped: a stale in-memory session must never overwrite a newer identity.
+    /// </summary>
+    private (AuthSession Session, SlotMarker Marker, string Replaced)? TakePending(SlotRole role, SlotReadResult disk)
+    {
+        if (!_unpersisted.TryGetValue(role, out var pending))
+        {
+            return null;
+        }
+
+        if (disk.Status == SlotReadStatus.Ok &&
+            disk.Session!.UserId == pending.Session.UserId &&
+            disk.Session.RefreshToken == pending.Replaced)
+        {
+            return pending;
+        }
+
+        if (disk.Status is SlotReadStatus.IoError)
+        {
+            return null;   // cannot tell right now; keep it for the next attempt
+        }
+
+        _unpersisted.Remove(role);
+        return null;
+    }
+
+    private SlotReadResult Overlay(SlotRole role, SlotReadResult disk)
+    {
+        var pending = TakePending(role, disk);
+        return pending is { } p
+            ? new SlotReadResult { Status = SlotReadStatus.Ok, Session = p.Session, Marker = p.Marker }
+            : disk;
+    }
+
+    private async Task<TokenResult> AcquireLockedAsync(SlotRole role, CancellationToken ct, bool forceRefresh = false)
     {
         HealStorage();
         var slot = _vault.Slot(role);
         var read = slot.Read();
 
-        if (_unpersisted.TryGetValue(role, out var pending))
+        if (TakePending(role, read) is { } pending)
         {
             if (await TryPersistAsync(slot, pending.Session, pending.Marker, ct).ConfigureAwait(false))
             {
@@ -263,7 +322,7 @@ public sealed class AccountSessionManager
         var session = read.Session!;
         var marker = read.Marker is { } m ? m : SlotMarker.For(kind);
 
-        if (NeedsRefresh(session))
+        if (forceRefresh || NeedsRefresh(session))
         {
             var refreshed = await RefreshLockedAsync(role, slot, session, kind, marker, ct).ConfigureAwait(false);
             if (refreshed.Fault != SessionFault.None)
@@ -334,7 +393,7 @@ public sealed class AccountSessionManager
                 if (!await TryPersistAsync(slot, rotated, rotatedMarker, ct).ConfigureAwait(false))
                 {
                     // The server already rotated the token; keep the new session usable in memory and retry the write.
-                    _unpersisted[role] = (rotated, rotatedMarker);
+                    _unpersisted[role] = (rotated, rotatedMarker, current.RefreshToken);
                     SetFault(role, SessionFault.StorageFailure);
                     return new RefreshOutcome(rotated, SessionFault.None);
                 }
@@ -390,7 +449,7 @@ public sealed class AccountSessionManager
         var user = await _auth.GetUserAsync(session.AccessToken, ct).ConfigureAwait(false);
         if (!user.Ok)
         {
-            if (user.Failure == AuthFailureKind.SessionRejected)
+            if (user.Failure == AuthFailureKind.SessionRejected && SessionIsGone(user.ErrorCode))
             {
                 MarkRejected(slot, SessionKind.Registered);
                 SetFault(SlotRole.Primary, SessionFault.AuthRejected);
@@ -468,7 +527,7 @@ public sealed class AccountSessionManager
         using (lease)
         {
             HealStorage();
-            var primary = _vault.Primary.Read();
+            var primary = Overlay(SlotRole.Primary, _vault.Primary.Read());
 
             switch (primary.Status)
             {
@@ -514,9 +573,10 @@ public sealed class AccountSessionManager
             {
                 if (primary.Status == SlotReadStatus.Missing)
                 {
-                    var legacy = _vault.LegacyOwner.Read();
+                    var legacy = Overlay(SlotRole.LegacyOwner, _vault.LegacyOwner.Read());
                     if (legacy.Status == SlotReadStatus.Ok && legacy.ProvisionalKind == SessionKind.Anonymous && legacy.Marker?.Rejected != true)
                     {
+                        _unpersisted.Clear();
                         _vault.Primary.Write(legacy.Session!, legacy.Marker ?? SlotMarker.For(SessionKind.Anonymous));
                         _vault.LegacyOwner.Delete();
                                         Recompute();
@@ -549,6 +609,7 @@ public sealed class AccountSessionManager
                 }
 
                 _vault.Primary.Write(created, SlotMarker.For(SessionKind.Anonymous));
+                _unpersisted.Clear();
                 _verifiedUserId = null;
                         Recompute();
                 return StartAnonymousOutcome.Created;
@@ -596,8 +657,8 @@ public sealed class AccountSessionManager
             using (lease)
             {
                 HealStorage();
-                var primary = _vault.Primary.Read();
-                var legacy = _vault.LegacyOwner.Read();
+                var primary = Overlay(SlotRole.Primary, _vault.Primary.Read());
+                var legacy = Overlay(SlotRole.LegacyOwner, _vault.LegacyOwner.Read());
 
                 if (primary.Status == SlotReadStatus.IoError || legacy.Status == SlotReadStatus.IoError)
                 {
@@ -607,7 +668,8 @@ public sealed class AccountSessionManager
                 var primaryIsLiveRegistered =
                     primary.Status == SlotReadStatus.Ok &&
                     primary.ProvisionalKind == SessionKind.Registered &&
-                    primary.Marker?.Rejected != true;
+                    primary.Marker?.Rejected != true &&
+                    _verificationFailedUserId != primary.Session!.UserId;
                 if (primaryIsLiveRegistered)
                 {
                     return SignInOutcome.AlreadySignedIn;
@@ -677,6 +739,7 @@ public sealed class AccountSessionManager
                     return SignInOutcome.StorageFailure;
                 }
 
+                _unpersisted.Clear();
                 _verifiedUserId = session.UserId;
                 _verifiedEmail = user.Value.Email;
                 _verificationFailedUserId = null;
@@ -745,16 +808,17 @@ public sealed class AccountSessionManager
                 return SignOutOutcome.NotSignedIn;
             }
 
-            var revocation = primary.Marker?.Rejected == true
-                ? RevocationResult.AlreadyEnded
-                : await RevokeLockedAsync(primary.Session!, ct).ConfigureAwait(false);
+            var outcome = primary.Marker?.Rejected == true
+                ? new Revocation(RevocationResult.AlreadyEnded, primary.Session!)
+                : await RevokeCoreAsync(primary.Session!, ct).ConfigureAwait(false);
+            var revocation = outcome.Result;
 
             try
             {
                 if (revocation == RevocationResult.NotConfirmed)
                 {
                     // Keep a secure copy so the revocation can be retried; only then drop the primary slot.
-                    _vault.PendingRevocation.Write(primary.Session!, SlotMarker.For(SessionKind.Registered));
+                    _vault.PendingRevocation.Write(outcome.Latest, SlotMarker.For(SessionKind.Registered));
                 }
 
                 _vault.Primary.Delete();
@@ -782,6 +846,11 @@ public sealed class AccountSessionManager
     /// <summary>Retries a revocation that could not be confirmed at sign-out.</summary>
     public async Task<SignOutOutcome> RetryPendingRevocationAsync(CancellationToken ct = default)
     {
+        if (!AccountsEnabled)
+        {
+            return SignOutOutcome.FeatureDisabled;
+        }
+
         SessionLease lease;
         try
         {
@@ -822,7 +891,7 @@ public sealed class AccountSessionManager
     /// <summary>Explicit user decision to stop retrying; the remote session may remain active until its refresh token ages out.</summary>
     public async Task<bool> DiscardPendingRevocationAsync(bool confirmed, CancellationToken ct = default)
     {
-        if (!confirmed)
+        if (!confirmed || !AccountsEnabled)
         {
             return false;
         }
@@ -854,6 +923,11 @@ public sealed class AccountSessionManager
         if (!confirmed)
         {
             return ForgetOutcome.ConfirmationRequired;
+        }
+
+        if (!AccountsEnabled)
+        {
+            return ForgetOutcome.NothingToForget;
         }
 
         SessionLease lease;
@@ -944,29 +1018,62 @@ public sealed class AccountSessionManager
     /// scope=local logout of the given session. Refreshes an expired access token first; a definitively rejected
     /// session counts as ended. Anything ambiguous is NOT reported as confirmed.
     /// </summary>
-    private async Task<RevocationResult> RevokeLockedAsync(AuthSession session, CancellationToken ct)
+    private async Task<RevocationResult> RevokeLockedAsync(AuthSession session, CancellationToken ct) =>
+        (await RevokeCoreAsync(session, ct).ConfigureAwait(false)).Result;
+
+    private readonly record struct Revocation(RevocationResult Result, AuthSession Latest);
+
+    private static bool SessionIsGone(string? code) =>
+        code is "session_not_found" or "session_expired" or "user_not_found";
+
+    // Returns the newest session known (a refresh rotates the token, so a retry must use the rotated one).
+    private async Task<Revocation> RevokeCoreAsync(AuthSession session, CancellationToken ct)
     {
+        var latest = session;
         var token = session.AccessToken;
+        var refreshedOnce = false;
+
+        async Task<bool> RefreshAsync()
+        {
+            var refreshed = await _auth.RefreshAsync(latest.RefreshToken, ct).ConfigureAwait(false);
+            refreshedOnce = true;
+            if (!refreshed.Ok)
+            {
+                return false;
+            }
+
+            latest = refreshed.Value!;
+            latest.Email ??= session.Email;
+            token = latest.AccessToken;
+            return true;
+        }
+
         if (NeedsRefresh(session))
         {
-            var refreshed = await _auth.RefreshAsync(session.RefreshToken, ct).ConfigureAwait(false);
-            if (refreshed.Ok)
+            if (!await RefreshAsync().ConfigureAwait(false))
             {
-                token = refreshed.Value!.AccessToken;
-            }
-            else
-            {
-                return refreshed.Failure == AuthFailureKind.SessionRejected ? RevocationResult.AlreadyEnded : RevocationResult.NotConfirmed;
+                // Only a definitive "session does not exist" proves it ended; a spent or unknown refresh token does not.
+                return new Revocation(RevocationResult.NotConfirmed, latest);
             }
         }
 
         var logout = await _auth.LogoutLocalAsync(token, ct).ConfigureAwait(false);
-        if (logout.Ok)
+        if (!logout.Ok && logout.ErrorCode == "bad_jwt" && !refreshedOnce && await RefreshAsync().ConfigureAwait(false))
         {
-            return RevocationResult.Confirmed;
+            // The server refused an access token our clock thought valid (clock skew): retry once with a fresh one.
+            logout = await _auth.LogoutLocalAsync(token, ct).ConfigureAwait(false);
         }
 
-        return logout.Failure == AuthFailureKind.SessionRejected ? RevocationResult.AlreadyEnded : RevocationResult.NotConfirmed;
+        if (logout.Ok)
+        {
+            return new Revocation(RevocationResult.Confirmed, latest);
+        }
+
+        return new Revocation(
+            logout.Failure == AuthFailureKind.SessionRejected && SessionIsGone(logout.ErrorCode)
+                ? RevocationResult.AlreadyEnded
+                : RevocationResult.NotConfirmed,
+            latest);
     }
 
     private async Task TryRevokeAsync(string accessToken)
@@ -1132,7 +1239,8 @@ public sealed class AccountSessionManager
             changed = next != _status;
             _status = next;
 
-            if (key != _identityKey)
+            var slotReadFailed = primary.Status == SlotReadStatus.IoError || legacy.Status == SlotReadStatus.IoError;
+            if (!slotReadFailed && key != _identityKey)
             {
                 var first = _identityKey.Length == 0;
                 _identityKey = key;

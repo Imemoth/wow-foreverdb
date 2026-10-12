@@ -278,7 +278,7 @@ public sealed class GoTrueClient
         }
 
         var (code, _, _) = ParseError(body);
-        if (status is 401 or 403 && code is "bad_jwt" or "session_not_found" or "session_expired" or "user_not_found" or "refresh_token_not_found")
+        if (status is 401 or 403 && code is "session_not_found" or "session_expired" or "user_not_found" or "refresh_token_not_found")
         {
             return (AuthFailureKind.SessionRejected, code);
         }

@@ -182,6 +182,25 @@ Not claimed as passed by CI. Run on a Windows machine against the owner's isolat
 | W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | pending |
 | W10 | Gate closed (no variables): ACCOUNT tab shows features off; anonymous sync unchanged; no Auth request except the 0.8.x ones | pending |
 
+## 14a. Independent security review (PR D)
+
+A fresh-context reviewer (no prior conclusions) attacked the code and reproduced defects with scratch tests. **No Critical.** All findings are fixed in this PR with regression tests in `tests/companion-account/ReviewRegressionTests.cs`:
+
+| # | Sev | Finding | Resolution |
+| --- | --- | --- | --- |
+| F1 | High | A rotated-but-unpersisted session held in memory could later overwrite a registered sign-in (downgrade) and sign-in copied a spent anonymous token to the legacy slot | pending session applies only while the disk still holds the credential it replaced; dropped otherwise and on every identity change; sign-in/anonymous restore use the pending (newer) session |
+| F2 | Med | `bad_jwt` (clock skew) was treated as "session gone": marked a live session rejected and reported logout "Confirmed" | only `session_not_found`/`session_expired`/`user_not_found` mean gone; `bad_jwt` triggers one forced refresh and a retry, never a confirmation |
+| F3 | Med | a busy (locked) main file fell back to the stale `.bak`, which `Repair` could write back | backup/temp used only when the main file is missing/unreadable; a busy file reads as `IoError` |
+| F4 | Med | the plaintext marker overrode the token claim; `RegisteredVerificationFailed` was a dead end | the claim inside the encrypted blob decides; marker only for unreadable blobs; sign-in may replace a failed credential; sign-out is offered in `ReauthRequired` |
+| F5 | Low | lockless reads could flip the identity key and raise spurious identity changes | the key is left unchanged while a slot read is busy |
+| F6 | Low | pending-revocation stored the pre-rotation session | the rotated session is stored; a spent/unknown refresh token is `NotConfirmed`, not "ended" |
+| F7 | Low | claim code reached Windows clipboard history/cloud sync | `DataObject` with the exclude-from-history/cloud formats |
+| F8 | Low | forget/retry/discard ignored the gate; account handler followed redirects | `AccountsEnabled` checked; `AllowAutoRedirect = false` (also for the diagnostics client) |
+| F9 | Low | a server-side 401 on ingest was a permanent block | one forced refresh of the SAME credential and one retry |
+| F10 | Low | mutex-layer exceptions could crash the UI | converted to `SessionLockTimeoutException` |
+
+Accepted/info: `fdb_installation_link_status` requires exactly `{state}` (an additive backend field fails closed until the client is updated); `LegacySlotOccupied` needs the user to forget the other rejected anonymous identity first; signing out an unreadable registered credential reports "not confirmed" without a retryable file (nothing readable exists to revoke).
+
 ## 14. Owner actions and PR E dependencies
 
 * Provide the isolated staging Supabase project, apply `0010`/`0012`/`0013` **there only**, and the Windows acceptance session (see [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md)).

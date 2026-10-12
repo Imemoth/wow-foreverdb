@@ -110,7 +110,9 @@ public sealed class SlotReadResult
             }
 
             var claims = JwtInspector.TryDecode(Session.AccessToken);
-            if (markerKind == SessionKind.Registered || claims?.IsAnonymous == false)
+
+            // The token's own claim (inside the encrypted blob) decides; the plaintext marker never overrides it.
+            if (claims?.IsAnonymous == false)
             {
                 return SessionKind.Registered;
             }
@@ -195,6 +197,12 @@ public sealed class CredentialSlot
                 default:
                     sawUnreadable = true;
                     break;
+            }
+
+            if (path == BlobPath && status == SlotReadStatus.IoError)
+            {
+                // The main file is merely busy right now: never fall back to a previous-generation backup.
+                return new SlotReadResult { Status = SlotReadStatus.IoError, Marker = marker };
             }
         }
 

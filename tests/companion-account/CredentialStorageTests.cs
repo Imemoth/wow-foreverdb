@@ -117,12 +117,12 @@ public class CredentialStorageTests
             var io = new FaultyIo();
             var slot = new CredentialSlot(dir, "session", TestEnv.Protector(), io);
             var uid = Guid.NewGuid().ToString();
-            slot.Write(Session(uid, "r1", 2_000_000_100), SlotMarker.For(SessionKind.Registered));
+            slot.Write(Session(uid, "r1", 2_000_000_100, anonymous: false), SlotMarker.For(SessionKind.Registered));
 
             io.FailAt = phase;
             io.LeaveTempOnWrite = true;
             io.FailPathContains = "session.dat";
-            try { slot.Write(Session(uid, "r2", 2_000_000_200), SlotMarker.For(SessionKind.Registered)); } catch (IOException) { }
+            try { slot.Write(Session(uid, "r2", 2_000_000_200, anonymous: false), SlotMarker.For(SessionKind.Registered)); } catch (IOException) { }
 
             // A brand-new process (fresh objects) after the "crash".
             var recovered = new CredentialSlot(dir, "session", TestEnv.Protector()).Read();
