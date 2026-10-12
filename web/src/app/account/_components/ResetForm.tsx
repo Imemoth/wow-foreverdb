@@ -64,7 +64,7 @@ export function ResetForm() {
         <p className="text-sm text-parchment">{messageFor("revocation_incomplete")}</p>
         <FormAlert message={error} alertRef={alertRef} />
         <button type="button" className="btn-gold" onClick={finish} disabled={busy}>{busy ? "Working…" : "Finish securing my account"}</button>
-        <p className="text-xs text-mist">If this keeps failing or the page says your link expired, request a new reset link and enter the SAME password again: that completes the sign-out.</p>
+        <p className="text-xs text-mist">If this keeps failing or the page says your link expired, request a new reset link in THIS browser and enter the same password again: that completes the sign-out.</p>
       </div>
     );
   }

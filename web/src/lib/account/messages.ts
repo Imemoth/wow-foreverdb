@@ -4,7 +4,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   too_many_attempts: "Too many sign-in attempts for this address. Please wait a few minutes and try again.",
   rate_limited: "Too many requests. Please wait a minute and try again.",
   weak_password: "That password is not accepted. Choose a longer, less common password.",
-  same_password: "Choose a password that is different from your current one.",
+  same_password: "Choose a password that is different from your current one (a reset must change it).",
   invalid_input: "Please check the highlighted fields and try again.",
   already_signed_in: "You are already signed in on this browser. Sign out first, then open the link again.",
   invalid_or_expired: "This link is invalid or has expired. Links work once; request a new one.",
@@ -19,6 +19,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   network: "Could not reach the server. Check your connection and try again.",
   revocation_incomplete: "Your password was changed, but we could not confirm that all other sessions were signed out. Your account is not fully secured yet: press \"Finish securing my account\".",
   unauthenticated: "Your session has ended. Please sign in again.",
+  no_pending_reset: "There is nothing to finish in this browser. Set a new password instead.",
 };
 
 /** Installation-linking answers (kept apart from the sign-in texts: the same code can mean something else there). */

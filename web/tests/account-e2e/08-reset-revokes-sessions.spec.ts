@@ -154,6 +154,12 @@ test("partial success 1: password changed but the global logout FAILED -> 202 re
   expect(await liveSessions(v.uid)).toBeGreaterThanOrEqual(1);
   const probe = await newClient(playwright);
   expect((await post(probe, "/account/api/login", { email: v.email, password: fresh })).status()).toBe(200);
+  // sessions created AFTER the password update (the attacker who now knows nothing but already holds the old credentials cannot, but a Companion
+  // signing in with the new password can): they are untouched by Auth's own side effect, so only the website's global logout can end them
+  const late = await registeredSession(v.email, fresh);
+  const lateWeb = await loginAgain(playwright, { email: v.email, password: fresh });
+  expect((await rpc(late.token, "fdb_account_installations")).status).toBe(200);
+  expect((await lateWeb.c.get("/account/api/me")).status()).toBe(200);
   // retry still failing: the same honest answer
   const again = await postChaos(site, "/account/api/reset-password/revoke", {});
   expect(again.status()).toBe(202);
@@ -166,6 +172,8 @@ test("partial success 1: password changed but the global logout FAILED -> 202 re
   expect(await liveSessions(v.uid)).toBe(0);
   expect((await attacker.c.get("/account/api/me")).status()).toBe(401);
   expect([(await rpc(companion.token, "fdb_account_installations")).status]).toEqual([401]);
+  expect((await rpc(late.token, "fdb_account_installations")).status).toBe(401); // proves the retry sent the GLOBAL scope
+  expect((await lateWeb.c.get("/account/api/me")).status()).toBe(401);
   expect((await post(await newClient(playwright), "/account/api/login", { email: v.email, password: fresh })).status()).toBe(200); // unchanged new password
   // the recovery session is gone: a further finish call is refused
   expect((await postChaos(site, "/account/api/reset-password/revoke", {})).status()).toBe(401);
@@ -192,7 +200,18 @@ test("partial success 2: the global logout TOOK EFFECT but its reply was lost (a
   expect(await json(fin)).toEqual({ ok: false, error: "recovery_required" });
   // new link, SAME password: no second password update is needed (Auth says "same password"), the revocation is re-run and CONFIRMED
   const second = await recoverySession(playwright, v.email);
-  const done = await post(second.c, "/account/api/reset-password", { password: fresh });
+  // (a different browser WITHOUT the marker is refused: an identical password is not a reset)
+  const stranger = await post(second.c, "/account/api/reset-password", { password: fresh });
+  expect(stranger.status()).toBe(422);
+  expect(await json(stranger)).toMatchObject({ ok: false, error: "same_password" });
+  // the same browser (marker cookie present) finishes it
+  const marker = (await site.storageState()).cookies.find((x) => x.name === "fdb_reset");
+  expect(marker, "the 202 set the sealed reset marker").toBeTruthy();
+  const sameBrowser = await playwright.request.newContext({
+    baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": "198.51.100.200" },
+    storageState: { cookies: [{ ...marker!, domain: "localhost" }, { name: "fdb_acct", value: second.cookie, domain: "localhost", path: "/account", httpOnly: true, secure: false, sameSite: "Lax", expires: -1 }], origins: [] },
+  });
+  const done = await post(sameBrowser, "/account/api/reset-password", { password: fresh });
   expect(done.status()).toBe(200);
   expect(await json(done)).toEqual({ ok: true, passwordChanged: false, sessionsRevoked: true, redirect: "/account/login?reason=password_reset" });
   expect((await post(await newClient(playwright), "/account/api/login", { email: v.email, password: fresh })).status()).toBe(200);
@@ -216,21 +235,20 @@ test("the revoke endpoint is not a back door: it needs a live recovery session a
   expect((await other.c.get("/account/api/me")).status()).toBe(200); // another account is never affected
   // a recovery session of another account cannot revoke THIS account's sessions
   const ro = await recoverySession(playwright, other.email);
-  expect((await post(ro.c, "/account/api/reset-password/revoke", {})).status()).toBe(200);
+  expect((await post(ro.c, "/account/api/reset-password/revoke", {})).status()).toBe(409); // a recovery session alone, without a prior password change here
   expect((await v.c.get("/account/api/me")).status()).toBe(200);
+  expect((await other.c.get("/account/api/me")).status()).toBe(200);
 });
 
-test("the website's own global logout is what revokes (not a side effect of the password update): resetting to the SAME password changes nothing in Auth, yet every session ends", async ({ playwright }) => {
+test("an identical password is not a reset: without a pending marker it is refused (422), nothing is revoked and nothing is claimed secure", async ({ playwright }) => {
   const v = await webUser(playwright, "sameP");
   const attacker = await loginAgain(playwright, v);
-  const companion = await registeredSession(v.email, v.password);
-  expect(await liveSessions(v.uid)).toBeGreaterThanOrEqual(3);
   const { c: rc } = await recoverySession(playwright, v.email);
-  const done = await post(rc, "/account/api/reset-password", { password: v.password }); // identical: Auth refuses the update (same_password)
-  expect(done.status()).toBe(200);
-  expect(await json(done)).toEqual({ ok: true, passwordChanged: false, sessionsRevoked: true, redirect: "/account/login?reason=password_reset" });
-  expect(await liveSessions(v.uid)).toBe(0);
-  expect((await attacker.c.get("/account/api/me")).status()).toBe(401);
-  expect((await rpc(companion.token, "fdb_account_installations")).status).toBe(401);
-  expect((await post(await newClient(playwright), "/account/api/login", { email: v.email, password: v.password })).status()).toBe(200);
+  const r = await post(rc, "/account/api/reset-password", { password: v.password });
+  expect(r.status()).toBe(422);
+  expect(await json(r)).toEqual({ ok: false, error: "same_password" });
+  expect((await attacker.c.get("/account/api/me")).status()).toBe(200); // not revoked: the password was never changed
+  expect((await post(rc, "/account/api/reset-password/revoke", {})).status()).toBe(409); // and the finish endpoint refuses without a prior change
+  expect(await json(await post(rc, "/account/api/reset-password/revoke", {}))).toEqual({ ok: false, error: "no_pending_reset" });
+  expect((await attacker.c.get("/account/api/me")).status()).toBe(200);
 });
