@@ -95,6 +95,7 @@ public sealed class ClaimService
     private readonly OwnershipRouter _router;
     private readonly InstallationSyncCoordinator _coordinator;
     private readonly TimeProvider _clock;
+    private readonly bool _allowClaims;
     private readonly SemaphoreSlim _single = new(1, 1);
     private readonly Dictionary<string, ClaimOffer> _offers = new(StringComparer.Ordinal);
 
@@ -103,8 +104,10 @@ public sealed class ClaimService
         OwnershipRpcClient rpc,
         OwnershipRouter router,
         InstallationSyncCoordinator coordinator,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        bool allowClaims = true)
     {
+        _allowClaims = allowClaims;
         _manager = manager;
         _rpc = rpc;
         _router = router;
@@ -123,7 +126,7 @@ public sealed class ClaimService
 
     public async Task<ClaimStartResult> StartClaimAsync(string installationId, CancellationToken ct)
     {
-        if (!_manager.AccountsEnabled)
+        if (!_manager.AccountsEnabled || !_allowClaims)
         {
             return new ClaimStartResult(ClaimStartOutcome.FeatureDisabled, null);
         }
