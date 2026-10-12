@@ -34,6 +34,13 @@ W8 is now technically testable: `/account/link` exists on the preview (PR E). Fl
 | W9 | Visual review of the ACCOUNT tab, dark theme, 100% and 150% | either; gate closed | readable, no clipping | Anonymous account state, local installation and account-disabled notice visible; narrow/wide window and owner-reported Windows display scaling changes: no clipped or overlapping controls | 2026-10-12 owner screenshots: `image(20261012-121733).png`, `image(20261012-121740).png`, `image(20261012-121835).png`; STATUS evidence `image(20261012-121709).png` | **PASS — WINDOWS VERIFIED (owner, visual only)** |
 | W10 | Gate closed, production host blocked by firewall | real vault, gate closed | features off, **no** account request, Companion usable offline | | | |
 
+## Owner archive checkpoint — 2026-10-12
+
+- Owner reports a **local backup of the existing Companion `%LOCALAPPDATA%\\ForeverDB` directory** made with the Companion closed (the full backup location/content was not independently inspected).
+- This is a **backup-exists user assertion**, NOT W1a PASS: the live `session.dat` DPAPI blob has not yet been compared with the backup by SHA-256 before/after offline restart; a genuine 0.8.x -> 0.9.x upgrade run was not performed in this checkpoint.
+- **Non-destructive next owner gate:** retain AutoSync OFF; compare the local backup copy of `session.dat` against the current one using `Get-FileHash` without disclosing file content or its digest. Start `0.9.0-alpha` **offline** with the default closed account gate, confirm existing anonymous mode and installation rows, close it, compare again. Neither a claim code nor a new account sign-in may be attempted in this check.
+- **Implementation blocker to registered Companion pilot against the existing single Supabase project:** `AccountFeatureGate.ProductionAccountAuthApproved=false`, `staging` explicitly excludes ref `klxhikdlfwgxurdyexdi`, and `ProductionHostGuardHandler` rejects requests to it whenever the account gate is open. Web Preview success does not lift these Companion constraints. Do not bypass them by editing settings or pointing `staging` at production. A separately reviewed, isolated-vault, bounded pilot-client change plus explicit test-installation approval is required before W4/W7/W8 on the existing project.
+
 ## W9 evidence record — 2026-10-12
 
 - **Companion:** 0.9.0-alpha, real owner Windows runtime; exact binary commit and Windows version not supplied.
