@@ -10,6 +10,12 @@ Status: DRAFT / UNMERGED / NO LIVE CLAIM EXECUTED. Owner explicitly approved lif
 - The protected website requires signed-in account, fresh password, CSRF protection and explicit user confirmation for redemption. Supabase migration 0012 enforces atomic ownership transfer and restricts private Guildbook data.
 - The selected historical installation's owner WILL change upon web redemption. Other SIX historical installations, all other claim codes, automatic ingest, new anonymous signup, owner-selection, diagnostic upload and automatic post-login resync remain forbidden in the client. Even for the selected installation, post-claim ingest stays OFF during this first phase; therefore normal anonymous sync of that installation is expected to stop after transfer until registered ingest is implemented.
 
+## Read-only pre-claim server baseline (2026-10-12)
+
+- Selected: `2f8df8ba69345d0a14c8d56ac86d4b2e`; **exists**, **anonymous-owned**, not yet linked to a registered Account.
+- 7 installations total, 6 unselected. **Other-six owner-fingerprint: `1bd16ed087b98f0632b5f01a39c760ba`** (MD5 of sorted `<id>:<owner_user_id>` strings; this is only a comparison/checksum, not a security signature).
+- 0 rows in `private.account_installations`; 0 claim records; selected installation 140 source-stat rows and 46 Guildbook-member rows.
+- All queries were SELECT/read-only. Exact final CI before the next owner build must be checked at its SHA; this note itself does not authorize redemption.
 ## First Windows acceptance - NOT STARTED
 1. Owner explicitly selected the existing historical ID `2f8df8ba69345d0a14c8d56ac86d4b2e` and accepted that its current anonymous ingest may stop following transfer. Before issuing any code, require final CI and security review, and re-query that EXACT ID is still owned by an anonymous Auth user, has no account link/claim, and remains the only scoped selection. Baseline: 140 source-stat rows, 46 Guildbook-member rows, server last_seen_at 2026-10-12 17:39 UTC. Do not use any of the other six historical installations for this test.
 2. Fully close Companion; retain local backup and AutoSync OFF. Launch the new tested pilot binary with variables scoped to that process only; never store account secrets in GitHub, chat or settings.json.
