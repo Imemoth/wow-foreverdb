@@ -4,6 +4,19 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — disposable installation claim pilot (PR #55, draft)
+
+- [x] Owner approved lifting the existing single-project Companion claim-code restriction, scoped to a private pilot (2026-10-12).
+- [x] PR #55 draft on PR #54: a separate private-claim-pilot process mode accepts ONE explicitly selected installation ID; default production and login-only modes remain unchanged.
+- [x] The original anonymous DPAPI credential is only read and copied into an isolated legacy slot; refresh and revocation of the copy are blocked. Code issuance requires live server proof of anonymous ownership. Full ingest, automatic sync, owner selection and new anonymous identity creation remain blocked.
+- [x] Website password-confirmed one-time code redemption and server-side transaction/ownership checks stay unchanged; no live claim or data migration executed.
+- [ ] Windows CI and independent code/security review on final PR #55 head, including negative cases.
+- [ ] Read-only validate one newly provisioned disposable installation ID, confirming it is not among the 7 historical installs; never test first claim against a valuable installation.
+- [ ] Windows owner E2E: one-time code issuance, password-confirmed web redemption, private Guildbook and registered ownership check, then normal anonymous mode recovery and server-side baseline.
+- [ ] Only after explicit review and acceptance, design protected post-claim registered snapshot ingestion. Keep all public pilot flags OFF for main/release.
+
+Runbook: [private claim pilot](account-v1/private-claim-pilot.md).
+
 ## Companion — registered sign-in for existing private Supabase (PR #54, draft)
 
 - [x] Owner explicitly approved lifting the blanket existing-project registration ban **for a private Companion pilot only** (2026-10-12).
