@@ -211,7 +211,7 @@ public class FeatureGateTests
         Assert.False((await runtime.Rpc.IngestAsync("not-a-token", "{}", default)).Ok);
         var blocked = await runtime.Sync.SyncAsync("installation", "{}", 1, true, default);
         Assert.Equal(SyncOutcome.Blocked, blocked.Outcome);
-        Assert.Equal(BlockReason.FeatureDisabled, blocked.Block);
+        Assert.Equal(BlockReason.FeatureDisabled, blocked.Reason);
 
         // No Account client mutation call made by this login-only pilot.
         Assert.NotEmpty(handler.RequestUris); // only password grant and user verification
