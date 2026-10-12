@@ -22,8 +22,8 @@ export interface ApiReply {
   data: { ok?: boolean; error?: string; redirect?: string; [k: string]: unknown };
 }
 
-export async function postJson(path: string, body: unknown): Promise<ApiReply> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+export async function postJson(path: string, body: unknown, opts: { retryCsrf?: boolean } = {}): Promise<ApiReply> {
+  for (let attempt = 0; attempt < (opts.retryCsrf === false ? 1 : 2); attempt += 1) {
     const token = await csrfToken(attempt > 0);
     if (!token) return { status: 0, data: { ok: false, error: "network" } };
     try {

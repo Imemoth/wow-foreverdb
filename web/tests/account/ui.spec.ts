@@ -188,7 +188,8 @@ test("account cookies are never sent to public pages, public APIs or static asse
   await sleep(300);
   await Promise.race([Promise.all(pending), sleep(4000)]);
   expect(seen.length).toBeGreaterThan(5);
-  for (const s of seen) expect(s.cookie, s.url).not.toMatch(/fdb_acct|fdb_csrf/);
+  // (prefetches of /account/* links that were still in flight from the overview page legitimately carry the account cookie: only requests OUTSIDE /account are checked)
+  for (const s of seen.filter((x) => !new URL(x.url).pathname.startsWith("/account"))) expect(s.cookie, s.url).not.toMatch(/fdb_acct|fdb_csrf/);
   // ...while the account namespace does receive it.
   const acct: string[] = [];
   page.on("request", (r) => { if (new URL(r.url()).pathname.startsWith("/account")) pending.push(r.allHeaders().then((h) => { acct.push(h.cookie ?? ""); }, () => undefined)); });

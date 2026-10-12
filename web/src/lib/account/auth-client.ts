@@ -65,8 +65,8 @@ interface CallSpec<T> {
   emptyOk?: boolean;
 }
 
-async function call<T>(cfg: AccountAuthConfig, spec: CallSpec<T>, callbackUrl?: string): Promise<AuthResult<T>> {
-  if (!isAllowedAuthRequest(spec.method, spec.pathAndQuery, { callbackUrl })) {
+async function call<T>(cfg: AccountAuthConfig, spec: CallSpec<T>, callbackUrl?: string, recovery = false): Promise<AuthResult<T>> {
+  if (!isAllowedAuthRequest(spec.method, spec.pathAndQuery, { callbackUrl, recovery })) {
     // A programming error, not a runtime condition: refuse loudly rather than send anything.
     throw new Error("auth_request_not_allowed");
   }
@@ -173,6 +173,26 @@ export const auth = {
   /** Ends THIS session only. `scope=local` is pinned in the allowlist: a global logout would also sign the Companion out. */
   logout(cfg: AccountAuthConfig, accessToken: string) {
     return call(cfg, { method: "POST", pathAndQuery: "/auth/v1/logout?scope=local", bearer: accessToken, parse: noBody, emptyOk: true });
+  },
+  /**
+   * After a SUCCESSFUL password reset, in the verified recovery session: ends EVERY session of this user (`scope=global`, fixed here and
+   * recovery-only in the allowlist; no caller supplies a scope). The answer is typed and independently verified:
+   *   - `confirmed`: Auth answered 2xx AND the recovery token is then refused with a session-gone code (it was one of the revoked sessions);
+   *   - `uncertain`: Auth answered 2xx but the check could not prove it, or the call timed out / was cut off / answered 5xx / 429 / was refused
+   *     with a session-gone code on a RETRY (the session may have been revoked by the first, unanswered attempt, or by something else);
+   *   - `failed`: Auth definitively refused (nothing was revoked).
+   * Callers must report a secure reset only for `confirmed`.
+   */
+  async logoutAllAfterRecovery(cfg: AccountAuthConfig, recoveryToken: string): Promise<"confirmed" | "uncertain" | "failed"> {
+    const out = await call(cfg, { method: "POST", pathAndQuery: "/auth/v1/logout?scope=global", bearer: recoveryToken, parse: noBody, emptyOk: true }, undefined, true);
+    if (!out.ok) {
+      if (out.kind === "unavailable" || out.kind === "rate_limited") return "uncertain";
+      if (out.code === "session_not_found" || out.code === "session_expired") return "uncertain";
+      return "failed";
+    }
+    const check = await call(cfg, { method: "GET", pathAndQuery: "/auth/v1/user", bearer: recoveryToken, parse: sessionUser });
+    if (!check.ok && check.kind === "rejected" && (check.code === "session_not_found" || check.code === "bad_jwt" || check.code === "session_expired")) return "confirmed";
+    return "uncertain";
   },
   /** The server-confirmed identity: Auth validates the JWT AND that its session still exists. */
   getUser(cfg: AccountAuthConfig, accessToken: string) {

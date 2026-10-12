@@ -27,9 +27,11 @@ const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^
 describe("account web zone (static)", () => {
   it("has the expected shape", () => {
     expect(routes.map(rel).sort()).toEqual([
-      "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts", "app/account/api/forgot-password/route.ts", "app/account/api/login/route.ts",
+      "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts", "app/account/api/forgot-password/route.ts",
+      "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",
+      "app/account/api/link/route.ts", "app/account/api/login/route.ts",
       "app/account/api/logout/route.ts", "app/account/api/me/route.ts", "app/account/api/register/route.ts", "app/account/api/resend/route.ts",
-      "app/account/api/reset-password/route.ts", "app/account/api/session/refresh/route.ts",
+      "app/account/api/reset-password/revoke/route.ts", "app/account/api/reset-password/route.ts", "app/account/api/session/refresh/route.ts",
     ]);
     expect(existsSync(join(SRC, "app/api/account"))).toBe(false);
     expect(clientFiles.length).toBeGreaterThan(5);
@@ -73,19 +75,89 @@ describe("account web zone (static)", () => {
 
   it("only lib/account/auth-client.ts contacts Auth; only turnstile.ts contacts Cloudflare; the browser helper calls same-origin paths only", () => {
     const fetchers = zone.filter((f) => /\bfetch\s*\(/.test(code(f))).map(rel).sort();
-    expect(fetchers).toEqual(["lib/account/auth-client.ts", "lib/account/client.ts"]); // turnstile.ts calls an injected fetchImpl (default: fetch)
+    expect(fetchers).toEqual(["lib/account/auth-client.ts", "lib/account/client.ts", "lib/account/rpc-client.ts"]); // turnstile.ts calls an injected fetchImpl (default: fetch)
     expect(code(join(SRC, "lib/account/turnstile.ts"))).toMatch(/fetchImpl: typeof fetch = fetch/);
     expect(code(join(SRC, "lib/account/turnstile.ts"))).toContain("https://challenges.cloudflare.com/turnstile/v0/siteverify");
     for (const m of code(join(SRC, "lib/account/client.ts")).matchAll(/fetch\(\s*([^,)]+)/g)) expect(m[1], "client fetch target").toMatch(/^("\/account\/api\/|path\b)/);
     // the wrapper checks every request against the closed allowlist
     const wrapper = code(join(SRC, "lib/account/auth-client.ts"));
-    expect(wrapper).toMatch(/isAllowedAuthRequest\(spec\.method, spec\.pathAndQuery, \{ callbackUrl \}\)/);
+    expect(wrapper).toMatch(/isAllowedAuthRequest\(spec\.method, spec\.pathAndQuery, \{ callbackUrl, recovery \}\)/);
     expect(wrapper).toMatch(/AUTH_BODIES\.(signup|password_grant|refresh_grant|verify|recover|resend|update_password)\.parse/);
     expect(wrapper).toMatch(/redirect: "manual"/);
     expect(wrapper).not.toMatch(/\.\.\.(init|options|req|request)\b/); // nothing is spread in from a caller
     // logout is pinned to the local scope and nothing derives a scope from input
     expect(wrapper).toContain("/auth/v1/logout?scope=local");
-    expect(wrapper).not.toMatch(/scope=(global|others)/);
+    // the ONLY global scope is the fixed one inside logoutAllAfterRecovery (recovery-only); nothing else, and never `others`
+    expect(wrapper.match(/scope=global/g)?.length).toBe(1);
+    expect(wrapper).toMatch(/async logoutAllAfterRecovery\(cfg: AccountAuthConfig, recoveryToken: string\)[\s\S]*?\/auth\/v1\/logout\?scope=global[\s\S]*?undefined, true\)/);
+    expect(wrapper).not.toMatch(/scope=others/);
+    expect(wrapper).not.toMatch(/scope=\$\{|scope="\s*\+/);
+    // only the reset routes may call it
+    const callers = zone.filter((f) => /logoutAllAfterRecovery\(/.test(code(f)) && !/auth-client\.ts$/.test(f)).map(rel).sort();
+    expect(callers).toEqual(["app/account/api/reset-password/revoke/route.ts", "app/account/api/reset-password/route.ts"]);
+  });
+
+  it("PR E: the PostgREST client is closed (registry subset, fixed method/path, publishable key + user token, no redirects, bounded, no caller headers)", () => {
+    const text = code(join(SRC, "lib/account/rpc-client.ts"));
+    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*"fdb_account_guildbook_guilds",\s*"fdb_account_guildbook_members",\s*\] as const satisfies/);
+    expect(text).not.toMatch(/fdb_account_claim_start|fdb_installation_link_status/); // Companion-only functions are unreachable from the website
+    expect(text).toMatch(/isAccountRpc\(name\)/);
+    expect(text).toMatch(/\$\{cfg\.authOrigin\}\/rest\/v1\/rpc\/\$\{name\}/);
+    expect(text).toMatch(/method: "POST"/);
+    expect(text).toMatch(/redirect: "manual"/);
+    expect(text).toMatch(/cache: "no-store"/);
+    expect(text).toMatch(/credentials: "omit"/);
+    expect(text).toMatch(/AbortSignal\.timeout\(TIMEOUT_MS\)/);
+    expect(text).toMatch(/MAX_RESPONSE_BYTES/);
+    expect(text).toMatch(/spec\.input as z\.ZodTypeAny\)\.parse\(input\)/);
+    expect(text).toMatch(/spec\.output as z\.ZodTypeAny\)\.safeParse\(json\)/);
+    // exactly four request headers, none taken from a caller; no Prefer / Profile / transaction headers, nothing spread in
+    expect([...text.matchAll(/^\s{8}("?[A-Za-z-]+"?|apikey): /gm)].map((m) => m[1]).sort()).toEqual(["Accept", "Authorization", "\"Content-Type\"", "apikey"].sort());
+    expect(text).not.toMatch(/prefer|profile|x-|\.\.\.(init|options|req|request|headers|input)\b/i);
+    expect(text).not.toMatch(/process\.env|service[_-]?role|sb_secret_/i);
+    expect(importsOf(join(SRC, "lib/account/rpc-client.ts")).filter((i) => /lib\/data|security\/identity|^pg$/.test(i))).toEqual([]);
+  });
+
+  it("PR E: the link route runs wrapper -> identity -> code shape -> password budget -> fresh password -> identity re-check -> link budget -> RPC, with the ORIGINAL session token", () => {
+    const text = code(join(SRC, "app/account/api/link/route.ts"));
+    const order = [
+      "accountApi({ route: \"link\", mutating: true, body: INPUTS.link }", "authenticate(c)", "normalizeClaimCode(body.code)", "\"reauth\", user.id", "chargeEmail(c.ac.env, c.ac.cfg.csrfSecret, \"login\", user.email)",
+      "confirmPassword(c.ac.cfg, user, body.password)", "recheckIdentity(c.ac.cfg, session)", "\"link\", user.id", "callWebRpc(c.ac.cfg, \"fdb_account_claim_redeem\", { p_code: code }, session.at)",
+    ].map((m) => text.indexOf(m));
+    expect(order.every((i) => i > 0), JSON.stringify(order)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(text).not.toMatch(/writeSession|fromAuthSession|passwordGrant|body\.code[^)]*(log|console)/);
+    // nothing about the code or the password reaches a log call
+    for (const m of text.matchAll(/accountLog\([^)]*\)/g)) expect(m[0]).not.toMatch(/code\b(?!:\s*(null|out\.|fresh))|password|body/);
+  });
+
+  it("PR E: reauth.ts never stores or returns the temporary session, checks the SAME user id and revokes with the pinned local logout", () => {
+    const text = code(join(SRC, "lib/account/reauth.ts"));
+    expect(text).toMatch(/temp\.user\.id\.toLowerCase\(\) === current\.id\.toLowerCase\(\)/);
+    expect(text).toMatch(/auth\.getUser\(cfg, temp\.access_token\)/);
+    expect(text).toMatch(/auth\.logout\(cfg, accessToken\)/);
+    expect(text).not.toMatch(/writeSession|setCookie|NextResponse|jsonResponse|refresh_token|\.rt\b/);
+    expect(text).toMatch(/cleanup: revoked \? "revoked" : "unconfirmed"/);
+  });
+
+  it("PR E: every private handler authenticates through the approved resolver and nothing takes ownership from the request", () => {
+    for (const r of ["link", "installations", "guildbook/guilds", "guildbook/members"]) {
+      const text = code(join(SRC, `app/account/api/${r}/route.ts`));
+      expect(text, r).toMatch(/authenticate\(c(, \{ read: true \})?\)/);
+      expect(text, r).toMatch(/\bsession\.at\b/);
+      expect(text, r).not.toMatch(/process\.env|cookies\(\)|req\.headers\.get\("authorization"\)/i);
+    }
+    const priv = code(join(SRC, "lib/account/private.ts"));
+    expect(priv).toMatch(/resolveSession\(c\.ac\.cfg, c\.jar, c\.ac\.https, \{ kind: "user", canWrite: true \}\)/);
+    // the Guildbook member endpoint fixes the page size: the strict body has no limit/offset
+    expect(code(join(SRC, "lib/account/inputs.ts"))).toMatch(/guildbookMembers: z\s*\.object\(\{ installationId: installationIdSchema, guildKey: guildKeySchema, page: z\.number\(\)\.int\(\)\.min\(0\)\.max\(1000\) \}\)\s*\.strict\(\)/);
+  });
+
+  it("PR E: the claim code is never placed in a URL, Web Storage, a cookie or a log by the linking UI", () => {
+    const text = code(join(SRC, "app/account/_components/LinkForm.tsx"));
+    expect(text).not.toMatch(/localStorage|sessionStorage|document\.cookie|indexedDB|history\.(push|replace)State|router\.(push|replace)|searchParams|console\./);
+    expect(text).not.toMatch(/\?code=|[?&]claim=/);
+    expect(text).toMatch(/autoComplete="off"/);
   });
 
   it("the session cookie is written and cleared only by session.ts; cookie names live there alone", () => {

@@ -44,3 +44,34 @@ export async function chargeEmail(env: ServerEnv, secret: string, action: EmailA
   if (n === undefined) throw new Error("rate_limit_store_bad_reply");
   return n > max ? "exhausted" : "allowed";
 }
+
+/**
+ * Budgets keyed by the VERIFIED account (server-confirmed user id), independent of the per-IP edge budgets and of the
+ * database's own budgets (which keep counting wrong codes inside SQL). They bound what one signed-in browser session, or a
+ * stolen copy of its cookie, can do from any number of addresses:
+ *   - `reauth`: fresh-password confirmations for the installation link (every attempt counts, right or wrong);
+ *   - `link`:   claim-code redemptions forwarded to the database (counted only after the password was confirmed).
+ */
+export type AccountAction = "reauth" | "link";
+
+export const ACCOUNT_LIMITS: Record<AccountAction, { windowSec: number; max: number }> = {
+  reauth: { windowSec: 900, max: 5 },
+  link: { windowSec: 3600, max: 10 },
+};
+
+/** Fixed-window counter per (action, account). Throws on a store failure: the caller fails closed. */
+export async function chargeAccount(
+  env: ServerEnv,
+  secret: string,
+  action: AccountAction,
+  userId: string,
+  nowMs = Date.now(),
+): Promise<{ budget: EmailBudget; retryAfterSec: number }> {
+  const { windowSec, max } = ACCOUNT_LIMITS[action];
+  const nowSec = Math.floor(nowMs / 1000);
+  const window = Math.floor(nowSec / windowSec);
+  const key = `rl:acct:${action}:uid:${await hmacB64(secret, "throttle-hash", userId.toLowerCase())}:${window}`;
+  const [n] = await counters(env).incr([key], windowSec * 2);
+  if (n === undefined) throw new Error("rate_limit_store_bad_reply");
+  return { budget: n > max ? "exhausted" : "allowed", retryAfterSec: Math.max(1, (window + 1) * windowSec - nowSec) };
+}

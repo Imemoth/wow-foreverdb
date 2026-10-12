@@ -25,5 +25,6 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
       </div>
     );
   }
-  return <div className="mx-auto w-full max-w-md space-y-6">{children}</div>;
+  // Narrow by default (forms); a page that renders an element with `data-account-wide` (installation list, Guildbook) widens it.
+  return <div className="mx-auto w-full max-w-md space-y-6 has-[[data-account-wide]]:max-w-4xl">{children}</div>;
 }

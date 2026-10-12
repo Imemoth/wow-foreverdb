@@ -146,6 +146,37 @@ export function clearSession(sink: CookieSink, https: boolean) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
+// Password-reset marker: "this browser changed the password of <uid> but the session revocation was not confirmed"
+// -------------------------------------------------------------------------------------------------------------
+
+export const RESET_PENDING_MAX_AGE_SEC = 3600;
+const resetPendingName = (https: boolean) => (https ? "__Secure-fdb_reset" : "fdb_reset");
+const resetAad = (name: string) => `fdb-acct-reset-pending-v1|${name}`;
+
+/** Sealed, HttpOnly, Path=/account: lets the SAME browser finish an incomplete reset (revoke endpoint, "same password" retry) and nothing else. */
+export async function writeResetPending(secret: string, sink: CookieSink, https: boolean, uid: string, now = Math.floor(Date.now() / 1000)): Promise<void> {
+  const name = resetPendingName(https);
+  const sealed = await seal(secret, JSON.stringify({ uid: uid.toLowerCase(), exp: now + RESET_PENDING_MAX_AGE_SEC }), resetAad(name));
+  setCookie(sink, name, sealed, { httpOnly: true, secure: https, sameSite: "Lax", path: "/account", maxAge: RESET_PENDING_MAX_AGE_SEC });
+}
+export async function resetPendingFor(secret: string, jar: CookieJar, https: boolean, uid: string, now = Math.floor(Date.now() / 1000)): Promise<boolean> {
+  const name = resetPendingName(https);
+  const v = jar.get(name);
+  if (!v) return false;
+  const plain = await unseal(secret, v, resetAad(name));
+  if (!plain) return false;
+  try {
+    const p = JSON.parse(plain) as { uid?: unknown; exp?: unknown };
+    return typeof p.uid === "string" && typeof p.exp === "number" && p.exp > now && p.uid === uid.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+export function clearResetPending(sink: CookieSink, https: boolean) {
+  expire(sink, resetPendingName(https), https, "/account");
+}
+
+// -------------------------------------------------------------------------------------------------------------
 // Resolution: stored session -> server-confirmed user (refreshing when needed)
 // -------------------------------------------------------------------------------------------------------------
 

@@ -119,7 +119,7 @@ export async function signedInClient(playwright: Playwright, tag = "user", passw
   const email = uniqueEmail(tag);
   const c = await newClient(playwright);
   const reg = await post(c, "/account/api/register", { email, password });
-  if (reg.status() !== 202) throw new Error(`register answered ${reg.status()}`);
+  if (reg.status() !== 202) throw new Error(`register answered ${reg.status()}: ${await reg.text()}`);
   const mail = await waitForMail(email, /confirm/i);
   const conf = await post(c, "/account/api/confirm", { type: mail.type, token_hash: mail.tokenHash });
   if (conf.status() !== 200) throw new Error(`confirm answered ${conf.status()}`);

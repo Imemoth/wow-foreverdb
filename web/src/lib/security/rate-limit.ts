@@ -73,8 +73,12 @@ export function classify(pathname: string): RuleName | null {
  * The rule (if any) that protects a request. Data routes are limited on
  * GET/HEAD; the challenge endpoint is limited on POST (its only method).
  */
-/** Account routes that call Supabase Auth with a caller-supplied credential, token or address. */
-const ACCOUNT_STRICT_ROUTES = new Set(["register", "login", "confirm", "forgot-password", "resend", "reset-password"]);
+/**
+ * Account routes that call Supabase Auth with a caller-supplied credential, token or address. `link` is one of them: its fresh-password
+ * confirmation makes a password grant (plus a user check and a revocation) per attempt, so it shares the strict `account_auth` budget
+ * (global ceiling below Auth's own per-IP limit, finding L-8).
+ */
+const ACCOUNT_STRICT_ROUTES = new Set(["register", "login", "confirm", "forgot-password", "resend", "reset-password", "reset-password/revoke", "link"]);
 
 /** True for the whole account namespace: pages (/account, /account/...) and the backend-for-frontend (/account/api/...). */
 export function isAccountPath(pathname: string): boolean {

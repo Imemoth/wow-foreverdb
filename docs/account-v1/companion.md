@@ -1,6 +1,6 @@
 # Account System V1 — Windows Companion (PR D, Companion 0.9.0-alpha)
 
-Status: **IMPLEMENTED in PR D; CI verified when `Companion account auth (Windows)` passes on the final head; real-Windows UI acceptance PENDING; website redemption and end-to-end acceptance BLOCKED on PR E.** Account features are **off by default and refuse the private production project.** Nothing in this PR was applied to, or sent to, production.
+Status: **IMPLEMENTED in PR D; CI verified when `Companion account auth (Windows)` passes on the final head; real-Windows UI acceptance PENDING; website redemption IMPLEMENTED in PR E (CI-verified against real GoTrue/PostgREST with test clients); the real-Windows run and staging acceptance remain owner-pending.** Account features are **off by default and refuse the private production project.** Nothing in this PR was applied to, or sent to, production.
 
 Binding inputs: [architecture.md](architecture.md), [ownership-claim-protocol.md](ownership-claim-protocol.md) (§2 state machine, §4 contracts), [security.md](security.md), `web/src/lib/account/contracts.ts`, migration `0012` (PR C, unchanged).
 
@@ -12,17 +12,19 @@ Binding inputs: [architecture.md](architecture.md), [ownership-claim-protocol.md
 | Six-state session machine with explicit fault reasons | yes | yes | pending | — |
 | `session.dat` / `legacy-owner.dat` DPAPI slots, atomic writes, crash recovery, kind marker | yes | yes (real DPAPI) | pending | — |
 | Machine-wide session lock (named Mutex), real multi-process tests | yes | yes | pending | — |
-| Registered sign-in (password grant + `GET /auth/v1/user` proof) | yes | yes (fake GoTrue) | pending | PR E: real GoTrue / staging |
+| Registered sign-in (password grant + `GET /auth/v1/user` proof) | yes | yes (fake GoTrue); the integrated suite exercises the same Auth calls with a test client against real GoTrue | pending | staging |
 | Registered sign-out (`scope=local`), pending-revocation retry | yes | yes | pending | PR E |
 | Forget anonymous identity (confirmation, revocation) | yes | yes | pending | — |
-| Ownership-aware per-installation routing, race protection, scoped caches | yes | yes | pending | PR E: real PostgREST/0012 |
-| Claim **initiation**, display, copy, expiry, status checks | yes | yes | pending | PR E: redemption on the website |
+| Ownership-aware per-installation routing, race protection, scoped caches | yes | yes; server contract (`transferred`, ingest refusal, ingest as new owner) exercised by test clients against real PostgREST/0012 | pending | staging |
+| Claim **initiation**, display, copy, expiry, status checks | yes | yes; the RPC contract is exercised against real PostgREST | pending | W7/W8 on Windows |
 | Feature gate (production OFF, local/staging only) | yes | yes | pending | owner staging project |
 | ACCOUNT tab (WPF) | yes | compiled only | **pending** | — |
-| Website `/account/link` redemption, pre-hijack protection UI | **no (PR E)** | — | — | PR E |
+| Website `/account/link` redemption, pre-hijack protection | **yes (PR E)**, [web-linking.md](web-linking.md) | real GoTrue + real PostgREST integrated suite | **pending** (W8) | owner Windows run |
 | Production activation | **no** | — | — | owner approval (`ProductionAccountAuthApproved` is a `const false`) |
 
-Installation linking is **not** end-to-end complete in this PR: a displayed code cannot be redeemed until PR E ships the website step (destination account e-mail shown + fresh password confirmation, or an independently reviewed equivalent). Do not describe linking as complete before that.
+A successful website password reset revokes **every** session of the account including the registered Companion session: the Companion then shows *Sign-in required again* (`ReauthRequired`); it never falls back to a new anonymous identity, and the separate anonymous legacy identity, local data and installations are untouched ([security.md §6.1](security.md)).
+
+The website redemption step now exists (PR E: destination e-mail shown, fresh password confirmation, same-UID check). Linking is **code-integrated** and CI-verified with Companion-style test clients; it is **not WINDOWS VERIFIED** until the owner runs W7/W8 with the real application ([windows-acceptance-checklist.md](windows-acceptance-checklist.md)).
 
 ## 2. Layout
 
@@ -102,7 +104,7 @@ Production behaviour with the gate closed is the 0.8.x protocol exactly: the ano
 
 `ClaimService.StartClaimAsync` finds the anonymous owner credential (primary in anonymous mode, else legacy), refuses a registered token for `claim_start`, proves ownership with `fdb_installation_link_status`, then calls `fdb_account_claim_start` with exactly `{"p_installation_id":"…"}`. Replies are parsed against the approved contract (`ok:true` + uppercase 32-hex `code` + `expires_at`, or `ok:false` + `not_available`; extra or missing fields are discarded). The backend generates the code; the Companion never does. The code lives in a `ClaimOffer` in memory only (wiped on dismiss/expiry/identity change, redacted `ToString`), is shown as `FDB-XXXX-…` with a copy button (the clipboard is cleared after two minutes if it still holds the code), a 10-minute countdown, a single-use and privacy warning. Never logged, never in `settings.json`, never written to disk. No retry loop: an ambiguous network outcome is `OutcomeUnknown` and a new explicit request revokes any earlier code server-side. "Transferred" is reported only when `fdb_installation_link_status` says so; afterwards the previous anonymous identity is no longer used for that installation, the verified registered owner is used if signed in, otherwise sync pauses with a sign-in prompt, local data is untouched and ownership is never restored automatically.
 
-Redemption (`/account/link`) and the pre-hijack protections are **PR E** and are not implemented here; there is no generic RPC proxy and no new endpoint.
+Redemption (`/account/link`) and the pre-hijack protections are PR E ([web-linking.md](web-linking.md)); this component has no generic RPC proxy and no new endpoint.
 
 ## 10. Feature gate, environments, production separation
 
@@ -179,7 +181,7 @@ Not claimed as passed by CI. **Environment rule:** with `FOREVERDB_ACCOUNT_MODE=
 | W5 | Sign out; staging website session still signed in; legacy still syncs | staging | staging only | pending |
 | W6 | Two Companion windows/processes started together; one identity, no re-auth | staging vault | staging only | pending |
 | W7 | Start a claim; code shown once; copy; expiry; hide; no code in the vault directory or settings | staging, test installation | staging only | pending |
-| W8 | Redeem on the website; Companion shows *transferred*, asks to sign in, then syncs with the account | staging + PR E | — | **BLOCKED on PR E** |
+| W8 | Redeem on the website; Companion shows *transferred*, asks to sign in, then syncs with the account | staging + PR E preview (`/account/link`, now technically testable) | staging only | **pending (owner)**: record in [windows-acceptance-checklist.md](windows-acceptance-checklist.md) |
 | W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | either; no sync needed | none | pending |
 | W10 | Gate closed: ACCOUNT tab shows features off; no account request is made (inspect with a proxy/firewall rule that blocks the production host: the Companion must stay usable offline) | production vault, AutoSync OFF | none | pending |
 
@@ -208,7 +210,7 @@ Accepted/info: `fdb_installation_link_status` requires exactly `{state}` (an add
 * Add the exact required status check `Companion account auth (Windows)` (GitHub Actions app, integration ID 15368) to ruleset `24853899` next to the existing eight, and verify the readback shows nine unique checks (owner governance action; not done by this PR).
 * Provide the Windows acceptance session (see [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md)).
 * Auth settings that would break the Companion must stay off (project-wide CAPTCHA, single session per user, session time-box, short inactivity timeout); staging acceptance AT-4 runs the Companion under the final settings.
-* PR E: `/account/link` redemption with the pre-hijack protection, the cross-component run, the Windows evidence, and the decision whether account features may ever be enabled for production (flipping `ProductionAccountAuthApproved`).
+* PR E delivered `/account/link` with the pre-hijack protection and the CI cross-component run (test clients); still open: the Windows evidence and the decision whether account features may ever be enabled for production (flipping `ProductionAccountAuthApproved`).
 
 ## 15. Residual risks and deliberate deviations
 
