@@ -1,6 +1,6 @@
 # Account System V1 — single-project pilot and production candidate
 
-Status (2026-10-12): **CODE CANDIDATE ONLY**. No hosted activation, no database migration, no approval, no merge. Tracks [Issue #52](https://github.com/Imemoth/wow-foreverdb/issues/52). This supplements, but does **not** silently replace, the original isolated-staging runbook. The owner has chosen an alternative *single existing Supabase project* for the eventual pilot; security gates remain.
+Status (2026-10-12): **Database migration `0012` APPLIED to the existing private Supabase project and postchecked** (ledger `20261012124839`); **web Account Auth activation remains OFF**, PR #53 is draft/unmerged and no Vercel deployment or owner transfer was performed. A local owner-managed PostgreSQL custom archive was created and `pg_restore -f NUL` returned exit code 0; no full restore rehearsal has occurred. All further hosted/pilot release gates remain OPEN. Tracks [Issue #52](https://github.com/Imemoth/wow-foreverdb/issues/52). This supplements, but does **not** silently replace, the original isolated-staging runbook. The owner has chosen an alternative *single existing Supabase project* for the eventual pilot; security gates remain.
 
 ## 1. Unchanged isolation guarantees
 
