@@ -49,6 +49,19 @@ public sealed class FakeSupabase
     public Func<LoggedRequest, FakeResponse?>? Interceptor { get; set; }
     public TimeSpan RefreshDelay { get; set; } = TimeSpan.Zero;
     public TimeSpan IngestDelay { get; set; } = TimeSpan.Zero;
+
+    /// <summary>Deterministic hold: ingest requests block at the server until <see cref="IngestHold.Release"/>.</summary>
+    public sealed class IngestHold
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Entered => _entered.Task;
+        internal void Enter() => _entered.TrySetResult();
+        internal Task Wait() => _release.Task;
+        public void Release() => _release.TrySetResult();
+    }
+
+    public IngestHold? Hold { get; set; }
     public int AccessLifetimeSeconds { get; set; } = 3600;
     public int SignupCount { get; private set; }
     public int IngestCount { get; private set; }
@@ -201,6 +214,12 @@ public sealed class FakeSupabase
             case ("POST", "/rest/v1/rpc/fdb_account_claim_start"):
                 return ClaimStart(bearer, body);
             case ("POST", "/rest/v1/rpc/ingest_foreverdb_snapshot_auth"):
+                if (Hold is { } hold)
+                {
+                    hold.Enter();
+                    await hold.Wait().ConfigureAwait(false);
+                }
+
                 if (IngestDelay > TimeSpan.Zero)
                 {
                     await Task.Delay(IngestDelay).ConfigureAwait(false);

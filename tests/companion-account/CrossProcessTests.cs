@@ -161,21 +161,41 @@ public class CrossProcessTests
         var dir = TestEnv.NewDirectory();
         var holder = Start("hold", dir, "http://127.0.0.1:1", "600000");
         Assert.Equal("HELD", (await holder.StandardOutput.ReadLineAsync())?.Trim());
+
+        // A second Companion is already waiting for the lock when the holder dies (only a process that has the mutex
+        // open observes it as abandoned; with no waiter the OS simply destroys the named object).
+        var gate = new CrossProcessSessionGate(dir);
+        var waiting = gate.AcquireAsync(TimeSpan.FromSeconds(60), default);
+        await Task.Delay(500);
+        Assert.False(waiting.IsCompleted);
+
         holder.Kill(entireProcessTree: true);
         await holder.WaitForExitAsync();
 
-        var gate = new CrossProcessSessionGate(dir);
-        using var lease = await gate.AcquireAsync(TimeSpan.FromSeconds(15), default);
-        // Windows reports the abandoned mutex; other platforms silently recover. Either way the lock is usable.
+        using var lease = await waiting;
+        // Windows reports the abandoned mutex; other platforms may silently recover. Either way the lock is usable.
         if (OperatingSystem.IsWindows())
         {
             Assert.True(lease.Abandoned);
         }
 
-        // A second acquisition after a clean release is not flagged.
+        // A later acquisition after a clean release is not flagged.
         lease.Dispose();
         using var again = await gate.AcquireAsync(TimeSpan.FromSeconds(5), default);
         Assert.False(again.Abandoned);
+    }
+
+    [Fact]
+    public async Task A_lock_whose_holder_died_with_no_waiter_is_simply_free()
+    {
+        var dir = TestEnv.NewDirectory();
+        var holder = Start("hold", dir, "http://127.0.0.1:1", "600000");
+        Assert.Equal("HELD", (await holder.StandardOutput.ReadLineAsync())?.Trim());
+        holder.Kill(entireProcessTree: true);
+        await holder.WaitForExitAsync();
+
+        using var lease = await new CrossProcessSessionGate(dir).AcquireAsync(TimeSpan.FromSeconds(15), default);
+        Assert.NotNull(lease);
     }
 
     [Fact]

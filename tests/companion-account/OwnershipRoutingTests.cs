@@ -273,19 +273,18 @@ public class OwnershipRoutingTests
     {
         using var w = await World.SignedInWithLegacyAsync();
         w.Server.SetOwner("inst", w.Registered.Id);
-        w.Server.IngestDelay = TimeSpan.FromMilliseconds(400);
+        var hold = w.Server.Hold = new FakeSupabase.IngestHold();
 
-        var events = new List<InstallationRecord>();
-        w.Sync.InstallationChanged += events.Add;
         var inFlight = w.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default);
-        await Task.Delay(100);
+        await hold.Entered;                       // the upload is now in flight at the server
         await w.Rig.Sessions.SignOutRegisteredAsync();
+        hold.Release();
         var result = await inFlight;
 
         Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
         // The stale request did not repopulate account-specific state after the switch.
         Assert.All(w.Sync.Installations, r => Assert.Null(r.LastSyncedAt));
-        w.Server.IngestDelay = TimeSpan.Zero;
+        w.Server.Hold = null;
 
         // The same snapshot is NOT considered synced for whoever acts next.
         Assert.Equal(SyncOutcome.Blocked, (await w.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default)).Outcome);
@@ -299,11 +298,12 @@ public class OwnershipRoutingTests
         rig.Server.SetOwner("inst", anon.UserId);
         rig.Server.AddRegisteredUser("a@b.test", "a-long-password-1");
         await rig.Sessions.InitializeAsync();
-        rig.Server.IngestDelay = TimeSpan.FromMilliseconds(400);
+        var hold = rig.Server.Hold = new FakeSupabase.IngestHold();
 
         var inFlight = rig.Runtime.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default);
-        await Task.Delay(100);
+        await hold.Entered;
         await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
+        hold.Release();
         var result = await inFlight;
 
         Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
@@ -315,10 +315,14 @@ public class OwnershipRoutingTests
     {
         using var w = await World.SignedInWithLegacyAsync();
         w.Server.SetOwner("inst", w.Registered.Id);
-        w.Server.IngestDelay = TimeSpan.FromMilliseconds(200);
+        var hold = w.Server.Hold = new FakeSupabase.IngestHold();
 
         var auto = w.Sync.SyncAsync("inst", Snapshot("inst"), 7, false, default);
-        var manual = w.Sync.SyncAsync("inst", Snapshot("inst"), 7, false, default);
+        await hold.Entered;                                                   // first request is at the server...
+        var manual = w.Sync.SyncAsync("inst", Snapshot("inst"), 7, false, default);   // ...second arrives meanwhile
+        await Task.Delay(100);
+        Assert.False(manual.IsCompleted);                                     // serialised behind the first
+        hold.Release();
         var results = await Task.WhenAll(auto, manual);
 
         Assert.Equal(1, w.Server.IngestCount);

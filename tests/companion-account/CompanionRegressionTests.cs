@@ -135,11 +135,12 @@ public class CompanionRegressionTests
         await rig.Sessions.InitializeAsync();
         var (service, events, _, blocks, _) = Wire(rig);
         var path = WriteSavedVariables(rig.Directory, "inst-1", 100);
-        rig.Server.IngestDelay = TimeSpan.FromMilliseconds(400);
+        var hold = rig.Server.Hold = new FakeSupabase.IngestHold();
 
         var inFlight = service.SyncFileAsync(path, force: true, trigger: SyncTrigger.Manual);
-        await Task.Delay(100);
+        await hold.Entered;
         await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
+        hold.Release();
         var attempt = await inFlight;
 
         Assert.Equal(SyncOutcome.StaleDiscarded, attempt!.Outcome);

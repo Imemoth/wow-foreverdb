@@ -515,11 +515,37 @@ public class SessionManagerTests
     }
 
     [Fact]
-    public async Task Sign_in_while_registered_is_refused_and_a_dead_registered_credential_may_be_replaced()
+    public async Task Sign_in_while_registered_is_refused()
     {
         using var rig = new Rig();
         rig.SeedRegistered("a@b.test", "a-long-password-1");
+        await rig.Sessions.InitializeAsync();
         Assert.Equal(SignInOutcome.AlreadySignedIn, await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray()));
+    }
+
+    [Fact]
+    public async Task A_dead_registered_credential_is_replaced_by_signing_in_again_and_set_aside_not_deleted()
+    {
+        using var rig = new Rig();
+        var anon = rig.SeedAnonymous();
+        var user = rig.Server.AddRegisteredUser("a@b.test", "a-long-password-1");
+        await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
+
+        // The registered session dies server-side and its refresh is definitively rejected.
+        var vault = rig.Vault();
+        var current = vault.Primary.Read().Session!;
+        vault.Primary.Write(new AuthSession { AccessToken = current.AccessToken, RefreshToken = "dead", ExpiresAt = 1, UserId = current.UserId, Email = current.Email }, SlotMarker.For(SessionKind.Registered));
+        Assert.False((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+        Assert.Equal(SessionState.ReauthRequired, rig.Sessions.Status.State);
+        Assert.Equal(anon.UserId, vault.LegacyOwner.Read().Session!.UserId);
+
+        Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(SessionState.Registered, rig.Sessions.Status.State);
+        Assert.Equal(user.Id, vault.Primary.Read().Session!.UserId);
+        Assert.Single(Directory.GetFiles(rig.VaultDirectory, "session.dat.lost-*"));
+        // The preserved anonymous owner is still the original one.
+        Assert.Equal(anon.UserId, vault.LegacyOwner.Read().Session!.UserId);
+        Assert.Equal(0, rig.Server.SignupCount);
     }
 
     [Fact]
