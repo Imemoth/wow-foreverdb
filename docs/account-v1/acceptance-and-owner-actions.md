@@ -51,7 +51,7 @@ Nothing below was done by this work. Items marked **approval** change real setti
 
 ## 4. Explicit non-actions (verified, current)
 
-Migration `0012` exists in the repository (PR C) but was applied to **no** real database (only disposable CI databases); migration `0010` is not applied; the production ledger ends at `0011`; no Supabase setting, email provider, credential, billing or Vercel configuration was changed; `release`, the Vercel Production Branch and Vercel Authentication are untouched; no service-role credential exists in the website; production activation is blocked by code.
+**Historical PR E baseline:** when this acceptance report was originally written, 0012 had only run in disposable CI and the ledger ended at 0011. **Later owner-run update (2026-10-12):** 0012 `account_ownership_claims` is now applied to existing private Supabase, ledger version `20261012124839`; data fingerprints and owner counts verified unchanged, new account tables empty. The custom dump was archive-read checked but not restored to a disposable database. Email SMTP has been configured separately, and a test invite was delivered (spam placement); the test user was removed. Vercel/release account activation remains OFF; this operational update must not be mistaken for completion of remaining acceptance gates.
 
 ## 5. Direct Auth abuse: enforceable acceptance criteria (threat A24)
 
