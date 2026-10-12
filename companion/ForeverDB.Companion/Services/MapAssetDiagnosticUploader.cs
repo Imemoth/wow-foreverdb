@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
@@ -27,6 +28,12 @@ public sealed class MapAssetDiagnosticEvent
 
 public static class MapAssetDiagnosticUploader
 {
+    /// <summary>
+    /// Set by the main window. Diagnostics go to the same Supabase project as every other Companion request and
+    /// use an EXISTING session only: they never create an anonymous identity.
+    /// </summary>
+    public static AccountRuntime? Runtime { get; set; }
+
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(12)
@@ -37,31 +44,36 @@ public static class MapAssetDiagnosticUploader
         MapAssetDiagnosticEvent diagnostic,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(settings.SupabaseUrl) ||
-            string.IsNullOrWhiteSpace(settings.SupabaseKey))
+        var runtime = Runtime;
+
+        if (runtime is null)
         {
             return;
         }
 
         try
         {
-            var auth =
-                new SupabaseAuthService(
-                    HttpClient,
-                    settings);
-
-            var accessToken =
-                await auth.GetAccessTokenAsync(
+            var token =
+                await runtime.Sessions.GetReadTokenAsync(
                     cancellationToken);
+
+            if (!token.Ok)
+            {
+                return;
+            }
+
+            var accessToken = token.AccessToken;
+            var supabaseUrl = runtime.Endpoint.BaseUrl;
+            var supabaseKey = runtime.Endpoint.PublishableKey;
 
             using var request =
                 new HttpRequestMessage(
                     HttpMethod.Post,
-                    $"{settings.SupabaseUrl.TrimEnd('/')}/rest/v1/map_asset_diagnostics");
+                    $"{supabaseUrl.TrimEnd('/')}/rest/v1/map_asset_diagnostics");
 
             request.Headers.TryAddWithoutValidation(
                 "apikey",
-                settings.SupabaseKey);
+                supabaseKey);
 
             request.Headers.Authorization =
                 new AuthenticationHeaderValue(

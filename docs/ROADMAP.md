@@ -24,7 +24,7 @@ polish and distribution work.
   detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
-- Version: **0.8.2-alpha**
+- Version: **0.9.0-alpha** (Account System V1 authentication; account features OFF by default, production blocked)
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing

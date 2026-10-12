@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Controls;
 using ForeverDB.Companion.Models;
 using ForeverDB.Companion.Services;
@@ -17,6 +18,8 @@ public partial class MainWindow : Window
 
     private SyncService? _syncService;
     private SearchService? _searchService;
+    private AccountRuntime? _account;
+    private string _accountRuntimeKey = "";
     private WowSavedVariablesWatcher? _watcher;
     private readonly SyncHealthState _syncHealth = new();
 
@@ -87,14 +90,52 @@ public partial class MainWindow : Window
             return;
         }
 
-        var auth = new SupabaseAuthService(
-            _httpClient,
-            _settings);
+        // Account System V1: one validated endpoint for Auth AND data traffic. With the gate closed (default,
+        // production) this is exactly the 0.8.x anonymous-only behaviour against the configured project.
+        var gate = AccountFeatureGate.EvaluateFromEnvironment();
+        var productionEndpoint = new AccountEndpoint(
+            _settings.SupabaseUrl,
+            _settings.SupabaseKey,
+            "production");
+        var runtimeKey =
+            $"{gate.AccountsEnabled}|{gate.Endpoint?.BaseUrl}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
+
+        if (_account is null ||
+            _accountRuntimeKey != runtimeKey)
+        {
+            _account = AccountRuntime.Create(
+                gate,
+                productionEndpoint);
+            _accountRuntimeKey = runtimeKey;
+            AttachAccountHandlers(_account);
+        }
+
+        var account = _account;
+        MapAssetDiagnosticUploader.Runtime = account;
+
+        // Services talk to the project the account runtime was validated for (staging/local when the gate is open;
+        // settings.json is never modified).
+        var effective = new CompanionSettings
+        {
+            WowRoot = _settings.WowRoot,
+            SupabaseUrl = account.Endpoint.BaseUrl,
+            SupabaseKey = account.Endpoint.PublishableKey,
+            AutoSync = _settings.AutoSync,
+            LaunchWithWindows = _settings.LaunchWithWindows,
+            StartMinimized = _settings.StartMinimized
+        };
+
+        await account.Sessions.InitializeAsync();
+        RefreshAccountUi();
+        _ = RunAccountBackgroundChecksAsync(account);
 
         _syncService = new SyncService(
-            _httpClient,
-            _settings,
-            auth);
+            account.Sync,
+            MapMetadataStore.Merge,
+            snapshot =>
+                _ = MapPrewarm.RunAsync(
+                    effective,
+                    snapshot));
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -114,6 +155,17 @@ public partial class MainWindow : Window
                         completed.GuildMemberCount,
                         completed.Trigger);
                     RefreshSyncHealthUi();
+                    RefreshAccountUi();
+                });
+
+        _syncService.SyncBlocked += (_, blocked) =>
+            Dispatcher.Invoke(
+                () =>
+                {
+                    RecordSyncError(
+                        AccountMessages.Describe(
+                            blocked.Reason));
+                    RefreshAccountUi();
                 });
 
         _syncService.GuildbookChanged += guilds =>
@@ -122,8 +174,8 @@ public partial class MainWindow : Window
 
         _searchService = new SearchService(
             _httpClient,
-            _settings,
-            auth.GetAccessTokenAsync);
+            effective,
+            GetSearchTokenAsync);
 
         await LoadSearchZonesAsync();
 
@@ -172,6 +224,8 @@ public partial class MainWindow : Window
 
         RefreshSyncHealthUi();
 
+        TryDiscoverInstallations();
+
         if (_settings.AutoSync &&
             _watcher is not null)
         {
@@ -188,6 +242,37 @@ public partial class MainWindow : Window
                     RecordSyncError(ex.Message);
                 }
             }
+        }
+    }
+
+    private void TryDiscoverInstallations()
+    {
+        try
+        {
+            if (_syncService is null ||
+                string.IsNullOrWhiteSpace(_settings.WowRoot))
+            {
+                return;
+            }
+
+            var watcher = _watcher ??
+                new WowSavedVariablesWatcher(
+                    _settings.WowRoot,
+                    (_, _) => Task.CompletedTask);
+
+            _syncService.DiscoverInstallations(
+                watcher.FindExistingFiles());
+
+            if (_watcher is null)
+            {
+                watcher.Dispose();
+            }
+
+            RefreshAccountUi();
+        }
+        catch (Exception)
+        {
+            // Discovery only feeds the Account tab.
         }
     }
 

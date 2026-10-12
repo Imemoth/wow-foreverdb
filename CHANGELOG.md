@@ -8,9 +8,23 @@ version contract and release checklist are documented in
 
 - Addon: **0.5.0-alpha**
 - Export schema: **9**
-- Companion: **0.8.2-alpha**
+- Companion: **0.9.0-alpha**
 
 # Companion
+
+## 0.9.0-alpha — 2026-10-12 (Account System V1 authentication, PR D)
+
+Account features are **disabled by default** and refuse the private production project; nothing here activates Account System V1 in production. Full design: [docs/account-v1/companion.md](docs/account-v1/companion.md).
+
+- **Fixed: anonymous identity loss.** A refresh failure used to clear the session and silently create a *new* anonymous user, orphaning every installation (offline start, HTTP 5xx, timeout, antivirus lock, unreadable file). Failures are now classified: transient/ambiguous errors never touch the credential; only a verified GoTrue "session gone" reply (`refresh_token_not_found`, `refresh_token_already_used`, `session_not_found`, `session_expired`, `user_not_found`, or the legacy `invalid_grant` "Invalid Refresh Token") moves an identity to `AnonymousIdentityLost`/`ReauthRequired`. No anonymous account is ever created implicitly; first use asks the user to sign in or choose anonymous mode.
+- Session state machine: `LoggedOut`, `Anonymous`, `AnonymousClaiming`, `Registered`, `ReauthRequired`, `AnonymousIdentityLost`, with explicit fault reasons (network, rate limit, rejection, local corruption, storage, lock timeout).
+- Encrypted credential slots `session.dat` and `legacy-owner.dat` (DPAPI CurrentUser), atomic writes with a previous-credential backup and crash recovery, plaintext non-secret kind marker (recovery hint only), 0.8.x sessions read unchanged.
+- Machine-wide session lock (named Mutex, thread-correct, bounded, cancellable, abandoned-lock safe) so two Companion processes cannot rotate the same refresh token.
+- ACCOUNT tab: registered sign-in (GoTrue password grant, identity confirmed by `GET /auth/v1/user`), sign-out (`scope=local` only), explicit anonymous mode, forget-anonymous-identity with confirmation and revocation, per-installation ownership state, installation link code (`fdb_account_claim_start`) with copy, 10-minute countdown and privacy warnings. Website registration/recovery stay on the website.
+- Ownership-aware sync: per-installation credential selection through `fdb_installation_link_status` (registered, then legacy anonymous); unknown/conflicting/unavailable ownership fails closed; no implicit adoption; sync caches are scoped by installation, owner and identity generation; stale in-flight results are discarded after login/logout.
+- Windows regression suite `tests/companion-account` (real DPAPI and real multi-process tests) and the `Companion account auth (Windows)` workflow.
+- Unchanged: addon version, export schema, SavedVariables parsing, Search, Guildbook, map rendering, the production anonymous sync protocol.
+- Known limitation: the website step that redeems a link code is PR E; until then a displayed code cannot be redeemed.
 
 ## 0.8.2-alpha — 2026-09-27
 

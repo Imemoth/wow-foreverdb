@@ -20,6 +20,8 @@ public sealed class SyncService
     private readonly ForeverDbExportParser _parser = new();
     private readonly Action<IEnumerable<ForeverDbMap>>? _mapSink;
     private readonly Action<ForeverDbSnapshot>? _afterSynced;
+    private readonly Dictionary<string, string> _knownFiles =
+        new(StringComparer.Ordinal);
 
     public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
@@ -36,6 +38,45 @@ public sealed class SyncService
         _afterSynced = afterSynced;
     }
 
+    /// <summary>SavedVariables file per installation ID seen so far (for re-syncing after an owner choice).</summary>
+    public string? FileFor(string installationId)
+    {
+        lock (_knownFiles)
+        {
+            return _knownFiles.TryGetValue(installationId, out var path)
+                ? path
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Parses SavedVariables only to learn installation IDs for the Account tab. No upload, no authentication.
+    /// </summary>
+    public void DiscoverInstallations(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            try
+            {
+                var snapshot = _parser.ParseSavedVariables(path);
+
+                if (!string.IsNullOrWhiteSpace(snapshot.InstallationId))
+                {
+                    lock (_knownFiles)
+                    {
+                        _knownFiles[snapshot.InstallationId] = path;
+                    }
+
+                    _coordinator.NoteLocalInstallation(snapshot.InstallationId);
+                }
+            }
+            catch (Exception)
+            {
+                // An unreadable file is reported by the normal sync path; discovery stays silent.
+            }
+        }
+    }
+
     public async Task<SyncAttempt?> SyncFileAsync(
         string path,
         CancellationToken cancellationToken = default,
@@ -48,6 +89,11 @@ public sealed class SyncService
         }
 
         var snapshot = _parser.ParseSavedVariables(path);
+
+        lock (_knownFiles)
+        {
+            _knownFiles[snapshot.InstallationId] = path;
+        }
 
         _mapSink?.Invoke(snapshot.Maps);
 

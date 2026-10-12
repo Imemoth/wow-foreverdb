@@ -416,7 +416,7 @@ public sealed class GoTrueClient
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or UriFormatException or InvalidOperationException)
         {
             // Offline, DNS, TLS, reset, timeout: all transient. Nothing about the credential is learned.
             return new Reply(0, "", AuthFailureKind.Transient);

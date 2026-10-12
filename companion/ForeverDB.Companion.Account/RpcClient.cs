@@ -221,7 +221,7 @@ public sealed class OwnershipRpcClient
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or UriFormatException or InvalidOperationException)
         {
             return new Reply(RpcFailure.Unavailable, 0, "");
         }
