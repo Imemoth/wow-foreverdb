@@ -45,6 +45,7 @@ public sealed class AccountRuntime
         TimeSpan? requestTimeout = null)
     {
         var endpoint = gate.AccountsEnabled ? gate.Endpoint! : productionEndpoint;
+        var privatePilot = gate.Environment == AccountEnvironment.PrivatePilot;
         var directory = productionDirectory ?? SessionVault.DefaultProductionDirectory();
         if (gate.AccountsEnabled)
         {
@@ -52,14 +53,18 @@ public sealed class AccountRuntime
         }
 
         var http = new HttpClient(
-            new ProductionHostGuardHandler(handler ?? new HttpClientHandler { AllowAutoRedirect = false }, enforce: gate.AccountsEnabled));
+            new ProductionHostGuardHandler(
+                handler ?? new HttpClientHandler { AllowAutoRedirect = false },
+                enforce: gate.AccountsEnabled,
+                privatePilotOrigin: privatePilot ? gate.Endpoint!.BaseUri : null));
         var vault = new SessionVault(directory, protector ?? CreateDefaultProtector());
         var sessions = new AccountSessionManager(
-            vault, new CrossProcessSessionGate(directory), new GoTrueClient(http, endpoint, requestTimeout), gate.AccountsEnabled, clock);
-        var rpc = new OwnershipRpcClient(http, endpoint, clock, requestTimeout);
+            vault, new CrossProcessSessionGate(directory), new GoTrueClient(http, endpoint, requestTimeout),
+            gate.AccountsEnabled, clock, allowAnonymousCreation: !privatePilot);
+        var rpc = new OwnershipRpcClient(http, endpoint, clock, requestTimeout, allowWrites: !privatePilot);
         var router = new OwnershipRouter(sessions, rpc, clock);
-        var sync = new InstallationSyncCoordinator(sessions, router, rpc, clock);
-        var claims = new ClaimService(sessions, rpc, router, sync, clock);
+        var sync = new InstallationSyncCoordinator(sessions, router, rpc, clock, allowUploads: !privatePilot);
+        var claims = new ClaimService(sessions, rpc, router, sync, clock, allowClaims: !privatePilot);
         return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint);
     }
 
