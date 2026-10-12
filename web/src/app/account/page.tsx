@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
@@ -45,12 +46,17 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
           {since && (<><dt className="text-mist">Member since</dt><dd className="text-parchment">{since}</dd></>)}
         </dl>
       </section>
-      <section className="panel space-y-2 p-6" aria-labelledby="inst-h">
+      <section className="panel space-y-3 p-6" aria-labelledby="inst-h">
         <h2 id="inst-h" className="panel-title text-lg">Companion installations</h2>
         <p className="text-sm text-mist">
-          Linking Companion installations and the Guildbook are not available yet. They arrive in a later Account System milestone;
-          nothing about your installations is stored or shown here today.
+          Link a Companion installation to this account with a code from the Companion&apos;s ACCOUNT tab, see the installations
+          you own, and browse their private Guildbook.
         </p>
+        <ul className="space-y-1 text-sm">
+          <li><Link href="/account/link">Link an installation</Link></li>
+          <li><Link href="/account/installations">Your installations</Link></li>
+          <li><Link href="/account/guildbook">Private Guildbook</Link></li>
+        </ul>
       </section>
       <LogoutButton />
     </>

@@ -23,7 +23,11 @@ MIGRATOR_URL="postgres://fdb_migrator:local-test-password@$PGHOST:$PGPORT/$DB"
 su_psql() { psql -X -q -v ON_ERROR_STOP=1 -d "$1" "${@:2}"; }
 as_migrator() { PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U fdb_migrator -d "$DB" "$@"; }
 
+# Optional extra GoTrue settings (KEY=VALUE lines) that OVERRIDE the defaults below: the end-to-end stack (web/tests/e2e-stack) uses it to
+# add mail capture, the Site URL and the callback allow list. Unset = this suite is byte-for-byte what it was.
 gotrue_start() {
+  EXTRA=()
+  if [ -n "${FDB_GOTRUE_ENV_FILE:-}" ]; then mapfile -t EXTRA < <(grep -E '^[A-Z_0-9]+=' "$FDB_GOTRUE_ENV_FILE"); fi
   [ -x "$GOTRUE_BIN" ] || { echo "GoTrue binary not found: $GOTRUE_BIN (see build-gotrue.sh)" >&2; exit 2; }
   env -i PATH="$PATH" HOME="$RUN" \
     GOTRUE_DB_DRIVER=postgres \
@@ -38,6 +42,7 @@ gotrue_start() {
     GOTRUE_RATE_LIMIT_ANONYMOUS_USERS=1000 GOTRUE_RATE_LIMIT_EMAIL_SENT=1000 GOTRUE_RATE_LIMIT_TOKEN_REFRESH=1000 \
     GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED=true \
     LOG_LEVEL=info \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
     "$GOTRUE_BIN" > "$RUN/gotrue.log" 2>&1 &
   echo $! > "$RUN/gotrue.pid"
   for _ in $(seq 1 120); do

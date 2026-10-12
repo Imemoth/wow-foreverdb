@@ -17,7 +17,29 @@ export const ERROR_MESSAGES: Record<string, string> = {
   account_unavailable: "Accounts are temporarily unavailable.",
   temporarily_unavailable: "The sign-in service is temporarily unavailable. Please try again shortly.",
   network: "Could not reach the server. Check your connection and try again.",
+  unauthenticated: "Your session has ended. Please sign in again.",
 };
+
+/** Installation-linking answers (kept apart from the sign-in texts: the same code can mean something else there). */
+export const LINK_MESSAGES: Record<string, string> = {
+  invalid_code_format: "That is not a valid linking code. It has 32 letters and digits (0-9, A-F); copy it again from the Companion's ACCOUNT tab.",
+  reauth_failed: "The password is incorrect. Enter the password of the account shown above.",
+  invalid_claim: "This code could not be used. It may be wrong, expired, already used, or replaced by a newer one. Generate a new code in the Companion and try again.",
+  account_limit: "This account already has the maximum number of linked installations (50). The code was not used.",
+  too_many_attempts: "Too many attempts for this account. Please wait a while and try again.",
+  rate_limited: "Too many requests. Please wait a while and try again.",
+  outcome_unknown: "We could not confirm whether the installation was linked. Do not retry the same code: check your installations to see the result.",
+  unauthenticated: "Your session has ended. Please sign in again.",
+  forbidden: "This request was refused. Reload the page and try again.",
+  csrf: "Your page was open too long. Please reload it and try again.",
+  invalid_input: "Please check the fields and try again.",
+  temporarily_unavailable: "The service is temporarily unavailable. Please try again shortly.",
+  network: "Could not reach the server. Check your connection, then check your installations before trying again.",
+};
+
+export function linkMessageFor(code: unknown): string {
+  return (typeof code === "string" && LINK_MESSAGES[code]) || "Something went wrong. Please try again.";
+}
 
 export function messageFor(code: unknown): string {
   return (typeof code === "string" && ERROR_MESSAGES[code]) || "Something went wrong. Please try again.";
