@@ -295,7 +295,7 @@ public class FeatureGateTests
     }
 
     [Fact]
-    public void Claim_pilot_does_not_import_a_registered_production_identity()
+    public async Task Claim_pilot_does_not_import_a_registered_production_identity()
     {
         var server = new FakeSupabase();
         var registered = server.AddRegisteredUser("owner@example.test", "an-example-long-password");
@@ -307,7 +307,7 @@ public class FeatureGateTests
         var runtime = AccountRuntime.Create(Eval(ClaimPilot("fresh-test-install-001")),
             new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
             handler: new FakeHandler(server), protector: protector, productionDirectory: dir);
-        runtime.Sessions.InitializeAsync().GetAwaiter().GetResult();
+        await runtime.Sessions.InitializeAsync();
         Assert.False(runtime.Sessions.Status.HasLegacyOwner);
         Assert.Equal(before, TestEnv.ReadTopLevelFiles(dir));
     }
