@@ -22,6 +22,8 @@ Binding inputs: [architecture.md](architecture.md), [ownership-claim-protocol.md
 | Website `/account/link` redemption, pre-hijack protection | **yes (PR E)**, [web-linking.md](web-linking.md) | real GoTrue + real PostgREST integrated suite | **pending** (W8) | owner Windows run |
 | Production activation | **no** | — | — | owner approval (`ProductionAccountAuthApproved` is a `const false`) |
 
+A successful website password reset revokes **every** session of the account including the registered Companion session: the Companion then shows *Sign-in required again* (`ReauthRequired`); it never falls back to a new anonymous identity, and the separate anonymous legacy identity, local data and installations are untouched ([security.md §6.1](security.md)).
+
 The website redemption step now exists (PR E: destination e-mail shown, fresh password confirmation, same-UID check). Linking is **code-integrated** and CI-verified with Companion-style test clients; it is **not WINDOWS VERIFIED** until the owner runs W7/W8 with the real application ([windows-acceptance-checklist.md](windows-acceptance-checklist.md)).
 
 ## 2. Layout

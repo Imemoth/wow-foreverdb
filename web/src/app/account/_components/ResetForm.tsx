@@ -13,6 +13,7 @@ export function ResetForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
+  const [pending, setPending] = useState(false); // password changed, session revocation not confirmed
   const alertRef = useRef<HTMLDivElement | null>(null);
 
   async function submit(e: React.FormEvent) {
@@ -30,16 +31,43 @@ export function ResetForm() {
     setBusy(true);
     const r = await postJson("/account/api/reset-password", { password });
     if (r.data.ok && typeof r.data.redirect === "string") {
-      window.location.assign(r.data.redirect);
+      window.location.assign(new URL(r.data.redirect, window.location.origin).toString());
       return;
     }
     setBusy(false);
+    setPassword("");
+    if (r.data.error === "revocation_incomplete") { setPending(true); return; }
     if (r.data.error === "recovery_required") setExpired(true);
     if (r.data.error === "weak_password" || r.data.error === "same_password") setPasswordError(messageFor(r.data.error));
     setError(messageFor(r.data.error));
     alertRef.current?.focus();
   }
 
+  async function finish() {
+    setBusy(true);
+    setError(null);
+    const r = await postJson("/account/api/reset-password/revoke", {});
+    if (r.data.ok && typeof r.data.redirect === "string") {
+      window.location.assign(new URL(r.data.redirect, window.location.origin).toString());
+      return;
+    }
+    setBusy(false);
+    if (r.data.error === "recovery_required") { setPending(false); setExpired(true); return; }
+    setError(messageFor(r.data.error));
+    alertRef.current?.focus();
+  }
+
+  if (pending) {
+    return (
+      <div className="panel space-y-3 p-6" role="alert">
+        <h2 className="panel-title text-lg">Not fully secured yet</h2>
+        <p className="text-sm text-parchment">{messageFor("revocation_incomplete")}</p>
+        <FormAlert message={error} alertRef={alertRef} />
+        <button type="button" className="btn-gold" onClick={finish} disabled={busy}>{busy ? "Working…" : "Finish securing my account"}</button>
+        <p className="text-xs text-mist">If this keeps failing or the page says your link expired, request a new reset link and enter the SAME password again: that completes the sign-out.</p>
+      </div>
+    );
+  }
   if (expired) {
     return (
       <div className="panel space-y-3 p-6" role="alert">

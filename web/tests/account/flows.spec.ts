@@ -205,11 +205,11 @@ test("8-9. recovery: generic answers, interstitial, explicit POST, restricted re
 
   // Weak / identical passwords are refused; the real reset succeeds and ends the recovery session.
   expect((await post(c, "/account/api/reset-password", { password: "short" })).status()).toBe(400);
-  expect((await post(c, "/account/api/reset-password", { password })).status()).toBe(422); // same password
+  // (an identical password is no longer refused: it is "already set" and finishes the revocation; covered in the integrated suite)
   const fresh = "a brand new passphrase 2026";
   const done = await post(c, "/account/api/reset-password", { password: fresh });
   expect(done.status()).toBe(200);
-  expect(await json(done)).toEqual({ ok: true, redirect: "/account/login?reason=password_reset" });
+  expect(await json(done)).toEqual({ ok: true, passwordChanged: true, sessionsRevoked: true, redirect: "/account/login?reason=password_reset" });
   expect((await post(c, "/account/api/reset-password", { password: "yet another passphrase 1" })).status()).toBe(401); // session ended
   expect((await post(await newClient(playwright), "/account/api/login", { email, password })).status()).toBe(401);
   expect((await post(await newClient(playwright), "/account/api/login", { email, password: fresh })).status()).toBe(200);

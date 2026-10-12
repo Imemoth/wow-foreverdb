@@ -17,6 +17,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   account_unavailable: "Accounts are temporarily unavailable.",
   temporarily_unavailable: "The sign-in service is temporarily unavailable. Please try again shortly.",
   network: "Could not reach the server. Check your connection and try again.",
+  revocation_incomplete: "Your password was changed, but we could not confirm that all other sessions were signed out. Your account is not fully secured yet: press \"Finish securing my account\".",
   unauthenticated: "Your session has ended. Please sign in again.",
 };
 
@@ -30,6 +31,7 @@ export const LINK_MESSAGES: Record<string, string> = {
   rate_limited: "Too many requests. Please wait a while and try again.",
   outcome_unknown: "We could not confirm whether the installation was linked. Do not retry the same code: check your installations to see the result.",
   unauthenticated: "Your session has ended. Please sign in again.",
+  revocation_incomplete: "Your password was changed, but we could not confirm that all other sessions were signed out. Your account is not fully secured yet: press \"Finish securing my account\".",
   account_changed: "Your session changed while this page was open. Reload the page and check which account is shown.",
   forbidden: "This request was refused. Reload the page and try again.",
   csrf: "Your page was open too long. Please reload it and try again.",
@@ -49,6 +51,6 @@ export function messageFor(code: unknown): string {
 export const LOGIN_REASONS: Record<string, { text: string; tone: "info" | "warn" }> = {
   expired: { text: "Your session has expired. Please sign in again.", tone: "warn" },
   signed_out: { text: "You have been signed out.", tone: "info" },
-  password_reset: { text: "Your password was changed. Sign in with the new password.", tone: "info" },
+  password_reset: { text: "Your password was changed and every other session was signed out, including the Companion (sign in there again). Sign in here with the new password.", tone: "info" },
   unavailable: { text: "Sign-in is temporarily unavailable. Please try again shortly.", tone: "warn" },
 };

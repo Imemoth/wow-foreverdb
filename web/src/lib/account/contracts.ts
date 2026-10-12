@@ -26,6 +26,11 @@ export interface AuthEndpoint {
   fixedQuery?: Readonly<Record<string, string>>;
   /** `redirect_to` is accepted only when it equals the single, server-computed callback URL. */
   allowRedirectTo?: boolean;
+  /**
+   * Reachable ONLY when the caller passes `{ recovery: true }` (one server-only wrapper function does, see auth-client.ts): never
+   * selectable by request data. The global logout that ends every session of a user after a successful password reset.
+   */
+  recoveryOnly?: boolean;
 }
 
 export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
@@ -37,6 +42,9 @@ export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
   // Web logout ends THIS session only. GoTrue's default is global scope, which would also sign the Companion
   // out (sessions must stay independent), so the scope is pinned and never taken from a caller.
   { method: "POST", path: "/auth/v1/logout", fixedQuery: { scope: "local" } },
+  // PR E (owner decision): after a successful password reset EVERY session of the user is revoked (a pre-registering attacker's session,
+  // other browsers, the registered Companion). Fixed query, recovery-only: `isAllowedAuthRequest` refuses it unless `recovery: true`.
+  { method: "POST", path: "/auth/v1/logout", fixedQuery: { scope: "global" }, recoveryOnly: true },
   { method: "GET", path: "/auth/v1/user" },
   { method: "PUT", path: "/auth/v1/user" },
   { method: "GET", path: "/auth/v1/.well-known/jwks.json" },
@@ -47,7 +55,7 @@ export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
  * permits (pinned values, the grant type, a `redirect_to` equal to `opts.callbackUrl`). Duplicate or unknown
  * parameters are refused, so the backend can never be steered into e.g. a global logout or an arbitrary redirect.
  */
-export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts: { callbackUrl?: string } = {}): boolean {
+export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts: { callbackUrl?: string; recovery?: boolean } = {}): boolean {
   let url: URL;
   try {
     url = new URL(pathAndQuery, "https://auth.invalid");
@@ -55,8 +63,11 @@ export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts:
     return false;
   }
   if (url.origin !== "https://auth.invalid") return false;
-  const ep = AUTH_ENDPOINTS.find((e) => e.method === method.toUpperCase() && e.path === url.pathname);
-  if (!ep) return false;
+  const candidates = AUTH_ENDPOINTS.filter((e) => e.method === method.toUpperCase() && e.path === url.pathname && (!e.recoveryOnly || opts.recovery === true));
+  return candidates.some((ep) => matchesEndpoint(ep, url, opts));
+}
+
+function matchesEndpoint(ep: AuthEndpoint, url: URL, opts: { callbackUrl?: string }): boolean {
   const keys = [...url.searchParams.keys()];
   if (new Set(keys).size !== keys.length) return false;
   for (const key of keys) {

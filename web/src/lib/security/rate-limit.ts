@@ -78,7 +78,7 @@ export function classify(pathname: string): RuleName | null {
  * confirmation makes a password grant (plus a user check and a revocation) per attempt, so it shares the strict `account_auth` budget
  * (global ceiling below Auth's own per-IP limit, finding L-8).
  */
-const ACCOUNT_STRICT_ROUTES = new Set(["register", "login", "confirm", "forgot-password", "resend", "reset-password", "link"]);
+const ACCOUNT_STRICT_ROUTES = new Set(["register", "login", "confirm", "forgot-password", "resend", "reset-password", "reset-password/revoke", "link"]);
 
 /** True for the whole account namespace: pages (/account, /account/...) and the backend-for-frontend (/account/api/...). */
 export function isAccountPath(pathname: string): boolean {

@@ -3,6 +3,7 @@ import { MemoryStore } from "@/lib/security/rate-limit";
 import type { AccountAuthConfig } from "@/lib/account/config";
 import { b64urlEncode } from "@/lib/account/crypto";
 import { ACCOUNT_RPCS } from "@/lib/account/contracts";
+import { auth } from "@/lib/account/auth-client";
 import { ACCOUNT_LIMITS, __setAccountStoreForTests, chargeAccount } from "@/lib/account/limits";
 import { confirmPassword, recheckIdentity } from "@/lib/account/reauth";
 import { WEB_RPCS, callWebRpc } from "@/lib/account/rpc-client";
@@ -201,6 +202,34 @@ describe("fresh-password confirmation and the temporary Auth session", () => {
     expect(await recheckIdentity(cfg, s)).toBe("unavailable");
     stub(() => ({ status: 0, throws: true }));
     expect(await recheckIdentity(cfg, s)).toBe("unavailable");
+  });
+});
+
+describe("global logout after a password reset (recovery-only, typed, verified)", () => {
+  const RT = jwt({ exp: 4_000_000_000, session_id: "sess-recovery", sub: UID });
+  const run = (handler: (c: Call) => Reply) => { const calls = stub(handler); return { calls, out: auth.logoutAllAfterRecovery(cfg, RT) }; };
+  it("sends exactly one fixed global logout with the recovery bearer, then proves the session is gone: confirmed", async () => {
+    const { calls, out } = run((c) => (c.url.includes("/auth/v1/logout") ? { status: 204 } : { status: 403, body: { error_code: "session_not_found" } }));
+    expect(await out).toBe("confirmed");
+    expect(calls.map((c) => `${c.method} ${c.url.replace(cfg.authOrigin, "")}`)).toEqual(["POST /auth/v1/logout?scope=global", "GET /auth/v1/user"]);
+    for (const c of calls) expect(c.headers.Authorization).toBe(`Bearer ${RT}`);
+  });
+  it("is NEVER 'confirmed' unless Auth answered 2xx AND refuses the token afterwards (alive token, 5xx, 429, timeout, session already gone are all uncertain)", async () => {
+    expect(await run((c) => (c.url.includes("/auth/v1/logout") ? { status: 204 } : { status: 200, body: userBody() })).out).toBe("uncertain"); // answered 204 but the session is still alive
+    expect(await run((c) => (c.url.includes("/auth/v1/logout") ? { status: 204 } : { status: 503 })).out).toBe("uncertain"); // cannot verify
+    for (const r of [{ status: 500 }, { status: 502 }, { status: 429, body: { error_code: "over_request_rate_limit" } }, { status: 0, throws: true }] as Reply[]) {
+      expect(await run(() => r).out, JSON.stringify(r)).toBe("uncertain");
+    }
+    expect(await run(() => ({ status: 403, body: { error_code: "session_not_found" } })).out).toBe("uncertain"); // gone, but not provably by us
+  });
+  it("a definitive refusal is 'failed' (nothing revoked)", async () => {
+    expect(await run(() => ({ status: 403, body: { error_code: "not_admin" } })).out).toBe("failed");
+    expect(await run(() => ({ status: 422, body: { error_code: "validation_failed" } })).out).toBe("failed");
+  });
+  it("the global scope exists only through this function: the generic logout stays local, and the request is checked against the recovery-only allowlist entry", async () => {
+    const calls = stub(() => ({ status: 204 }));
+    await auth.logout(cfg, RT);
+    expect(calls[0]!.url).toBe(`${cfg.authOrigin}/auth/v1/logout?scope=local`);
   });
 });
 

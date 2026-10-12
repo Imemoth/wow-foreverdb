@@ -22,6 +22,7 @@ Pre-flight through `0012`'s own pre-flight; apply in this order and no other: th
 | Hosted grants and default privileges: repeat test 30 (private tables unreachable for anon and other accounts) incl. `observed_loot_stats`, and the `graphql` surface | the CI harness has stricter default grants than Supabase |
 | Hosted `authenticated` statement timeout vs the website's 8 s redemption timeout | a slow redeem would surface as "outcome unknown" |
 | Hosted JWT signing (symmetric vs asymmetric keys) | CI uses HS256 with a shared secret |
+| Password-reset revocation: after a reset in a recovery session, `POST /auth/v1/logout?scope=global` must end every session (web, registered Companion) while the anonymous Companion identity survives; record whether hosted Auth also ends other sessions on the password update itself (v2.197.0 does) | the website relies on its own verified global logout, not on that side effect; hosted-version equality is unverified |
 | Real SMTP delivery, SPF/DKIM/DMARC pass, inbox placement | CI uses Mailpit |
 | Session independence under the final settings (Companion anonymous + registered + web at once), AT-4 | proves CAPTCHA/session-coupling settings are really off |
 

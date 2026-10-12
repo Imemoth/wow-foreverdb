@@ -131,7 +131,7 @@ describe("contracts.ts is browser-safe (no Node globals or built-ins)", () => {
     expect(ok("😀".repeat(19))).toBe(false);
     expect(C.normalizeClaimCode("0123456789abcdef0123456789abcdef")).toBe("0123456789ABCDEF0123456789ABCDEF");
     expect(C.isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local")).toBe(true);
-    expect(C.isAllowedAuthRequest("POST", "/auth/v1/logout?scope=global")).toBe(false);
+    expect(C.isAllowedAuthRequest("POST", "/auth/v1/logout?scope=global")).toBe(false); // never without the recovery-only flag
     expect(C.safeNext("//evil.example")).toBe("/account");
   });
 });
@@ -143,13 +143,25 @@ describe("auth endpoint allowlist", () => {
     expect(isAllowedAuthRequest("POST", "/auth/v1/token?grant_type=refresh_token")).toBe(true);
     expect(isAllowedAuthRequest("GET", "/auth/v1/user")).toBe(true);
     expect(isAllowedAuthRequest("GET", "/auth/v1/.well-known/jwks.json")).toBe(true);
-    expect(AUTH_ENDPOINTS.length).toBe(9);
+    expect(AUTH_ENDPOINTS.length).toBe(10);
   });
   it("pins query parameters: logout is always scope=local (never global, so the Companion session survives)", () => {
     expect(isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local")).toBe(true);
     for (const p of ["/auth/v1/logout", "/auth/v1/logout?scope=global", "/auth/v1/logout?scope=others", "/auth/v1/logout?scope=local&scope=global", "/auth/v1/logout?scope=local&x=1"]) {
       expect(isAllowedAuthRequest("POST", p), p).toBe(false);
     }
+  });
+  it("the global logout exists only as a fixed, recovery-only entry: no caller can choose a scope", () => {
+    const g = "/auth/v1/logout?scope=global";
+    expect(isAllowedAuthRequest("POST", g)).toBe(false);
+    expect(isAllowedAuthRequest("POST", g, { recovery: false })).toBe(false);
+    expect(isAllowedAuthRequest("POST", g, { recovery: true })).toBe(true);
+    for (const p of ["/auth/v1/logout?scope=others", "/auth/v1/logout", "/auth/v1/logout?scope=global&scope=local", "/auth/v1/logout?scope=global&x=1", "/auth/v1/logout?scope=GLOBAL", "/auth/v1/logout?scope="]) {
+      expect(isAllowedAuthRequest("POST", p, { recovery: true }), p).toBe(false);
+    }
+    expect(isAllowedAuthRequest("GET", g, { recovery: true })).toBe(false);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local", { recovery: true })).toBe(true);
+    expect(AUTH_ENDPOINTS.filter((e) => e.recoveryOnly).map((e) => `${e.method} ${e.path} ${JSON.stringify(e.fixedQuery)}`)).toEqual(['POST /auth/v1/logout {"scope":"global"}']);
   });
   it("accepts redirect_to only when it equals the server-computed callback URL", () => {
     const cb = "https://app.example/account/auth/confirm";

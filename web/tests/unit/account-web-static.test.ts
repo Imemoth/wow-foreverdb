@@ -31,7 +31,7 @@ describe("account web zone (static)", () => {
       "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",
       "app/account/api/link/route.ts", "app/account/api/login/route.ts",
       "app/account/api/logout/route.ts", "app/account/api/me/route.ts", "app/account/api/register/route.ts", "app/account/api/resend/route.ts",
-      "app/account/api/reset-password/route.ts", "app/account/api/session/refresh/route.ts",
+      "app/account/api/reset-password/revoke/route.ts", "app/account/api/reset-password/route.ts", "app/account/api/session/refresh/route.ts",
     ]);
     expect(existsSync(join(SRC, "app/api/account"))).toBe(false);
     expect(clientFiles.length).toBeGreaterThan(5);
@@ -81,13 +81,20 @@ describe("account web zone (static)", () => {
     for (const m of code(join(SRC, "lib/account/client.ts")).matchAll(/fetch\(\s*([^,)]+)/g)) expect(m[1], "client fetch target").toMatch(/^("\/account\/api\/|path\b)/);
     // the wrapper checks every request against the closed allowlist
     const wrapper = code(join(SRC, "lib/account/auth-client.ts"));
-    expect(wrapper).toMatch(/isAllowedAuthRequest\(spec\.method, spec\.pathAndQuery, \{ callbackUrl \}\)/);
+    expect(wrapper).toMatch(/isAllowedAuthRequest\(spec\.method, spec\.pathAndQuery, \{ callbackUrl, recovery \}\)/);
     expect(wrapper).toMatch(/AUTH_BODIES\.(signup|password_grant|refresh_grant|verify|recover|resend|update_password)\.parse/);
     expect(wrapper).toMatch(/redirect: "manual"/);
     expect(wrapper).not.toMatch(/\.\.\.(init|options|req|request)\b/); // nothing is spread in from a caller
     // logout is pinned to the local scope and nothing derives a scope from input
     expect(wrapper).toContain("/auth/v1/logout?scope=local");
-    expect(wrapper).not.toMatch(/scope=(global|others)/);
+    // the ONLY global scope is the fixed one inside logoutAllAfterRecovery (recovery-only); nothing else, and never `others`
+    expect(wrapper.match(/scope=global/g)?.length).toBe(1);
+    expect(wrapper).toMatch(/async logoutAllAfterRecovery\(cfg: AccountAuthConfig, recoveryToken: string\)[\s\S]*?\/auth\/v1\/logout\?scope=global[\s\S]*?undefined, true\)/);
+    expect(wrapper).not.toMatch(/scope=others/);
+    expect(wrapper).not.toMatch(/scope=\$\{|scope="\s*\+/);
+    // only the reset routes may call it
+    const callers = zone.filter((f) => /logoutAllAfterRecovery\(/.test(code(f)) && !/auth-client\.ts$/.test(f)).map(rel).sort();
+    expect(callers).toEqual(["app/account/api/reset-password/revoke/route.ts", "app/account/api/reset-password/route.ts"]);
   });
 
   it("PR E: the PostgREST client is closed (registry subset, fixed method/path, publishable key + user token, no redirects, bounded, no caller headers)", () => {

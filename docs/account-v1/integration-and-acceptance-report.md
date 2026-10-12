@@ -60,7 +60,7 @@ PT401/PT403/PT400/PT429 -> HTTP 401/403/400/429 with the SQL message and no `Ret
 
 | # | Severity | Finding | Disposition |
 | --- | --- | --- | --- |
-| S1 | **High** | pre-registering attacker keeps a session issued before the victim's password reset (I-1) and can later read the Guildbook / act as owner through a Companion login | **OPEN, owner decision, merge gate.** The fix (`logout?scope=others` after a reset) changes the pinned Auth allowlist and signs the Companion out; not made unilaterally. Mitigation shipped: the link page warns and points to password reset. See [security.md §6](security.md) |
+| S1 | **High** | pre-registering attacker keeps a session issued before the victim's password reset (I-1) and can later read the Guildbook / act as owner through a Companion login | **RESOLVED (owner-approved, implemented, verified)**: [security.md §6.1](security.md). Original text: the fix (`logout?scope=others` after a reset) changes the pinned Auth allowlist and signs the Companion out; not made unilaterally. Mitigation shipped: the link page warns and points to password reset. See [security.md §6](security.md) |
 | S2 | Medium | a session swap in another tab plus the automatic CSRF retry could redeem to account B while the page showed A | **fixed**: the request carries the displayed account id (`409 account_changed`), no CSRF auto-retry for the link route; test `recipient binding` |
 | S3 | Medium (0012) | ~12 cheap accounts calling PostgREST directly can hold `claim_redeem:global` at 429 | accepted/documented; owner decision on 0012 later; monitor M-7 |
 | S4 | Medium/Low (0012) | account reads share `read:global` with the public API | accepted/documented |
@@ -87,7 +87,7 @@ PT401/PT403/PT400/PT429 -> HTTP 401/403/400/429 with the SQL message and no `Ret
 
 ## 6. Pending gates (owner)
 
-1. Decide S1 (global/other-session sign-out on password reset). **Merge hold until decided.**
+1. ~~Decide S1~~ **Decided and implemented (owner, PR E): password reset revokes every session of the account.** Hosted verification belongs to the staging runbook.
 2. Add the check `Account end-to-end (GoTrue + PostgREST)` to ruleset `24853899` after it reports consistently (GitHub Actions app, integration id 15368; readback must show ten unique checks). Not done by this PR.
 3. Create the isolated staging project and run [staging-runbook.md](staging-runbook.md) (nothing was created, configured, migrated or billed).
 4. Run the Windows scenarios W1a, W1b, W2..W10 and record them in [windows-acceptance-checklist.md](windows-acceptance-checklist.md).

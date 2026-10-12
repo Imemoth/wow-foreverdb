@@ -55,7 +55,7 @@ These are facts the implementation depends on. Each one is exercised by `web/tes
 | A body-less `POST /signup` creates an **anonymous** user | impossible from the website (`AUTH_BODIES.signup` requires e-mail + password); anonymous identities are rejected as web sessions |
 | Confirmation works with `POST /verify {type:"email", token_hash}`; replay → 403 `otp_expired` | explicit POST only; replay answers a generic `invalid_or_expired` |
 | Recovery `verify` returns a full session; `PUT /user` needs no re-authentication in a recovery session; `type=email` also accepts a recovery token (indistinguishable `amr`) | honest links get an isolated recovery session (own kind, 15 min, reset form only); the type cannot be enforced (see §2 limitation) |
-| Changing the password does **not** revoke other sessions | accepted (Companion independence); see finding I-1 |
+| Changing the password inside a **recovery** session ended the account's other sessions in v2.197.0 (re-observed in PR E; an earlier note here said it did not), and the hosted version is unverified | the website no longer relies on it: since PR E a successful reset runs its own verified global logout ([security.md §6.1](security.md)) |
 | Parallel refreshes with the **same** refresh token all receive the **same** successor token | concurrent serverless requests converge; test 10b |
 | Replaying the parent of the active token is allowed until the child is used; a copy two rotations behind, beyond the 10 s window, is refused (`refresh_token_already_used`) | the stale copy never authenticates and its cookie is cleared; test 10c records what happens to the live session (v2.197.0: not terminated) |
 | After `logout?scope=local` the session's access token fails `GET /user` with 403 `session_not_found`; other sessions of the same user (and anonymous ones) keep working | server-confirmed identity gives immediate revocation; session independence test 7 |
@@ -107,7 +107,7 @@ Independent review (fresh reviewer, static, no prior conclusions supplied): **no
 | R-L5 | Low | Any Auth 4xx ended a session (a rotated key would sign everyone out) | **fixed**: only refusals naming a dead credential (`refresh_token_*`, `session_not_found`, `bad_jwt`, user gone/banned) end a session; others are transient (unit-tested) |
 | R-L6 | Low | Turnstile checks only `success` (no hostname/action pin, no remoteip) | accepted for V1 (documented); bot protection only |
 | R-L7 | Low | `GET /session/refresh` side effects | **tightened**: only `same-origin`/`none` Fetch-Metadata is processed |
-| I-1 | Info | A password reset does not revoke other sessions | accepted (Companion independence); owner decision |
+| I-1 | Info -> High (re-rated by the PR E review) | A password reset must revoke other sessions (pre-registered/stolen sessions) | **RESOLVED in PR E by owner decision**: `logoutAllAfterRecovery` ([security.md §6.1](security.md)) |
 | W-2 | Medium | Shared egress (L-8) | see R-M2 |
 | W-3 | Medium | Direct GoTrue abuse (A24) | **OPEN** by design; owner-run L/M/AT criteria; website Turnstile is website-only |
 | W-4..6 | Low | one `GET /user` per private view; forms need JavaScript; a stale cookie copy is refused at its next refresh | accepted |

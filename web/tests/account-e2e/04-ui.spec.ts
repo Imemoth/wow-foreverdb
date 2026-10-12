@@ -155,3 +155,32 @@ test("a person with no installation sees helpful empty states; an anonymous visi
   }
   await anon.close();
 });
+
+test("recovery UX: a reset whose sign-out of other sessions is not confirmed is NEVER shown as done; 'Finish securing my account' completes it without a new password", async ({ browser, playwright }, info) => {
+  const { newClient, post, waitForMail, cookieOf } = await import("../account/helpers");
+  const v = await webUser(playwright, "uiReset");
+  const attacker = await webUser(playwright, "uiResetX"); void attacker;
+  const rc = await newClient(playwright);
+  expect((await post(rc, "/account/api/forgot-password", { email: v.email })).status()).toBe(202);
+  const mail = await waitForMail(v.email, /reset|recover|password/i);
+  expect((await post(rc, "/account/api/confirm", { type: "recovery", token_hash: mail.tokenHash })).status()).toBe(200);
+  const CHAOS = process.env.E2E_CHAOS_URL ?? "http://127.0.0.1:54330";
+  const mode = (m: string) => fetch(`${CHAOS}/__chaos`, { method: "POST", body: JSON.stringify({ mode: m, reset: true }) });
+  const ctx = await browser.newContext({ baseURL: "http://localhost:3211", extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
+  await ctx.addCookies([{ name: "fdb_acct", value: (await cookieOf(rc))!.value, domain: "localhost", path: "/account", httpOnly: true, secure: false, sameSite: "Lax" }]);
+  const page = await ctx.newPage();
+  await mode("fail-global-logout");
+  await page.goto("/account/reset-password");
+  await page.getByLabel("New password").fill("ui recovery passphrase 2026 ok");
+  await page.getByRole("button", { name: "Set new password" }).click();
+  await expect(page.getByRole("heading", { name: "Not fully secured yet" })).toBeVisible();
+  await expect(page.getByText(/could not confirm that all other sessions were signed out/)).toBeVisible();
+  expect(page.url()).toBe("http://localhost:3211/account/reset-password"); // no redirect to the "password changed" screen
+  expect((await new AxeBuilder({ page: page as never }).withTags(AXE_TAGS).analyze()).violations.map((x) => x.id)).toEqual([]);
+  await info.attach("recovery-incomplete", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  await mode("pass");
+  await page.getByRole("button", { name: "Finish securing my account" }).click();
+  await expect(page).toHaveURL(/\/account\/login\?reason=password_reset$/);
+  await expect(page.getByText(/every other session was signed out/)).toBeVisible();
+  await ctx.close();
+});
