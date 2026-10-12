@@ -22,11 +22,13 @@ import { evaluateAccountAuth, type AccountAuthConfig } from "./account/config";
  * FOREVERDB_DEPLOYMENT=preview.
  *
  * Only NEXT_PUBLIC_* values may ever reach the browser; none of them are secrets.
- * The website never receives production Supabase credentials. Error messages name
- * variables only, never their values.
+ * Public browsing never receives private database credentials. A separately reviewed,
+ * server-only Account Auth boundary may use the existing project's HTTPS Auth/RPC
+ * gateway with a publishable key; the PUBLIC read/database guard remains strict.
+ * Error messages name variables only, never their values.
  */
 
-// The private production Supabase project. The website must never talk to it.
+// Private production project ref: NEVER allowed in public browsing/publication adapters.
 const FORBIDDEN_DATABASE_MARKERS = ["klxhikdlfwgxurdyexdi"];
 
 /** Variable names the public website must never be given (private backend credentials). */
@@ -217,9 +219,19 @@ export function evaluateEnv(raw: RawEnv): { ok: true; env: ServerEnv } | { ok: f
     }
   }
 
-  // 4b. Account Auth boundary (disabled by default; separate, stricter rules) ----
+  // 4b. Closed, server-only Account Auth boundary (disabled unless a reviewed source flag approves).
+  // Nothing in this exception relaxes the PUBLIC read adapter or NEXT_PUBLIC_* protections above.
   const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv });
   for (const issue of account.issues) fail(issue);
+  if (account.config?.mode === "pilot") {
+    // Preview designation normally permits memory limiting and no CAPTCHA, but the private-project
+    // pilot is an exception: require the same distributed server-side defenses as production.
+    if (b.RATE_LIMIT_BACKEND !== "upstash") fail("single-project account pilot requires the upstash rate limiter");
+    if (!b.RATE_LIMIT_SALT) fail("single-project account pilot requires RATE_LIMIT_SALT");
+    if (!b.TURNSTILE_SECRET_KEY || !b.NEXT_PUBLIC_TURNSTILE_SITE_KEY || !b.CHALLENGE_COOKIE_SECRET) {
+      fail("single-project account pilot requires server-side Turnstile configuration");
+    }
+  }
 
   // 5. Site URL --------------------------------------------------------------
   let siteUrlRaw = b.SITE_URL;
