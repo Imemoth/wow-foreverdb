@@ -50,3 +50,15 @@ export function readFailure(f: RpcFailure): NextResponse {
     default: return failure(503, "temporarily_unavailable", {}, { "Retry-After": "30" });
   }
 }
+
+/**
+ * Runs the rest of a private handler; an exception after `authenticate` must not lose a refresh that already rotated the token
+ * (the browser would keep the spent one and be signed out): the rotated session is persisted on the generic error answer too.
+ */
+export async function guarded(c: RouteContext, a: PrivateAuth, fn: () => Promise<NextResponse>): Promise<NextResponse> {
+  try {
+    return await fn();
+  } catch {
+    return withSession(c, a, failure(500, "internal_error"));
+  }
+}

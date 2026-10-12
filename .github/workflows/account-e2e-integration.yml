@@ -2,8 +2,8 @@ name: Account end-to-end integration (GoTrue + PostgREST)
 
 # Account System V1, PR E acceptance: the website's linking flow, private Guildbook and the Companion-style anonymous/registered clients
 # against a REAL, EPHEMERAL stack:  PostgreSQL 16  +  real GoTrue (pinned supabase/auth tag AND commit)  +  real PostgREST (pinned release,
-# checksum-verified)  +  Mailpit (captured mail), with the repository migrations 0001-0011 and 0012 applied exactly as the SQL suite does.
-# Nothing is emulated (the SQL suite emulates PostgREST; this one does not) and nothing real is touched: no Supabase project, no production
+# checksum-verified)  +  Mailpit (captured mail), with the repository migrations 0001-0006, 0008, 0009, 0011 and 0012 applied (0007 is skipped exactly as in the SQL suite; 0010 and 0013 are never applied) exactly as the SQL suite does.
+# PostgREST and GoTrue are the real programs (the SQL suite emulates PostgREST; this one does not); only the API gateway (Kong) is a small pass-through shim. Nothing real is touched: no Supabase project, no production
 # credential, no Vercel. If any component cannot start the job FAILS (integrated acceptance BLOCKED); it never falls back to stubs.
 #
 # Like web-ci.yml and the other account workflows there is deliberately NO `paths:` filter, so the check reports on every pull request and
@@ -66,7 +66,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .stack-bin
-          key: e2e-stack-bin-${{ env.GOTRUE_TAG }}-${{ env.POSTGREST_TAG }}-${{ env.POSTGREST_SHA256 }}-${{ env.MAILPIT_TAG }}-v1
+          key: e2e-stack-bin-${{ env.GOTRUE_TAG }}-${{ hashFiles('database/tests/account/build-gotrue.sh') }}-${{ env.POSTGREST_TAG }}-${{ env.POSTGREST_SHA256 }}-${{ env.MAILPIT_TAG }}-v1
       - name: Build GoTrue (commit-pinned), download PostgREST (checksum-pinned), build Mailpit
         if: steps.bin.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}

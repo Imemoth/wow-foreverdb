@@ -166,17 +166,19 @@ test("27. budgets: business failures COMMIT (counters persist), exhaustion is HT
   await resetBudgets(db);
 });
 
-test("a wrong guess against a REAL pending claim counts attempts and revokes it after five (SQL logic reached through PostgREST)", async ({ playwright }) => {
+test("unknown codes never touch a REAL pending claim, and the real code still redeems afterwards (SQL logic reached through PostgREST)", async ({ playwright }) => {
   const w = await webUser(playwright, "attempts");
   const s = await registeredSession(w.email, w.password);
   const comp = await companionWithInstallation();
   const code = await startClaim(comp);
   await resetBudgets(db);
-  // a registered holder who cannot satisfy the claim (owner mismatch is simulated by redeeming as the initiator's own... use a bogus code against the real hash space)
   const attempts = async () => (await db.query("select status, attempts from private.installation_claims where installation_id = $1", [comp.installationId])).rows[0];
   expect(await attempts()).toEqual({ status: "pending", attempts: 0 });
   // an UNKNOWN code never touches the real claim
-  for (let i = 0; i < 6; i += 1) await rpc(s.token, "fdb_account_claim_redeem", { p_code: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + i });
+  for (let i = 0; i < 6; i += 1) {
+    const r = await rpc(s.token, "fdb_account_claim_redeem", { p_code: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + i });
+    expect([r.status, r.body]).toEqual([200, { ok: false, error: "invalid_claim" }]);
+  }
   expect(await attempts()).toEqual({ status: "pending", attempts: 0 });
   // the real code still works afterwards for a registered account
   await resetBudgets(db);

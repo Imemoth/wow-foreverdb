@@ -126,7 +126,12 @@ test("28-29. historical rows, stable hashes and aggregate statistics are identic
   const stats = async () => {
     await resetBudgets(db);
     const out: Record<string, unknown> = {};
-    for (const item of [7001, 7002, 7003, 8001]) out[item] = (await rpc(reader.token, "get_foreverdb_item_stats", { p_item_id: item })).body;
+    for (const item of [7001, 7002, 7003, 8001]) {
+      const r = await rpc(reader.token, "get_foreverdb_item_stats", { p_item_id: item });
+      expect(r.status, `stats ${item}`).toBe(200); // never compare error bodies
+      expect(Array.isArray(r.body) && r.body.length > 0, `stats ${item} non-empty`).toBe(true);
+      out[item] = r.body;
+    }
     return out;
   };
   const rowsBefore = await fingerprint(db);

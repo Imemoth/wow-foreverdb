@@ -17,11 +17,18 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 STACK_DIR="${STACK_DIR:-$HERE/.stack}"; mkdir -p "$STACK_DIR"
 : "${PGUSER:?}" "${PGPASSWORD:?}" "${GOTRUE_BIN:?}" "${POSTGREST_BIN:?}" "${MAILPIT_BIN:?}"
 export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-5432}"
+# The stack DROPS and recreates a database and creates roles: only ever against a disposable local cluster.
+case "$PGHOST" in 127.0.0.1|localhost|::1|/*) ;; *) [ "${FDB_DISPOSABLE_CLUSTER:-}" = 1 ] || { echo "refusing PGHOST=$PGHOST: not a loopback/socket host (set FDB_DISPOSABLE_CLUSTER=1 only for a throw-away cluster)" >&2; exit 1; } ;; esac
 NODE="${NODE:-node}"
 SITE="${E2E_SITE_URL:-http://localhost:3210}"
 JWT_SECRET="local-test-only-jwt-secret-0123456789abcdef0123456789abcdef"   # public test constant (same as database/tests/account)
 DB="${FDB_IT_DB:-fdb_account_it}"
 GW=54321; MAIL_HTTP=54324; MAIL_SMTP=54325; TPL=54326; REST=54323; REST_ADMIN=54327; REST_OVERRIDE=54328; REST_OVERRIDE_ADMIN=54329
+# A leftover process from an earlier run on one of our ports would silently answer in place of the component under test (and sign tokens
+# with another secret): refuse to start instead.
+for p in 9999 $GW $MAIL_HTTP $MAIL_SMTP $TPL $REST $REST_ADMIN $REST_OVERRIDE $REST_OVERRIDE_ADMIN 54330; do
+  if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then echo "port $p is already in use: stop the previous stack first (tests/e2e-stack/down.sh)" >&2; exit 1; fi
+done
 ANON_KEY="$("$NODE" "$REPO/web/tests/auth-stack/anon-key.mjs" "$JWT_SECRET")"
 
 # 1. Mailpit + the gateway (so GoTrue's mail and the website's /rest/v1 calls have somewhere to go from the first second).

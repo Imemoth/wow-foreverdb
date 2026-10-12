@@ -1,6 +1,6 @@
 import type { APIRequestContext, APIResponse, PlaywrightWorkerArgs } from "@playwright/test";
 import { PASSWORD, cookieOf, json, newClient, openSessionCookie, post, signedInClient, uniqueEmail, waitForMail } from "../account/helpers";
-import { anonymous, claimsOf, ingest, rpc, snapshot, type Identity, uniq } from "./stack";
+import { anonymous, claimsOf, ingest, relaxFixtureCeilings, rpc, snapshot, type Identity, uniq } from "./stack";
 
 type Playwright = PlaywrightWorkerArgs["playwright"];
 export { PASSWORD, json, newClient, post, uniqueEmail, waitForMail, cookieOf, openSessionCookie };
@@ -21,7 +21,7 @@ export async function webUser(playwright: Playwright, tag: string): Promise<WebU
 export async function loginAgain(playwright: Playwright, u: Pick<WebUser, "email" | "password">): Promise<WebUser> {
   const c = await newClient(playwright);
   const r = await post(c, "/account/api/login", { email: u.email, password: u.password });
-  if (r.status() !== 200) throw new Error(`login answered ${r.status()}`);
+  if (r.status() !== 200) throw new Error(`login answered ${r.status()}: ${await r.text()}`);
   const s = (await openSessionCookie((await cookieOf(c))!.value))!;
   return { c, email: u.email.toLowerCase(), password: u.password, uid: s.uid, sid: s.sid, accessToken: s.at };
 }
@@ -30,6 +30,7 @@ export interface Companion { id: Identity; installationId: string }
 
 /** An anonymous Companion identity that has really ingested one installation (sources, loot, locations, quest drops, Guildbook). */
 export async function companionWithInstallation(o: { guilds?: number; members?: number; tag?: string; sources?: number } = {}): Promise<Companion> {
+  await relaxFixtureCeilings();
   const id = await anonymous();
   const installationId = uniq("e2e");
   const r = await ingest(id.token, snapshot(installationId, { updatedAt: 1000, sources: o.sources ?? 3, guilds: o.guilds ?? 2, members: o.members ?? 4, tag: o.tag ?? "M" }));
@@ -38,14 +39,18 @@ export async function companionWithInstallation(o: { guilds?: number; members?: 
 }
 
 export async function startClaim(c: Companion): Promise<string> {
+  await relaxFixtureCeilings();
   const r = await rpc(c.id.token, "fdb_account_claim_start", { p_installation_id: c.installationId });
   if (r.status !== 200 || r.body?.ok !== true) throw new Error(`claim start answered ${r.status} ${JSON.stringify(r.body)}`);
   return r.body.code as string;
 }
 
 /** POST /account/api/link exactly as the page does (signed CSRF, same-origin). */
-export async function link(c: APIRequestContext, code: string, password: string): Promise<APIResponse> {
-  return post(c, "/account/api/link", { code, password, confirm: true });
+export async function link(c: APIRequestContext, code: string, password: string, accountId?: string): Promise<APIResponse> {
+  // the page sends the id of the account it displayed; by default that is the account the client's session belongs to
+  const ck = await cookieOf(c);
+  const s = ck ? await openSessionCookie(ck.value) : null;
+  return post(c, "/account/api/link", { code, password, confirm: true, accountId: accountId ?? s?.uid ?? "00000000-0000-4000-8000-000000000000" });
 }
 export { claimsOf };
 

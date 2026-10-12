@@ -132,3 +132,30 @@ Checks 1, 3, 4, 16 need a real Auth server; they are never marked passed on mock
 | LS-11 | Concurrent revocation vs `claim_start` (row lock) | C | SQL, parallel sessions |
 | PW-1 | Password validation: ASCII, multibyte, boundary lengths, and with no `Buffer` global; contracts bundled for the browser run in a bare context | A | unit (done) |
 | AT-1..AT-7 | Auth abuse drill and monitoring criteria ([acceptance §5](acceptance-and-owner-actions.md)) | owner | staging (not code) |
+
+## 6. PR E: website linking, installation list and private Guildbook (as built)
+
+Design and tests: [web-linking.md](web-linking.md); integrated evidence: [integration-and-acceptance-report.md](integration-and-acceptance-report.md).
+
+New threats and their controls:
+
+| ID | Threat | Control | Verified by |
+| --- | --- | --- | --- |
+| A25 | **Pre-hijack** (R-M1): the attacker registers the victim's address with a password the victim does not know; the victim confirms; a confirmation then authorises a transfer | fresh password for the verified account's own e-mail against the same Auth project; same immutable UID; temporary session revoked (`scope=local`); identity re-checked; redemption only with the ORIGINAL web session | unit (`account-link-lib`), e2e 9-11 and the pre-hijack test (real GoTrue + PostgREST) |
+| A26 | Redemption lands on another account than the one displayed | the request names the displayed account id (`409 account_changed` otherwise); no automatic CSRF retry for the link route; the e-mail used for the password check is always the session's | e2e `recipient binding` |
+| A27 | A one-time call whose reply is lost is reported as failed and retried | `502 outcome_unknown`, never retried automatically, reconcile through the installation list; the code is cleared from the UI | e2e 05 (fault-injecting proxy: database committed, reply dropped, exactly one request forwarded) |
+| A28 | Generic RPC proxy / header smuggling to PostgREST | `rpc-client.ts`: four functions, fixed method/path, four headers, strict Zod in/out, no redirects, bounded; bundle scan forbids `/rest/v1` and RPC names | static + unit + bundle scan |
+| A29 | `Prefer: tx=rollback` (or another client header) rolls back abuse counters | reviewed `db-tx-end = commit`; the website sends no `Prefer`; proven with real PostgREST, and shown to FAIL with `commit-allow-override` (deployment checklist item, re-check on staging) | e2e 03 test 27 |
+| A30 | Wrong-account Guildbook read, pagination or size bypass, member GUID leak | ownership re-derived in SQL; ids are filters; page size fixed server-side; strict body/outputs | e2e 02 |
+| A31 | Stored XSS through guild/member/zone text | React text rendering, nonce CSP unchanged | e2e 06 (hostile ingest, real browser) |
+
+Independent reviews (fresh context, static, no prior conclusions supplied) of the PR E change set are recorded in the report; their findings and dispositions are listed there. Residual risks specific to PR E (none Critical):
+
+| Risk | Severity | Disposition |
+| --- | --- | --- |
+| **Lingering sessions after a password reset** (I-1): a pre-registering attacker who signed in between the victim's confirmation and the victim's reset keeps that session; after the victim links an installation it can read the Guildbook and (through a Companion login with the same account) act as owner | **High per the reviewer, OPEN: owner decision, merge gate** | fix needs `logout?scope=others` after a reset (a change to the pinned Auth allowlist that also signs the user's Companion out); deliberately not made unilaterally. Until then the link page tells a user who does not know the password to reset it, and the owner must decide before any production plan |
+| `claim_redeem:global` (120 / 5 min) is charged by well-formed but unknown codes: ~12 cheap registered accounts calling PostgREST directly can keep every redemption at 429 | Medium (migration 0012 design) | owner decision (monitor `redeem_rejected` rate, M-7; consider not charging unknown codes globally in a later migration) |
+| Account reads call `foreverdb_api_gate('detail')`, which shares `read:global` with the public loot API | Medium/Low (0012 design) | accepted for V1; separate buckets are a later migration |
+| Website link throttles share the per-address sign-in budget: an attacker can lock a victim out of linking (not of the Companion) for up to 15 minutes | Low | accepted (same class as R-M3) |
+| The fresh-password requirement exists only in the website: the database function accepts any live registered session | Info | by design (the code, not the session, is the bearer secret); documented |
+| A failed revocation of the temporary reauthentication session leaves one unused Auth session whose tokens were dropped | Low | reported as `reauthCleanup: "unconfirmed"`, logged by name, bounded by the per-account budget; operators can prune unused sessions |

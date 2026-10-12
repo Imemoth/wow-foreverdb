@@ -65,7 +65,8 @@ export function GuildbookBrowser({ installations }: { installations: Installatio
   // fragment is a convenience, not an authorisation: the database re-checks ownership on every request anyway.
   useEffect(() => {
     const m = /^#installation=(.+)$/.exec(window.location.hash);
-    const wanted = m ? decodeURIComponent(m[1]!) : null;
+    let wanted: string | null = null;
+    try { wanted = m ? decodeURIComponent(m[1]!) : null; } catch { wanted = null; }
     const pick = installations.find((i) => i.id === wanted)?.id ?? (installations.length === 1 ? installations[0]!.id : null);
     if (!pick) return;
     const t = setTimeout(() => void chooseInstallation(pick), 0);

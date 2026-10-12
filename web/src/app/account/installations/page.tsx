@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { callWebRpc } from "@/lib/account/rpc-client";
-import { refreshPath, requirePageUser } from "@/lib/account/page-session";
+import { requirePageUser } from "@/lib/account/page-session";
 import { Unavailable } from "../_ui/Unavailable";
 
 export const metadata = { title: "Installations" };
@@ -17,7 +16,6 @@ export default async function InstallationsPage() {
   if (!p.ok) return p.reason === "unavailable" ? <Unavailable /> : null;
   // The list comes from the database for THIS verified session: nothing about it is read from the request.
   const out = await callWebRpc(p.ac.cfg, "fdb_account_installations", {}, p.session.at);
-  if (!out.ok && out.kind === "unauthenticated") redirect(refreshPath("/account/installations"));
   return (
     <div data-account-wide>
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Your installations</h1>
@@ -25,7 +23,7 @@ export default async function InstallationsPage() {
       {!out.ok ? (
         <div className="panel mt-6 space-y-2 p-6" role="alert">
           <p className="text-parchment">
-            {out.kind === "forbidden" ? "This account cannot list installations." : "The installation list is temporarily unavailable. Reload in a moment."}
+            {out.kind === "forbidden" ? "This account cannot list installations." : out.kind === "unauthenticated" ? <>Your session could not be verified. <Link href="/account/login?next=%2Faccount%2Finstallations">Sign in again</Link>.</> : "The installation list is temporarily unavailable. Reload in a moment."}
           </p>
         </div>
       ) : out.data.length === 0 ? (

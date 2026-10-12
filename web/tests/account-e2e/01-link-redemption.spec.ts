@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { cookieOf, json, post, setCookies, newClient } from "../account/helpers";
 import { PASSWORD, clientWithSessionCookie, companionWithInstallation, link, loginAgain, startClaim, webUser, uniqueEmail, waitForMail, openSessionCookie } from "./world";
-import { admin, auth, claimRows, claimsOf, fingerprint, logoutLocal, ownerOf, registeredSession, resetBudgets, rpc, sessionCount, ingest, snapshot } from "./stack";
+import { admin, superAdmin, auth, claimRows, claimsOf, fingerprint, logoutLocal, ownerOf, registeredSession, resetBudgets, rpc, sessionCount, ingest, snapshot } from "./stack";
 import type pg from "pg";
 
 /**
@@ -17,6 +17,16 @@ test("1-8. registered account A signs in; the Companion's anonymous owner issues
   const comp = await companionWithInstallation();
   const code = await startClaim(comp);
   expect(code).toMatch(/^[0-9A-F]{32}$/);
+
+  // 5: the ingest stored representative observations of every kind (sources, loot, locations incl. quest drops, Guildbook members, professions)
+  const rows = (await db.query(`select (select count(*) from public.installation_source_stats where installation_id = $1)::int sources,
+                                      (select count(*) from public.installation_item_stats where installation_id = $1)::int loot,
+                                      (select count(*) from public.installation_item_stats where installation_id = $1 and quest_drop_count > 0)::int quest,
+                                      (select count(*) from public.installation_location_stats where installation_id = $1)::int locations,
+                                      (select count(*) from public.installation_guilds where installation_id = $1)::int guilds,
+                                      (select count(*) from public.installation_guild_members where installation_id = $1)::int members,
+                                      (select count(*) from public.installation_guild_professions where installation_id = $1)::int professions`, [comp.installationId])).rows[0];
+  expect(rows).toEqual({ sources: 3, loot: 6, quest: 3, locations: 3, guilds: 2, members: 8, professions: 8 });
 
   // 3-4: the anonymous identity is a real anonymous Auth user with a session id; the installation exists and is owned by it
   expect(claimsOf(comp.id.token)).toMatchObject({ is_anonymous: true, role: "authenticated" });
@@ -62,7 +72,7 @@ test("9-11. no redemption without a fresh password: missing/empty/foreign/wrong 
 
   // 9: structurally no password / no explicit confirmation -> refused before anything else
   for (const body of [{ code }, { code, confirm: true }, { code, password: "", confirm: true }, { code, password: PASSWORD }, { code, password: PASSWORD, confirm: false }, { password: PASSWORD, confirm: true }]) {
-    const r = await post(a.c, "/account/api/link", body);
+    const r = await post(a.c, "/account/api/link", { accountId: a.uid, ...body });
     expect(r.status(), JSON.stringify(Object.keys(body))).toBe(400);
     expect(await json(r)).toMatchObject({ ok: false, error: "invalid_input" });
   }
@@ -139,7 +149,7 @@ test("12. a revoked, replaced or stale web session cannot redeem; the pending cl
 
   // a copied cookie of the revoked session (stolen browser state) is just as dead
   const thief = await clientWithSessionCookie(playwright, copiedCookie);
-  const stolen = await post(thief, "/account/api/link", { code, password: a.password, confirm: true });
+  const stolen = await post(thief, "/account/api/link", { code, password: a.password, confirm: true, accountId: a.uid });
   expect(stolen.status()).toBe(401);
   expect(await ownerOf(db, comp.installationId)).toBe(comp.id.uid);
 
@@ -174,9 +184,8 @@ test("13-15. a valid redemption transfers the installation exactly once, A sees 
   const audit = (await db.query("select event from private.account_audit where installation_id = $1 order by id", [comp.installationId])).rows.map((x) => x.event);
   expect(audit.filter((e) => e === "claim_redeemed")).toHaveLength(1);
   // history untouched (the one allowed difference is owner_user_id, which the fingerprint excludes)
-  expect(await fingerprint(db)).toEqual({ ...frozen, ...(await fingerprint(db)) }); // shape guard
   const after = await fingerprint(db);
-  for (const t of Object.keys(frozen)) if (t !== "public.installations") expect(after[t], t).toEqual(frozen[t]);
+  for (const t of Object.keys(frozen)) expect(after[t], t).toEqual(frozen[t]); // installations too: the fingerprint excludes only owner_user_id
 
   // 15: A sees the installation and the Guildbook through the website; the page shows the id
   const list = await a.c.get("/account/api/installations");
@@ -284,19 +293,23 @@ test("20-22. consumed, expired, malformed, replaced and revoked codes all fail w
   expect(await ownerOf(db, c3.installationId)).toBe(d.uid);
 
   // malformed: rejected locally with a format answer, nothing is sent to the database (no budget burnt, no claim looked up)
-  const budgetsBefore = (await db.query("select count(*)::int n from private.foreverdb_api_budgets where bucket like 'claim%'")).rows[0].n;
+  const budgetCalls = async () => (await db.query("select coalesce(sum(calls),0)::int n from private.foreverdb_api_budgets where bucket like 'claim%'")).rows[0].n;
+  const rejects = async () => (await db.query("select count(*)::int n from private.account_audit where event = 'redeem_rejected' and account_uid = $1", [b.uid])).rows[0].n;
+  const budgetsBefore = await budgetCalls();
+  const rejectsBefore = await rejects();
   const b2 = await loginAgain(playwright, b); // a new browser (the edge budget is per address)
   for (const bad of ["", "short", "ZZZZ0123456789ABCDEF0123456789ABCD", "0123456789ABCDEF0123456789ABCDEF0", "FDB-0123"]) {
-    const r = await post(b2.c, "/account/api/link", { code: bad, password: b.password, confirm: true });
+    const r = await post(b2.c, "/account/api/link", { code: bad, password: b.password, confirm: true, accountId: b.uid });
     expect([400]).toContain(r.status());
   }
-  expect((await db.query("select count(*)::int n from private.foreverdb_api_budgets where bucket like 'claim%'")).rows[0].n).toBe(budgetsBefore);
+  expect(await budgetCalls()).toBe(budgetsBefore); // no database call counted
+  expect(await rejects()).toBe(rejectsBefore); // and no database rejection recorded: the RPC was never reached
 
   // authentication failures are NOT claim failures: no cookie -> 401 unauthenticated, CSRF-less -> 403
-  const noSession = await post(await newClient(playwright), "/account/api/link", { code: new3, password: PASSWORD, confirm: true });
+  const noSession = await post(await newClient(playwright), "/account/api/link", { code: new3, password: PASSWORD, confirm: true, accountId: a.uid });
   expect(noSession.status()).toBe(401);
   expect(await json(noSession)).toEqual({ ok: false, error: "unauthenticated" });
-  const noCsrf = await post(a.c, "/account/api/link", { code: new3, password: a.password, confirm: true }, { csrf: "none" });
+  const noCsrf = await post(a.c, "/account/api/link", { code: new3, password: a.password, confirm: true, accountId: a.uid }, { csrf: "none" });
   expect(noCsrf.status()).toBe(403);
 });
 
@@ -349,19 +362,61 @@ test("24. website logout is session-local: it neither revokes the Companion's se
   expect((await otherWeb.c.get("/account/api/me")).status()).toBe(200);
 });
 
-test("26. concurrent redemption of one code is atomic: exactly one winner, one owner change, one audit row", async ({ playwright }) => {
+test("26. concurrent redemption of one code is atomic: several redemptions are provably IN FLIGHT at once (blocked on the installation lock), exactly one wins", async ({ playwright }) => {
   const a = await webUser(playwright, "acctA26");
   const b = await webUser(playwright, "acctB26");
+  const a2 = await loginAgain(playwright, a);
+  const b2 = await loginAgain(playwright, b);
   const comp = await companionWithInstallation();
   const code = await startClaim(comp);
-  const results = await Promise.all([link(a.c, code, a.password), link(b.c, code, b.password), link((await loginAgain(playwright, a)).c, code, a.password), link((await loginAgain(playwright, b)).c, code, b.password)]);
-  const statuses = results.map((r) => r.status()).sort();
-  expect(statuses.filter((s) => s === 200)).toHaveLength(1);
-  expect(statuses.filter((s) => s === 422)).toHaveLength(3);
-  const owner = await ownerOf(db, comp.installationId);
-  expect([a.uid, b.uid]).toContain(owner);
+  // Hold the SAME advisory lock the redeem function takes for this installation, fire all requests, and release only when four database
+  // backends are visibly waiting for it: the four RPCs then race for real instead of running one after another.
+  const lockDb = await admin();
+  const observer = await superAdmin();
+  await lockDb.query("select pg_advisory_lock(hashtextextended($1, 0))", [comp.installationId]);
+  const requests = [link(a.c, code, a.password), link(b.c, code, b.password), link(a2.c, code, a.password), link(b2.c, code, b.password)];
+  // (the functions run with lock_timeout = 5 s, so release as soon as the race is real: at least two backends blocked at the same moment)
+  let waiting = 0;
+  for (let i = 0; i < 100 && waiting < 2; i += 1) {
+    waiting = (await observer.query("select count(*)::int n from pg_stat_activity where wait_event_type = 'Lock' and wait_event = 'advisory'")).rows[0].n;
+    if (waiting < 2) await new Promise((r) => setTimeout(r, 50));
+  }
+  expect(waiting, "at least two redemptions reached the database and wait for the installation lock at the same time").toBeGreaterThanOrEqual(2);
+  await lockDb.query("select pg_advisory_unlock(hashtextextended($1, 0))", [comp.installationId]);
+  await lockDb.end();
+  await observer.end();
+  const statuses = (await Promise.all(requests)).map((r) => r.status()).sort();
+  expect(statuses).toEqual([200, 422, 422, 422]);
+  expect([a.uid, b.uid]).toContain(await ownerOf(db, comp.installationId));
   expect((await claimRows(db, comp.installationId)).map((x) => x.status)).toEqual(["consumed"]);
   const audit = (await db.query("select event from private.account_audit where installation_id = $1", [comp.installationId])).rows.map((x) => x.event);
   expect(audit.filter((e) => e === "claim_redeemed")).toHaveLength(1);
   void auth;
+});
+
+test("26b. the same race straight at real PostgREST: four registered sessions blocked on the installation lock at once, exactly one wins", async ({ playwright }) => {
+  const a = await webUser(playwright, "race26a");
+  const b = await webUser(playwright, "race26b");
+  const sessions = [await registeredSession(a.email, a.password), await registeredSession(a.email, a.password), await registeredSession(b.email, b.password), await registeredSession(b.email, b.password)];
+  const comp = await companionWithInstallation();
+  const code = await startClaim(comp);
+  const lockDb = await admin();
+  const observer = await superAdmin();
+  await lockDb.query("select pg_advisory_lock(hashtextextended($1, 0))", [comp.installationId]);
+  const calls = sessions.map((s) => rpc(s.token, "fdb_account_claim_redeem", { p_code: code }));
+  let waiting = 0;
+  for (let i = 0; i < 100 && waiting < 4; i += 1) {
+    waiting = (await observer.query("select count(*)::int n from pg_stat_activity where wait_event_type = 'Lock'")).rows[0].n;
+    if (waiting < 4) await new Promise((r) => setTimeout(r, 50));
+  }
+  expect(waiting, "four backends blocked on locks (two on the installation lock, the same-account pair behind each other on that account's budget row)").toBe(4);
+  await lockDb.query("select pg_advisory_unlock(hashtextextended($1, 0))", [comp.installationId]);
+  await lockDb.end();
+  await observer.end();
+  const results = await Promise.all(calls);
+  expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+  expect(results.filter((r) => r.body.ok === true)).toHaveLength(1);
+  expect(results.filter((r) => r.body.ok === false && r.body.error === "invalid_claim")).toHaveLength(3);
+  expect((await claimRows(db, comp.installationId)).map((x) => x.status)).toEqual(["consumed"]);
+  expect((await db.query("select count(*)::int n from private.account_audit where installation_id = $1 and event = 'claim_redeemed'", [comp.installationId])).rows[0].n).toBe(1);
 });

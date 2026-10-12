@@ -4,7 +4,7 @@ import { accountApi } from "@/lib/account/handler";
 import { accountLog, failure, jsonResponse } from "@/lib/account/http";
 import { INPUTS } from "@/lib/account/inputs";
 import { chargeAccount, chargeEmail } from "@/lib/account/limits";
-import { authenticate, withSession } from "@/lib/account/private";
+import { authenticate, guarded, withSession } from "@/lib/account/private";
 import { confirmPassword, recheckIdentity } from "@/lib/account/reauth";
 import { callWebRpc } from "@/lib/account/rpc-client";
 
@@ -32,6 +32,10 @@ export const POST = accountApi({ route: "link", mutating: true, body: INPUTS.lin
   if (!a.ok) return a.response;
   const { user, session } = a.auth;
   const done = (res: NextResponse) => withSession(c, a.auth, res);
+  return guarded(c, a.auth, async () => {
+
+  // The request names the account the person SAW on the page; if the session now belongs to another account, nothing is attempted.
+  if (body.accountId.toLowerCase() !== user.id.toLowerCase()) return done(failure(409, "account_changed"));
 
   const code = normalizeClaimCode(body.code);
   if (!code) return done(failure(400, "invalid_code_format"));
@@ -42,7 +46,7 @@ export const POST = accountApi({ route: "link", mutating: true, body: INPUTS.lin
   try {
     reauthBudget = await chargeAccount(c.ac.env, c.ac.cfg.csrfSecret, "reauth", user.id);
     if (reauthBudget.budget !== "exhausted" && (await chargeEmail(c.ac.env, c.ac.cfg.csrfSecret, "login", user.email)) === "exhausted") {
-      reauthBudget = { budget: "exhausted" as const, retryAfterSec: 300 };
+      reauthBudget = { budget: "exhausted" as const, retryAfterSec: 900 };
     }
   } catch {
     return done(failure(503, "temporarily_unavailable", {}, { "Retry-After": "30" }));
@@ -95,4 +99,5 @@ export const POST = accountApi({ route: "link", mutating: true, body: INPUTS.lin
   }
   accountLog("link_succeeded", { route: "link", status: 200 });
   return done(jsonResponse({ ok: true, installationId: out.data.installation_id, linkedAt: out.data.linked_at, reauthCleanup: fresh.cleanup }));
+  });
 });

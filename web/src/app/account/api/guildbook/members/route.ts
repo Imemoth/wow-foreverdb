@@ -1,7 +1,7 @@
 import { accountApi } from "@/lib/account/handler";
 import { jsonResponse } from "@/lib/account/http";
 import { GUILDBOOK_PAGE_SIZE, INPUTS } from "@/lib/account/inputs";
-import { authenticate, readFailure, withSession } from "@/lib/account/private";
+import { authenticate, guarded, readFailure, withSession } from "@/lib/account/private";
 import { callWebRpc } from "@/lib/account/rpc-client";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const POST = accountApi({ route: "guildbook/members", mutating: true, body: INPUTS.guildbookMembers }, async (c, body) => {
   const a = await authenticate(c, { read: true });
   if (!a.ok) return a.response;
+  return guarded(c, a.auth, async () => {
   const out = await callWebRpc(
     c.ac.cfg,
     "fdb_account_guildbook_members",
@@ -34,4 +35,5 @@ export const POST = accountApi({ route: "guildbook/members", mutating: true, bod
       })),
     }),
   );
+  });
 });

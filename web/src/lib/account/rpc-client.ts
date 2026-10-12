@@ -123,6 +123,8 @@ export async function callWebRpc<N extends WebRpcName>(
   if (res.status === 403) return { ok: false, kind: "forbidden" };
   if (res.status === 429) return { ok: false, kind: "rate_limited", retryAfterSec: retryAfter(res) };
   if (res.status === 400) return { ok: false, kind: "bad_request" };
+  // PostgREST refusing BEFORE execution (function not in the schema cache, unsupported media type / profile): definitely not run.
+  if (res.status === 404 || res.status === 405 || res.status === 406 || res.status === 415) return { ok: false, kind: "unavailable" };
   if (res.status < 200 || res.status >= 300) return lost; // 5xx, 3xx (redirects are refused), anything unexpected
   if (text === null) return lost; // oversized or truncated body
 

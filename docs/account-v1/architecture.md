@@ -82,7 +82,7 @@ sequenceDiagram
 
 ### Account Guildbook read
 
-`Browser → /account/guildbook (server component, server-confirmed user) → rpc fdb_account_guildbook_* (user JWT) → database re-derives ownership from auth.uid()`. Caller-supplied installation/guild identifiers are filters inside the caller's own set, never authorization.
+`Browser → /account/guildbook (server component, server-confirmed user) → /account/api/guildbook/* (CSRF-protected JSON) → lib/account/rpc-client.ts (closed PostgREST client, user JWT) → rpc fdb_account_guildbook_* → database re-derives ownership from auth.uid()`. Caller-supplied installation/guild identifiers are filters inside the caller's own set, never authorization.
 
 ## 3. Trust boundaries
 
@@ -90,7 +90,7 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | T1 | Internet → public website | anonymous visitors | existing: CSP, rate limits, Turnstile (optional), noindex outside production |
 | T2 | Public website ↔ **account zone** | same process, different route prefix | single URL prefix `/account`, separate cookie with `Path=/account`, `private, no-store`, static import-boundary tests, no shared code with `lib/data` |
-| T3 | Account zone → Supabase Auth/PostgREST (private project) | server-to-server HTTPS | closed endpoint and RPC allowlists (`contracts.ts`), publishable key only, user's own JWT, validated configuration (§4) |
+| T3 | Account zone → Supabase Auth/PostgREST (private project) | server-to-server HTTPS | closed endpoint and RPC allowlists (`contracts.ts`; `auth-client.ts` for Auth, `rpc-client.ts` for PostgREST: four web functions, fixed method/path/headers), publishable key only, user's own JWT, validated configuration (§4); PR E: [web-linking.md](web-linking.md) |
 | T4 | Companion → Supabase | user's machine → internet | existing anon JWT / new registered JWT; DPAPI at rest; fail closed |
 | T5 | Database role boundaries | `anon` / `authenticated` / definer | explicit REVOKE/GRANT per function, `search_path = ''`, in-function identity checks (registered + confirmed + active session) |
 | T6 | Private Supabase ↔ **public PostgreSQL** (future) | none in V1 | physical separation; the website's public adapter has no route to the private project |

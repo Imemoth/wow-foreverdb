@@ -17,7 +17,7 @@ type Phase =
  * Web Storage, analytics or a log, are cleared after every submission and when the page is hidden or restored from the
  * back/forward cache, and the form does not allow the browser to autofill or remember the code.
  */
-export function LinkForm({ email }: { email: string }) {
+export function LinkForm({ email, accountId }: { email: string; accountId: string }) {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -57,7 +57,7 @@ export function LinkForm({ email }: { email: string }) {
     if (!understood) { setError("Tick the confirmation box to continue."); alertRef.current?.focus(); return; }
 
     setBusy(true);
-    const r = await postJson("/account/api/link", { code: canonical, password, confirm: true });
+    const r = await postJson("/account/api/link", { code: canonical, password, confirm: true, accountId }, { retryCsrf: false }); // a changed session must never be silently adopted
     setPassword("");
     setBusy(false);
     if (r.data.ok && typeof r.data.installationId === "string") {
@@ -74,6 +74,7 @@ export function LinkForm({ email }: { email: string }) {
       setPhase({ kind: "unknown" });
       return;
     }
+    if (err === "account_changed" || err === "csrf") { setError("Your session changed while this page was open. Reload the page and check which account is shown."); alertRef.current?.focus(); return; }
     if (err === "unauthenticated") {
       window.location.assign(new URL("/account/login?reason=expired&next=%2Faccount%2Flink", window.location.origin).toString());
       return;

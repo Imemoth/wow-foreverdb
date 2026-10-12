@@ -38,7 +38,7 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
           before you: do not link anything, <Link href="/account/forgot-password">reset the password</Link> first.
         </p>
       </section>
-      <LinkForm email={p.user.email} />
+      <LinkForm email={p.user.email} accountId={p.user.id} />
     </>
   );
 }

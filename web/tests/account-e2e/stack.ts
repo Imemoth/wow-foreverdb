@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- JSON bodies of the servers under test are inspected structurally by the assertions */
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 
@@ -74,6 +75,13 @@ export async function admin(): Promise<pg.Client> {
   return c;
 }
 
+/** Superuser connection of the DISPOSABLE cluster: needed only to observe other backends' lock waits in pg_stat_activity. */
+export async function superAdmin(): Promise<pg.Client> {
+  const c = new pg.Client({ host: env.PGHOST ?? "127.0.0.1", port: Number(env.PGPORT ?? 5432), database: DB, user: env.PGUSER, password: env.PGPASSWORD });
+  await c.connect();
+  return c;
+}
+
 export const DATA_TABLES = [
   "public.installations", "public.sources", "public.items", "public.installation_source_stats", "public.installation_location_stats",
   "public.installation_item_stats", "public.installation_guilds", "public.installation_guild_members", "public.installation_guild_professions",
@@ -132,3 +140,10 @@ export function snapshot(installationId: string, o: { updatedAt?: number; source
   return { installationId, schemaVersion: 9, addonVersion: "e2e-test", updatedAt, sources: src, guilds: gl };
 }
 export const ingest = (token: string, snap: unknown) => rpc(token, "ingest_foreverdb_snapshot_auth", { p_snapshot: snap });
+
+let budgetDb: pg.Client | null = null;
+/** Keeps the DATABASE's GLOBAL ingest / claim-start ceilings from throttling fixture creation (they are alarms shared by the whole run; the per-account budgets under test are untouched). */
+export async function relaxFixtureCeilings(): Promise<void> {
+  budgetDb ??= await admin();
+  await budgetDb.query("delete from private.foreverdb_api_budgets where bucket in ('ingest:global', 'claim_start:global')");
+}

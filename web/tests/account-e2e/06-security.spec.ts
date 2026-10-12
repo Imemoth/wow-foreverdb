@@ -11,7 +11,7 @@ test.beforeAll(async () => { db = await admin(); });
 test.afterAll(async () => { await db.end(); });
 
 const PRIVATE_POSTS = [
-  ["/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "x", confirm: true }],
+  ["/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "x", confirm: true, accountId: "00000000-0000-4000-8000-000000000000" }],
   ["/account/api/guildbook/guilds", { installationId: "some-installation-1" }],
   ["/account/api/guildbook/members", { installationId: "some-installation-1", guildKey: "Realm:Guild1", page: 0 }],
 ] as const;
@@ -22,7 +22,7 @@ test("CSRF / Origin / Fetch-Metadata / content-type matrix on every private POST
   const comp = await companionWithInstallation();
   const code = await startClaim(comp);
   for (const [path, body] of PRIVATE_POSTS) {
-    const real = path === "/account/api/link" ? { ...body, code, password: a.password } : body;
+    const real = path === "/account/api/link" ? { ...body, code, password: a.password, accountId: a.uid } : body;
     const cases: [string, Parameters<typeof post>[3], number][] = [
       ["no CSRF token", { csrf: "none" }, 403],
       ["garbage CSRF token", { csrf: "v1.AAAAAAAAAAAAAAAA.9999999999.AAAA" }, 403],
@@ -59,7 +59,7 @@ test("CSRF / Origin / Fetch-Metadata / content-type matrix on every private POST
   }
   // the CSRF protection also covers a REAL code: with the right password but no token, nothing is redeemed
   const fresh = await loginAgain(playwright, a); // (the per-address edge budget of the first browser is spent by the matrix above)
-  expect((await post(fresh.c, "/account/api/link", { code, password: a.password, confirm: true }, { csrf: "none" })).status()).toBe(403);
+  expect((await post(fresh.c, "/account/api/link", { code, password: a.password, confirm: true, accountId: a.uid }, { csrf: "none" })).status()).toBe(403);
   expect(await ownerOf(db, comp.installationId)).toBe(comp.id.uid);
 });
 
@@ -71,7 +71,7 @@ test("every private route and page: private no-store, noindex, no referrer, API 
     await a.c.get("/account/link"), await a.c.get("/account/installations"), await a.c.get("/account/guildbook"), await a.c.get("/account/api/installations"),
     await post(a.c, "/account/api/guildbook/guilds", { installationId: comp.installationId }),
     await post(a.c, "/account/api/guildbook/members", { installationId: comp.installationId, guildKey: "Realm:Guild1", page: 0 }),
-    await post(a.c, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "nope nope nope", confirm: true }),
+    await post(a.c, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "nope nope nope", confirm: true, accountId: a.uid }),
   ];
   for (const r of responses) {
     const h = r.headers();
@@ -96,7 +96,6 @@ test("every private route and page: private no-store, noindex, no referrer, API 
 
 test("redirect allowlist: the new pages are valid return paths, everything else falls back to /account", async ({ playwright }) => {
   const users = [await webUser(playwright, "redir1"), await webUser(playwright, "redir2")]; // (sign-ins are throttled per address: 10 / 15 min)
-  const a = users[0]!;
   const cases: [string, string][] = [
     ["/account/link", "/account/link"], ["/account/installations", "/account/installations"], ["/account/guildbook", "/account/guildbook"],
     ["/account/link?code=ABCDEF0123456789ABCDEF0123456789", "/account/link"], ["/account/link#x", "/account/link"],
@@ -135,8 +134,6 @@ test("XSS: hostile guild, member, zone and rank text is rendered as inert text o
   const violations: string[] = [];
   page.on("console", (m) => { if (/Content Security Policy|CSP violation/i.test(m.text())) violations.push(m.text()); });
   await page.goto(`/account/guildbook#installation=${encodeURIComponent(installationId)}`);
-  await page.getByRole("button", { name: /Guild/ }).nth(0).click({ timeout: 10_000 }).catch(() => undefined);
-  await page.getByRole("button", { name: new RegExp(installationId) }).click({ timeout: 10_000 }).catch(() => undefined);
   await page.getByRole("button", { name: /Guild/ }).first().click();
   await expect(page.getByTestId("member-row").first()).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();

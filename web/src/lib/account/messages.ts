@@ -30,6 +30,7 @@ export const LINK_MESSAGES: Record<string, string> = {
   rate_limited: "Too many requests. Please wait a while and try again.",
   outcome_unknown: "We could not confirm whether the installation was linked. Do not retry the same code: check your installations to see the result.",
   unauthenticated: "Your session has ended. Please sign in again.",
+  account_changed: "Your session changed while this page was open. Reload the page and check which account is shown.",
   forbidden: "This request was refused. Reload the page and try again.",
   csrf: "Your page was open too long. Please reload it and try again.",
   invalid_input: "Please check the fields and try again.",

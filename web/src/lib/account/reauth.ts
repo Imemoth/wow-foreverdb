@@ -43,7 +43,11 @@ function failureReason(f: AuthFailure): "wrong_password" | "rate_limited" | "una
 
 export async function confirmPassword(cfg: AccountAuthConfig, current: AccountUser, password: string): Promise<ReauthResult> {
   const grant = await auth.passwordGrant(cfg, { email: current.email, password });
-  if (!grant.ok) return { ok: false, reason: failureReason(grant) };
+  if (!grant.ok) {
+    // A 2xx whose body we could not parse may have CREATED a session nobody holds: say so by name (nothing to revoke without a token).
+    if (grant.status >= 200 && grant.status < 300) accountLog("reauth_grant_unparseable", { route: "link", status: grant.status });
+    return { ok: false, reason: failureReason(grant) };
+  }
 
   const temp = grant.data;
   let verdict: "match" | "mismatch" | "unavailable" = "mismatch";

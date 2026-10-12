@@ -115,8 +115,8 @@ describe("closed PostgREST client", () => {
 
 describe("link request bodies", () => {
   it("are strict: code, password and an explicit literal-true confirmation; Guildbook bodies have no limit/offset", () => {
-    expect(INPUTS.link.safeParse({ code: "FDB-0123", password: "pw", confirm: true }).success).toBe(true);
-    for (const bad of [{ code: "x", password: "pw" }, { code: "x", password: "pw", confirm: false }, { code: "x", password: "pw", confirm: "true" }, { code: "x", password: "pw", confirm: true, installationId: "i" }, { code: "", password: "pw", confirm: true }, { code: "x", password: "", confirm: true }]) {
+    expect(INPUTS.link.safeParse({ code: "FDB-0123", password: "pw", confirm: true, accountId: UID }).success).toBe(true);
+    for (const bad of [{ code: "x", password: "pw" }, { code: "x", password: "pw", confirm: false }, { code: "x", password: "pw", confirm: "true" }, { code: "x", password: "pw", confirm: true }, { code: "x", password: "pw", confirm: true, accountId: "not-a-uuid" }, { code: "x", password: "pw", confirm: true, accountId: UID, installationId: "i" }, { code: "", password: "pw", confirm: true, accountId: UID }, { code: "x", password: "", confirm: true, accountId: UID }].map((b) => ({ accountId: UID, ...b, ...("accountId" in b ? {} : { accountId: undefined }) }))) {
       expect(INPUTS.link.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }
     expect(INPUTS.guildbookMembers.safeParse({ installationId: "i1", guildKey: "g", page: 0 }).success).toBe(true);

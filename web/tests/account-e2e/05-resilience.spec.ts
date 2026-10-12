@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { cookieOf, json, newClient, post } from "../account/helpers";
-import { companionWithInstallation, link, loginAgain, startClaim, webUser, type WebUser } from "./world";
+import { clientWithSessionCookie, companionWithInstallation, link, startClaim, webUser, type WebUser } from "./world";
 import { admin, claimRows, ownerOf, sessionCount } from "./stack";
 import type { APIRequestContext, PlaywrightWorkerArgs } from "@playwright/test";
 import type pg from "pg";
@@ -31,8 +31,8 @@ async function csrf(c: APIRequestContext) {
   const r = await c.get("/account/api/csrf", { headers: { "sec-fetch-site": "same-origin" } });
   return ((await r.json()) as { token: string }).token;
 }
-async function linkVia(c: APIRequestContext, origin: string, code: string, password: string) {
-  return c.post("/account/api/link", { headers: { "content-type": "application/json", origin, "sec-fetch-site": "same-origin", "x-fdb-csrf": await csrf(c) }, data: JSON.stringify({ code, password, confirm: true }) });
+async function linkVia(c: APIRequestContext, origin: string, code: string, password: string, accountId: string) {
+  return c.post("/account/api/link", { headers: { "content-type": "application/json", origin, "sec-fetch-site": "same-origin", "x-fdb-csrf": await csrf(c) }, data: JSON.stringify({ code, password, confirm: true, accountId }) });
 }
 
 test("a lost reply AFTER the redemption was sent is an UNKNOWN outcome: reported as such, never retried automatically, reconcilable through the installation list", async ({ playwright }) => {
@@ -41,7 +41,7 @@ test("a lost reply AFTER the redemption was sent is an UNKNOWN outcome: reported
   const code = await startClaim(comp);
   const c = await onChaosSite(playwright, a);
   await chaos("drop-redeem-response", true);
-  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password);
+  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password, a.uid);
   expect(r.status()).toBe(502);
   expect(await json(r)).toEqual({ ok: false, error: "outcome_unknown", reconcile: "/account/installations" });
   const state = await chaos("pass");
@@ -51,7 +51,7 @@ test("a lost reply AFTER the redemption was sent is an UNKNOWN outcome: reported
   const list = await json<{ installations: { installationId: string }[] }>(await c.get("/account/api/installations"));
   expect(list.installations.map((i) => i.installationId)).toEqual([comp.installationId]);
   // a (human) retry of the same code is the ordinary one-time answer
-  const again = await linkVia(c, ORIGIN_CHAOS, code, a.password);
+  const again = await linkVia(c, ORIGIN_CHAOS, code, a.password, a.uid);
   expect(again.status()).toBe(422);
   expect((await claimRows(db, comp.installationId)).map((x) => x.status)).toEqual(["consumed"]);
 });
@@ -64,7 +64,7 @@ test("a hung redemption times out as UNKNOWN (not as a failure) and the claim st
   const c = await onChaosSite(playwright, a);
   await chaos("hang-redeem", true);
   const started = Date.now();
-  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password);
+  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password, a.uid);
   const took = Date.now() - started;
   await chaos("pass");
   expect(r.status()).toBe(502);
@@ -81,7 +81,7 @@ test("an unrevocable temporary reauthentication session is reported as UNCONFIRM
   const c = await onChaosSite(playwright, a);
   const before = await sessionCount(db, a.uid);
   await chaos("fail-logout", true);
-  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password);
+  const r = await linkVia(c, ORIGIN_CHAOS, code, a.password, a.uid);
   await chaos("pass");
   expect(r.status()).toBe(200);
   const body = await json<{ ok: boolean; reauthCleanup: string }>(r);
@@ -105,11 +105,13 @@ test("the website's own budgets: 6th password attempt of one account in 15 minut
   const comp = await companionWithInstallation();
   const code = await startClaim(comp);
   const statuses: number[] = [];
-  const sessions: WebUser[] = [a];
-  for (let i = 0; i < 5; i += 1) sessions.push(await loginAgain(playwright, a));
-  for (let i = 0; i < 6; i += 1) statuses.push((await link(sessions[i]!.c, code, "wrong password number " + i)).status());
+  // ONE web session presented from six different addresses, no extra sign-ins: only the per-account budget can trip
+  const cookie = (await cookieOf(a.c))!.value;
+  const sessions = [];
+  for (let i = 0; i < 6; i += 1) sessions.push({ c: await clientWithSessionCookie(playwright, cookie, `203.0.113.${100 + i}`) });
+  for (let i = 0; i < 6; i += 1) statuses.push((await link(sessions[i]!.c, code, "wrong password number " + i, a.uid)).status());
   expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
-  const limited = await link(sessions[5]!.c, code, a.password); // even the CORRECT password is refused while the account budget is spent
+  const limited = await link(sessions[5]!.c, code, a.password, a.uid); // even the CORRECT password is refused while the account budget is spent
   expect(limited.status()).toBe(429);
   expect(limited.headers()["retry-after"]).toBeTruthy();
   expect(await json(limited)).toEqual({ ok: false, error: "too_many_attempts" });
@@ -117,8 +119,8 @@ test("the website's own budgets: 6th password attempt of one account in 15 minut
   // per ADDRESS (edge): one browser address may make 10 strict account requests in 5 minutes
   const b = await webUser(playwright, "limitB");
   const edge: number[] = [];
-  const c = await newClient(playwright, "main", "198.51.100.250");
-  for (let i = 0; i < 12; i += 1) edge.push((await post(c, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: b.password, confirm: true })).status());
+  const c = await newClient(playwright, "main", "192.0.2.250");
+  for (let i = 0; i < 12; i += 1) edge.push((await post(c, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: b.password, confirm: true, accountId: b.uid })).status());
   expect(edge.slice(0, 10).every((s) => s === 401)).toBe(true); // unauthenticated (no cookie) but counted
   expect(edge.slice(10)).toEqual([429, 429]);
 });
@@ -136,7 +138,7 @@ test("a dead rate limiter FAILS CLOSED: the link route answers 503 and nothing r
   const token = await c.get("/account/api/csrf", { headers: { "sec-fetch-site": "same-origin" } });
   // the csrf route is a cheap account route (also limiter-backed): it too refuses rather than waving requests through
   expect([503, 429]).toContain(token.status());
-  const r = await c.post("/account/api/link", { headers: { "content-type": "application/json", origin: "http://localhost:3212", "sec-fetch-site": "same-origin" }, data: JSON.stringify({ code, password: a.password, confirm: true }) });
+  const r = await c.post("/account/api/link", { headers: { "content-type": "application/json", origin: "http://localhost:3212", "sec-fetch-site": "same-origin" }, data: JSON.stringify({ code, password: a.password, confirm: true, accountId: a.uid }) });
   expect(r.status()).toBe(503);
   expect(await ownerOf(db, comp.installationId)).toBe(comp.id.uid);
   expect(await sessionCount(db, a.uid)).toBe(before); // no password grant was attempted
