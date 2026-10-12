@@ -1,0 +1,35 @@
+# Companion registered Auth on the existing private Supabase project — owner-only pilot
+
+**Status:** DRAFT CODE / NOT Windows-verified / NOT merged. This is an exception for the owner's *existing private* ForeverDB Auth project, not permission to enable registered accounts in a public Companion release.
+
+## What the owner approved
+
+Allow the 0.9.0-alpha Windows Companion to sign into the *same* Supabase project as the protected ForeverDB Account V1 website (`klxhikdlfwgxurdyexdi`), without creating a second Supabase project. The initial client pilot is **login/read-only**. It does not turn on installation ownership claims, snapshot uploads, automatic anonymous sign-ups, or registration quotas.
+
+The compiled `ProductionAccountAuthApproved` remains **false**. Only the deliberately named `private-pilot` mode can reach the one preapproved HTTPS origin. The temporary `PrivateProjectPilotApproved` source flag is **true in this draft test branch only** and **MUST be false before merging into main/release**. Never ship this temporary flag in the public Windows binary.
+
+## Required safety controls
+
+- Default (no variables) remains `ProductionAnonymousOnly`, using the original production `%LOCALAPPDATA%\ForeverDB\session.dat` DPAPI identity. Nothing changes for existing users.
+- Explicit process opt-in: `FOREVERDB_ACCOUNT_MODE=private-pilot`, `FOREVERDB_ACCOUNT_SUPABASE_URL=https://klxhikdlfwgxurdyexdi.supabase.co`, `FOREVERDB_ACCOUNT_PROJECT_REF=klxhikdlfwgxurdyexdi`, and a **modern publishable** `FOREVERDB_ACCOUNT_SUPABASE_KEY=sb_publishable_...`. Never use `sb_secret_`, `service_role`, or a user's access/refresh token as the key. **Do not paste keys into chat or GitHub.**
+- `private-pilot` resolves a dedicated `%LOCALAPPDATA%\ForeverDB\account-test\private-pilot-klxhikdlfwgxurdyexdi\` vault. The existing `session.dat` remains a different primary file, never migrated/copied or used as a legacy owner in the pilot.
+- HTTP requests in the owner pilot are allowlisted to `https://klxhikdlfwgxurdyexdi.supabase.co:443` by the same guard layer that denies production traffic in staging. No alternate origin, scheme, host or port is permitted; HTTP redirects remain disabled.
+- Three independent write defenses: the Coordinator does not resolve owners/ingest, the RPC client denies `ingest_foreverdb_snapshot_auth` and `fdb_account_claim_start` before network traffic, and the ClaimService refuses code issuance. Anonymous user creation is disabled. Account UI hides the relevant controls. Automatic post-login re-sync is skipped. All the write gates remain disabled even when a SavedVariables watcher is configured or Sync now is clicked.
+- Registration, password recovery, existing-site privacy controls and Supabase/Resend limits remain managed by the protected web site; the Companion adds only **registered password sign-in/sign-out** in this phase.
+- Account login creates a new *registered* GoTrue browser-independent session in the isolated vault. It does not transfer or merge historical anonymous installation ownership. To maintain the existing data, leave the original anonymous Companion identity and backup intact.
+
+## Owner Windows acceptance sequence — first run
+
+1. **Do not merge or publish** this draft branch. Wait for the dedicated Windows Companion build and CI PASS.
+2. Close Companion completely. Ensure the baseline backup of `%LOCALAPPDATA%\ForeverDB` exists and is protected; retain the original `session.dat`, `.bak` and any `legacy-owner.dat`. Do not upload private DPAPI blobs.
+3. Turn AutoSync **OFF** in the existing running Companion, then close it. For the pilot start, set `FOREVERDB_ACCOUNT_MODE=private-pilot`, the exact project URL/ref and publishable key as **process-only environment variables**, never persist them in `settings.json`. Run only the explicitly built pilot binary.
+4. In the ACCOUNT tab verify the **owner-only private-project** banner, no anonymous creation/claim/owner-selection controls, and that the original installation list is still discoverable. Try Sync now only after the test explicitly authorizes its negative test: it must not send a snapshot.
+5. Sign in with the *registered* ForeverDB email/password. Observe the registered account headline. Close/reopen under the same pilot env and verify the registered credential persists only in the **isolated pilot vault**. Test sign-out (web browser session should remain signed in).
+6. Quit Companion; restore its default launch environment (no pilot variables), open the regular Companion and confirm its previously saved anonymous identity and normal sync resume unchanged. Repeat the SHA-256 comparison of its original `session.dat` against the owner-held baseline *before any legitimate anonymous refresh or sync*. A later token refresh legitimately rotates the credential and therefore changes file bytes.
+7. Operator read-back: pre/post installation and Guildbook record counts/hashes, recorded anonymous Auth identities, registered Auth identities; no links/transfers; no claim codes; no ingestion from the pilot session.
+
+**Negative/stop conditions:** new anonymous identity, changed production-vault credential without explicit refresh, missing installation history, new owner link/claim, outgoing ingest/claim RPC in this pilot, wrong endpoint, missing site session, or a storage error. Stop, do not repeatedly sign in, retain logs with keys/IDs/tokens redacted. Do not claim W4/W7/W8 PASS without their own owner-run evidence.
+
+## Next explicitly separate phase
+
+After this pilot proves local credential separation and registered sign-in, review a **throwaway installation** claim and end-to-end Guildbook retrieval with the operator. Any enabling of `ClaimService` or ingest for the existing private project requires another reviewed change and explicit, scoped approval. Never use one of the seven valuable existing installations as the first claim.
