@@ -7,12 +7,13 @@ polish and distribution work.
 ## Account V1 — single existing Supabase project candidate (2026-10-12)
 
 - [x] Separate code-only branch for a **protected, owner-only account pilot** using the existing private Supabase Auth project and for eventual production-compatible Auth configuration.
-- [x] Compile-time flags remain **OFF** (`SINGLE_PROJECT_PILOT_APPROVED = false`, `PRODUCTION_ACCOUNT_AUTH_APPROVED = false`); no environment variable can activate either without a reviewed source change.
+- [x] Owner-authorized guarded Preview **pilot flag temporarily ON in draft PR #53** (`SINGLE_PROJECT_PILOT_APPROVED = true`); public production flag remains OFF. All account connection variables are still absent, so the website Account V1 remains DISABLED. **Before merge, revert pilot flag to false and rerun CI.**
 - [x] Scoped Auth-only publishable-key boundary and fail-closed pilot/production configuration matrix; public data isolation unchanged.
 - [ ] CI on final PR head and independent security review (no merge or deployment until approved).
 - [x] Existing private Supabase `0012_account_ownership_claims` applied (2026-10-12) after owner-led local archive check; all 9 functions and 3 RLS-protected tables verified, ledger recorded, pre-existing installation and Guildbook hashes unchanged.
 - [ ] Owner-run hosted abuse, email/DMARC, Auth URL, **migration recovery rehearsal**, remaining Windows and cross-account acceptance.
-- [ ] Separate explicit approvals for pilot activation and final public production activation.
+- [x] Owner authorized a SSO-protected, personal pilot; temporary preview-only source gate prepared. **Actual Auth activation remains PENDING Supabase URL/templates validation and safe Vercel environment rollout**.
+- [ ] Separate explicit approval and independent security gate for any public production activation.
 - See [single-project candidate runbook](account-v1/single-project-candidate.md) and [Issue #52](https://github.com/Imemoth/wow-foreverdb/issues/52). Prior isolated-staging runbook remains an available safer alternative.
 
 ## Current baseline
