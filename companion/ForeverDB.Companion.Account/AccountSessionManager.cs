@@ -106,9 +106,11 @@ public sealed class AccountSessionManager
         bool accountsEnabled,
         TimeProvider? clock = null,
         TimeSpan? lockTimeout = null,
-        bool allowAnonymousCreation = true)
+        bool allowAnonymousCreation = true,
+        bool allowLegacyRefreshOrRevoke = true)
     {
         _allowAnonymousCreation = allowAnonymousCreation;
+        _allowLegacyRefreshOrRevoke = allowLegacyRefreshOrRevoke;
         _vault = vault;
         _gate = gate;
         _auth = auth;
@@ -119,6 +121,7 @@ public sealed class AccountSessionManager
     }
 
     private readonly bool _allowAnonymousCreation;
+    private readonly bool _allowLegacyRefreshOrRevoke;
 
     public bool AccountsEnabled { get; }
 
@@ -328,6 +331,14 @@ public sealed class AccountSessionManager
 
         if (forceRefresh || NeedsRefresh(session))
         {
+            // The claim pilot copied the historical anonymous owner credential into a
+            // separate vault. Its refresh token also exists in the original production
+            // vault: rotating it here would silently invalidate normal anonymous sync.
+            if (role == SlotRole.LegacyOwner && !_allowLegacyRefreshOrRevoke)
+            {
+                SetFault(role, SessionFault.NetworkUnavailable);
+                return Fail(role, SessionFault.NetworkUnavailable);
+            }
             var refreshed = await RefreshLockedAsync(role, slot, session, kind, marker, ct).ConfigureAwait(false);
             if (refreshed.Fault != SessionFault.None)
             {
