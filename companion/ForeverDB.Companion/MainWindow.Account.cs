@@ -313,11 +313,11 @@ public partial class MainWindow
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAccountVisibility =
-                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && selection && status.State == SessionState.Registered
+                enabled && !privatePilot && selection && status.State == SessionState.Registered
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAnonymousVisibility =
-                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && selection && anonymousAvailable
+                enabled && !privatePilot && selection && anonymousAvailable
                     ? Visibility.Visible
                     : Visibility.Collapsed
         };
