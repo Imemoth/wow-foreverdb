@@ -127,6 +127,38 @@ describe("account auth configuration: refusals", () => {
 });
 
 
+describe("Vercel Upstash Marketplace REST credentials", () => {
+  const marketplace = {
+    RATE_LIMIT_BACKEND: "upstash",
+    UPSTASH_REDIS_REST_KV_REST_API_URL: "https://primary-upstash.example.upstash.io",
+    UPSTASH_REDIS_REST_KV_REST_API_TOKEN: "t".repeat(40),
+  };
+
+  it("accepts integration REST API names without requiring manual secret duplication", () => {
+    const r = evaluateEnv(marketplace);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.env.UPSTASH_REDIS_REST_URL).toBe(marketplace.UPSTASH_REDIS_REST_KV_REST_API_URL);
+    expect(r.env.UPSTASH_REDIS_REST_TOKEN).toBe(marketplace.UPSTASH_REDIS_REST_KV_REST_API_TOKEN);
+  });
+
+  it("refuses conflicting manual and marketplace credentials rather than guessing", () => {
+    const url = evaluateEnv({ ...marketplace, UPSTASH_REDIS_REST_URL: "https://different.example.upstash.io" });
+    expect(url.ok).toBe(false);
+    expect(!url.ok && url.issues.join(" ")).toMatch(/REST_URL conflicts with marketplace REST API URL/);
+    const token = evaluateEnv({ ...marketplace, UPSTASH_REDIS_REST_TOKEN: "x".repeat(40) });
+    expect(token.ok).toBe(false);
+    expect(!token.ok && token.issues.join(" ")).toMatch(/REST_TOKEN conflicts with marketplace REST API token/);
+    expect(!token.ok && token.issues.join(" ")).not.toContain("tttt");
+  });
+
+  it("does not mistake the Upstash Redis connection URL for the REST endpoint", () => {
+    const r = evaluateEnv({ RATE_LIMIT_BACKEND: "upstash", UPSTASH_REDIS_REST_REDIS_URL: "rediss://redis.example:6380", UPSTASH_REDIS_REST_KV_URL: "redis://redis.example:6379" });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.issues.join(" ")).toMatch(/upstash rate limiter requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN/);
+  });
+});
+
 describe("single-project Auth pilot and production candidate: owner-gated policies", () => {
   const PRIVATE_URL = "https://" + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co";
   const modernKey = "sb_publishable_" + "z".repeat(40);
