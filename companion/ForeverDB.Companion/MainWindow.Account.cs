@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using ForeverDB.Companion.Account;
+using ForeverDB.Companion.Services;
 
 namespace ForeverDB.Companion;
 
@@ -348,7 +349,7 @@ public partial class MainWindow
             {
                 await service.SyncFileAsync(
                     file,
-                    trigger: Services.SyncTrigger.Auto);
+                    trigger: SyncTrigger.Auto);
             }
 
             if (watcher is null)
@@ -773,7 +774,7 @@ public partial class MainWindow
             await service.SyncFileAsync(
                 file,
                 force: true,
-                trigger: Services.SyncTrigger.Manual);
+                trigger: SyncTrigger.Manual);
         }
         catch (Exception ex)
         {
