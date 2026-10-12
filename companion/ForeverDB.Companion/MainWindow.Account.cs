@@ -151,9 +151,12 @@ public partial class MainWindow
                 status.VerifiedEmail);
         AccountDetailText.Text =
             AccountMessages.Detail(status);
-        var privatePilot = account.Gate.Environment == AccountEnvironment.PrivatePilot;
+        var claimPilot = account.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
+        var privatePilot = account.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
         AccountEnvironmentText.Text =
-            privatePilot
+            claimPilot
+                ? "Owner-only claim pilot: only one selected installation can request a link code. Uploads, owner selection and anonymous creation remain disabled."
+                : privatePilot
                 ? "Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
                 : enabled
                     ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
@@ -206,7 +209,7 @@ public partial class MainWindow
                 : Visibility.Collapsed;
 
         AccountLegacyPanel.Visibility =
-            status.HasLegacyOwner && enabled
+            status.HasLegacyOwner && enabled && !claimPilot
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         AccountLegacyText.Text =
@@ -258,6 +261,10 @@ public partial class MainWindow
         AccountStatus status)
     {
         var enabled = status.AccountsEnabled;
+        var claimPilot = _account?.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
+        var permittedClaim = claimPilot &&
+            string.Equals(record.InstallationId, _account?.Gate.ScopedClaimInstallationId, StringComparison.Ordinal);
+        var privatePilot = _account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
         var ownership = record.Ownership;
 
         var detail =
@@ -294,12 +301,12 @@ public partial class MainWindow
                     ? Visibility.Collapsed
                     : Visibility.Visible,
             ClaimVisibility =
-                enabled && !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) && anonymousOwned
+                enabled && (!privatePilot || permittedClaim) && anonymousOwned
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             CheckVisibility =
                 enabled &&
-                !(_account?.Gate.Environment == AccountEnvironment.PrivatePilot) &&
+                (!privatePilot || permittedClaim) &&
                 (record.ClaimPending ||
                  ownership == InstallationOwnership.Unchecked ||
                  ownership == InstallationOwnership.TransferredSignInRequired)
@@ -335,7 +342,7 @@ public partial class MainWindow
     {
         // Signing in to the real project for the first owner pilot must NOT
         // auto-upload existing installations, even if AutoSync was enabled.
-        if (_account?.Gate.Environment == AccountEnvironment.PrivatePilot) return;
+        if (_account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot) return;
         var service = _syncService;
         var watcher = _watcher;
 
