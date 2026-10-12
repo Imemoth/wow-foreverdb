@@ -70,17 +70,26 @@ public sealed class AccountRuntime
             // mode; the pilot cannot rotate its shared refresh token.
             var original = new SessionVault(productionVaultDirectory, credentialProtector).Primary.Read();
             var existing = vault.LegacyOwner.Read();
-            if (existing.Status == SlotReadStatus.Missing &&
-                original.Status == SlotReadStatus.Ok &&
+            if (existing.Status is SlotReadStatus.Unreadable or SlotReadStatus.IoError)
+            {
+                throw new InvalidOperationException("Private claim pilot owner credential is unavailable. No changes were made to the original identity.");
+            }
+
+            if (original.Status == SlotReadStatus.Ok &&
                 original.ProvisionalKind == SessionKind.Anonymous &&
                 original.Marker?.Rejected != true &&
                 JwtInspector.TryDecode(original.Session!.AccessToken)?.IsAnonymous == true)
             {
-                vault.LegacyOwner.Write(original.Session, SlotMarker.For(SessionKind.Anonymous));
-            }
-            else if (existing.Status is SlotReadStatus.Unreadable or SlotReadStatus.IoError)
-            {
-                throw new InvalidOperationException("Private claim pilot owner credential is unavailable. No changes were made to the original identity.");
+                // When the NORMAL anonymous Companion refreshed the original
+                // after an earlier pilot, copy its newer token again. Never
+                // substitute a different user, and never refresh this copy.
+                var sameOwner = existing.Status == SlotReadStatus.Ok &&
+                    existing.Session!.UserId == original.Session!.UserId;
+                if (existing.Status == SlotReadStatus.Missing ||
+                    (sameOwner && original.Session!.ExpiresAt > existing.Session!.ExpiresAt))
+                {
+                    vault.LegacyOwner.Write(original.Session!, SlotMarker.For(SessionKind.Anonymous));
+                }
             }
         }
 
