@@ -145,6 +145,7 @@ public static class AccountMessages
         ForgetOutcome.AlreadyEnded => "The anonymous identity was already ended and was removed from this computer.",
         ForgetOutcome.RevocationFailedKept => "The server could not be reached, so the anonymous identity was kept. Try again when online, or choose to discard it without revoking.",
         ForgetOutcome.DiscardedUnrevoked => "The anonymous identity was removed from this computer, but the server session was not revoked.",
+        ForgetOutcome.FeatureDisabled => "Original anonymous identity cannot be revoked from the private claim pilot.",
         ForgetOutcome.StorageFailure => "The change could not be stored safely. Nothing was removed.",
         ForgetOutcome.LockTimeout => "Another ForeverDB Companion window is using the sign-in. Try again in a moment.",
         _ => "Done."
