@@ -1,6 +1,6 @@
 # Account System V1 — acceptance and owner actions
 
-> **Candidate alternative, not an achieved gate:** [Single-project pilot/production candidate](single-project-candidate.md) (draft PR #53) is an expressly chosen alternative to creating a second permanent Supabase staging project. The original staging/production requirements below remain the historical V1 acceptance plan; until the new pilot has separate owner approval, protected-host checks, migration evidence and A24 abuse verification, **all hosted and production gates remain PENDING**. No project settings were changed by the PR.
+> **Current status (2026-10-12):** Owner-authorized, Vercel-SSO-protected single-project **Preview pilot ACTIVE**, with registration, confirmation, logout, fresh password login and initial empty private-data pages verified by owner screenshots; see §4a. PR #53 is draft/unmerged and public Production OFF. The original isolated-staging plan below remains as historical acceptance criteria; cross-account, password recovery, refresh/expiry, A24 and public go-live gates are **PENDING**.
 
 
 ## 1. Evidence ledger rules
@@ -51,7 +51,24 @@ Nothing below was done by this work. Items marked **approval** change real setti
 
 ## 4. Explicit non-actions (verified, current)
 
-**Historical PR E baseline:** when this acceptance report was originally written, 0012 had only run in disposable CI and the ledger ended at 0011. **Later owner-run update (2026-10-12):** 0012 `account_ownership_claims` is now applied to existing private Supabase, ledger version `20261012124839`; data fingerprints and owner counts verified unchanged, new account tables empty. The custom dump was archive-read checked but not restored to a disposable database. Email SMTP has been configured separately, and a test invite was delivered (spam placement); the test user was removed. Vercel/release account activation remains OFF; this operational update must not be mistaken for completion of remaining acceptance gates.
+**Historical PR E baseline:** when this acceptance report was originally written, 0012 had only run in disposable CI and the ledger ended at 0011. **Later owner-run update (2026-10-12):** 0012 `account_ownership_claims` is now applied to existing private Supabase, ledger version `20261012124839`; data fingerprints and owner counts verified unchanged, new account tables empty. The custom dump was archive-read checked but not restored to a disposable database. Email SMTP has been configured separately, and a test invite was delivered (spam placement); the test user was removed. That was the pre-pilot state; the later protected Preview pilot is now active (see §4a), while Vercel public Production/release account activation remains OFF. This does not complete the remaining acceptance gates.
+
+## 4a. Owner protected Preview pilot – observed runtime acceptance (2026-10-12)
+
+This is a **single-user, SSO-protected Vercel Preview pilot on the existing private Supabase project**; it does not advance the formal multi-user STAGING VERIFIED or public PRODUCTION APPROVED gates.
+
+| Owner-run observation | Status | Basis and remaining scope |
+| --- | --- | --- |
+| Register with Cloudflare Turnstile, email confirmation | **PASS (protected pilot)** | Owner screenshots: `/account/register` form, generic `Check your email` response, Gmail **Inbox** arrival, confirmation interstitial, explicit confirm action, account profile. Resend delivery recorded. |
+| Registered user / confirmed email / Auth session | **PASS (read-only DB verification)** | One registered confirmed Auth user and an Auth session observed; existing eight anonymous users unaffected. |
+| Sign out then password sign-in, own profile restored | **PASS (owner browser)** | Screenshots show `You have been signed out`, then re-login and profile with `Email confirmed`. This does **not** establish refresh-token rotation or session expiry behavior. |
+| Own installations and private Guildbook while unlinked | **PASS for initial empty state only** | Both pages render the correct `No installation is linked` message; DB link count 0, historical installation rows 7, guilds 2, members 46. Not evidence of cross-account isolation. |
+| F5 persistence / automatic refresh / expiration | **PENDING** | Browser refresh after new sign-in not separately evidenced, nor forced token expiry/rotation. |
+| Password recovery with all-session revocation | **PENDING (next)** | Test `/account/forgot-password` through email `type=recovery` and explicit confirm; require old password refusal and successful new-password sign-in. Do not assert global revocation from page alone. |
+| Ownership claim / transfer and two-account Guildbook isolation | **PENDING** | No claim code used; existing anonymous installation owners not touched. |
+| Public production readiness and direct-GoTrue abuse A24 | **BLOCKED / PENDING** | No public promotion, PR #53 remains draft/unmerged; direct Auth project-wide abuse protections and recovery rehearsal still open. |
+
+**Deferred UI roadmap:** Show current account's `last_sign_in_at` in profile with Europe/Budapest timezone, then separately design a bounded, privacy-protected `Recent sign-ins` history with retention and account ownership. See [ROADMAP](../ROADMAP.md); no new table/ACL introduced here.
 
 ## 5. Direct Auth abuse: enforceable acceptance criteria (threat A24)
 
