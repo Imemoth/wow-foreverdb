@@ -1,0 +1,65 @@
+name: AzerDex welcome outbox (SQL + real GoTrue + worker)
+
+# Migration 0015 + worker. Disposable PostgreSQL and a real GoTrue built from the pinned upstream release tag (same pin as the Account
+# suites); Resend is mocked. Nothing here touches a real Supabase or Resend account. Like the other account workflows there is
+# deliberately NO `paths:` filter so the check always reports.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mutation_check:
+        description: 'Also run the migration mutation check (slow)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: azerdex-welcome-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  welcome-outbox:
+    name: AzerDex welcome outbox SQL + real GoTrue + worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-password
+      FDB_REQUIRE_GOTRUE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disposable PostgreSQL 16
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-password postgres:16 \
+            -c track_commit_timestamp=on -c max_connections=300
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Install web dependencies (pg driver used by the suites)
+        working-directory: web
+        run: npm ci
+      - name: Worker unit tests (mocked Resend and database)
+        run: node --test tests/welcome-worker/worker.test.mjs
+      - name: Build real GoTrue (pinned upstream release tag)
+        run: database/tests/account/build-gotrue.sh
+      - name: Stack up (migrations through 0012, then 0015; GoTrue mail to the in-process sink)
+        run: database/tests/welcome/stack.sh up
+      - name: Re-apply 0015 (idempotent body)
+        run: PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d fdb_account_it -f database/migrations/0015_azerdex_welcome_outbox.sql
+      - name: Privileges, provenance (real GoTrue), worker RPCs, worker end-to-end
+        run: node --test --test-concurrency=1 database/tests/welcome/*.test.mjs
+      - name: Mutation check (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
+        run: node database/tests/welcome/mutation_check.mjs
+      - name: GoTrue log (on failure)
+        if: failure()
+        run: tail -n 200 database/tests/account/.run/gotrue.log || true
