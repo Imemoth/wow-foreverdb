@@ -52,6 +52,7 @@ public enum BlockReason
     ServerUnavailable,
     NotDeployed,
     FeatureDisabled,
+    PilotUploadDisabled,
     CredentialUnavailable,
     InvalidRequest
 }
