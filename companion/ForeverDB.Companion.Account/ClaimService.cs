@@ -64,6 +64,7 @@ public enum ClaimStartOutcome
     /// <summary>Network/server failure. The outcome is UNKNOWN: no automatic retry; a new request invalidates any earlier code.</summary>
     OutcomeUnknown,
     CredentialUnavailable,
+    AnonymousTokenNeedsRefresh,
     MalformedResponse
 }
 
@@ -158,9 +159,14 @@ public sealed class ClaimService
             {
                 // A registered token must never be used for claim_start.
                 return new ClaimStartResult(
-                    token.Fault is SessionFault.AuthRejected or SessionFault.LocalCredentialCorrupt
-                        ? ClaimStartOutcome.NoAnonymousOwner
-                        : ClaimStartOutcome.CredentialUnavailable,
+                    token.Fault switch
+                    {
+                        SessionFault.AuthRejected or SessionFault.LocalCredentialCorrupt =>
+                            ClaimStartOutcome.NoAnonymousOwner,
+                        SessionFault.LegacyOwnerRefreshRequired =>
+                            ClaimStartOutcome.AnonymousTokenNeedsRefresh,
+                        _ => ClaimStartOutcome.CredentialUnavailable
+                    },
                     null);
             }
 
