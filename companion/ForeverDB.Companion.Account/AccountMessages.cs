@@ -89,6 +89,7 @@ public static class AccountMessages
         BlockReason.ServerUnavailable => "ForeverDB is temporarily unavailable; sync will be retried.",
         BlockReason.NotDeployed => "The ForeverDB service does not support this feature yet.",
         BlockReason.FeatureDisabled => "Account features are not enabled in this build.",
+        BlockReason.PilotUploadDisabled => "Snapshot upload is intentionally disabled in this private pilot. Registered sign-in and installation linking remain available on the Account tab.",
         BlockReason.CredentialUnavailable => "The sign-in could not be used just now; sync will be retried.",
         BlockReason.InvalidRequest => "The server rejected the upload.",
         _ => "Sync is paused."
