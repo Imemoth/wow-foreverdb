@@ -211,7 +211,7 @@ public class FeatureGateTests
         Assert.False((await runtime.Rpc.IngestAsync("not-a-token", "{}", default)).Ok);
         var blocked = await runtime.Sync.SyncAsync("installation", "{}", 1, true, default);
         Assert.Equal(SyncOutcome.Blocked, blocked.Outcome);
-        Assert.Equal(BlockReason.FeatureDisabled, blocked.Reason);
+        Assert.Equal(BlockReason.PilotUploadDisabled, blocked.Reason);
 
         // No Account client mutation call made by this login-only pilot.
         Assert.NotEmpty(handler.RequestUris); // only password grant and user verification
@@ -281,8 +281,9 @@ public class FeatureGateTests
         var noRefresh = await runtime.Sessions.RefreshNowAsync(SlotRole.LegacyOwner);
         Assert.False(noRefresh.Ok);
         Assert.False((await runtime.Rpc.IngestAsync("test-token", "{}", default)).Ok);
-        Assert.Equal(SyncOutcome.Blocked,
-            (await runtime.Sync.SyncAsync("fresh-test-install-001", "{}", 1, true, default)).Outcome);
+        var rejectedUpload = await runtime.Sync.SyncAsync("fresh-test-install-001", "{}", 1, true, default);
+        Assert.Equal(SyncOutcome.Blocked, rejectedUpload.Outcome);
+        Assert.Equal(BlockReason.PilotUploadDisabled, rejectedUpload.Reason);
         Assert.Empty(server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth"));
 
         var claim = await runtime.Claims.StartClaimAsync("fresh-test-install-001", default);
