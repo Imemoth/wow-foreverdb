@@ -33,9 +33,9 @@ public class DeviceGateTests
         (AccountFeatureGate.KeyVariable, Key));
 
     [Fact]
-    public void The_new_approval_and_auto_sync_flags_are_compile_time_constants_that_default_to_false()
+    public void Production_and_registered_auto_sync_approvals_remain_compile_time_false()
     {
-        foreach (var name in new[] { nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), nameof(AccountFeatureGate.DeviceAutoSyncApproved), nameof(AccountFeatureGate.ProductionAccountAuthApproved) })
+        foreach (var name in new[] { nameof(AccountFeatureGate.DeviceAutoSyncApproved), nameof(AccountFeatureGate.ProductionAccountAuthApproved) })
         {
             var field = typeof(AccountFeatureGate).GetField(name, BindingFlags.Public | BindingFlags.Static)!;
             Assert.True(field.IsLiteral, $"{name} must be a const");
@@ -68,14 +68,15 @@ public class DeviceGateTests
     }
 
     [Fact]
-    public void Private_pilot_gates_do_not_enable_zero_touch_while_the_approval_constant_is_false()
+    public void Private_pilot_only_zero_touch_approval_is_enabled_for_this_unmerged_owner_branch()
     {
         var pilot = PrivatePilot(claim: false);
         var claim = PrivatePilot(claim: true);
         Assert.True(pilot.AccountsEnabled);
         Assert.True(claim.AccountsEnabled);
-        Assert.False(AccountFeatureGate.ZeroTouchAvailable(pilot));
-        Assert.False(AccountFeatureGate.ZeroTouchAvailable(claim));
+        Assert.True(AccountFeatureGate.ZeroTouchEnrollmentApproved);
+        Assert.True(AccountFeatureGate.ZeroTouchAvailable(pilot));
+        Assert.True(AccountFeatureGate.ZeroTouchAvailable(claim));
     }
 
     [Fact]
@@ -104,14 +105,15 @@ public class DeviceGateTests
     }
 
     [Fact]
-    public async Task Private_pilots_get_no_device_runtime_either()
+    public async Task Private_pilot_gates_wire_isolated_device_runtime_in_owner_build()
     {
         foreach (var claim in new[] { false, true })
         {
             var dir = TestEnv.NewDirectory();
             var handler = new FakeHandler(new FakeSupabase());
             var runtime = AccountRuntime.Create(PrivatePilot(claim), TestEnv.ProductionEndpoint, handler, TestEnv.Protector(), dir, null, null, new ThrowingSource());
-            Assert.Null(runtime.Device);
+            Assert.NotNull(runtime.Device);
+            Assert.Equal(DeviceState.Anonymous, runtime.Device!.Status.State);
             await Task.CompletedTask;
         }
     }
