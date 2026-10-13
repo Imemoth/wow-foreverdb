@@ -181,6 +181,7 @@ public static class AccountMessages
         ClaimStartOutcome.NotDeployed => "The ForeverDB service does not support linking yet.",
         ClaimStartOutcome.OutcomeUnknown => "ForeverDB did not answer. A code may or may not have been created. It is not retried automatically; request a new code (it replaces any earlier one).",
         ClaimStartOutcome.CredentialUnavailable => "The sign-in could not be used just now. Nothing was linked.",
+        ClaimStartOutcome.AnonymousTokenNeedsRefresh => "The preserved anonymous sign-in is too old to issue a link code. Close this pilot, open the normal anonymous Companion, use Sync now once, close it, then restart this pilot and Check status again. Nothing was linked.",
         ClaimStartOutcome.MalformedResponse => "ForeverDB sent an unexpected answer. Nothing was linked.",
         _ => "Linking failed."
     };
