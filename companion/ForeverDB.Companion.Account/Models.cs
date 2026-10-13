@@ -60,6 +60,8 @@ public enum SessionFault
     None,
     /// <summary>Network, timeout or 5xx. The credential is untouched; retry later.</summary>
     NetworkUnavailable,
+    /// <summary>Isolated claim-pilot copy expired; only the normal anonymous Companion may refresh its source credential.</summary>
+    LegacyOwnerRefreshRequired,
     /// <summary>Auth rate limit. Credential untouched.</summary>
     RateLimited,
     /// <summary>The server definitively invalidated the session.</summary>
