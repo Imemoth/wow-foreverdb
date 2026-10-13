@@ -9,11 +9,13 @@ polish and distribution work.
 - [x] Owner approved lifting the existing single-project Companion claim-code restriction, scoped to a private pilot (2026-10-12).
 - [x] PR #55 draft on PR #54: a separate private-claim-pilot process mode accepts ONE explicitly selected installation ID; default production and login-only modes remain unchanged.
 - [x] The original anonymous DPAPI credential is only read and copied into an isolated legacy slot; refresh and revocation of the copy are blocked. Code issuance requires live server proof of anonymous ownership. Full ingest, automatic sync, owner selection and new anonymous identity creation remain blocked.
-- [x] Website password-confirmed one-time code redemption and server-side transaction/ownership checks stay unchanged; no live claim or data migration executed.
-- [ ] Windows CI and independent code/security review on final PR #55 head, including negative cases.
+- [x] Website password-confirmed one-time code redeemed successfully on 2026-10-13 for owner-approved historical installation `2f8df8ba69345d0a14c8d56ac86d4b2e`; one claim consumed and one registered ownership link confirmed by read-only production SQL. No migration or unrelated owner transfer executed.
+- [x] Prior PR #55 pilot build at `f0ea09f` passed Windows account auth tests, CodeQL and GitHub CI; owner-run claim success verified on that installed build.
+- [ ] Independent release-oriented code/security review and CI on the FINAL revised PR head, including negative cases; do not merge draft PR with temporary private-pilot source flags enabled.
 - [x] Owner accepted using one existing historical installation instead of provisioning a disposable one (2026-10-12). Read-only Supabase inspection confirms scoped ID `2f8df8ba69345d0a14c8d56ac86d4b2e` is anonymously owned, with 140 source-stat rows and 46 Guildbook-member rows.
-- [ ] Before issue/transfer, repeat owner/claim-link read-only validation on that exact ID and preserve server baseline. The remaining six historical installations must remain unchanged.
-- [ ] Windows owner E2E: issue one-time code for the explicitly scoped existing installation, redeem through password-confirmed web, verify one registered owner/link, preserve 140 source-stat and 46 member rows, verify six other owners unchanged. Expect normal anonymous ingest for the transferred installation to stop until registered ingest is implemented.
+- [x] Pre-claim baseline read-only verified (0 links/claims, exact target anonymously owned, 140 source rows/46 members, other-six ownership fingerprint `1bd16ed087b98f0632b5f01a39c760ba`); post-claim other-six fingerprint unchanged.
+- [x] Windows/web owner transfer E2E: initial credential-unavailable recovery followed by successful one-time code issue and protected web redemption; live SQL confirms 1 registered link, consumed claim, 140 source-stat rows and 46 member rows retained, six other owners unchanged (2026-10-13).
+- [ ] Finish owner-run **Your installations** + **Private Guildbook** UI/RLS verification and Companion post-transfer `Check status` (no Sync now). Registered snapshot ingest/AutoSync remains disabled; old anonymous ingest to the transferred installation must not be retried.
 - [ ] Only after explicit review and acceptance, design protected post-claim registered snapshot ingestion. Keep all public pilot flags OFF for main/release.
 
 Runbook: [private claim pilot](account-v1/private-claim-pilot.md).
