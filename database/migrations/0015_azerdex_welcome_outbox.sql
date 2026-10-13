@@ -26,10 +26,10 @@
 --   * Kill switch: private.azerdex_welcome_config.{enqueue_enabled,dispatch_enabled}, both default FALSE. dispatch off => claim returns
 --     nothing; enqueue off => no candidates / events. Rows are preserved.
 --   * GDPR: both event tables reference auth.users ON DELETE CASCADE, so deleting an account erases its candidate, outbox row and
---     failure markers. After a successful send the (hashed) recipient is erased at once. No history that could re-enable a duplicate
+--     failure markers. A candidate row (and its address hash) is deleted as soon as its outbox row exists; after a successful send, an automatic suppression or an operator decision the outbox hash is zeroed at once. No history that could re-enable a duplicate
 --     survives for a still-existing account.
 --
--- DATA PRESERVATION: only new objects (four tables, eleven functions, two triggers on auth.users). No existing table row or function is
+-- DATA PRESERVATION: only new objects (four tables, twelve functions, two triggers on auth.users). No existing table row or function is
 -- altered. NOTHING is applied to any Supabase project by the repository; apply only after explicit owner approval (kill switches stay OFF).
 -- Numbering: 0012 applied; 0013 is a restore script only; 0014 is reserved by PR #56 (unmerged, untouched); 0010 reserved. 0015 is the
 -- next free ID and is independent of 0014 (neither references the other).
@@ -63,6 +63,9 @@ begin
     if not has_table_privilege(current_user, 'auth.users', 'TRIGGER') or not has_table_privilege(current_user, 'auth.users', 'REFERENCES')
        or not has_table_privilege(current_user, 'auth.one_time_tokens', 'SELECT') then
         raise exception '0015 pre-flight: migration role lacks TRIGGER/REFERENCES on auth.users or SELECT on auth.one_time_tokens';
+    end if;
+    if not exists (select 1 from pg_roles where rolname = current_user and (rolbypassrls or rolsuper)) then
+        raise exception '0015 pre-flight: the migration role must have BYPASSRLS (the tables use FORCE ROW LEVEL SECURITY with no policy)';
     end if;
     if to_regprocedure('pg_catalog.sha256(bytea)') is null then
         raise exception '0015 pre-flight: sha256(bytea) is unavailable (PostgreSQL 11+ required)';
@@ -122,7 +125,6 @@ create index if not exists azerdex_welcome_outbox_due_idx
     on private.azerdex_welcome_outbox (next_attempt_at) where status in ('pending', 'retry');
 create index if not exists azerdex_welcome_outbox_lease_idx
     on private.azerdex_welcome_outbox (lease_until) where status = 'leased';
-create index if not exists azerdex_welcome_outbox_status_idx on private.azerdex_welcome_outbox (status);
 
 create table if not exists private.azerdex_welcome_trigger_failures (
     id            bigserial primary key,
@@ -229,6 +231,8 @@ begin
             insert into private.azerdex_welcome_outbox (user_id, email_sha256)
             values (new.id, sha256(convert_to(lower(new.email), 'UTF8')))
             on conflict (user_id) do nothing;
+            -- The candidate (and its address hash) has served its purpose; the outbox row is the duplicate memory from here on.
+            delete from private.azerdex_welcome_candidates where user_id = new.id;
         end if;
     exception when others then
         perform private.azerdex_welcome_note_failure(new.id, 'confirm', v_prov);
@@ -291,6 +295,7 @@ begin
         insert into private.azerdex_welcome_outbox (user_id, email_sha256)
         select c.user_id, c.email_sha256 from private.azerdex_welcome_candidates c where c.user_id = r.user_id
         on conflict (user_id) do nothing;
+        delete from private.azerdex_welcome_candidates where user_id = r.user_id;
         v_n := v_n + 1;
     end loop;
     for r in
@@ -303,6 +308,7 @@ begin
         insert into private.azerdex_welcome_outbox (user_id, email_sha256)
         select c.user_id, c.email_sha256 from private.azerdex_welcome_candidates c where c.user_id = r.user_id
         on conflict (user_id) do nothing;
+        delete from private.azerdex_welcome_candidates where user_id = r.user_id;
         update private.azerdex_welcome_trigger_failures set handled_at = now() where id = r.id;
         v_n := v_n + 1;
     end loop;
@@ -398,7 +404,8 @@ begin
             else null end;
         if v_reason is not null then
             update private.azerdex_welcome_outbox set status = 'suppressed', last_error_code = v_reason, lease_until = null,
-                   lease_token = null, updated_at = now() where user_id = r.user_id;
+                   lease_token = null, email_sha256 = '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea,
+                   updated_at = now() where user_id = r.user_id;
             continue;
         end if;
 
@@ -474,6 +481,7 @@ begin
     if p_outcome = 'retry' and v_code = 'circuit_open' then
         -- Not attempted at all: give the attempt back and look again soon.
         update private.azerdex_welcome_outbox set status = 'retry', attempts = greatest(attempts - 1, 0), last_error_code = 'circuit_open',
+               first_send_at = case when attempts <= 1 then null else first_send_at end, -- nothing was sent: do not start the idempotency clock
                next_attempt_at = now() + make_interval(secs => 300), lease_until = null, lease_token = null, updated_at = now()
          where user_id = p_user_id;
         return true;
@@ -526,7 +534,8 @@ begin
         'verified_not_enqueued', (select count(*) from private.azerdex_welcome_candidates c
                                    where c.verified_via_signup_at is not null
                                      and not exists (select 1 from private.azerdex_welcome_outbox o where o.user_id = c.user_id)),
-        'trigger_failures_open', (select count(*) from private.azerdex_welcome_trigger_failures where handled_at is null));
+        'trigger_failures_open', (select count(*) from private.azerdex_welcome_trigger_failures where handled_at is null),
+        'signup_trigger_failures_open', (select count(*) from private.azerdex_welcome_trigger_failures where handled_at is null and phase = 'signup'));
 end
 $fn$;
 
@@ -562,7 +571,7 @@ begin
     update private.azerdex_welcome_outbox
        set status = 'retry', attempts = 0, idem_epoch = idem_epoch + 1, first_send_at = null, unknown_outcome = false,
            next_attempt_at = now(), lease_until = null, lease_token = null, last_error_code = null, updated_at = now()
-     where user_id = p_user_id and status in ('review_required', 'retry', 'suppressed');
+     where user_id = p_user_id and status in ('review_required', 'suppressed');
     return found;
 end
 $fn$;
@@ -585,7 +594,8 @@ begin
          where user_id = p_user_id and status in ('review_required', 'retry', 'leased');
     else
         update private.azerdex_welcome_outbox
-           set status = 'suppressed', last_error_code = 'operator_suppressed', lease_until = null, lease_token = null, updated_at = now()
+           set status = 'suppressed', last_error_code = 'operator_suppressed', lease_until = null, lease_token = null,
+               email_sha256 = '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea, updated_at = now()
          where user_id = p_user_id and status in ('review_required', 'retry', 'pending', 'leased');
     end if;
     return found;

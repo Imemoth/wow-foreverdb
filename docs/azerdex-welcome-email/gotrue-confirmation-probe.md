@@ -17,6 +17,8 @@ Columns shown when true: `old_ctok` = `confirmation_token` was non-empty before;
 | I admin sets email_confirm=true on unconfirmed signup | admin update 200 | new_confirmed=True, old_ctok=True, ott=confirmation_token |
 | J signup, recover requested, THEN the signup link is used | verify(signup) after recover request: 200 | new_confirmed=True, old_ctok=True, old_rtok=True, new_rtok=True, rsent=True, ott=confirmation_token,recovery_token |
 
+*Reading note:* in scenarios D and G the first row shown is the **setup** confirmation of the user (the probe signs the user up and confirms it before testing recovery / e-mail change); the later recovery and e-mail-change updates do not touch `email_confirmed_at` and therefore have no row in this table.
+
 ## Findings
 
 1. **A plain `email_confirmed_at` NULL -> non-NULL transition is NOT sufficient.** Scenario B: a recovery link used on a still-unconfirmed signup confirms the address exactly like the signup link (and GoTrue even audits it as `user_signedup`). A password reset can therefore otherwise look like a first verification.

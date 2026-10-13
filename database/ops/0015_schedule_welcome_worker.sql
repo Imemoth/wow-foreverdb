@@ -2,8 +2,11 @@
 -- shared secret held in Supabase Vault. Run ONLY on an approved project (hosted staging first), after:
 --   1. migration 0015 is applied (kill switches OFF),  2. the Edge Function `azerdex-welcome-worker` is deployed with its secrets,
 --   3. extensions pg_cron, pg_net and supabase_vault are enabled.
--- The secret VALUES never appear in this file or in git: pass them as psql variables from your password manager / shell history-less
--- prompt, e.g.   psql ... -v worker_secret="$AZERDEX_WORKER_SECRET" -v fn_url="https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker" -f this.sql
+-- The secret VALUE never appears in this file, in git, or on a command line (a command-line argument is visible in the process list):
+-- it is read from the file /dev/shm/azerdex_worker_secret (umask 077, created in runbook §2) by psql itself. Only the non-secret URL is a -v variable:
+--   psql "$DB_URL" -v fn_url="https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker" -f this.sql
+-- NOTE: secrets are created only if absent. To ROTATE, use vault.update_secret (runbook §6), not this script.
+\set worker_secret `cat /dev/shm/azerdex_worker_secret`
 -- Scheduling does NOT start sending: the worker flag AZERDEX_WELCOME_ENABLED and both database switches must also be ON (runbook §5).
 \set ON_ERROR_STOP on
 begin;

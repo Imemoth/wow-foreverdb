@@ -4,6 +4,8 @@ import type { WorkerConfig } from "./config.ts";
 import type { ClaimedJob, Db, FinishArgs } from "./worker.ts";
 import type { FetchLike } from "./resend.ts";
 
+const DB_TIMEOUT_MS = 10_000;
+
 export function createDb(cfg: WorkerConfig, f: FetchLike): Db {
   const call = async (fn: string, body: unknown): Promise<unknown> => {
     const res = await f(`${cfg.supabaseUrl}/rest/v1/rpc/${fn}`, {
@@ -11,8 +13,12 @@ export function createDb(cfg: WorkerConfig, f: FetchLike): Db {
       headers: { apikey: cfg.dbKey, authorization: `Bearer ${cfg.dbKey}`, "content-type": "application/json", "content-profile": "public" },
       body: JSON.stringify(body),
       redirect: "error",
+      signal: AbortSignal.timeout(DB_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`rpc_${fn}_${res.status}`); // status only, never the body
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`rpc_${fn}_${res.status}`); // status only, never the body
+    }
     return res.json();
   };
   return {

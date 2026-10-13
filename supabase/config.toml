@@ -3,3 +3,5 @@
 # The caller is the database scheduler, not a Supabase user, so no user JWT exists. Authentication is the dedicated shared secret
 # (x-azerdex-worker-secret, constant-time compared, fail-closed when unset). Never copy this setting to another function.
 verify_jwt = false
+# The CID emblem is read at run time; it must be bundled with the deployment (the owner adds the PNG, see the function README).
+static_files = ["./functions/azerdex-welcome-worker/azerdex-logo.png"]

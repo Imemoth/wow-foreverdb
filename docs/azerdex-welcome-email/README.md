@@ -1,7 +1,7 @@
 # AzerDex welcome e-mail V1 — secure outbox and worker
 
 One transactional welcome message after a person's **first genuine registration e-mail verification**. Specification:
-[`../superpowers/specs/2026-10-13-azerdex-welcome-outbox-design.md`](../superpowers/specs/2026-10-13-azerdex-welcome-outbox-design.md) · plan:
+[design spec](https://github.com/Imemoth/wow-foreverdb/blob/docs/azerdex-welcome-outbox-design-20261013/docs/superpowers/specs/2026-10-13-azerdex-welcome-outbox-design.md) (lives on the design branch, not on this one) · plan:
 [`../superpowers/plans/2026-10-13-azerdex-welcome-implementation.md`](../superpowers/plans/2026-10-13-azerdex-welcome-implementation.md).
 
 | Document | Content |

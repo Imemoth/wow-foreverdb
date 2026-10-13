@@ -1,6 +1,6 @@
 # AzerDex Welcome Email V1 — Implementation Plan
 
-**Date:** 2026-10-13 · **Spec (approved):** [`2026-10-13-azerdex-welcome-outbox-design.md`](../specs/2026-10-13-azerdex-welcome-outbox-design.md) (on branch `docs/azerdex-welcome-outbox-design-20261013`)
+**Date:** 2026-10-13 · **Spec (approved):** [`2026-10-13-azerdex-welcome-outbox-design.md`](https://github.com/Imemoth/wow-foreverdb/blob/docs/azerdex-welcome-outbox-design-20261013/docs/superpowers/specs/2026-10-13-azerdex-welcome-outbox-design.md) (on branch `docs/azerdex-welcome-outbox-design-20261013`)
 **Branch:** `claude/azerdex-welcome-email-v1-mzlc7s` from `main` `ecda356`. **Scope:** isolated repository development, local tests and an unmerged **draft** PR. Nothing is applied, deployed, scheduled, enabled or merged.
 
 ## Baseline findings (task 0)
@@ -22,15 +22,15 @@
 | 1 | Real-GoTrue provenance probe: which `auth.users` changes occur for signup / recovery / OTP / email change / invite / admin confirm | `database/tests/welcome/probe_gotrue_confirmation.mjs` → `docs/azerdex-welcome-email/gotrue-confirmation-probe.md`. **Finding: bare `email_confirmed_at` transition is unsafe** (recovery confirms unconfirmed signups). Distinguishing rule found and pinned. | done |
 | 2 | Migration `0015`: private config/candidates/outbox/failures tables, RLS forced, no grants, FK `ON DELETE CASCADE`, hashed recipient | `10_privileges.test.mjs` (9) | done |
 | 3 | Triggers on `auth.users` (signup candidate; confirm provenance → one event), no I/O, swallow + record failures, bounded reconciler | `20_gotrue_provenance.test.mjs` (20, real GoTrue) | done |
-| 4 | Worker RPCs `azerdex_welcome_claim/_finish/_stats` (service_role only), leases, skip-locked, retry/unknown-outcome/idempotency-window, re-verification at dispatch, operator procedures, prune | `30_worker_rpc.test.mjs` (21) | done |
-| 5 | Edge Function worker: config/flags, logo validation, payload (rendered HTML + text, or template), Resend taxonomy, run loop with circuit breaker, authenticated entry | `tests/welcome-worker/worker.test.mjs` (22) | done |
+| 4 | Worker RPCs `azerdex_welcome_claim/_finish/_stats` (service_role only), leases, skip-locked, retry/unknown-outcome/idempotency-window, re-verification at dispatch, operator procedures, prune | `30_worker_rpc.test.mjs` (26) | done |
+| 5 | Edge Function worker: config/flags, logo validation, payload (rendered HTML + text, or template), Resend taxonomy, run loop with circuit breaker, authenticated entry | `tests/welcome-worker/worker.test.mjs` (25) | done |
 | 6 | Worker ↔ database integration (parallel workers, 429, timeout, crash, stale accounts, flags, recovery path) | `40_worker_e2e.test.mjs` (8) | done |
 | 7 | Rollback / kill switch / reinstall / preservation of pre-existing functions | `50_rollback.test.mjs` (4) | done |
 | 8 | Mutation check of the migration (20 mutants) | `mutation_check.mjs` | done (manual workflow) |
 | 9 | CI workflow `azerdex-welcome-outbox.yml`; scheduler SQL (manual, `database/ops/`), rollback SQL (`database/rollback/`), function config | CI on the draft PR | done; CI result recorded in the PR |
 | 10 | Docs: README, runbook, Resend integration, acceptance record, security review, ROADMAP, Account V1 index | this PR | done |
-| 11 | Independent security review + code-quality review; fix actionable findings; re-run affected tests | `docs/azerdex-welcome-email/security-review.md` | see record |
-| 12 | Existing regression suites (web lint/typecheck/vitest; Account SQL suite) | recorded in the acceptance record | see record |
+| 11 | Independent security review + code-quality review; fix actionable findings; re-run affected tests | [security-review.md](../../azerdex-welcome-email/security-review.md) | done |
+| 12 | Existing regression suites (web lint/typecheck/vitest; Account SQL suite) | [acceptance.md](../../azerdex-welcome-email/acceptance.md) | done |
 | 13 | Draft PR to `main` (not merge-ready) | PR | see PR |
 
 ## Verification gates (each must be green before the next phase)

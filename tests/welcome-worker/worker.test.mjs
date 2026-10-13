@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig, missingSettings } from "../../supabase/functions/azerdex-welcome-worker/config.ts";
+import { loadConfig, missingSettings, isAllowedDbUrl } from "../../supabase/functions/azerdex-welcome-worker/config.ts";
 import { validateLogo, LogoError } from "../../supabase/functions/azerdex-welcome-worker/logo.ts";
 import { buildPayload, renderHtml, renderText } from "../../supabase/functions/azerdex-welcome-worker/email.ts";
 import { sendEmail } from "../../supabase/functions/azerdex-welcome-worker/resend.ts";
@@ -42,6 +42,8 @@ test("WT-2 missing/weak settings stop the run before any claim (names only are r
     assert.equal(h.calls.claim, 0);
   }
   assert.deepEqual(missingSettings(cfg({ RESEND_API_KEY: "" })), ["RESEND_API_KEY"]);
+  for (const bad of ["http://localhost.evil.com", "http://127.0.0.1.evil.com", "http://user:pw@127.0.0.1", "ftp://x.test", "not a url", "https://u:p@x.test"]) assert.equal(isAllowedDbUrl(bad), false, bad);
+  for (const good of ["https://abc.supabase.co", "http://127.0.0.1:54321", "http://localhost:54321"]) assert.equal(isAllowedDbUrl(good), true, good);
 });
 
 test("WT-3 sender, reply-to, subject and CTA are fixed in code: no setting or request can change them", () => {
@@ -53,7 +55,8 @@ test("WT-3 sender, reply-to, subject and CTA are fixed in code: no setting or re
   assert.equal(c.templateId, "azerdex-welcome-v1");
   assert.equal(cfg({ AZERDEX_WELCOME_MAX_PER_RUN: "1000" }).maxPerRun, 10);
   assert.equal(cfg({ AZERDEX_WELCOME_MAX_PER_RUN: "3" }).maxPerRun, 3);
-  assert.equal(cfg({ AZERDEX_WELCOME_MAX_PER_RUN: "-1" }).maxPerRun, 10);
+  for (const v of ["-1", "0", "abc", "1.5x"]) assert.equal(cfg({ AZERDEX_WELCOME_MAX_PER_RUN: v }).maxPerRun, 1, `throttle ${v} means the smallest run, never the largest`);
+  assert.equal(cfg({ AZERDEX_WELCOME_MAX_PER_RUN: "" }).maxPerRun, 10);
 });
 
 // ---- CID attachment -----------------------------------------------------------------------------------------------------------------
@@ -132,6 +135,7 @@ test("WT-8 Resend response taxonomy", async () => {
   assert.equal((await send(async () => jsonResponse(429, {}))).retryAfterSeconds, 60);
   for (const st of [500, 502, 503, 504]) assert.deepEqual(await send(async () => jsonResponse(st, {})), { kind: "ambiguous", code: "provider_5xx" });
   assert.equal((await send(async () => jsonResponse(409, {}))).code, "provider_idempotency_conflict");
+  for (const st of [202, 204, 408, 423, 425]) assert.equal((await send(async () => new Response(null, { status: st }))).kind, "ambiguous", `status ${st} may have been accepted`);
   assert.deepEqual(await send(async () => jsonResponse(401, {})), { kind: "permanent", code: "provider_auth" });
   assert.deepEqual(await send(async () => jsonResponse(403, {})), { kind: "permanent", code: "provider_auth" });
   assert.deepEqual(await send(async () => jsonResponse(422, {})), { kind: "permanent", code: "provider_rejected" });
@@ -143,6 +147,16 @@ test("WT-9 a hanging provider is cut off by the timeout and reported as an AMBIG
   const hang = (_u, init) => new Promise((_res, rej) => init.signal.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
   const t0 = Date.now();
   assert.deepEqual(await send(hang, 40), { kind: "ambiguous", code: "provider_timeout" });
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test("WT-9b headers arrive but the body stalls: still cut off by the timeout and reported ambiguous", async () => {
+  const stalled = (_u, init) => {
+    const body = new ReadableStream({ start(c) { init.signal.addEventListener("abort", () => c.error(Object.assign(new Error("aborted"), { name: "AbortError" }))); } });
+    return Promise.resolve(new Response(body, { status: 200 }));
+  };
+  const t0 = Date.now();
+  assert.deepEqual(await send(stalled, 40), { kind: "ambiguous", code: "provider_timeout" });
   assert.ok(Date.now() - t0 < 1000);
 });
 
@@ -198,17 +212,34 @@ test("WT-13 circuit breaker: after 3 consecutive provider failures the rest are 
   assert.ok(released.every((f) => f.outcome === "retry"));
 });
 
-test("WT-14 a success resets the failure streak; a bad provider key stops the run at once", async () => {
+test("WT-14 a success resets the failure streak", async () => {
   const jobs = Array.from({ length: 6 }, (_, i) => job({ user_id: `u${i}`, lease_token: `l${i}`, idempotency_key: `k${i}` }));
   let n = 0;
   const h = harness({ jobs, fetchImpl: () => (++n % 3 === 0 ? jsonResponse(200, { id: "re_abcdefgh1234" }) : jsonResponse(503, {})) });
   const s = await runOnce(h.deps);
   assert.equal(s.state, "ok");
   assert.equal(h.calls.fetch.length, 6);
-  const h2 = harness({ jobs, fetchImpl: () => jsonResponse(401, {}) });
-  const s2 = await runOnce(h2.deps);
-  assert.equal(h2.calls.fetch.length, 1);
-  assert.equal(s2.state, "circuit_open");
+});
+
+test("WT-14b a rejected provider key is a RUN-level failure: the run stops at once and no user is parked (attempt given back, not review_required)", async () => {
+  const jobs = Array.from({ length: 6 }, (_, i) => job({ user_id: `u${i}`, lease_token: `l${i}`, idempotency_key: `k${i}` }));
+  for (const st of [401, 403]) {
+    const h = harness({ jobs, fetchImpl: () => jsonResponse(st, {}) });
+    const s = await runOnce(h.deps);
+    assert.equal(h.calls.fetch.length, 1);
+    assert.equal(s.state, "provider_auth_failed");
+    assert.equal(h.calls.finish.length, 6, "every claimed job is finished/released");
+    assert.ok(h.calls.finish.every((f) => f.outcome === "retry" && f.error_code === "circuit_open"), "none is marked permanent");
+    assert.ok(h.calls.logs.some((l) => l.e === "provider_auth_failed"));
+  }
+});
+
+test("WT-14c a claim failure is logged (code only) and reported, never thrown", async () => {
+  const h = harness();
+  h.deps.db.claim = async () => { throw new Error("rpc_azerdex_welcome_claim_503"); };
+  const s = await runOnce(h.deps);
+  assert.equal(s.state, "claim_failed");
+  assert.ok(h.calls.logs.some((l) => l.e === "claim_failed"));
 });
 
 test("WT-15 a failing finish call never throws (the lease expiry is the safety net) and is counted", async () => {
@@ -224,6 +255,7 @@ test("WT-16 never sends more than the per-run cap even if the database returns m
   const h = harness({ jobs });
   await runOnce(h.deps);
   assert.equal(h.calls.fetch.length, 10);
+  assert.equal(h.calls.finish.filter((f) => f.error_code === "circuit_open").length, 15, "the 15 jobs beyond the cap are released, never left leased");
 });
 
 test("WT-17 logs and run summaries contain no secret, address, key, provider body or payload", async () => {
@@ -294,6 +326,7 @@ test("WT-22 the DB client only calls the two named RPCs, sends the server key as
   assert.equal(seen[0].url, "https://example-ref.supabase.co/rest/v1/rpc/azerdex_welcome_claim");
   assert.equal(seen[0].init.headers.apikey, DB_KEY);
   assert.deepEqual(JSON.parse(seen[0].init.body), { p_limit: 10 });
+  assert.ok(seen[0].init.signal instanceof AbortSignal, "RPC calls carry a timeout signal");
   await assert.rejects(() => db.finish({ user_id: "u", lease_token: "l", outcome: "sent", provider_id: "re_abcdefgh1234" }), (e) => e.message === "rpc_azerdex_welcome_finish_500" && !e.message.includes("LEAK"));
   assert.deepEqual(JSON.parse(seen[1].init.body), { p_user_id: "u", p_lease_token: "l", p_outcome: "sent", p_provider_id: "re_abcdefgh1234", p_error_code: null, p_retry_after_seconds: null });
   await assert.rejects(() => createDb(cfg(), async () => jsonResponse(200, { not: "an array" })).claim(1), /rpc_claim_shape/);

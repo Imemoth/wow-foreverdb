@@ -14,8 +14,8 @@ case "${1:-}" in
   up)
     "$ACC" up
     "$ACC" apply
-    PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U fdb_migrator -d "$DB" \
-      -f "$REPO/database/migrations/0015_azerdex_welcome_outbox.sql" 2>&1 | grep -v NOTICE || true
+    PGOPTIONS='-c client_min_messages=warning' PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U fdb_migrator -d "$DB" \
+      -f "$REPO/database/migrations/0015_azerdex_welcome_outbox.sql"
     echo "welcome stack up: 0012 + 0015 applied"
     ;;
   down) "$ACC" down ;;

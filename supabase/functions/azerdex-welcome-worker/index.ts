@@ -40,12 +40,15 @@ declare const Deno: { env: { get(n: string): string | undefined }; readFile(u: U
 
 if (typeof Deno !== "undefined" && typeof Deno.serve === "function") {
   Deno.serve((req) =>
-    handle(req, Deno.env, fetch, async () => {
+    handle(req, Deno.env, (u, i) => fetch(u, i), async () => {
       try {
         return await Deno.readFile(new URL("./azerdex-logo.png", import.meta.url));
       } catch {
         return null;
       }
-    }).catch(() => json(500, { error: "internal" })),
+    }).catch((e) => {
+      console.log(JSON.stringify({ fn: "azerdex-welcome-worker", event: "handler_failed", code: String((e as Error)?.name ?? "error").slice(0, 40) }));
+      return json(500, { error: "internal" });
+    }),
   );
 }

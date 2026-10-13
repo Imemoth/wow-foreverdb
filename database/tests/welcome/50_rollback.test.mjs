@@ -60,11 +60,8 @@ test("RB-3 rollback with drop_data=1 removes the tables too", async () => {
 });
 
 test("RB-4 the migration never alters or drops a pre-existing object: only azerdex_welcome_* objects and two auth.users triggers differ", async () => {
-  const c = await connectSuper(CLONE);
-  try {
-    const rows = (await c.query(`select p.oid::regprocedure::text sig from pg_proc p where p.pronamespace in ('public'::regnamespace,'private'::regnamespace) and p.proname not like 'azerdex\\_welcome\\_%'`)).rows.length;
-    assert.ok(rows > 0);
-  } finally { await c.end(); }
+  const trg = await q(`select tgname from pg_trigger where tgrelid='auth.users'::regclass and not tgisinternal and tgname like 'azerdex\\_welcome\\_%' order by 1`);
+  assert.deepEqual(trg.map((t) => t.tgname), ["azerdex_welcome_on_confirm", "azerdex_welcome_on_signup"]);
   const base = JSON.parse((await import("node:fs")).readFileSync(path.join(repoRoot, "database/tests/account/.run/functions_before_0012.json"), "utf8"));
   const now = await q(`select json_agg(json_build_object('sig', p.oid::regprocedure::text, 'owner', pg_get_userbyid(p.proowner), 'acl', coalesce(p.proacl::text, ''), 'config', coalesce(p.proconfig, '{}'::text[]), 'md5', md5(p.prosrc)) order by p.oid::regprocedure::text) j from pg_proc p where p.pronamespace in ('public'::regnamespace,'private'::regnamespace) and p.proname not like 'azerdex\\_welcome\\_%'`);
   const byBase = new Map(base.map((f) => [f.sig, f]));

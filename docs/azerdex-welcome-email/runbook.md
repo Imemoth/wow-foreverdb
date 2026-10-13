@@ -26,7 +26,9 @@ The server key can bypass RLS: it exists only as a Supabase secret read by this 
 ## 3. Deploy (staging first)
 
 ```bash
-supabase db push   # or apply database/migrations/0015_azerdex_welcome_outbox.sql with the migration role; switches stay OFF
+# Apply the migration with the project's migration role (needs BYPASSRLS, TRIGGER+REFERENCES on auth.users, SELECT on auth.one_time_tokens; the
+# migration's pre-flight checks this). This repository keeps migrations under database/migrations/, so `supabase db push` does NOT pick it up:
+psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/0015_azerdex_welcome_outbox.sql     # switches stay OFF
 supabase functions deploy azerdex-welcome-worker --project-ref <STAGING_REF>   # supabase/config.toml: verify_jwt = false (own secret check)
 ```
 Verify unauthenticated invocation is refused: `curl -i -X POST https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker` → `401 {"error":"unauthorized"}`.
@@ -35,8 +37,8 @@ Verify the migration's own post-conditions passed (it aborts otherwise) and run 
 ## 4. Schedule (still not sending)
 
 ```bash
-psql "$STAGING_DB_URL" -v worker_secret="$(cat /dev/shm/azerdex_worker_secret)" \
-  -v fn_url="https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker" -f database/ops/0015_schedule_welcome_worker.sql
+# the script reads the secret from /dev/shm/azerdex_worker_secret itself (never put it on a command line: it would show in the process list)
+psql "$STAGING_DB_URL" -v fn_url="https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker" -f database/ops/0015_schedule_welcome_worker.sql
 shred -u /dev/shm/azerdex_worker_secret
 ```
 The cron job runs every minute; while the worker flag is unset it answers `{"state":"disabled"}` and does nothing.
@@ -56,7 +58,7 @@ The cron job runs every minute; while the worker flag is unset it answers `{"sta
 | `psql -f database/rollback/0015_kill_switch.sql` | intake and dispatch OFF at once, rows preserved, accounts unaffected |
 | `supabase secrets set AZERDEX_WELCOME_ENABLED=false` | worker refuses to claim (nothing consumed) |
 | `psql -f database/ops/0015_unschedule_welcome_worker.sql` | stop invocations |
-| rotate `AZERDEX_WORKER_SECRET` (set new secret; `vault.update_secret` for the cron job) | invalidates a leaked invocation secret |
+| rotate `AZERDEX_WORKER_SECRET`: `supabase secrets set` the new value **and** `select vault.update_secret((select id from vault.secrets where name='azerdex_worker_secret'), '<new>');` (the scheduler script only creates, never updates) | invalidates a leaked invocation secret |
 | rotate `RESEND_API_KEY` | invalidates a leaked provider key |
 
 Re-enable only after the cause is understood: `database/rollback/0015_kill_switch_restore.sql` (dispatch only; intake is a separate deliberate step).
@@ -64,8 +66,10 @@ Re-enable only after the cause is understood: `database/rollback/0015_kill_switc
 ## 7. Monitoring
 
 `database/ops/0015_welcome_monitoring.sql` / `select public.azerdex_welcome_stats()` (service role). Alert when: `stale_pending_over_10m > 0`, `review_required > 0`,
-`unknown_outcomes > 0`, `trigger_failures_open > 0`, `verified_not_enqueued > 0` for more than a few minutes, or the Edge Function log shows repeated `run_complete` with
+`unknown_outcomes > 0`, `trigger_failures_open > 0` (`signup_trigger_failures_open` = a user whose candidate was lost: they will not be welcomed; this is fail-safe), `verified_not_enqueued > 0` for more than a few minutes, or the Edge Function log shows repeated `run_complete` with
 `ambiguous`/`retry`. Alert text must carry **counts only**: no address, no user id. Function logs contain counts and allowlisted codes only (asserted by tests).
+
+**Provider key / domain problem:** the worker log event `provider_auth_failed` (and `state: provider_auth_failed` in the response) means Resend answered 401/403. No user is parked; jobs are released and retried each minute until you fix the key or domain verification. Alert on this event.
 
 ## 8. Investigating an unknown delivery outcome (`review_required`, `unknown_outcome = true`)
 
@@ -87,7 +91,7 @@ Never re-send "just in case": a duplicate welcome is a worse outcome than a miss
 
 Both event tables reference `auth.users ON DELETE CASCADE`: deleting an account (GoTrue admin or dashboard) erases its candidate, outbox row and failure markers. No separate
 action is needed and an event for a deleted user can never be sent (the claim re-verifies the live account anyway). After a successful send the hashed recipient is erased immediately;
-the row keeps only the user id, status, timestamps and the provider message id until the account is deleted. Resend retains its own delivery logs per its retention settings: handle erasure there too when required.
+the row keeps only the user id, status, timestamps and the provider message id until the account is deleted. **GoTrue soft-delete** (`deleted_at` set, row kept) does not fire the cascade: the claim then suppresses and zeroes the hash, but the user id and provider message id stay until the row is hard-deleted; use hard deletion for erasure requests. Resend retains its own copy of the recipient and message: **erase it in the Resend dashboard/API (delete the message log or request erasure) as part of every GDPR deletion.** Candidate rows (with an address hash) exist only between signup and verification and are deleted when the outbox row is created or after 30 days.
 Welcome is transactional onboarding, not marketing consent.
 
 ## 11. Rollback

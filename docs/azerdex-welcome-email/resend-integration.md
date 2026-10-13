@@ -29,12 +29,12 @@ real send; none was available or permitted here, and the public reference docume
 | --- | --- | --- |
 | 200/201 with a well-formed id | accepted | `sent`, provider id stored, recipient hash erased. **Accepted ≠ delivered**: no webhook is implemented, so nothing claims delivery. |
 | 429 | retry (definitely not sent) | wait `max(Retry-After ≤ 3600 s, 60·2^(n-1) s)`, same key |
-| timeout / transport error / 5xx / 409 / malformed 2xx | **ambiguous** (may have been sent) | same key retried only inside **20 h** (Resend keeps keys 24 h); afterwards `review_required` |
-| 401 / 403 | permanent (+ run stops) | `review_required` |
-| other 4xx | permanent | `review_required`, never retried |
+| timeout (headers **or body**) / transport error / 5xx / 408 / 423 / 425 / 409 / any other 2xx / malformed 2xx | **ambiguous** (may have been sent) | same key retried only inside **20 h** (Resend keeps keys 24 h); afterwards `review_required`. A 409 `invalid_idempotent_request` (payload changed within 24 h, e.g. after switching html ↔ template mode) is bounded by the 6-attempt cap and ends in review. |
+| 401 / 403 | **run-level failure** (revoked key, unverified domain) | the run stops after one call; every claimed job is released with its attempt given back (`circuit_open`), **no user is parked**; log event `provider_auth_failed` must alert the operator |
+| 400 / 422 / other 4xx | permanent, per recipient | `review_required`, never retried |
 | expired lease (worker died) | ambiguous | as above |
 
-Attempts are capped at 6 and 10 jobs per run; three consecutive provider failures open a circuit for the rest of the run. **There is no exactly-once guarantee**:
+Attempts are capped at 6 and 10 jobs per run (`AZERDEX_WELCOME_MAX_PER_RUN` of 0, negative or unparsable means **1**, never 10); three consecutive provider failures open a circuit for the rest of the run; a run stops starting sends after 90 s (lease 180 s, send timeout 10 s, database call timeout 10 s) and releases the rest. **There is no exactly-once guarantee**:
 the database guarantees one durable event per user; the provider key de-duplicates retries inside its window; ambiguous sends beyond the window need an operator.
 
 ## Asset

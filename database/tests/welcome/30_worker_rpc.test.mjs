@@ -2,7 +2,7 @@
 // re-verification at dispatch time, kill switch, operator procedures and redaction.
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { openWorld, resetWelcome, setSwitches, registerAndConfirm, outboxRow, claim, finish, connect, gotrue, adminToken, newEmail } from "./world.mjs";
+import { openWorld, resetWelcome, setSwitches, registerAndConfirm, outboxRow, claim, finish, connect, gotrue, adminToken, newEmail, asService } from "./world.mjs";
 
 let w;
 before(async () => (w = await openWorld()));
@@ -237,20 +237,68 @@ test("WK-19 operator resolve: 'sent' needs the provider id and erases the hash; 
 
 test("WK-20 stats expose counters only: no address, no user id, no hash", async () => {
   const { u } = await oneJob();
-  const { asService } = await import("./world.mjs");
-  const stats = await asService(w.owner, async (c) => (await c.query(`select public.azerdex_welcome_stats() j`)).rows[0].j);
+    const stats = await asService(w.owner, async (c) => (await c.query(`select public.azerdex_welcome_stats() j`)).rows[0].j);
   const text = JSON.stringify(stats);
   assert.ok(!text.includes(u.email) && !text.includes(u.id));
   assert.equal(stats.by_status.leased, 1);
   for (const k of ["stale_pending_over_10m", "unknown_outcomes", "review_required", "verified_not_enqueued", "trigger_failures_open"]) assert.ok(k in stats, k);
 });
 
-test("WK-21 prune is bounded and keeps every outbox row (so a duplicate can never be re-enabled)", async () => {
-  const u = await registerAndConfirm(w.sup);
-  const pending = await registerAndConfirm(w.sup);
-  await w.sup.query(`update private.azerdex_welcome_candidates set registered_at = now() - interval '40 days', verified_via_signup_at = null where user_id = $1`, [pending.id]);
+test("WK-21 prune is bounded: it removes only stale UNVERIFIED candidates and old handled failures, and keeps every outbox row", async () => {
+  const { signup, newEmail } = await import("./world.mjs");
+  const done = await registerAndConfirm(w.sup);
+  const staleId = await signup(newEmail("stale")), freshId = await signup(newEmail("fresh"));
+  await w.sup.query(`update private.azerdex_welcome_candidates set registered_at = now() - interval '40 days' where user_id = $1`, [staleId]);
+  await w.sup.query(`insert into private.azerdex_welcome_trigger_failures(user_id, phase, provenance_ok, created_at, handled_at) values ($1,'confirm',true, now() - interval '40 days', now() - interval '39 days')`, [done.id]);
   const n = Number((await w.owner.query(`select private.azerdex_welcome_prune() n`)).rows[0].n);
-  assert.ok(n >= 1);
-  assert.equal((await outboxRow(w.sup, u.id)) !== null, true);
-  assert.equal((await outboxRow(w.sup, pending.id)) !== null, true);
+  assert.equal(n, 2);
+  const has = async (id) => Number((await w.sup.query(`select count(*) n from private.azerdex_welcome_candidates where user_id=$1`, [id])).rows[0].n);
+  assert.equal(await has(staleId), 0);
+  assert.equal(await has(freshId), 1);
+  assert.notEqual(await outboxRow(w.sup, done.id), null);
+});
+
+test("WK-22 data minimisation: the candidate (and its address hash) disappears once the outbox row exists; suppression and operator decisions zero the outbox hash", async () => {
+  const u = await registerAndConfirm(w.sup);
+  assert.equal(Number((await w.sup.query(`select count(*) n from private.azerdex_welcome_candidates where user_id=$1`, [u.id])).rows[0].n), 0);
+  await w.sup.query(`update auth.users set deleted_at = now() where id=$1`, [u.id]);
+  await claim(w.owner, 10);
+  assert.equal((await outboxRow(w.sup, u.id)).email_sha256.toString("hex"), "00".repeat(32));
+  const v = await registerAndConfirm(w.sup);
+  await w.sup.query(`update private.azerdex_welcome_outbox set status='review_required' where user_id=$1`, [v.id]);
+  await w.owner.query(`select private.azerdex_welcome_operator_resolve($1, false, null)`, [v.id]);
+  assert.equal((await outboxRow(w.sup, v.id)).email_sha256.toString("hex"), "00".repeat(32));
+});
+
+test("WK-23 a given-back attempt (circuit_open) does not start the idempotency clock; operator requeue is refused for a row that is still retrying", async () => {
+  const { u, job } = await oneJob();
+  await finish(w.owner, { user_id: u.id, lease_token: job.lease_token, outcome: "retry", error_code: "circuit_open" });
+  const r = await outboxRow(w.sup, u.id);
+  assert.deepEqual([r.attempts, r.first_send_at], [0, null]);
+  assert.equal((await w.owner.query(`select private.azerdex_welcome_operator_requeue($1, true) ok`, [u.id])).rows[0].ok, false, "only review_required/suppressed rows can be requeued");
+});
+
+test("WK-24 backoff grows 60 s, 120 s, 240 s... and is capped at 1 h", async () => {
+  const u = await registerAndConfirm(w.sup);
+  const waits = [];
+  for (let i = 1; i <= 5; i++) {
+    const [job] = await claim(w.owner, 5);
+    await finish(w.owner, { user_id: u.id, lease_token: job.lease_token, outcome: "retry", error_code: "provider_rate_limited", retry_after_seconds: 1 });
+    const r = await outboxRow(w.sup, u.id);
+    waits.push(Math.round((new Date(r.next_attempt_at) - Date.now()) / 1000 / 10) * 10);
+    await age(u.id, `next_attempt_at = now() - interval '1 second'`);
+  }
+  assert.deepEqual(waits, [60, 120, 240, 480, 960]);
+});
+
+test("WK-25 a claim-time attempts>=6 row (e.g. after lease expiries) stops for review instead of being sent a 7th time", async () => {
+  const u = await registerAndConfirm(w.sup);
+  await age(u.id, `status='retry', attempts=6`);
+  assert.deepEqual(await claim(w.owner, 5), []);
+  assert.equal((await outboxRow(w.sup, u.id)).last_error_code, "attempts_exhausted");
+});
+
+test("WK-26 stats also expose signup-phase trigger failures", async () => {
+  const stats = await asService(w.owner, async (c) => (await c.query(`select public.azerdex_welcome_stats() j`)).rows[0].j);
+  assert.ok("signup_trigger_failures_open" in stats);
 });

@@ -35,7 +35,8 @@ type Env = { get(name: string): string | undefined };
 export function loadConfig(env: Env): WorkerConfig {
   const get = (n: string) => (env.get(n) ?? "").trim();
   const requested = Number.parseInt(get("AZERDEX_WELCOME_MAX_PER_RUN") || String(DEFAULTS.maxPerRunCeiling), 10);
-  const maxPerRun = Number.isInteger(requested) && requested >= 1 ? Math.min(requested, DEFAULTS.maxPerRunCeiling) : DEFAULTS.maxPerRunCeiling;
+  // A throttle that is 0, negative or unparsable means the SMALLEST run (1), never the largest.
+  const maxPerRun = Number.isInteger(requested) ? Math.min(Math.max(requested, 1), DEFAULTS.maxPerRunCeiling) : 1;
   return {
     enabled: get("AZERDEX_WELCOME_ENABLED") === "true",
     // Rendered HTML + CID is the proven path; the hosted-template path stays opt-in until the owner-run provider test passes.
@@ -60,7 +61,19 @@ export function missingSettings(c: WorkerConfig): string[] {
   const m: string[] = [];
   if (!c.workerSecret || c.workerSecret.length < 32) m.push("AZERDEX_WORKER_SECRET");
   if (!c.resendApiKey) m.push("RESEND_API_KEY");
-  if (!c.supabaseUrl.startsWith("https://") && !c.supabaseUrl.startsWith("http://127.0.0.1") && !c.supabaseUrl.startsWith("http://localhost")) m.push("SUPABASE_URL");
+  if (!isAllowedDbUrl(c.supabaseUrl)) m.push("SUPABASE_URL");
   if (!c.dbKey) m.push("AZERDEX_WORKER_DB_KEY");
   return m;
+}
+
+/** https everywhere; plain http only for the loopback addresses of a local test stack (exact host match, not a prefix). */
+export function isAllowedDbUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.username || u.password) return false;
+    if (u.protocol === "https:") return true;
+    return u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost");
+  } catch {
+    return false;
+  }
 }
