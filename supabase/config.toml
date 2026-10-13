@@ -1,0 +1,5 @@
+# Minimal Supabase CLI config: ONLY the welcome worker's function settings live here. Not applied by the repository; the owner deploys.
+[functions.azerdex-welcome-worker]
+# The caller is the database scheduler, not a Supabase user, so no user JWT exists. Authentication is the dedicated shared secret
+# (x-azerdex-worker-secret, constant-time compared, fail-closed when unset). Never copy this setting to another function.
+verify_jwt = false
