@@ -92,7 +92,95 @@ public static class AccountMessages
         BlockReason.PilotUploadDisabled => "Snapshot upload is intentionally disabled in this private pilot. Registered sign-in and installation linking remain available on the Account tab.",
         BlockReason.CredentialUnavailable => "The sign-in could not be used just now; sync will be retried.",
         BlockReason.InvalidRequest => "The server rejected the upload.",
+        BlockReason.DeviceAutoSyncOff => "This computer is a registered device: automatic upload is off. Use Sync now to upload.",
+        BlockReason.DeviceSyncNotCompleted => "The registered device did not upload. See the Registered device line on the Account tab.",
         _ => "Sync is paused."
+    };
+
+    public static string Headline(DeviceState state) => state switch
+    {
+        DeviceState.Anonymous => "No activation",
+        DeviceState.PendingActivation => "Activation pending",
+        DeviceState.Registered => "Registered device",
+        DeviceState.ActivationExpired => "Activation file expired",
+        DeviceState.ActivationRejected => "Activation file not accepted",
+        DeviceState.DeviceRevoked => "Device revoked",
+        DeviceState.OwnershipConflict => "Installation conflict",
+        DeviceState.AccountUnavailable => "Account unavailable",
+        DeviceState.CredentialDamaged => "Device credential damaged",
+        _ => "Unknown"
+    };
+
+    /// <summary>Fixed, secret-free wording for the zero-touch device state: what happened and what to do next.</summary>
+    public static string Describe(DeviceStatus status)
+    {
+        var text = status.State switch
+        {
+            DeviceState.Anonymous => "This computer has no activation file. ForeverDB works as before.",
+            DeviceState.PendingActivation => status.Detail switch
+            {
+                DeviceDetail.NoInstallation => "An activation file was found, but no ForeverDB installation is known yet. Start World of Warcraft with the ForeverDB addon once, then reopen the Companion. The file was kept.",
+                DeviceDetail.MultipleInstallations => "An activation file was found, but more than one installation was detected. A computer can be activated for one installation only. The file was kept.",
+                DeviceDetail.InvalidInstallation => "The server did not accept this computer's installation identifier. The activation file was kept; nothing was changed.",
+                DeviceDetail.StorageFailure => "The device credential could not be stored safely just now. The Companion will try again; do not delete the activation file.",
+                _ => "An activation file was found but has not been redeemed yet. It was kept and the Companion will try again when ForeverDB can be reached."
+            },
+            DeviceState.Registered => status.Detail == DeviceDetail.Synced
+                ? "Uploaded with this computer's registered device. No sign-in was needed."
+                : "This computer is registered to your ForeverDB account. Use Sync now to upload; automatic upload is off for registered devices.",
+            DeviceState.ActivationExpired =>
+                "This activation file has expired. Download a new activation file from your ForeverDB account > Devices; you do not need to reinstall. Your local data was not changed.",
+            DeviceState.ActivationRejected => status.Detail switch
+            {
+                DeviceDetail.TicketConsumed => "This activation file was already used. If this computer is not shown as registered, download a NEW activation file from your ForeverDB account > Devices; the old one is spent.",
+                DeviceDetail.TicketRevoked => "This activation file was revoked on the website. Download a new activation file from your ForeverDB account > Devices.",
+                _ => "This activation file is not valid. Download a new activation file from your ForeverDB account > Devices."
+            },
+            DeviceState.DeviceRevoked =>
+                "This device was revoked in your ForeverDB account. Nothing is uploaded from here. To use this computer again, download a new activation file from your ForeverDB account > Devices.",
+            DeviceState.OwnershipConflict => status.Detail switch
+            {
+                DeviceDetail.InstallationConflict => "This computer already has an anonymous installation; link it with a claim code. The activation did not change the installation's owner.",
+                DeviceDetail.InstallationBound => "This installation is already bound to another device of the account. Revoke that device in your ForeverDB account > Devices, then download a new activation file.",
+                DeviceDetail.IdentityInUse => "This computer's device identity is already registered for another installation. Nothing was changed.",
+                _ => "The server reports that this installation no longer belongs to the account this device was registered for. Nothing was uploaded."
+            },
+            DeviceState.AccountUnavailable => status.Detail == DeviceDetail.LimitReached
+                ? "Your account has reached its device limit. Revoke a device you no longer use in your ForeverDB account > Devices, then try again."
+                : "Your ForeverDB account is not available right now. Nothing was uploaded; this computer keeps its registration.",
+            DeviceState.CredentialDamaged => status.Detail switch
+            {
+                DeviceDetail.StaleCredential => "The device credential on this computer is out of date. Download a new activation file from your ForeverDB account > Devices.",
+                DeviceDetail.DeviceUnknown or DeviceDetail.SessionNotAccepted => "The server no longer recognises this computer's device credential. Nothing was replaced. Download a new activation file from your ForeverDB account > Devices.",
+                _ => "The device credential on this computer is damaged and cannot be read. Nothing was replaced and no new identity was created. Download a new activation file from your ForeverDB account > Devices."
+            },
+            _ => ""
+        };
+
+        var extra = status.Detail switch
+        {
+            DeviceDetail.Offline => "ForeverDB could not be reached; nothing was lost and it will be retried.",
+            DeviceDetail.RateLimited => "Too many requests; try again shortly.",
+            DeviceDetail.ServiceNotReady => "The ForeverDB service does not support device activation yet.",
+            DeviceDetail.ServiceRefused => "The server refused this request.",
+            DeviceDetail.SessionNotAccepted when status.State is not DeviceState.CredentialDamaged => "The server did not accept this computer's device session just now; try again.",
+            DeviceDetail.Unexpected => "ForeverDB sent an unexpected answer. Nothing was changed.",
+            DeviceDetail.StorageFailure when status.State is not (DeviceState.PendingActivation) => "The credential file could not be read or written just now. Nothing was changed.",
+            DeviceDetail.LockTimeout => "Another ForeverDB Companion window is working on this computer's device. Try again in a moment.",
+            DeviceDetail.AutoSyncOff => "Automatic upload is off for registered devices; use Sync now.",
+            DeviceDetail.StaleCredential when status.State is not DeviceState.CredentialDamaged => "The device credential is being renewed; try Sync now again later.",
+            _ => ""
+        };
+
+        return extra.Length == 0 ? text : text + " " + extra;
+    }
+
+    public static string Describe(DeviceSyncResult result) => result.Outcome switch
+    {
+        DeviceSyncOutcome.Synced => "Uploaded with this computer's registered device.",
+        DeviceSyncOutcome.NotRegistered => "This computer is not a registered device.",
+        DeviceSyncOutcome.AutoSyncOff => "Automatic upload is off for registered devices; use Sync now.",
+        _ => result.Status.Message
     };
 
     public static string Describe(InstallationOwnership ownership) => ownership switch

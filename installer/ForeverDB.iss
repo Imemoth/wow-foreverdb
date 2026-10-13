@@ -28,6 +28,11 @@ Name: "autostart"; Description: "Launch ForeverDB Companion with Windows"; Group
 [Files]
 Source: "..\artifacts\ForeverDB-Companion-win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Zero-touch enrollment: an activation file placed next to Setup (the website's "Download for my account") is handed to the
+; Companion's per-user activation folder. The Companion redeems it on first start and deletes it afterwards; Setup only copies it
+; (never reads it) and never removes it or any ForeverDB user data on uninstall.
+Source: "{src}\foreverdb-activation*.fdbact"; DestDir: "{localappdata}\ForeverDB\activation"; Flags: external skipifsourcedoesntexist ignoreversion uninsneveruninstall
+
 [Icons]
 Name: "{group}\ForeverDB Companion"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\ForeverDB Companion"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon

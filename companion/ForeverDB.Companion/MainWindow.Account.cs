@@ -35,6 +35,12 @@ public partial class MainWindow
 
     private void AttachAccountHandlers(AccountRuntime account)
     {
+        if (account.Device is { } device)
+        {
+            device.Context.StatusChanged += _ =>
+                Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+        }
+
         account.Sessions.StatusChanged += _ =>
             Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
 
@@ -43,6 +49,81 @@ public partial class MainWindow
 
         account.Sessions.IdentityChanged += _ =>
             Dispatcher.BeginInvoke(new Action(OnAccountIdentityChanged));
+    }
+
+    /// <summary>
+    /// Zero-touch: runs only when the gate created a device runtime. Finds an activation file, enrolls, then classifies the device
+    /// with the server. Background, never blocks the UI, and a failure only changes the Registered device line.
+    /// </summary>
+    private async Task RunDeviceBackgroundAsync(
+        AccountRuntime account)
+    {
+        if (account.Device is not { } device)
+        {
+            return;
+        }
+
+        try
+        {
+            var state = await device.Enrollment.InitializeAsync();
+
+            if (state.State == DeviceState.Registered)
+            {
+                await device.Sync.CheckStatusAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // The status line already carries the outcome; nothing here may disturb the UI.
+        }
+        finally
+        {
+            await Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+        }
+    }
+
+    private async void DeviceRetry_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_account is { } account)
+        {
+            await RunDeviceBackgroundAsync(account);
+        }
+    }
+
+    private void RefreshDeviceUi()
+    {
+        if (DevicePanel is null)
+        {
+            return;
+        }
+
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+            return;
+        }
+
+        // Nothing is shown unless a device runtime exists (gate open) and there is something to say.
+        var device = _account?.Device;
+        var status = device?.Status;
+
+        if (device is null ||
+            status is null ||
+            status.State == DeviceState.Anonymous)
+        {
+            DevicePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DevicePanel.Visibility = Visibility.Visible;
+        DeviceHeadlineText.Text = AccountMessages.Headline(status.State);
+        DeviceDetailText.Text = status.Message;
+        DeviceRetryButton.Visibility =
+            status.State == DeviceState.PendingActivation
+                ? Visibility.Visible
+                : Visibility.Collapsed;
     }
 
     private async Task RunAccountBackgroundChecksAsync(
@@ -144,6 +225,8 @@ public partial class MainWindow
 
         var status = account.Sessions.Status;
         var enabled = status.AccountsEnabled;
+
+        RefreshDeviceUi();
 
         AccountHeadlineText.Text =
             AccountMessages.Headline(

@@ -9,6 +9,8 @@ public static class Redaction
     {
         (new Regex(@"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*", RegexOptions.Compiled), "[jwt]"),
         (new Regex(@"\bsb_(?:publishable|secret)_[A-Za-z0-9._-]+", RegexOptions.Compiled), "[key]"),
+        (new Regex(@"\bfdba1_[A-Za-z0-9_-]+", RegexOptions.Compiled), "[ticket]"),
+        (new Regex(@"\bfdbd1_[A-Za-z0-9_-]+", RegexOptions.Compiled), "[device-secret]"),
         (new Regex(@"\bFDB(?:-[0-9A-Fa-f]{4}){8}\b", RegexOptions.Compiled), "[claim-code]"),
         (new Regex(@"\b[0-9A-Fa-f]{32}\b", RegexOptions.Compiled), "[hex32]"),
         (new Regex(@"(?i)\b(?:bearer|apikey|access_token|refresh_token|password|token)\b\s*[:=]?\s*""?[^\s,;""}]+", RegexOptions.Compiled), "[secret]"),
