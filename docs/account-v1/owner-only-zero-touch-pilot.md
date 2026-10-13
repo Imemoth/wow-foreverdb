@@ -30,6 +30,10 @@ Use the already accepted independent Windows 10 test login, not the regular Comp
 
 Install the new **pilot-branch** installer (not the previously validated PR #56 default-off installer). The normal installer may start the application once in default mode; close it before activating. Never configure or point it at the usual WoW account's live `WTF/SavedVariables` folder.
 
+**Fast path (recommended for this isolated Windows test user):** use `scripts/owner-zero-touch-fixture-and-launch.ps1` from this exact pilot branch. It creates a **new** synthetic `H|7|...` SavedVariables export in `%LOCALAPPDATA%\ForeverDB-ZeroTouch-TestRoot`, points the test profile's Companion settings at it, forcibly sets AutoSync OFF, reads the *publishable* key already present in that test profile's settings, and launches the Companion only in a process-local `private-pilot` mode. It refuses to replace any pre-existing real WoW root and never reads or copies the live WoW directory. The fixture has zero guilds/sources, so the test should verify the registered device and successful *empty* manual ingest, **not** expect the existing 46-member historical Guildbook to appear under the new installation. Keep original installed files untouched outside this test profile.
+
+After installing the pilot artifact, log in as `ForeverDB-Test` or the separate test Windows user, confirm the normal Companion is closed, download `foreverdb-activation.fdbact` into that user's **Downloads** folder, and run the script with PowerShell from a trusted checkout of this pilot branch. Do not change `ExecutionPolicy` for the machine or user globally. If script execution is blocked, run via a process-scoped policy only after reviewing the source.
+
 In the test user's *one* PowerShell process, set:
 ```powershell
 $env:FOREVERDB_ACCOUNT_MODE = "private-pilot"
