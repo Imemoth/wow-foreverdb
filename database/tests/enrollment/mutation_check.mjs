@@ -59,7 +59,6 @@ const mutants = [
   ["device revoke: second lookup not scoped to the account", sub("select d.status into v_status from private.devices d where d.id = p_device_id and d.account_uid = v_uid for update;", "select d.status into v_status from private.devices d where d.id = p_device_id for update;"), [F]],
   ["devices list: not scoped to the caller", sub("    from private.devices d\n    where d.account_uid = v_uid\n    order by (d.status = 'revoked')", "    from private.devices d\n    order by (d.status = 'revoked')"), [F]],
   ["device functions: no SECURITY DEFINER search_path pin on rotate", sub("create or replace function public.fdb_device_rotate_credential(p_device_secret text)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = ''", "create or replace function public.fdb_device_rotate_credential(p_device_secret text)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = public"), [P]],
-  ["status: reveals state for a secret that does not match", sub("    if v_inst is null then\n        return jsonb_build_object('state', 'unknown', 'installation_id', null, 'needs_rotation', false, 'reason', null);\n    end if;\n\n    perform pg_advisory_xact_lock(hashtextextended(v_inst, 0));\n    select * into v_auth", "    if v_inst is null then\n        return jsonb_build_object('state', 'unknown', 'installation_id', null, 'needs_rotation', false, 'reason', null);\n    end if;\n\n    perform pg_advisory_xact_lock(hashtextextended(v_inst, 0));\n    select * into v_auth"), [K]],
 ];
 
 async function cloneDb() {
