@@ -5,6 +5,7 @@
 #   stack.sh up        create the database, bootstrap roles, start GoTrue (it runs its own Auth migrations),
 #                      then apply repository migrations 0001..0011 as the non-superuser migration role
 #   stack.sh apply     apply 0012 (and nothing else) as the migration role
+#   stack.sh apply14   apply 0014 (zero-touch enrollment) as the migration role; requires `apply` first
 #   stack.sh down      stop GoTrue and drop the database
 #
 # Required env: PGHOST PGPORT PGUSER PGPASSWORD of a SUPERUSER on a disposable cluster; GOTRUE_BIN = built GoTrue binary.
@@ -83,9 +84,12 @@ case "${1:-}" in
   apply)
     as_migrator -f "$REPO/database/migrations/0012_account_ownership_claims.sql"
     ;;
+  apply14)
+    as_migrator -f "$REPO/database/migrations/0014_zero_touch_enrollment.sql"
+    ;;
   down)
     gotrue_stop
     su_psql postgres -c "drop database if exists $DB with (force)"
     ;;
-  *) echo "usage: $0 up|apply|down" >&2; exit 64 ;;
+  *) echo "usage: $0 up|apply|apply14|down" >&2; exit 64 ;;
 esac

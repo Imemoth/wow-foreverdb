@@ -10,12 +10,12 @@ polish and distribution work.
 - [x] Bootstrap TTL: **7 days (168 hours)**, single use, independently revocable. After redemption, persist a distinct **device-scoped** credential, not a packaged account refresh token. A lapsed ticket can be replaced from the signed-in website without re-downloading the binary.
 - [x] Anon download and existing historical anonymous installations remain supported. A previously owned anonymous installation still needs one-time explicit claim; new registered installations must never auto-claim an already owned ID.
 - [x] Owner's 2026-10-13 visual acceptance: web Guildbook correctly shows both linked Guilds (25 + 21 = 46 members); after sign-out the private Guildbook requested sign-in. Registered cross-account negative test remains separately pending.
-- [ ] Independent ADR for account-bound ticket -> device-scoped authentication -> owned-installation ingest, including legacy JWT compatibility, race-safe first enrollment and 7-day bearer leakage risk.
-- [ ] Website protected download/activation issue + revoke, Companion first-run device key storage and enrollment, registered manual ingest, multi-PC independence and revocation.
+- [x] Independent ADR for account-bound ticket -> device-scoped authentication -> owned-installation ingest, including legacy JWT compatibility, race-safe first enrollment and 7-day bearer leakage risk.
+- [x] (implemented on PR #56, draft; **Windows/staging acceptance NOT executed**, see [acceptance-zero-touch.md](account-v1/acceptance-zero-touch.md)) Website protected download/activation issue + revoke, Companion first-run device credential storage and enrollment, registered manual ingest, multi-PC independence and revocation.
 - [ ] A/B/C/D negative, race, access control, Windows and browser CI; 6 historical anonymous owner fingerprints unchanged; no automatic public activation.
 - [ ] Separate integration/release gate: disable temporary code-level pilot flags and complete security reviews before any main/release merge, preserving the protected active preview during transition.
 
-Specification: [7-day Zero-Touch Enrollment + Registered Sync](account-v1/zero-touch-enrollment-registered-sync.md).
+Specification: [7-day Zero-Touch Enrollment + Registered Sync](account-v1/zero-touch-enrollment-registered-sync.md). Decision: [ADR-017](account-v1/adr-017-zero-touch-enrollment.md). Merge order and pilot-flag gate: [integration-and-release-order.md](account-v1/integration-and-release-order.md).
 
 ## Account V1 — owner-approved single-installation claim pilot (PR #55, draft)
 
