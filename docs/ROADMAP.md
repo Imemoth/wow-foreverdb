@@ -4,6 +4,19 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
+
+- [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.
+- [x] Bootstrap TTL: **7 days (168 hours)**, single use, independently revocable. After redemption, persist a distinct **device-scoped** credential, not a packaged account refresh token. A lapsed ticket can be replaced from the signed-in website without re-downloading the binary.
+- [x] Anon download and existing historical anonymous installations remain supported. A previously owned anonymous installation still needs one-time explicit claim; new registered installations must never auto-claim an already owned ID.
+- [x] Owner's 2026-10-13 visual acceptance: web Guildbook correctly shows both linked Guilds (25 + 21 = 46 members); after sign-out the private Guildbook requested sign-in. Registered cross-account negative test remains separately pending.
+- [ ] Independent ADR for account-bound ticket -> device-scoped authentication -> owned-installation ingest, including legacy JWT compatibility, race-safe first enrollment and 7-day bearer leakage risk.
+- [ ] Website protected download/activation issue + revoke, Companion first-run device key storage and enrollment, registered manual ingest, multi-PC independence and revocation.
+- [ ] A/B/C/D negative, race, access control, Windows and browser CI; 6 historical anonymous owner fingerprints unchanged; no automatic public activation.
+- [ ] Separate integration/release gate: disable temporary code-level pilot flags and complete security reviews before any main/release merge, preserving the protected active preview during transition.
+
+Specification: [7-day Zero-Touch Enrollment + Registered Sync](account-v1/zero-touch-enrollment-registered-sync.md).
+
 ## Account V1 — owner-approved single-installation claim pilot (PR #55, draft)
 
 - [x] Owner approved lifting the existing single-project Companion claim-code restriction, scoped to a private pilot (2026-10-12).
