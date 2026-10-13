@@ -6,12 +6,12 @@ Rule: **nothing is PASS unless it was executed and the evidence is named.** Rows
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| Existing 0012 backend suite (before 0014) | `database/tests/account/stack.sh up && apply` then `node --test --test-concurrency=1 database/tests/account/*.test.mjs` | see PR description (run on the pre-0014 stack; the suite asserts "exactly the 0012 functions", so it must run **before** `apply14`) |
+| Existing 0012 backend suite (before 0014) | `database/tests/account/stack.sh up && apply` then `node --test --test-concurrency=1 database/tests/account/*.test.mjs` | **219/219 pass** (fresh stack; must run **before** `apply14`: the suite asserts "exactly the 0012 functions") |
 | 0014 migration | `stack.sh apply14` twice (idempotent body) | applied, in-migration assertions passed |
-| Enrollment suite (privileges, tickets, flows A1/A2/B1/C1/C2, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal) | `node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs` | see PR description for counts |
-| Mutation check 0014 | `node database/tests/enrollment/mutation_check.mjs` | see PR description |
+| Enrollment suite (privileges, tickets, flows A1/A2/B1/C1/C2, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal, existing-regression SQL) | `node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs` | **98/98 pass** |
+| Mutation check 0014 | `node database/tests/enrollment/mutation_check.mjs` | 33/33 effective mutants killed; 2 equivalent defence-in-depth mutants documented in the script (a first run: 32/35 with those 3 survivors, then analysed) |
 | Web | `cd web && npm run lint && npx tsc --noEmit && npx vitest run` | lint/tsc clean, vitest 395/395 |
-| Companion Account library (Linux, test doubles) | `dotnet test tests/companion-account/... -p:EnableWindowsTargeting=true` | see PR description |
+| Companion Account library (Linux, test doubles) | `dotnet test tests/companion-account/... -p:EnableWindowsTargeting=true` | **572 passed, 3 skipped (Real_DPAPI, Windows only), 0 failed**; `scripts/check-companion-account.py` passes. The WPF project could **not** be built on Linux (missing WindowsDesktop SDK targets): UI edits are uncompiled until Windows CI |
 
 ## 2. NOT EXECUTED (owner / CI): Windows, staging, production
 
