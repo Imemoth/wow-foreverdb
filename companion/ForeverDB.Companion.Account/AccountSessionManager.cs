@@ -337,8 +337,10 @@ public sealed class AccountSessionManager
             // vault: rotating it here would silently invalidate normal anonymous sync.
             if (role == SlotRole.LegacyOwner && !_allowLegacyRefreshOrRevoke)
             {
-                SetFault(role, SessionFault.NetworkUnavailable);
-                return Fail(role, SessionFault.NetworkUnavailable);
+                // The pilot's legacy credential is only a read-only COPY; rotating
+                // its shared refresh token could break the normal anonymous client.
+                SetFault(role, SessionFault.LegacyOwnerRefreshRequired);
+                return Fail(role, SessionFault.LegacyOwnerRefreshRequired);
             }
             var refreshed = await RefreshLockedAsync(role, slot, session, kind, marker, ct).ConfigureAwait(false);
             if (refreshed.Fault != SessionFault.None)
