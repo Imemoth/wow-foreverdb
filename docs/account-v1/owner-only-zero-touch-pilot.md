@@ -19,8 +19,9 @@ Vercel project `wow-foreverdb` (SSO protection **enabled for all deployments**) 
 - `SITE_URL=https://wow-foreverdb-git-account-v1-zero-touc-7b455a-imemoths-projects.vercel.app`
 - `RATE_LIMIT_BACKEND=upstash`
 
-**Owner must duplicate/add (as sensitive) on THAT Preview branch** the six existing secrets from the working #53 protected pilot without sharing them in chat or public logs:
-`ACCOUNT_AUTH_PUBLISHABLE_KEY`, `ACCOUNT_CSRF_SECRET`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `CHALLENGE_COOKIE_SECRET`, `RATE_LIMIT_SALT`. Shared Preview Upstash secrets are already project-wide; do NOT broaden the branch-scoped account secrets to all Preview or Production.
+**Configured directly on the #56 Preview branch (2026-10-13):** `ACCOUNT_AUTH_PUBLISHABLE_KEY` (the existing active modern Supabase publishable key), plus freshly and independently generated 256-bit `ACCOUNT_CSRF_SECRET`, `CHALLENGE_COOKIE_SECRET`, and `RATE_LIMIT_SALT`. None of those values should be pasted in chat or committed to GitHub. Shared Preview Upstash credentials already exist project-wide.
+
+**Owner action still required:** add only `TURNSTILE_SECRET_KEY` (sensitive) and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (public site key) to this exact Preview branch, using the matching existing Cloudflare Turnstile widget credentials. Ensure the widget allows the stable #56 Preview hostname. Do not broaden these or the Account Auth variables to Production or to every Preview branch.
 
 Cloudflare Turnstile host allowlist must cover the stable #56 preview hostname if using host-restricted Turnstile. Deploy new Preview after editing vars; verify SSO and `/account/devices` page behind registered login, and download an activation file ONLY when Windows first-run is ready. Every ticket is usable once for 168 hours; keep the .fdbact private.
 
