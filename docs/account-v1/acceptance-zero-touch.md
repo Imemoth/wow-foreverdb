@@ -45,6 +45,7 @@ A fresh checkout/CI run is required if later documentation or code commits chang
 | Z10 | Copy an **unredeemed** file to a second PC and redeem there first | staging | succeeds for the copier (documented inherent risk, ADR-017 §4); the legitimate PC then gets `ticket_consumed`; revoke the device on the website → copy dead. Record this as an observation, not a failure |
 | Z11 | `python3 scripts/check-pilot-flags.py --require-off` on the commit to be merged | repo | `OK` (see integration-and-release-order.md) |
 | Z12 | Production: **only after explicit owner approval** — apply 0014, flip `ZeroTouchEnrollmentApproved`, repeat Z2–Z6 with the owner's own account | production | owner decision, not part of this PR |
+| Z13 — PUBLIC RELEASE ONLY | Website account signed in → **one downloadable installer package** → run installation → **automatic activation** with no separate `.fdbact` download, drag/drop, new login or code; repeat on second PC, test anon-first, expiry/recovery and browser/download caches | Windows 10 & 11, protected web then release candidate | **NOT EXECUTED; blocking public release. #57 pilot is explicitly exempt.** |
 
 Production data checks (read-only, before and after any production step): the six anonymous installation ids keep `owner_user_id` and row counts; linked
 installation `2f8df8ba69345d0a14c8d56ac86d4b2e` keeps 140 source-stats and 46 Guildbook members. This PR did not touch production.
@@ -53,7 +54,7 @@ installation `2f8df8ba69345d0a14c8d56ac86d4b2e` keeps 140 source-stats and 46 Gu
 
 1. First-redeemer theft of an unused ticket is bounded, not prevented (ADR-017 §4). Decide on re-approval (`pending_approval` status is reserved).
 2. No cryptographic proof-of-possession of a device key (needs an Edge Function backend, ADR-017 §6).
-3. Public signed binary download does not exist yet; only the activation file is served (ZIP composition is later website work).
+3. **PUBLIC RELEASE BLOCKER (Z13, owner decision 2026-10-13):** one download must deliver a securely integrated installer + activation handoff, with no manually managed `.fdbact`. Current web delivers only the activation file; a ZIP requiring manual placement of the activation file is **not enough**. The owner-only #57 split-file pilot remains valid for backend E2E, but cannot satisfy Z13. Installer signing and secure non-cached bootstrap transport need design and verification.
 4. Pilot flags are still true on this stacked branch; merge only with `check-pilot-flags.py --require-off` (integration-and-release-order.md).
 5. Z1 Windows WPF build, real DPAPI, win-x64 publish and installer compilation PASS on SHA `a63db255`; an isolated local-user offline installer/UI smoke also PASS by owner report. **The live activation, staged installation handoff, device authentication and Z2-Z12 acceptance are NOT executed.**
 6. Anonymous-signup abuse on the shared Auth project (threat A24) is unchanged.
