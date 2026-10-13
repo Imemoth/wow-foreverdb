@@ -295,6 +295,38 @@ public class FeatureGateTests
     }
 
     [Fact]
+    public async Task Expired_legacy_owner_copy_reports_safe_refresh_route_without_network_claim()
+    {
+        var server = new FakeSupabase();
+        var anonymous = server.AddAnonymousUser();
+        server.AddRegisteredUser("owner@example.test", "an-example-long-password");
+        server.SetOwner("fresh-test-install-001", anonymous.Id);
+        var handler = new FakeHandler(server);
+        var dir = TestEnv.NewDirectory();
+        var protector = TestEnv.Protector();
+        var original = new SessionVault(dir, protector);
+        var session = server.IssueSession(anonymous.Id);
+        session.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeSeconds();
+        original.Primary.Write(session, SlotMarker.For(SessionKind.Anonymous));
+        var baseline = TestEnv.ReadTopLevelFiles(dir);
+
+        var runtime = AccountRuntime.Create(Eval(ClaimPilot("fresh-test-install-001")),
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: handler, protector: protector, productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.True(runtime.Sessions.Status.HasLegacyOwner);
+        var token = await runtime.Sessions.GetAccessTokenAsync(SlotRole.LegacyOwner);
+        Assert.False(token.Ok);
+        Assert.Equal(SessionFault.LegacyOwnerRefreshRequired, token.Fault);
+        var claim = await runtime.Claims.StartClaimAsync("fresh-test-install-001", default);
+        Assert.Equal(ClaimStartOutcome.AnonymousTokenNeedsRefresh, claim.Outcome);
+        Assert.Null(claim.Offer);
+        Assert.Contains("normal anonymous Companion", AccountMessages.Describe(claim.Outcome));
+        Assert.Empty(server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start"));
+        Assert.Equal(baseline, TestEnv.ReadTopLevelFiles(dir));
+    }
+
+    [Fact]
     public async Task Claim_pilot_does_not_import_a_registered_production_identity()
     {
         var server = new FakeSupabase();
