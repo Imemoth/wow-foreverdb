@@ -40,4 +40,6 @@ Checked and found sound: forced RLS + no grants on all four tables, sequence and
 
 Still not covered by any test (stated, not hidden): an owner role without BYPASSRLS at run time (guarded by the pre-flight only), a deployed `Deno.serve` + bundled static asset, hosted GoTrue/Auth behaviour, real Resend.
 
+Round 2 (updated HEAD, emblem + bundle regression + account-test isolation): see the section at the end of this file.
+
 Re-run after the fixes: worker unit 25/25; SQL/GoTrue suites 67/67; mutation check OK (see [acceptance.md](acceptance.md)).

@@ -47,8 +47,12 @@ jobs:
       - name: Install web dependencies (pg driver used by the suites)
         working-directory: web
         run: npm ci
-      - name: Worker unit tests (mocked Resend and database)
-        run: node --test tests/welcome-worker/worker.test.mjs
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: '2.x' }   # real Deno runtime for the entry-point / bundle-layout tests
+      - name: Worker unit tests, emblem asset and Deno entry-point/bundle regression (mocked Resend and database)
+        run: node --test tests/welcome-worker/*.test.mjs
+        env:
+          FDB_REQUIRE_DENO: '1'
       - name: Build real GoTrue (pinned upstream release tag)
         run: database/tests/account/build-gotrue.sh
       - name: Stack up (migrations through 0012, then 0015; GoTrue mail to the in-process sink)
@@ -60,6 +64,12 @@ jobs:
       - name: Mutation check (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/welcome/mutation_check.mjs
+      - name: Compatibility - existing Account suite with 0015 applied (fresh stack, plain GoTrue config)
+        run: |
+          database/tests/account/stack.sh up
+          database/tests/account/stack.sh apply
+          PGOPTIONS="-c client_min_messages=warning" PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d fdb_account_it -f database/migrations/0015_azerdex_welcome_outbox.sql
+          node --test --test-concurrency=1 database/tests/account/*.test.mjs
       - name: GoTrue log (on failure)
         if: failure()
         run: tail -n 200 database/tests/account/.run/gotrue.log || true

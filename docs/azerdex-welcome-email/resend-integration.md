@@ -39,5 +39,5 @@ the database guarantees one durable event per user; the provider key de-duplicat
 
 ## Asset
 
-`supabase/functions/azerdex-welcome-worker/azerdex-logo.png` (128×128 PNG, ≤ 16 KB; the existing optimised rune emblem) is **not in the repository yet**. The worker validates signature,
-IHDR size and size cap before every run and sends nothing otherwise (`logo_invalid`). Supplying the asset is owner action A-1.
+`supabase/functions/azerdex-welcome-worker/azerdex-logo.png` (128×128 PNG with alpha, 6,819 B, derived from the owner's `AzerDex-Icon-128.png`; provenance and hash in the function README, pinned by `azerdex-logo.sha256`) is **committed** (G-1 closed). The worker validates signature,
+IHDR size and size cap before every run and sends nothing otherwise (`logo_invalid`). `supabase/config.toml` declares it under `static_files`; `tests/welcome-worker/asset-and-deno.test.mjs` runs the real Deno entry point against a staged bundle containing only the import graph + declared static files (with it: finds the emblem; without it: fails closed). Supabase's own bundler/deploy is still unverified (G-7 hosted part).
