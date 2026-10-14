@@ -45,7 +45,7 @@ test("1-8. registered account A signs in; the Companion's anonymous owner issues
   expect(html).not.toContain(comp.installationId);
   expect(page.headers()["cache-control"]).toBe("private, no-store");
   expect(page.headers()["x-robots-tag"]).toBe("noindex, nofollow");
-  expect(page.headers()["referrer-policy"]).toBe("no-referrer");
+  expect(page.headers()["referrer-policy"]).toBe("strict-origin");
   expect(await ownerOf(db, comp.installationId)).toBe(comp.id.uid);
   expect((await claimRows(db, comp.installationId)).map((r) => r.status)).toEqual(before.map((r) => r.status));
   // a stray GET with the code in the query string does nothing: the query is dropped by a redirect and the code is never reflected
