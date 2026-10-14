@@ -42,11 +42,11 @@ Local evidence on the fix branch before GitHub CI:
 | Focused unit/static/security suite | **140/140 pass**: proxy metadata and null-Origin edge check; enrollment route matrix; CSRF library; enrollment/account static boundaries |
 | TypeScript | `tsc --noEmit` **pass** |
 | Independent security review | **PASS after fixes**: root cause independently reproduced; no Critical production issue; one Important Playwright interception flaw fixed; no ticket RPC in corrected test |
-| Real-browser native form regression | corrected test submits through the real proxy/handler with a deliberately invalid token; local real-GoTrue execution and GitHub Actions **PENDING** |
+| Real-browser native form regression | corrected test submits through the real proxy/handler with a deliberately invalid token; Web E2E and Account web-auth (real GoTrue) **PASS** on `1b4d59c` |
 | Local lint/build/security | lint, TypeScript, production build, 47-file bundle-secret scan and production dependency audit **PASS**; audit: 0 production vulnerabilities |
 | Local full unit/static/security suite | **396/397** on Windows: only the unchanged CRLF-sensitive Markdown-fence check fails; the other **360/360 pass** when that file is excluded; Linux CI is authoritative |
-| Integration workflows and CodeQL | **PENDING** |
-| Fix-branch Vercel Preview and owner download | **PENDING; do not use the old #56 Preview as fix evidence** |
+| GitHub CI and CodeQL | **PASS** on `1b4d59c`: Web quality/E2E/release gate, Account web-auth/E2E/ownership SQL, Windows Companion, publisher/pipeline, collector smoke and CodeQL. SQL race job passed isolated rerun after one stochastic `device_limit` failure; no source change. |
+| Fix-branch Vercel Preview | **READY** on `1b4d59c`: `wow-foreverdb-git-fix-zero-touch-enrol-c79f66-imemoths-projects.vercel.app`; protected runtime header check and owner download **PENDING**. Do not use the old #56 Preview as fix evidence. |
 
 No Production deployment, Supabase migration/schema/data change, ticket issuance, AutoSync change, installer rebuild or live activation occurred.
 The detailed security argument and Preview/Windows continuation gate are in [activation-download-origin-fix.md](activation-download-origin-fix.md).

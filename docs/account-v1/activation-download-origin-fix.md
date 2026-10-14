@@ -57,8 +57,25 @@ does not match the CRLF checkout. The Linux CI result is authoritative for that 
 An independent security review confirmed the root cause and found no Critical production issue. Its one Important finding was that Playwright
 request interception happens before Chromium attaches Fetch Metadata, making the first form-test assertion invalid. The corrected test now reaches
 the real server and deliberately fails at the distinct session-bound token verdict; this proves the real request passed both metadata gates while
-preventing authentication and the ticket RPC. Review whitespace findings were also fixed. GitHub Actions conclusions and the fix-branch Preview
-remain **PENDING** until the branch is published.
+preventing authentication and the ticket RPC. Review whitespace findings were also fixed.
+
+GitHub Actions on code/evidence commit `1b4d59c` are **PASS**: Web code quality, Web E2E (Playwright), Web release gate, both CodeQL checks,
+Account web auth (real GoTrue), Account end-to-end (GoTrue + PostgREST), Account ownership SQL + real GoTrue, Windows Companion account auth,
+publisher/pipeline and collector smoke. The SQL job's first attempt exposed the existing 30-round race test's stochastic interaction with the
+10-device limit (`device_limit` instead of `ticket_revoked`); its isolated rerun passed without a source change. Supabase Preview was intentionally
+skipped because per-PR database branches are disabled; this web-only change neither needs nor creates one.
+
+Evidence: [web / Playwright / release / CodeQL run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338234),
+[Account web-auth run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338193),
+[Account end-to-end run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338171),
+[Account ownership SQL rerun](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338196),
+[Windows Companion run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338192), and
+[collector smoke run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38548338262).
+
+Vercel deployment `dpl_7dxVjwjeLSmZjPitMSeXXEksTgCu` for exact commit `1b4d59c` is **READY** at
+`https://wow-foreverdb-git-fix-zero-touch-enrol-c79f66-imemoths-projects.vercel.app`. It remains protected by Vercel SSO/Deployment Protection.
+The automation connection could inspect deployment metadata but was not authorized to create a protection-bypass link, so no runtime sign-in,
+header check or ticket issuance was attempted. That is an owner acceptance step, not a reason to weaken protection.
 
 ## Preview-only validation and PR #57 continuation gate
 
@@ -79,5 +96,5 @@ The old #56 Preview URL points at the old #56 branch and cannot prove this separ
    the already reviewed process-local settings, confirm exactly one new test device appears, and perform at most the separately approved manual
    Sync Now. Preserve the six anonymous installations, 140 source-stat rows and 46 Guildbook members.
 
-Owner acceptance remains **BLOCKED** until steps 2-4 have green evidence and the owner explicitly authorizes the one live ticket. Windows Z2/Z3
+Owner acceptance remains **BLOCKED** until the owner completes the protected runtime checks in steps 2-4 and explicitly authorizes the one live ticket. Windows Z2/Z3
 can then continue with the existing #57 artifact and test profile; Z13 public one-download packaging remains independently BLOCKED.
