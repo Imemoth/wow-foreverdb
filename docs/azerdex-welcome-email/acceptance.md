@@ -18,7 +18,7 @@ Runs: 2026-10-13/14. Environment: Linux, PostgreSQL 16.15 (disposable cluster, `
 | --- | --- |
 | `DENO_BIN=… FDB_REQUIRE_DENO=1 node --test tests/welcome-worker/*.test.mjs` | **32 / 32 pass** — worker 25, emblem/bundle regression (`asset-and-deno.test.mjs`) 7 |
 | `database/tests/welcome/stack.sh up` + `node --test --test-concurrency=1 database/tests/welcome/*.test.mjs` | **67 / 67 pass** — privileges 9, real-GoTrue provenance 20, worker RPCs 26, worker↔DB 8, rollback/kill-switch/reinstall 4 |
-| `node database/tests/welcome/mutation_check.mjs` | 20 mutants: **17 killed, 3 survivors, all documented equivalents / defence-in-depth**; original restored |
+| `node database/tests/welcome/mutation_check.mjs` (final migration text) | 20 mutants: **18 killed, 2 survivors, both documented equivalents / defence-in-depth** (the "confirmation_token just cleared" sub-condition, which the one-time-token and `recovery_sent_at` checks already cover; `SKIP LOCKED` removal, which under READ COMMITTED only changes blocking); original restored |
 | Existing Account suite on a fresh stack with 0012 **and 0015** applied (`node --test --test-concurrency=1 database/tests/account/*.test.mjs`) | **219 / 219 pass** (`01_privileges.test.mjs` excludes 0015's 12 functions **by exact signature**; negative check: adding one stray function makes that assertion fail, removing it passes) |
 | `web`: `npm run lint`, `npm run typecheck`, `npx vitest run` | clean, clean, **332 / 332** (no web file changed) |
 
