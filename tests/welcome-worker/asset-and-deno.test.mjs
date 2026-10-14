@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { crc32 } from "node:zlib";
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs";
@@ -31,6 +32,25 @@ test("AS-1 the emblem is committed, a valid 128x128 PNG, within the cap, with an
   assert.ok(colorType === 6 || (colorType === 3 && Buffer.from(bytes).includes(Buffer.from("tRNS"))), `colour type ${colorType}`);
 });
 
+test("AS-1b the emblem decodes structurally: every chunk CRC valid, IHDR first, IDAT present, IEND last with no trailing bytes, no text/exif chunks", () => {
+  const b = fs.readFileSync(png);
+  let off = 8;
+  const types = [];
+  while (off < b.length) {
+    const len = b.readUInt32BE(off);
+    const type = b.toString("ascii", off + 4, off + 8);
+    const data = b.subarray(off + 8, off + 8 + len);
+    assert.equal(b.readUInt32BE(off + 8 + len), crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), `CRC of ${type}`);
+    types.push(type);
+    off += 12 + len;
+  }
+  assert.equal(off, b.length, "no trailing bytes after the last chunk");
+  assert.equal(types[0], "IHDR");
+  assert.equal(types.at(-1), "IEND");
+  assert.ok(types.includes("IDAT"));
+  assert.deepEqual(types.filter((t) => !["IHDR", "PLTE", "tRNS", "IDAT", "IEND"].includes(t)), [], "only critical chunks (+tRNS): nothing that can carry metadata or a payload");
+});
+
 test("AS-2 the emblem is the pinned asset (a changed file must be a conscious, reviewed change)", () => {
   const sha = createHash("sha256").update(fs.readFileSync(png)).digest("hex");
   const recorded = fs.readFileSync(path.join(fnDir, "azerdex-logo.sha256"), "utf8").trim().split(/\s+/)[0];
@@ -38,7 +58,7 @@ test("AS-2 the emblem is the pinned asset (a changed file must be a conscious, r
 });
 
 test("AS-3 supabase/config.toml declares the emblem as a static file of exactly this function, and the code reads that same name", () => {
-  const m = configToml.match(/\[functions\.azerdex-welcome-worker\][^[]*?static_files\s*=\s*\[([^\]]*)\]/s);
+  const m = configToml.match(/^\[functions\.azerdex-welcome-worker\][^[]*?^static_files\s*=\s*\[([^\]]*)\]/ms); // line-anchored: a commented-out entry does not count
   assert.ok(m, "static_files is declared under [functions.azerdex-welcome-worker]");
   const files = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
   assert.deepEqual(files, ["./functions/azerdex-welcome-worker/azerdex-logo.png"]);
@@ -89,7 +109,7 @@ async function runEntry({ entry, dir }, dbCalls) {
   await new Promise((r) => probe.listen(0, "127.0.0.1", r));
   const port = probe.address().port;
   await new Promise((r) => probe.close(r));
-  const child = spawn(denoBin, ["run", `--allow-net=127.0.0.1`, `--allow-read=${dir}`, "--allow-env", entry], {
+  const child = spawn(denoBin, ["run", `--allow-net=127.0.0.1:${port},127.0.0.1:${dbPort}`, `--allow-read=${dir}`, "--allow-env=AZERDEX_WELCOME_ENABLED,AZERDEX_WELCOME_MODE,AZERDEX_WELCOME_MAX_PER_RUN,AZERDEX_WORKER_SECRET,RESEND_API_KEY,SUPABASE_URL,AZERDEX_WORKER_DB_KEY,SUPABASE_SERVICE_ROLE_KEY", entry], {
     env: {
       PATH: process.env.PATH, HOME: dir, DENO_DIR: path.join(dir, ".deno"),
       DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${port}`,

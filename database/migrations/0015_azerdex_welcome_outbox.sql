@@ -571,7 +571,8 @@ begin
     update private.azerdex_welcome_outbox
        set status = 'retry', attempts = 0, idem_epoch = idem_epoch + 1, first_send_at = null, unknown_outcome = false,
            next_attempt_at = now(), lease_until = null, lease_token = null, last_error_code = null, updated_at = now()
-     where user_id = p_user_id and status in ('review_required', 'suppressed');
+     where user_id = p_user_id and status = 'review_required';
+    -- A 'suppressed' row had its address hash zeroed: it could never pass the claim-time hash check again, so it is not requeueable.
     return found;
 end
 $fn$;

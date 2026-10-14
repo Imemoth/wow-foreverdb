@@ -5,7 +5,7 @@ for experiments), and requires the owner approvals in [acceptance.md](acceptance
 
 ## 1. Prerequisites (do not skip)
 
-1. Gate B-1: `https://azerdex.com/` is publicly reachable and useful (Vercel Deployment Protection / SSO not blocking it). If not, do not enable sending.
+1. Gate B-1: `https://azerdex.com/` is publicly reachable **for an anonymous visitor** and useful. The domain is assigned and verified, but Vercel Authentication (SSO) protects all deployments of the project; confirm from a logged-out browser (`curl -sI https://azerdex.com/` → 200, not 401/login redirect). Changing protection needs owner approval. If not satisfied, do not enable sending.
 2. Gate G-2: re-run `database/tests/welcome/20_gotrue_provenance.test.mjs` logic against the hosted Auth version on staging (signup → confirm = 1 event; recovery on an unconfirmed signup = 0 events).
 3. Asset: `supabase/functions/azerdex-welcome-worker/azerdex-logo.png` is committed. After the first staging deploy, confirm the deployed function finds it: an authorized invocation must answer `state: ok` (or `disabled`), **never** `logo_invalid`.
 4. Resend: domain `azerdex.com` verified, sending enabled, **open and click tracking OFF** — *owner-attested 2026-10-14 (G-5 PASS, not independently verifiable from this repository; re-check in the dashboard before first send)*. Create a **sending-only** API key restricted to that domain.
@@ -77,6 +77,7 @@ Re-enable only after the cause is understood: `database/rollback/0015_kill_switc
 2. In the Resend dashboard search that recipient + subject within the first-attempt window.
 3. **A message exists** → `select private.azerdex_welcome_operator_resolve('<user_id>', true, '<resend id>');` (marks sent, erases the hash).
 4. **No message exists** → `select private.azerdex_welcome_operator_requeue('<user_id>', true);` (new idempotency key, fresh attempts). The `true` is your explicit statement that the provider history shows nothing sent.
+(A `suppressed` event cannot be requeued: its address hash was erased. If a genuinely verified user must be welcomed after all, that is a new, separately approved action, not a retry.)
 5. **Unsure / address no longer valid / user asked to stop** → `select private.azerdex_welcome_operator_resolve('<user_id>', false, null);` (suppressed).
 Never re-send "just in case": a duplicate welcome is a worse outcome than a missed one. There is no public resend button.
 

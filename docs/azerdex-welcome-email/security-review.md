@@ -40,6 +40,18 @@ Checked and found sound: forced RLS + no grants on all four tables, sequence and
 
 Still not covered by any test (stated, not hidden): an owner role without BYPASSRLS at run time (guarded by the pre-flight only), a deployed `Deno.serve` + bundled static asset, hosted GoTrue/Auth behaviour, real Resend.
 
-Round 2 (updated HEAD, emblem + bundle regression + account-test isolation): see the section at the end of this file.
-
 Re-run after the fixes: worker unit 25/25; SQL/GoTrue suites 67/67; mutation check OK (see [acceptance.md](acceptance.md)).
+
+## Round 2 — final review of the updated head (`8b3abe7`, emblem + bundle regression + account-test isolation)
+
+**Security reviewer: no high or medium finding.** Re-verified from scratch: no enqueue/edit/read path for anon, authenticated or other users; provenance (recovery links keep `recovery_sent_at`; e-mail change leaves `confirmation_token`; invites/anonymous excluded; only false negatives); worker auth and leakage; no double send inside or after the idempotency window; scheduler secret handling. The emblem is a plain 128×128 8-bit palette PNG with only IHDR/PLTE/tRNS/IDAT/IEND chunks, valid CRCs, no trailing bytes, sha256 matches.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | low | Scheduler script interpolates the secret into SQL text; a failed `cat` stores an empty secret | **Fixed**: length ≥ 32 guard, abort otherwise; statement-log caveat documented in the script |
+| 2 | low | `operator_requeue` accepted `suppressed` rows whose hash is erased (could never send; misleading) | **Fixed**: only `review_required`; WK-23 asserts it |
+| 3 | low | `denoland/setup-deno@v2` tag-pinned, Deno version floating | **Partly fixed**: Deno version pinned (2.9.6). The action stays tag-pinned like every workflow in this repo (SHA-pinning repo-wide is a separate change) |
+| 4 | low | Deno permission flags broader than needed; probe-port race | **Fixed**: `--allow-net` limited to the two ports, `--allow-env` to the 8 names. Port race (rare) accepted |
+| info | | provenance reads GoTrue internals (fails closed); emblem presence in the *hosted* bundle unproven; worker URL internet-reachable without rate limit | Documented: G-2, G-7 (hosted), `verified_not_enqueued` alert in the runbook |
+
+**Integration/evidence auditor:** scope clean (nothing outside `database/`, `supabase/`, `tests/welcome-worker/`, `docs/`, the welcome workflow; the only existing test file touched is `database/tests/account/01_privileges.test.mjs`, one signature-exact exclusion, not edited on #56); `git merge-tree` against #56 merges clean (only `docs/ROADMAP.md`, different hunks); 0014 and 0015 do not collide (0014 writes nothing on `auth.users`, no triggers). Documentation contradictions it listed (stale Vercel facts, G-1/G-5/G-7 statuses, 218/219 and "unchanged" claims, counts, dangling reference) were **corrected**; test gaps (AS-3 regex also matched a commented-out entry; no PNG chunk/CRC walk) were **fixed** (AS-1b; mutation-checked: commenting out `static_files` fails AS-3). No suite applies 0014 and 0015 together — they are independent by name; flagged for the owner's merge-order check.

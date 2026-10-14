@@ -48,7 +48,7 @@ jobs:
         working-directory: web
         run: npm ci
       - uses: denoland/setup-deno@v2
-        with: { deno-version: '2.x' }   # real Deno runtime for the entry-point / bundle-layout tests
+        with: { deno-version: '2.9.6' }   # real Deno runtime for the entry-point / bundle-layout tests
       - name: Worker unit tests, emblem asset and Deno entry-point/bundle regression (mocked Resend and database)
         run: node --test tests/welcome-worker/*.test.mjs
         env:
@@ -64,7 +64,7 @@ jobs:
       - name: Mutation check (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/welcome/mutation_check.mjs
-      - name: Compatibility - existing Account suite with 0015 applied (fresh stack, plain GoTrue config)
+      - name: Compatibility - existing Account suite with 0015 applied (exercises the exact-signature exclusion in 01_privileges.test.mjs) (fresh stack, plain GoTrue config)
         run: |
           database/tests/account/stack.sh up
           database/tests/account/stack.sh apply

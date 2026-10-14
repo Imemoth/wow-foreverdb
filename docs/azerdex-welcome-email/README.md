@@ -50,4 +50,4 @@ Known, documented edge cases of the rule: *recovery requested before the signup 
 ## Safety posture of this PR
 
 All switches ship OFF (`enqueue_enabled`, `dispatch_enabled` default `false`; worker flag `AZERDEX_WELCOME_ENABLED` unset = off). The migration is not applied
-anywhere, the function is not deployed, no cron is scheduled, no secret exists. #53–#56 are untouched; no web, Companion, addon or Vercel file changed.
+anywhere, the function is not deployed, no cron is scheduled, no secret exists. The #53–#56 chain is untouched (the only existing test file edited is `database/tests/account/01_privileges.test.mjs`: an exact-signature exclusion of 0015's 12 functions, not on any chain branch); no web, Companion, addon or Vercel file changed.

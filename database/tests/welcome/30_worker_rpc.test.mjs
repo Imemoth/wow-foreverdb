@@ -275,7 +275,11 @@ test("WK-23 a given-back attempt (circuit_open) does not start the idempotency c
   await finish(w.owner, { user_id: u.id, lease_token: job.lease_token, outcome: "retry", error_code: "circuit_open" });
   const r = await outboxRow(w.sup, u.id);
   assert.deepEqual([r.attempts, r.first_send_at], [0, null]);
-  assert.equal((await w.owner.query(`select private.azerdex_welcome_operator_requeue($1, true) ok`, [u.id])).rows[0].ok, false, "only review_required/suppressed rows can be requeued");
+  assert.equal((await w.owner.query(`select private.azerdex_welcome_operator_requeue($1, true) ok`, [u.id])).rows[0].ok, false, "only review_required rows can be requeued");
+  await w.sup.query(`update auth.users set deleted_at = now() where id=$1`, [u.id]);
+  await w.sup.query(`update private.azerdex_welcome_outbox set next_attempt_at = now() where user_id=$1`, [u.id]);
+  await claim(w.owner, 5); // suppressed (deleted) -> hash zeroed
+  assert.equal((await w.owner.query(`select private.azerdex_welcome_operator_requeue($1, true) ok`, [u.id])).rows[0].ok, false, "a suppressed row (hash erased) cannot be requeued");
 });
 
 test("WK-24 backoff grows 60 s, 120 s, 240 s... and is capped at 1 h", async () => {

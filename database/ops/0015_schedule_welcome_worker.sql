@@ -7,6 +7,15 @@
 --   psql "$DB_URL" -v fn_url="https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker" -f this.sql
 -- NOTE: secrets are created only if absent. To ROTATE, use vault.update_secret (runbook §6), not this script.
 \set worker_secret `cat /dev/shm/azerdex_worker_secret`
+-- Refuse to run with a missing/short secret (a failed `cat` yields an empty string, which Vault would happily store).
+select (length(:'worker_secret') >= 32) as secret_ok \gset
+\if :secret_ok
+\else
+\echo 'refusing: /dev/shm/azerdex_worker_secret is missing or shorter than 32 characters'
+\quit 1
+\endif
+-- NOTE: the secret value is part of the SQL text sent to the server. On a self-managed server with log_statement=all (or an error that logs
+-- the statement) it could reach the server log; Supabase-hosted projects do not log statement text by default. Check log settings first.
 -- Scheduling does NOT start sending: the worker flag AZERDEX_WELCOME_ENABLED and both database switches must also be ON (runbook §5).
 \set ON_ERROR_STOP on
 begin;

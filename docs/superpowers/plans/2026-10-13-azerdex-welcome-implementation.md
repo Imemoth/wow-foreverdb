@@ -10,9 +10,9 @@
 | `main` | `ecda356`; migrations 0001–0012 (0010 reserved/unapplied under `private-export/`; 0013 exists only as `database/restore/`). |
 | PR chain | #53 → #54 → #55 → #56, all **draft/open**, heads `039d51a`, `b6c1937`, `f7b35e8`, `aa63f97`. #56 adds `0014_zero_touch_enrollment.sql` and edits `database/tests/account/stack.sh`. **Not touched, not rebased, not merged.** |
 | Migration ID | `0014` reserved (#56); no `0015` anywhere on any chain branch → **`0015`**. 0015 references no 0012/0014 object and 0014 none of 0015's, so merge order is irrelevant. |
-| Test harness | `database/tests/account/` (real GoTrue v2.197.0 + PostgreSQL 16, PostgREST emulated). Re-used unchanged; the welcome suites add their own `stack.sh` wrapper (SMTP sink, higher rate limits). |
+| Test harness | `database/tests/account/` (real GoTrue v2.197.0 + PostgreSQL 16, PostgREST emulated). Re-used; the welcome suites add their own `stack.sh` wrapper (SMTP sink, higher rate limits). The only edit to the existing suite is an exact-signature exclusion of 0015's 12 functions in `01_privileges.test.mjs` (see acceptance). |
 | Existing UX | `/account/api/confirm` → `/account?welcome=1` shows "Your email address is confirmed. Welcome to ForeverDB." — states only the verified fact, never "email sent". **No web change is needed or made.** |
-| CTA gate | Read-only Vercel check (2026-10-13): project `wow-foreverdb` has `ssoProtection: enabled (all deployments)`, `azerdex.com` is **not** among its domains, `live: false`. **Release blocker B-1** (see acceptance record). |
+| CTA gate | Read-only Vercel check (rechecked 2026-10-14, correcting an earlier misread): `azerdex.com` **is** assigned to `wow-foreverdb` (verified, DNS ok) and aliased to a READY production-target deployment, but the project has `ssoProtection: enabled (all deployments)`. Anonymous reachability not tested. **B-1 stays open** (see acceptance record). |
 | Resend | Template + CID attachment in one send is **unproven** (no provider access here; docs show attachments only with `html`/`text` examples). Implemented both modes; default = rendered HTML (proven path). **Owner gate G-4.** |
 
 ## Tasks
@@ -23,7 +23,7 @@
 | 2 | Migration `0015`: private config/candidates/outbox/failures tables, RLS forced, no grants, FK `ON DELETE CASCADE`, hashed recipient | `10_privileges.test.mjs` (9) | done |
 | 3 | Triggers on `auth.users` (signup candidate; confirm provenance → one event), no I/O, swallow + record failures, bounded reconciler | `20_gotrue_provenance.test.mjs` (20, real GoTrue) | done |
 | 4 | Worker RPCs `azerdex_welcome_claim/_finish/_stats` (service_role only), leases, skip-locked, retry/unknown-outcome/idempotency-window, re-verification at dispatch, operator procedures, prune | `30_worker_rpc.test.mjs` (26) | done |
-| 5 | Edge Function worker: config/flags, logo validation, payload (rendered HTML + text, or template), Resend taxonomy, run loop with circuit breaker, authenticated entry | `tests/welcome-worker/worker.test.mjs` (25) | done |
+| 5 | Edge Function worker: config/flags, logo validation, payload (rendered HTML + text, or template), Resend taxonomy, run loop with circuit breaker, authenticated entry | `tests/welcome-worker/*.test.mjs` (32, incl. real-Deno entry/bundle regression) | done |
 | 6 | Worker ↔ database integration (parallel workers, 429, timeout, crash, stale accounts, flags, recovery path) | `40_worker_e2e.test.mjs` (8) | done |
 | 7 | Rollback / kill switch / reinstall / preservation of pre-existing functions | `50_rollback.test.mjs` (4) | done |
 | 8 | Mutation check of the migration (20 mutants) | `mutation_check.mjs` | done (manual workflow) |
@@ -37,7 +37,7 @@
 
 1. `node --test tests/welcome-worker/worker.test.mjs` (no database).
 2. Stack up + `node --test --test-concurrency=1 database/tests/welcome/*.test.mjs` (real GoTrue).
-3. Account SQL suite unchanged and green with 0015 applied (regression).
+3. Account SQL suite green with 0015 applied (regression; only the exact-signature exclusion was added).
 4. Web `lint`, `typecheck`, `vitest` unchanged (no web file is modified).
 5. Independent reviews resolved.
 

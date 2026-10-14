@@ -15,7 +15,7 @@ Secrets (Supabase Edge Function secrets only): `AZERDEX_WELCOME_ENABLED` (exact 
 `SUPABASE_SERVICE_ROLE_KEY`), optional `AZERDEX_WELCOME_MODE` (`html` default | `template`), `AZERDEX_WELCOME_MAX_PER_RUN` (1–10; 0, negative or unparsable = 1).
 `SUPABASE_URL` is provided by the platform. Never put any of these in Vercel, the web app, Companion, addon or git.
 
-Tests: `node --test tests/welcome-worker/worker.test.mjs` (Node 22.18+/24, type stripping; no Deno needed).
+Tests: `node --test tests/welcome-worker/*.test.mjs` (Node 22.18+/24 type stripping). `worker.test.mjs` needs no Deno; `asset-and-deno.test.mjs` runs the real Deno entry point against a staged bundle and needs `deno` (`DENO_BIN`, `FDB_REQUIRE_DENO=1` makes a missing Deno a failure instead of a skip).
 
 ## Emblem provenance (`azerdex-logo.png`)
 
