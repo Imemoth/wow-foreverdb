@@ -132,4 +132,3 @@ Push `fix/zero-touch-enrollment-origin-403`; create a draft PR against `account/
 - [ ] **Step 5: Inspect Actions and Preview**
 
 Wait for relevant GitHub Actions. Report each workflow conclusion and whether a new Vercel Preview exists. If Preview is unavailable, document the exact safe redeploy/test procedure without generating a ticket.
-
