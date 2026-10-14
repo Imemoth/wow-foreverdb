@@ -41,8 +41,11 @@ Local evidence on the fix branch before GitHub CI:
 | TDD reproduction | **RED as expected:** proxy Account-page response was `no-referrer`, not required `strict-origin` |
 | Focused unit/static/security suite | **140/140 pass**: proxy metadata and null-Origin edge check; enrollment route matrix; CSRF library; enrollment/account static boundaries |
 | TypeScript | `tsc --noEmit` **pass** |
-| Real-browser native form regression | test added to `tests/account/security.spec.ts`; local real-GoTrue execution and GitHub Actions **PENDING** |
-| Full lint/unit/build/bundle scan, integration workflows, CodeQL | **PENDING** |
+| Independent security review | **PASS after fixes**: root cause independently reproduced; no Critical production issue; one Important Playwright interception flaw fixed; no ticket RPC in corrected test |
+| Real-browser native form regression | corrected test submits through the real proxy/handler with a deliberately invalid token; local real-GoTrue execution and GitHub Actions **PENDING** |
+| Local lint/build/security | lint, TypeScript, production build, 47-file bundle-secret scan and production dependency audit **PASS**; audit: 0 production vulnerabilities |
+| Local full unit/static/security suite | **396/397** on Windows: only the unchanged CRLF-sensitive Markdown-fence check fails; the other **360/360 pass** when that file is excluded; Linux CI is authoritative |
+| Integration workflows and CodeQL | **PENDING** |
 | Fix-branch Vercel Preview and owner download | **PENDING; do not use the old #56 Preview as fix evidence** |
 
 No Production deployment, Supabase migration/schema/data change, ticket issuance, AutoSync change, installer rebuild or live activation occurred.

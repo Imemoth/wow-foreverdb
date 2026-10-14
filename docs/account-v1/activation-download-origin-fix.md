@@ -49,8 +49,16 @@ The fix branch adds or retains checks for:
 - anonymous, dead/expired, unconfirmed and anonymous Auth users;
 - zero ticket RPC calls for the complete rejection matrix.
 
-Pre-PR local evidence: the focused suite is **140/140 pass** and TypeScript is clean. Full local verification, independent security review, GitHub
-Actions conclusions and the fix-branch Preview are recorded only after they actually run; until then they remain **PENDING**.
+Pre-PR local evidence on commit `0058f58`: focused suite **140/140 pass**; all other unit/static/security tests **360/360 pass**; TypeScript,
+lint, production build, the 47-file bundle-secret scan and production dependency audit pass (0 vulnerabilities). The one full-suite exception is an
+unchanged, Windows-only CRLF portability failure in `account-migration-conformance.test.ts` (`396/397` overall): its LF-only Markdown fence regex
+does not match the CRLF checkout. The Linux CI result is authoritative for that unrelated test.
+
+An independent security review confirmed the root cause and found no Critical production issue. Its one Important finding was that Playwright
+request interception happens before Chromium attaches Fetch Metadata, making the first form-test assertion invalid. The corrected test now reaches
+the real server and deliberately fails at the distinct session-bound token verdict; this proves the real request passed both metadata gates while
+preventing authentication and the ticket RPC. Review whitespace findings were also fixed. GitHub Actions conclusions and the fix-branch Preview
+remain **PENDING** until the branch is published.
 
 ## Preview-only validation and PR #57 continuation gate
 
