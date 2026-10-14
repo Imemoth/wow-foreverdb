@@ -27,7 +27,28 @@ the installation completed without error; the application launched; the main win
 The production project was not used in this smoke test. **No Z2-Z12 staging/production E2E PASS is claimed.**
 A fresh checkout/CI run is required if later documentation or code commits change the final SHA.
 
-## 3. Remaining owner / staging / production acceptance (Z2-Z12 not executed)
+## 3. Activation-download 403 repair evidence (2026-10-14)
+
+Root cause is **CONFIRMED**: Account HTML sent `Referrer-Policy: no-referrer`; a native non-CORS form POST therefore reached the Preview with
+literal `Origin: null`, and the fail-closed proxy correctly returned 403 before the enrollment route. The fix changes only Account HTML to
+`strict-origin`. Account paths, queries and `token_hash` values remain absent from Referer; Account API/file responses remain `no-referrer`;
+literal `null`, foreign/cross-site requests and invalid HMAC tokens remain refused.
+
+Local evidence on the fix branch before GitHub CI:
+
+| Gate | Result |
+| --- | --- |
+| TDD reproduction | **RED as expected:** proxy Account-page response was `no-referrer`, not required `strict-origin` |
+| Focused unit/static/security suite | **140/140 pass**: proxy metadata and null-Origin edge check; enrollment route matrix; CSRF library; enrollment/account static boundaries |
+| TypeScript | `tsc --noEmit` **pass** |
+| Real-browser native form regression | test added to `tests/account/security.spec.ts`; local real-GoTrue execution and GitHub Actions **PENDING** |
+| Full lint/unit/build/bundle scan, integration workflows, CodeQL | **PENDING** |
+| Fix-branch Vercel Preview and owner download | **PENDING; do not use the old #56 Preview as fix evidence** |
+
+No Production deployment, Supabase migration/schema/data change, ticket issuance, AutoSync change, installer rebuild or live activation occurred.
+The detailed security argument and Preview/Windows continuation gate are in [activation-download-origin-fix.md](activation-download-origin-fix.md).
+
+## 4. Remaining owner / staging / production acceptance (Z2-Z12 not executed)
 
 
 
@@ -50,7 +71,7 @@ A fresh checkout/CI run is required if later documentation or code commits chang
 Production data checks (read-only, before and after any production step): the six anonymous installation ids keep `owner_user_id` and row counts; linked
 installation `2f8df8ba69345d0a14c8d56ac86d4b2e` keeps 140 source-stats and 46 Guildbook members. This PR did not touch production.
 
-## 4. Remaining blockers and risks (owner decisions)
+## 5. Remaining blockers and risks (owner decisions)
 
 1. First-redeemer theft of an unused ticket is bounded, not prevented (ADR-017 §4). Decide on re-approval (`pending_approval` status is reserved).
 2. No cryptographic proof-of-possession of a device key (needs an Edge Function backend, ADR-017 §6).

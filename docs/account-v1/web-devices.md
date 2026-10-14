@@ -28,6 +28,12 @@ own anonymous identity) are not in any registry the website can reach and are re
 A browser form navigation (`Accept: text/html`) gets the same failure as a `303` back to `/account/devices?notice=<code>` (closed code list, never
 request data); programs get the JSON status.
 
+The `/account/devices` HTML page uses `Referrer-Policy: strict-origin`, not `no-referrer`: Fetch/Referrer Policy rules otherwise serialize the
+Origin of a native non-CORS form POST as literal `null`. `strict-origin` makes the same-origin download POST carry the exact site Origin while
+Referer remains origin-only (no Account path/query). The proxy and form handler still reject literal `Origin: null`, foreign Origin,
+`Sec-Fetch-Site` other than `same-origin`, wrong content type, and invalid/session-foreign/expired HMAC CSRF tokens before ticket issuance.
+The activation-file response itself remains `Referrer-Policy: no-referrer` as listed above.
+
 ## Threat notes
 
 - **CSRF on a form post.** A form cannot send the JSON content type or the custom header, so the download uses a different, equally strong proof:

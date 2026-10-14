@@ -3,6 +3,12 @@
 **Status:** SPECIFICATION / DRAFT PR ONLY. No implementation, main/release merge, new live migration, public download, or live account/device enrollment is authorized by this document.
 **Owner decision (2026-10-13):** One joined development milestone for registered Companion ingestion and invisible account enrollment. User should sign in once to the **ForeverDB website**, and need neither a separate Companion sign-in nor claim-code entry for a *new* installation downloaded while signed in. Downloading on home and workplace PCs must create **two distinct revocable installations** under the same registered account.
 
+**Activation-download repair (2026-10-14):** the protected Preview reproduced `403 {"error":"forbidden"}` on the native
+`POST /account/api/enrollment/download` with literal `Origin: null`, `Sec-Fetch-Site: same-origin`. Root cause and the bounded web-only fix are
+recorded in [activation-download-origin-fix.md](activation-download-origin-fix.md). The fix changes Account HTML referrer policy so the browser
+sends the concrete Preview Origin; it does not accept `null`, alter ticket/RPC behavior, touch migration 0014 or data, enable AutoSync, or require
+a new #57 installer/Windows profile.
+
 ## Product contract
 
 ### A. Registered website download: zero-touch first use
