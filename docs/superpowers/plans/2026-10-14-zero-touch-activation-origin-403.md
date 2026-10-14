@@ -58,7 +58,7 @@ Add literal `Origin: null` and expired session-bound HMAC token cases to `accoun
 
 - [ ] **Step 4: Add the real-browser regression**
 
-In `tests/account/security.spec.ts`, intercept (do not execute) the enrollment download POST from the real server-rendered Devices form. Assert the browser sends `Origin: http://localhost:3210`, `Sec-Fetch-Site: same-origin`, urlencoded content type, and only the origin (not `/account/devices` or a query) in Referer. Update page-vs-API referrer assertions: HTML `strict-origin`, Account APIs `no-referrer`.
+In `tests/account/security.spec.ts`, submit the real server-rendered Devices form with a deliberately invalid CSRF value so processing stops before authentication or ticket issuance. Assert the browser sends `Origin: http://localhost:3210`, urlencoded content type, and only the origin (not `/account/devices` or a query) in Referer; assert the server reaches the token rejection, proving the request passed both Fetch Metadata gates. Update page-vs-API referrer assertions: HTML `strict-origin`, Account APIs `no-referrer`.
 
 - [ ] **Step 5: Implement the minimal policy fix**
 

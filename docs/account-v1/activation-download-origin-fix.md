@@ -1,7 +1,7 @@
 # Activation-file download `Origin: null` / 403 repair
 
-**Date:** 2026-10-14  
-**Scope:** web-only repair stacked on PR #56; PR #57 remains OWNER-ONLY / NEVER MERGE.  
+**Date:** 2026-10-14
+**Scope:** web-only repair stacked on PR #56; PR #57 remains OWNER-ONLY / NEVER MERGE.
 **Safety state:** no Production deployment, live database/schema mutation, installer rebuild, AutoSync change or activation-ticket use is authorized by this document.
 
 ## Root cause — CONFIRMED
@@ -39,8 +39,9 @@ The change deliberately does **not**:
 The fix branch adds or retains checks for:
 
 - real proxy response policy for `/account/devices` (`strict-origin`);
-- real-browser submission from the server-rendered Devices form: concrete same-origin Origin, `Sec-Fetch-Site: same-origin`, urlencoded body, and
-  origin-only Referer; the test intercepts the request, so it issues no ticket;
+- real-browser submission from the server-rendered Devices form through the real proxy and route: concrete same-origin Origin, urlencoded body,
+  origin-only Referer, and a deliberate invalid-token rejection proving that the browser-supplied Fetch Metadata passed both request gates before
+  processing stopped (no ticket RPC);
 - normal same-origin route POST producing the activation attachment;
 - literal `Origin: null`, foreign Origin, cross-site/same-site Fetch Metadata and missing request metadata;
 - missing, malformed, other-session, anonymous-bound, wrong-key and expired HMAC CSRF tokens;

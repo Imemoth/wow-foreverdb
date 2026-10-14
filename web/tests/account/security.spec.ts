@@ -308,17 +308,23 @@ test.describe("15. caching, noindex, referrer, CSP on every account response", (
     const ctx = await browser.newContext({ baseURL: SITES.main, extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
     await ctx.addCookies((await c.storageState()).cookies);
     const page = await ctx.newPage();
-    await page.route("**/account/api/enrollment/download", (route) => route.fulfill({ status: 204 }));
     await page.goto("/account/devices");
+    await page.locator('input[name="csrf"]').evaluate((field) => { (field as HTMLInputElement).value = "v1.invalid"; });
     const requestPromise = page.waitForRequest("**/account/api/enrollment/download");
-    await page.getByRole("button", { name: "Download activation file for a new computer" }).click();
+    await Promise.all([
+      page.waitForURL("**/account/devices?notice=csrf"),
+      page.getByRole("button", { name: "Download activation file for a new computer" }).click(),
+    ]);
     const request = await requestPromise;
     const headers = request.headers();
     expect(request.method()).toBe("POST");
     expect(headers.origin).toBe(ORIGINS.main);
-    expect(headers["sec-fetch-site"]).toBe("same-origin");
     expect(headers["content-type"]).toMatch(/^application\/x-www-form-urlencoded/);
     expect(headers.referer).toBe(`${ORIGINS.main}/`);
+    expect(new URLSearchParams(request.postData() ?? "").get("csrf")).toBe("v1.invalid");
+    // Reaching the form-token verdict proves the real network request passed the proxy and handler Origin/Fetch-Metadata checks.
+    // The invalid token stops processing before authentication or the ticket-issuing RPC.
+    expect(page.url()).toBe(`${SITES.main}/account/devices?notice=csrf`);
     await ctx.close();
   });
 });
