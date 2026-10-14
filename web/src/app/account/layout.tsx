@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
+import { SENSITIVE_PAGE_REFERRER_POLICY } from "@/lib/security/headers";
 
 // Every account page is per-request: never statically generated, never shared-cached (see also proxy.ts headers).
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: { default: "Account", template: "%s · ForeverDB account" },
   robots: { index: false, follow: false, nocache: true },
-  referrer: "no-referrer",
+  referrer: SENSITIVE_PAGE_REFERRER_POLICY,
 };
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {

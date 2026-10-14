@@ -263,7 +263,7 @@ test.describe("14. cookies", () => {
 });
 
 test.describe("15. caching, noindex, referrer, CSP on every account response", () => {
-  test("pages and APIs: private no-store, noindex, no-referrer, CSP, never the anonymous cookie, never shared-cacheable", async ({ playwright }) => {
+  test("pages and APIs: private no-store, noindex, path-hiding referrer policy, CSP, never the anonymous cookie, never shared-cacheable", async ({ playwright }) => {
     const c = await newClient(playwright);
     const urls = [...ALL_ACCOUNT_PAGES, "/account/api/csrf", "/account/api/me", "/account/api/session/refresh?next=/account", "/account/api/login", "/account/does-not-exist"];
     for (const u of urls) {
@@ -273,7 +273,7 @@ test.describe("15. caching, noindex, referrer, CSP on every account response", (
       expect(h["cache-control"], u).toMatch(/no-store/);
       expect(h["cache-control"], u).not.toMatch(/public|s-maxage/);
       expect(h["x-robots-tag"], u).toBe("noindex, nofollow");
-      expect(h["referrer-policy"], u).toBe("no-referrer");
+      expect(h["referrer-policy"], u).toBe(u.startsWith("/account/api/") ? "no-referrer" : "strict-origin");
       expect(h["x-content-type-options"], u).toBe("nosniff");
       expect(h["x-frame-options"], u).toBe("DENY");
       expect(h["content-security-policy"], u).toContain("frame-ancestors 'none'");
@@ -282,7 +282,7 @@ test.describe("15. caching, noindex, referrer, CSP on every account response", (
       if ((h["content-type"] ?? "").includes("text/html") && r.status() === 200) {
         const html = await r.text();
         expect(html, u).toMatch(/<meta name="robots" content="noindex/);
-        expect(html, u).toMatch(/<meta name="referrer" content="no-referrer"/);
+        expect(html, u).toMatch(/<meta name="referrer" content="strict-origin"/);
       }
     }
     // An unauthenticated visit to the overview is sent to sign-in, never rendered.
@@ -301,6 +301,25 @@ test.describe("15. caching, noindex, referrer, CSP on every account response", (
     expect(r.headers()["cache-control"]).toMatch(/private.*no-store|no-store.*private/);
     expect(r.headers()["x-robots-tag"]).toBe("noindex, nofollow");
     expect(await r.text()).toContain(email);
+  });
+
+  test("the real native enrollment form sends a concrete same-origin Origin and no account path in Referer", async ({ browser, playwright }) => {
+    const { c } = await signedInClient(playwright, "form-origin");
+    const ctx = await browser.newContext({ baseURL: SITES.main, extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
+    await ctx.addCookies((await c.storageState()).cookies);
+    const page = await ctx.newPage();
+    await page.route("**/account/api/enrollment/download", (route) => route.fulfill({ status: 204 }));
+    await page.goto("/account/devices");
+    const requestPromise = page.waitForRequest("**/account/api/enrollment/download");
+    await page.getByRole("button", { name: "Download activation file for a new computer" }).click();
+    const request = await requestPromise;
+    const headers = request.headers();
+    expect(request.method()).toBe("POST");
+    expect(headers.origin).toBe(ORIGINS.main);
+    expect(headers["sec-fetch-site"]).toBe("same-origin");
+    expect(headers["content-type"]).toMatch(/^application\/x-www-form-urlencoded/);
+    expect(headers.referer).toBe(`${ORIGINS.main}/`);
+    await ctx.close();
   });
 });
 

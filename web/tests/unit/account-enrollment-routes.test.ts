@@ -152,6 +152,7 @@ describe("POST /account/api/enrollment/download", () => {
     world.reply = ISSUE_OK;
     const cases: [string, Parameters<typeof formPost>[1], number, string][] = [
       ["foreign origin", { headers: { origin: "https://evil.example" } }, 403, "forbidden"],
+      ["literal null origin", { headers: { origin: "null" } }, 403, "forbidden"],
       ["cross-site fetch metadata", { headers: { "sec-fetch-site": "cross-site" } }, 403, "forbidden"],
       ["same-site (sibling) fetch metadata", { headers: { "sec-fetch-site": "same-site" } }, 403, "forbidden"],
       ["json content type", { headers: { "content-type": "application/json" } }, 403, "forbidden"],
@@ -162,6 +163,7 @@ describe("POST /account/api/enrollment/download", () => {
       ["empty token", { token: "" }, 403, "csrf"],
       ["token of another session", { token: await mintCsrf(SECRET, "s:another-session") }, 403, "csrf"],
       ["anonymous-binding token with a session", { token: await mintCsrf(SECRET, "anon") }, 403, "csrf"],
+      ["expired session-bound token", { token: await mintCsrf(SECRET, csrfBinding(stored()), nowSec() - 3601) }, 403, "csrf"],
       ["token signed with another key", { token: await mintCsrf("another-secret-0123456789abcdefghijklmnopqrstuvwxyz", csrfBinding(stored())) }, 403, "csrf"],
       ["duplicate csrf field", { fields: `csrf=${await mintCsrf(SECRET, csrfBinding(stored()))}&csrf=x` }, 400, "invalid_body"],
       ["unknown extra field", { fields: { label: "x" } }, 400, "invalid_input"],
