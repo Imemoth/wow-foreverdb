@@ -39,9 +39,17 @@ public static class AccountFeatureGate
     /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
     public const bool ProductionAccountAuthApproved = false;
 
-    // TEMPORARY owner-approved single-project pilot, not a public release flag.
-    // Revert this flag before merging this PR into main/release.
-    public static readonly bool PrivateProjectPilotApproved = true;
+    // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
+    // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.
+    public static readonly bool PrivateProjectPilotApproved = false;
+
+    /// <summary>
+    /// Pure test seam: which compiled approvals a gate evaluation assumes. The runtime never supplies one (it calls
+    /// <see cref="EvaluateFromEnvironment"/>), so ONLY the compiled flags above decide live availability.
+    /// </summary>
+    public readonly record struct GateApprovals(bool PrivatePilot);
+
+    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved);
 
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
@@ -52,7 +60,10 @@ public static class AccountFeatureGate
 
     private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
 
-    public static AccountGateDecision Evaluate(Func<string, string?> getVariable)
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
+        Evaluate(getVariable, CompiledApprovals);
+
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable, GateApprovals approvals)
     {
         var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
 
@@ -63,7 +74,7 @@ public static class AccountFeatureGate
 
         if (mode == "private-pilot")
         {
-            return EvaluatePrivatePilot(getVariable);
+            return EvaluatePrivatePilot(getVariable, approvals);
         }
 
         if (mode == "production")
@@ -151,9 +162,9 @@ public static class AccountFeatureGate
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));
 
-    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable)
+    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals)
     {
-        if (!PrivateProjectPilotApproved)
+        if (!approvals.PrivatePilot)
             return Off("Private project pilot is not approved in this build.");
 
         var url = (getVariable(UrlVariable) ?? "").Trim();

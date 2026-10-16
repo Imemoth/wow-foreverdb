@@ -11,7 +11,7 @@ polish and distribution work.
 - [x] Pilot code disables anonymous account creation, claim-code generation, snapshot ingest, owner selection, and automatic post-login sync at multiple independent layers. No live ownership data changed.
 - [ ] Windows Companion CI and independent safety review on the final PR #54 head.
 - [ ] Owner-run isolated-vault login/logout/refresh verification, original credential hash check, and read-only Supabase preservation baseline; **W1a, W4 and W7/W8 are not yet accepted**.
-- [ ] Before any merge/distribution, revert the temporary `PrivateProjectPilotApproved=true` source flag to `false` and rerun CI; keep public `ProductionAccountAuthApproved=false`.
+- [x] `PrivateProjectPilotApproved` reverted to `false` before the merge to `main` (2026-10-16); gate tests use an injected-approval seam and assert the compiled default is closed. Public `ProductionAccountAuthApproved=false`.
 - [ ] Separately review and explicitly approve **throwaway-installation** claim/ingest support only after the login-only pilot passes, never with one of the 7 valuable historical installations first.
 
 Runbook: [Private project Companion pilot](account-v1/private-project-companion-pilot.md).

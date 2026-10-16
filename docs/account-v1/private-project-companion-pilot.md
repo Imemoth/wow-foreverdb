@@ -6,7 +6,7 @@
 
 Allow the 0.9.0-alpha Windows Companion to sign into the *same* Supabase project as the protected ForeverDB Account V1 website (`klxhikdlfwgxurdyexdi`), without creating a second Supabase project. The initial client pilot is **login/read-only**. It does not turn on installation ownership claims, snapshot uploads, automatic anonymous sign-ups, or registration quotas.
 
-The compiled `ProductionAccountAuthApproved` remains **false**. Only the deliberately named `private-pilot` mode can reach the one preapproved HTTPS origin. The temporary `PrivateProjectPilotApproved` source flag is **true in this draft test branch only** and **MUST be false before merging into main/release**. Never ship this temporary flag in the public Windows binary.
+The compiled `ProductionAccountAuthApproved` remains **false**. Only the deliberately named `private-pilot` mode can reach the one preapproved HTTPS origin. The `PrivateProjectPilotApproved` source flag is **false on the release line** (reverted before the merge to `main`); an owner-only pilot build needs a separate, owner-approved code change (the #57 branch carries its own overrides). Never ship this temporary flag in the public Windows binary.
 
 ## Required safety controls
 

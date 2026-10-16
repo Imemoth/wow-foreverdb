@@ -9,7 +9,25 @@ public class FeatureGateTests
     private static AccountGateDecision Eval(params (string Name, string Value)[] vars)
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null);
+        // Simulates an owner-approved build: the compiled approvals are OFF on the release line (see Compiled_approvals_are_off...).
+        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true));
+    }
+
+    [Fact]
+    public void Compiled_approvals_are_off_and_the_private_pilot_stays_closed_without_an_owner_approved_code_change()
+    {
+        Assert.False(AccountFeatureGate.PrivateProjectPilotApproved);
+        Assert.False(AccountFeatureGate.CompiledApprovals.PrivatePilot);
+        var env = new Dictionary<string, string>
+        {
+            [AccountFeatureGate.ModeVariable] = "private-pilot",
+            [AccountFeatureGate.UrlVariable] = PrivateUrl,
+            [AccountFeatureGate.KeyVariable] = PrivateKey,
+            [AccountFeatureGate.ProjectRefVariable] = AccountFeatureGate.ProductionProjectRef
+        };
+        var d = AccountFeatureGate.Evaluate(n => env.TryGetValue(n, out var v) ? v : null);
+        Assert.False(d.AccountsEnabled);
+        Assert.Null(d.Endpoint);
     }
 
     private const string Key = "sb_publishable_testkey";
@@ -129,7 +147,6 @@ public class FeatureGateTests
     [Fact]
     public void Owner_private_pilot_allows_only_exact_project_and_isolates_credential_vault()
     {
-        Assert.True(AccountFeatureGate.PrivateProjectPilotApproved); // TEMPORARY on this DRAFT branch
         var d = Eval(PrivatePilot());
         Assert.True(d.AccountsEnabled);
         Assert.Equal(AccountEnvironment.PrivatePilot, d.Environment);
