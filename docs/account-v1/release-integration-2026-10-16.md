@@ -21,6 +21,15 @@ owner-only #57 pilot branch is untouched and unmerged; any future pilot build ne
 #60 → #59 → #56 (fast-forward, history preserved) · #53 → #54 → #55 → #56 into `main` bottom-up with merge commits, each after its own
 flag-revert commit and CI on the exact head. #57 stays open/owner-only. #58 audited separately (see its section below).
 
+## PR #58 (AzerDex welcome email, migration `0015`) — audited separately: **NOT merged**
+
+Code-side evidence is strong (CI on `ae592ac`: 15 success + 1 skipped `Supabase Preview`; Worker 32/32, SQL/GoTrue 67/67, Account suite 219/219; two review rounds).
+Its **own** release gates are not satisfied, so the owner's condition for merging is not met: **G-2** (provenance rule on the hosted Auth version), **G-3**
+(hosted staging), **G-4** (template + CID in one real send), **G-6** (two explicit approvals), **B-1** (anonymous reachability of `https://azerdex.com/`; Vercel
+Authentication is on) and the hosted half of **G-7** are all OPEN in `docs/azerdex-welcome-email/acceptance.md`. G-1 and G-5 only are PASS (G-5 owner-attested).
+It stays an open draft; applying `0015`, deploying the function and sending any email remain owner-only. Re-audit after the account stack lands (it is
+conflict-free against this stack).
+
 ## Migration ledger evidence (repository-recorded; nothing was verified or changed live in this integration)
 
 | Migration | Evidence in repo | State |
