@@ -12,7 +12,7 @@ public class DeviceGateTests
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
         // Simulates owner-approved pilot builds; the compiled login/claim approvals are OFF on the release line (asserted below).
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
+        return AccountFeatureGate.EvaluateWithApprovals(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
     }
 
     private static AccountGateDecision PrivatePilot(bool claim)
