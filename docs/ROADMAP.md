@@ -7,7 +7,7 @@ polish and distribution work.
 ## Account V1 — single existing Supabase project candidate (2026-10-12)
 
 - [x] Separate code-only branch for a **protected, owner-only account pilot** using the existing private Supabase Auth project and for eventual production-compatible Auth configuration.
-- [x] Owner-authorized guarded Preview **pilot flag temporarily ON in draft PR #53** (`SINGLE_PROJECT_PILOT_APPROVED = true`); public production flag remains OFF. **The account is now ACTIVE only in the SSO-protected branch Preview**: verified account creation, confirmation email received in Gmail Inbox, account profile, sign-out and fresh password sign-in (2026-10-12). **Before merge, revert pilot flag to false and rerun CI.**
+- [x] Owner-authorized guarded Preview **pilot flag temporarily ON in draft PR #53** (`SINGLE_PROJECT_PILOT_APPROVED = true`); public production flag remains OFF. **The account is now ACTIVE only in the SSO-protected branch Preview**: verified account creation, confirmation email received in Gmail Inbox, account profile, sign-out and fresh password sign-in (2026-10-12). **Pilot flag reverted to `false` before the merge to `main` (2026-10-16 integration); CI re-run on the reverted head.**
 - [x] Scoped Auth-only publishable-key boundary and fail-closed pilot/production configuration matrix; public data isolation unchanged.
 - [ ] CI on final PR head and independent security review (no merge or deployment until approved).
 - [x] Existing private Supabase `0012_account_ownership_claims` applied (2026-10-12) after owner-led local archive check; all 9 functions and 3 RLS-protected tables verified, ledger recorded, pre-existing installation and Guildbook hashes unchanged.
