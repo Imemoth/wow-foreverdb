@@ -10,7 +10,7 @@ public class FeatureGateTests
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
         // Simulates an owner-approved build: the compiled approvals are OFF on the release line (see Compiled_approvals_are_off...).
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
+        return AccountFeatureGate.EvaluateWithApprovals(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
     }
 
     [Fact]

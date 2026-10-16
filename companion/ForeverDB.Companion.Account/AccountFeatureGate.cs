@@ -80,9 +80,9 @@ public static class AccountFeatureGate
     private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
 
     public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
-        Evaluate(getVariable, CompiledApprovals);
+        EvaluateWithApprovals(getVariable, CompiledApprovals);
 
-    public static AccountGateDecision Evaluate(Func<string, string?> getVariable, GateApprovals approvals)
+    public static AccountGateDecision EvaluateWithApprovals(Func<string, string?> getVariable, GateApprovals approvals)
     {
         var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
 
