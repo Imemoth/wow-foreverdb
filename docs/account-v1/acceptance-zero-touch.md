@@ -51,6 +51,18 @@ Local evidence on the fix branch before GitHub CI:
 No Production deployment, Supabase migration/schema/data change, ticket issuance, AutoSync change, installer rebuild or live activation occurred.
 The detailed security argument and Preview/Windows continuation gate are in [activation-download-origin-fix.md](activation-download-origin-fix.md).
 
+## 3b. Owner pilot on the live private project (2026-10-16) — summary; full record in [zero-touch-pilot-closure.md](zero-touch-pilot-closure.md)
+
+| Item | Status |
+| --- | --- |
+| #59 protected Preview: account HTML `strict-origin`; activation download POST 200 | **PASS** (owner-reported) |
+| #57 pilot: one `.fdbact` consumed, one registered device on the web (pilot subset of Z2) | **PASS** (owner-reported) |
+| Companion 0.9.0-alpha sign-in; registered-device manual Sync Now, AutoSync OFF, Last Error None (pilot subset of Z3) | **PASS** (owner-reported), **0 sources / 0 Guildbook members — empty payload only** |
+| Non-empty ingest, Guildbook view of uploaded data, 6 anonymous / 140 / 46 preservation re-check | **NOT TESTED** / **NOT VERIFIED here** |
+| Installation panel `Not checked yet` after successful upload | **defect fixed in code; fix NOT TESTED on Windows** (Windows CI pending) |
+| Z4–Z10, Z11 on a merge commit, Z12 | **NOT TESTED** |
+| Z13 | **NOT IMPLEMENTED / BLOCKED** for public release |
+
 ## 4. Remaining owner / staging / production acceptance (Z2-Z12 not executed)
 
 

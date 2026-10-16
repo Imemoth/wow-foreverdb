@@ -81,6 +81,50 @@ public class DeviceIntegrationTests
         Assert.Equal(1, w.GuildbookCalls);
     }
 
+    [Fact]
+    public async Task Accepted_device_upload_shows_the_installation_as_owned_by_the_account_and_only_then()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+
+        // Enrolled and discovered, but nothing server-verified yet: the row must not claim ownership.
+        Assert.Equal(InstallationOwnership.Unchecked, w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation).Ownership);
+
+        // Automatic triggers upload nothing, so they cannot change the display either.
+        await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Auto);
+        Assert.Equal(InstallationOwnership.Unchecked, w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation).Ownership);
+
+        var changed = new List<InstallationRecord>();
+        w.Runtime.Sync.InstallationChanged += changed.Add;
+        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual))!.Outcome);
+
+        var record = w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation);
+        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, record.Ownership);
+        Assert.Equal(BlockReason.None, record.LastBlock);
+        Assert.NotNull(record.LastSyncedAt);
+        Assert.Equal("Owned by your account", AccountMessages.Describe(record.Ownership));
+        Assert.Contains(changed, r => r.Ownership == InstallationOwnership.OwnedByRegisteredAccount);   // the Account tab is notified
+        Assert.Equal(0, AnonymousIngests(w));
+        Assert.Equal(1, w.Backend.DeviceIngests);
+    }
+
+    [Fact]
+    public async Task A_refused_device_upload_never_shows_the_installation_as_owned_and_clears_an_earlier_owned_state()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual))!.Outcome);
+        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, w.Runtime.Sync.Installations.Single().Ownership);
+
+        w.Backend.RevokeDevice(w.Backend.Devices.Single().Id);
+        w.Write(200);
+        Assert.Equal(SyncOutcome.Blocked, (await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual))!.Outcome);
+
+        var record = w.Runtime.Sync.Installations.Single();
+        Assert.Equal(InstallationOwnership.Unchecked, record.Ownership);
+        Assert.Equal(BlockReason.DeviceSyncNotCompleted, record.LastBlock);
+    }
+
     [Theory]
     [InlineData(SyncTrigger.Auto)]
     [InlineData(SyncTrigger.Startup)]

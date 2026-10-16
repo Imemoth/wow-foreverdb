@@ -183,6 +183,7 @@ public sealed class SyncService
                     snapshot.Guilds.Sum(guild => guild.Members.Count),
                     trigger));
             _afterSynced?.Invoke(snapshot);
+            _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);
             return new SyncAttempt(SyncOutcome.Synced, BlockReason.None, InstallationOwnership.OwnedByRegisteredAccount, null, null);
         }
 
@@ -192,6 +193,7 @@ public sealed class SyncService
             return SyncAttempt.Blocked(BlockReason.DeviceAutoSyncOff, InstallationOwnership.OwnedByRegisteredAccount);
         }
 
+        _coordinator.NoteDeviceUploadNotCompleted(snapshot.InstallationId, BlockReason.DeviceSyncNotCompleted);
         SyncBlocked?.Invoke(
             this,
             new SyncBlockedEventArgs(

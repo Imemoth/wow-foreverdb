@@ -48,3 +48,29 @@ reviewed change.
 * Rollback: `database/rollback/0014_rollback.sql` drops the functions, keeps non-empty tables, never changes ownership or history.
 * Monitoring queries: refusal rates `select detail, count(*) from private.device_audit where event = 'enroll_refused' and at > now() - interval '1 day' group by 1;`,
   reuse `... event = 'credential_reuse'`.
+
+## Update 2026-10-16 — #57/#58/#59 and the safe sequence (nothing here is done; every merge needs explicit owner authorization)
+
+Facts read from git on 2026-10-16 (all six PRs are still **draft**, nothing merged):
+
+| PR | Base | Relation |
+| --- | --- | --- |
+| #53 → #54 → #55 → #56 | `main` → … → #55 branch | unchanged chain; each is 0 commits behind its base |
+| #59 (web `strict-origin` fix) | #56 branch (`0decdf7`) | stacked on #56; web + docs only |
+| this branch (Companion row-state fix, `claude/awesome-cerf-as0jyk`) | #59 head `ae3e20e` | Companion + one test file + docs; **no PR opened** |
+| #57 (owner-only pilot) | #56 branch at `aa63f97`, i.e. one docs-only commit behind #56 | **never merge**; merges cleanly with #59, irrelevant |
+| #58 (AzerDex welcome email, migration 0015) | `main` | independent of the chain; `git merge-tree` against this branch is conflict-free |
+
+Sequence (the order is what keeps every intermediate state safe):
+
+1. **Owner decision first.** No PR is marked ready or merged without it. Pilot flags `PrivateProjectPilotApproved`, `PrivateProjectClaimPilotApproved`,
+   `SINGLE_PROJECT_PILOT_APPROVED` are still **true** (`scripts/check-pilot-flags.py`), so nothing in the chain is mergeable as it stands; the per-PR
+   flag-flip commit and the `--require-off` gate above still apply exactly as written.
+2. Land the two fixes **inside the #56 stack, before #56 reaches `main`**: this branch → #59 branch → #56 branch (each a merge into the stacked branch, not into `main`).
+   Merging #59 into `main` directly would be wrong (it depends on #56).
+3. Chain bottom-up: #53 → #54 → #55 → #56, retargeting each next PR to `main` after its base merged.
+4. #57 is closed unmerged once the owner has no further pilot use. If the owner wants the row fix seen on Windows first, an owner-only build of #57 **plus** this
+   fix is needed (a new commit on the #57 branch and an installer rebuild; no new activation ticket — the device credential already exists on the test profile).
+5. #58 is not part of the chain. Land it **after** #56 so `0014` (reserved by #56) precedes `0015` in the repo; its own gates (G-2…G-7, B-1) are separate and OPEN.
+6. Database: `0014` was **reported as already applied to the private project** (#57 body, owner acceptance 2026-10-16); the "(not applied)" wording in this
+   file's earlier sections predates that and was not re-verified here. Do not apply, re-apply or alter anything as part of merging.
