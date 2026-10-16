@@ -30,16 +30,13 @@
  */
 
 /**
- * TEMPORARY OWNER-APPROVED PRIVATE PILOT, 2026-10-12. This may run ONLY on a
- * Vercel-SSO-protected Preview branch and ONLY with the exact existing private
- * Supabase Auth project. Environment variables must still be explicitly supplied;
- * without ACCOUNT_AUTH_MODE, all account routes remain disabled.
- *
- * SECURITY RELEASE GATE: This flag MUST be reverted to false before merging
- * this PR to main. Public production approval remains separate and OFF.
+ * Owner-approved private pilot (2026-10-12) ran ONLY on a Vercel-SSO-protected Preview branch with the exact
+ * existing private Supabase Auth project. The compiled approval is now OFF on the release line (reverted before
+ * the merge to main, 2026-10-16 integration). Re-enabling it is a separate owner-approved code change; the
+ * environment alone can never open it. Public production approval remains separate and OFF.
  * Do not promote a pilot build or its configuration to the production target.
  */
-export const SINGLE_PROJECT_PILOT_APPROVED = true as boolean;
+export const SINGLE_PROJECT_PILOT_APPROVED = false as boolean;
 export const PRODUCTION_ACCOUNT_AUTH_APPROVED = false as boolean;
 
 /** The existing private Supabase project: only an approved account boundary may contact it. */
