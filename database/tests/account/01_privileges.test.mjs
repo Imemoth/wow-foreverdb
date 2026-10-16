@@ -116,7 +116,23 @@ describe("existing functions are untouched by 0012", () => {
       assert.ok(a, `${b.sig} still exists`);
       assert.deepEqual({ owner: a.owner, acl: a.acl, config: a.config, md5: a.md5 }, { owner: b.owner, acl: b.acl, config: b.config, md5: b.md5 }, b.sig);
     }
-    const added = now.filter((r) => !before.some((b) => b.sig === r.sig)).map((r) => r.sig).sort();
+    // Migration 0015 (AzerDex welcome outbox) is a SEPARATE feature whose own suite (database/tests/welcome) owns these twelve functions. They are
+    // excluded by exact signature, not by prefix or count: any other new function, or any change to the 0012 set, still fails this assertion.
+    const WELCOME_0015 = new Set([
+      "azerdex_welcome_claim(integer)",
+      "azerdex_welcome_finish(uuid,uuid,text,text,text,integer)",
+      "azerdex_welcome_stats()",
+      "private.azerdex_welcome_note_failure(uuid,text,boolean)",
+      "private.azerdex_welcome_on_confirm()",
+      "private.azerdex_welcome_on_signup()",
+      "private.azerdex_welcome_operator_requeue(uuid,boolean)",
+      "private.azerdex_welcome_operator_resolve(uuid,boolean,text)",
+      "private.azerdex_welcome_prune()",
+      "private.azerdex_welcome_reconcile()",
+      "private.azerdex_welcome_require_server_role()",
+      "private.azerdex_welcome_set_switch(boolean,boolean)",
+    ]);
+    const added = now.filter((r) => !before.some((b) => b.sig === r.sig) && !WELCOME_0015.has(r.sig)).map((r) => r.sig).sort();
     assert.equal(added.length, 9, `exactly the nine new functions were added: ${added.join(", ")}`);
   });
   it("the ingest implementation still takes the same advisory lock key as the account functions", async () => {
