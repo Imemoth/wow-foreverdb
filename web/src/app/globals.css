@@ -310,6 +310,14 @@
   .hero-bg[data-hero-theme="floating-city"] .hero-theme-layer--floating-city {
     opacity: 1;
   }
+  /* Phase 2 integration point: an owner-approved photo for the resolved theme, layered
+     above the SVG/gradient art (still z-index 0, same stacking context; DOM order puts
+     it on top) and below .hero-vignette/content. Renders only when HeroImageLayer finds
+     both a resolved theme and a configured asset - see themes.ts HERO_ASSET_SRC. */
+  .hero-photo-layer {
+    z-index: 0;
+    object-fit: cover;
+  }
   .hero-vignette {
     position: absolute;
     inset: 0;

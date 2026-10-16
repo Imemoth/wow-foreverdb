@@ -1,4 +1,5 @@
 import { HeroThemeScript } from "./HeroThemeScript";
+import { heroDataAttributes } from "./themes";
 
 /**
  * Three original, vector-only atmospheric backdrops (no painted/photographic artwork,
@@ -7,11 +8,13 @@ import { HeroThemeScript } from "./HeroThemeScript";
  * this wrapper, and plain CSS (.hero-theme-layer rules in globals.css) shows the match.
  * If JS never runs, no layer becomes visible and the hero's own fallback gradient
  * (set directly on the <section>, unconditionally) is what the visitor sees - that is
- * the required safe fallback, not an error state.
+ * the required safe fallback, not an error state. heroDataAttributes carries the theme
+ * list/storage key in as plain (React-escaped) HTML attributes for HeroThemeScript's
+ * fixed script to read back - see themes.ts and HeroThemeScript.tsx for why.
  */
 export function HeroBackground({ nonce }: { nonce: string | undefined }) {
   return (
-    <div className="hero-bg" aria-hidden="true">
+    <div className="hero-bg" aria-hidden="true" {...heroDataAttributes}>
       <HeroThemeScript nonce={nonce} />
       <div className="hero-theme-layer hero-theme-layer--arcane-ruins">
         <ArcaneRuinsArt />

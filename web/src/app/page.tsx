@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DisplayKindBadge } from "@/components/Badges";
 import { EntityLink } from "@/components/EntityLink";
 import { HeroBackground } from "@/components/hero/HeroBackground";
+import { HeroImageLayer } from "@/components/hero/HeroImageLayer";
 import { StatTile } from "@/components/StatTile";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
@@ -32,6 +33,7 @@ export default async function HomePage() {
       {/* Hero + central search */}
       <section aria-labelledby="hero-title" className="relative overflow-hidden rounded-2xl border border-ink-700 bg-[radial-gradient(900px_320px_at_50%_0,rgb(108_65_199/0.28),transparent_70%)] px-5 py-12 text-center sm:px-10 sm:py-16">
         <HeroBackground nonce={nonce} />
+        <HeroImageLayer />
         <div className="hero-vignette" />
         <div className="relative z-10">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
