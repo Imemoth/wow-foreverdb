@@ -47,3 +47,15 @@ PR [#45](https://github.com/Imemoth/wow-foreverdb/pull/45) was squash-merged as 
 ## Account System V1 additions (planned)
 
 PR B adds a CI job that runs the Supabase local stack (GoTrue, PostgREST, Postgres, Mailpit) inside GitHub Actions for account acceptance; it joins the aggregate `Web release gate` once it is stable (a new required context needs the ruleset edited by the owner, with the same GitHub Actions app pin). PR D adds a Windows `dotnet test` job. Until then PR A only extends `Web code quality` (account unit and static boundary tests run inside `npm test`).
+
+## Browser Pairing V1 release gate
+
+Browser Pairing V1 may not be promoted merely because the existing aggregate web gate is green. Its Draft PR must also report, on the
+same final commit, the disposable Account/PostgREST/PostgreSQL pairing suite, migration 0016 concurrency/rollback suite, Windows
+Companion Account tests and WPF Release build, CodeQL, bundle-secret scan and the source/database feature-gate checks. A failed,
+cancelled or skipped required pairing job is a failure.
+
+Promotion additionally requires the owner evidence OA-1..OA-10 in
+[the pairing acceptance plan](../account-v1/browser-pairing-test-and-acceptance.md), two independent final-diff reviews and a separate
+production go/no-go. Applying migration 0016, enabling its private config row, changing either source approval flag, merging the Draft
+PR and publishing the installer are distinct owner-controlled actions. None is implied by CI success.

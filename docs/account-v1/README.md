@@ -16,6 +16,10 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [staging-runbook.md](staging-runbook.md) / [windows-acceptance-checklist.md](windows-acceptance-checklist.md) | owner-run staging deployment/acceptance and the Windows W1a..W10 evidence template |
 | [web-auth.md](web-auth.md) | PR B as built: routes, session/CSRF/callback design, verified GoTrue behaviour, acceptance mapping, findings, owner actions |
 | [pr-obligations.md](pr-obligations.md) | Binding obligations for PR B and PR C, including the mandatory live-session negative tests (proof set LS-1..LS-9 and LS-11; LS-10 is the tripwire) |
+| [Browser Pairing V1 design](../superpowers/specs/2026-10-16-browser-pairing-v1-design.md) | Approved one-click browser-pairing architecture, reuse boundaries and release decision |
+| [ADR-019](adr-019-browser-pairing.md) / [API](browser-pairing-api-contract.md) / [state machine](browser-pairing-state-machine.md) | Pairing decision, exact device/browser contracts, session binding, lock order and atomic redemption |
+| [pairing threat model](browser-pairing-threat-model.md) / [migration](browser-pairing-migration-and-rollback.md) / [acceptance](browser-pairing-test-and-acceptance.md) | Abuse controls, migration 0016, rollback, automated and owner gates |
+| [pairing architecture review](browser-pairing-architecture-review.md) | Independent Stage A findings, frozen resolutions, residual risks and Stage B readiness |
 
 Related: [ADR-015..018](../web/architecture-decisions.md), [web threat model](../web/threat-model.md), [go-live checklist](../web/go-live-checklist.md), [release gates](../web/release-gates.md), [ROADMAP](../ROADMAP.md).
 
@@ -33,6 +37,9 @@ Out of scope: higher registered quotas (current anonymous and registered quota l
 4. **Ownership by single-use claim code (ADR-017):** the Companion's current owner (typically an anonymous UID) requests a 128-bit single-use code (10 minutes, hash only stored); a verified registered user redeems it; ownership moves in one transaction guarded by the same advisory lock the ingest function uses. An installation ID alone proves nothing.
 5. **Companion fails closed (ADR-018):** a registered session never falls back to a new anonymous identity; explicit session kinds; the anonymous session is kept in a separate legacy slot after registered sign-in so existing installations can still be claimed and synced; transient errors never clear a session; atomic DPAPI persistence with a plaintext kind marker.
 6. **Registered quotas unchanged.** One registered UID shares today's per-UID budgets across its installations; that limitation is documented, not "fixed" in V1.
+7. **One-click browser pairing (ADR-019):** the Companion and browser remain separate authenticated actors. An exact anonymous
+   Companion session starts and redeems a five-minute request; a registered browser session explicitly approves it. Ownership transfer
+   and device registration commit atomically under the existing installation lock. Pairing, production and AutoSync gates ship off.
 
 ## PR plan and dependencies
 

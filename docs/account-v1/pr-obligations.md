@@ -65,3 +65,18 @@ Claim and ownership rules in [ownership-claim-protocol.md](ownership-claim-proto
 | Pilot flags off on every merge commit (`check-pilot-flags.py --require-off`) | **BLOCKED** until flipped per PR; currently 3 flags true |
 | Z13 one-download installer integration | **NOT IMPLEMENTED** — public-release blocker, not a pilot blocker |
 | Merge / ready-for-review of #56, #57, #59 | **NOT DONE — requires explicit owner authorization**; #57 never merges |
+
+## Browser Pairing V1 — binding obligations
+
+1. Use migration `0016_browser_pairing.sql`; PR #58 owns 0015. Preserve independent ledger/application order and test both branch-order
+   combinations described in [the migration plan](browser-pairing-migration-and-rollback.md).
+2. Bind start, poll and cancel to both the anonymous UID and exact GoTrue session ID. Token refresh is accepted only while it preserves
+   that logical session. Never rebind an existing request to a new session.
+3. Implement the locator, signed cookie, CSRF, account-switch and authorization rules exactly as specified in
+   [the API contract](browser-pairing-api-contract.md) and [threat model](browser-pairing-threat-model.md).
+4. Ownership change, pairing previous-owner provenance, device insertion and connected transition are one transaction under the
+   shared installation lock. The concurrency proof set in [the state machine](browser-pairing-state-machine.md) is mandatory.
+5. All automated BP-01..BP-41 tests and owner OA-1..OA-10 gates in
+   [the acceptance plan](browser-pairing-test-and-acceptance.md) apply. Mocks alone are not completion evidence.
+6. Database config and all source approval flags remain false in every commit proposed for merge. AutoSync remains false. No service
+   role, live migration, production data, merge, public route activation or installer publication is authorized.

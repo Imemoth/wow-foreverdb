@@ -4,6 +4,25 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — One-Click Browser Pairing V1 (target 2026-10-30)
+
+- [x] Architecture approved 2026-10-16: database-authoritative, RFC 8628-inspired pairing reuses anonymous Companion Auth, the Account
+  V1 installation owner, device registry, DPAPI credentials, ingest authorization and revocation.
+- [x] Stage A specification: [design](superpowers/specs/2026-10-16-browser-pairing-v1-design.md),
+  [ADR-019](account-v1/adr-019-browser-pairing.md), [API](account-v1/browser-pairing-api-contract.md),
+  [state machine](account-v1/browser-pairing-state-machine.md), [threat model](account-v1/browser-pairing-threat-model.md),
+  [migration/rollback](account-v1/browser-pairing-migration-and-rollback.md),
+  [test/acceptance](account-v1/browser-pairing-test-and-acceptance.md).
+- [x] Migration numbering resolved against PR #58: welcome outbox owns 0015; Browser Pairing reserves **0016** and ADR-019.
+- [x] Independent Stage A architecture and security review: no Critical finding; restore dependencies, exact re-enrollment,
+  approval-session liveness, revocation propagation and lock ordering resolved in the
+  [review report](account-v1/browser-pairing-architecture-review.md).
+- [ ] Stage B: migration 0016, fixed pairing APIs and Account approval page; database/web/production gates remain OFF.
+- [ ] Stage C: Companion Connect Account, DPAPI pending proof, system-browser handoff, polling/backoff and state UI; AutoSync remains OFF.
+- [ ] Stage D: disposable full-stack, concurrency, CSRF/Origin, account isolation, WPF/DPAPI, compatibility and security checks.
+- [ ] Stage E: identical universal-installer checklist, Windows 10/11 owner acceptance, independent reviews and production go/no-go.
+- [ ] No production migration, live data change, merge, installer publication or public activation without separate owner authorization.
+
 ## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
 
 - [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.

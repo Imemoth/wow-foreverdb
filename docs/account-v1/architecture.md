@@ -84,6 +84,35 @@ sequenceDiagram
 
 `Browser → /account/guildbook (server component, server-confirmed user) → /account/api/guildbook/* (CSRF-protected JSON) → lib/account/rpc-client.ts (closed PostgREST client, user JWT) → rpc fdb_account_guildbook_* → database re-derives ownership from auth.uid()`. Caller-supplied installation/guild identifiers are filters inside the caller's own set, never authorization.
 
+### Browser Pairing V1 (ADR-019, Stage A)
+
+```mermaid
+sequenceDiagram
+  participant C as Companion (exact anonymous session)
+  participant W as Account BFF
+  participant P as PostgREST + PostgreSQL
+  participant B as User browser (registered session)
+  C->>C: CSPRNG locator + poll secret + device credential; DPAPI pending save
+  C->>W: POST device-pair/start (anon bearer, hashes only)
+  W->>P: fixed fdb_device_pair_start RPC
+  P-->>C: pending, clean verification URI, expiry, interval
+  C->>B: open system browser with public locator
+  B->>W: GET locator; signed HttpOnly pairing cookie; redirect to clean path
+  B->>W: login if needed; explicit Approve for displayed account/computer
+  W->>P: fdb_account_device_pair_approve (registered caller)
+  P-->>B: approved (no ownership change)
+  C->>W: scheduled poll (exact anon session + poll secret)
+  W->>P: fdb_device_pair_poll
+  P->>P: one transaction: lock, recheck, transfer/provenance, device insert, connected
+  P-->>C: connected device ID; no credential returned
+  C->>C: atomically promote DPAPI pending credential; AutoSync remains off
+```
+
+The browser and Companion never share Auth tokens. The public locator selects a five-minute request but cannot poll or redeem it.
+Normative details: [design](../superpowers/specs/2026-10-16-browser-pairing-v1-design.md),
+[API](browser-pairing-api-contract.md), [state machine](browser-pairing-state-machine.md) and
+[threat model](browser-pairing-threat-model.md). Migration 0016 and every public/source gate remain unapplied/off in Stage A.
+
 ## 3. Trust boundaries
 
 | # | Boundary | Crosses | Controls |
