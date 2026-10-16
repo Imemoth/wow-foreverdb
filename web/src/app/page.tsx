@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DisplayKindBadge } from "@/components/Badges";
 import { EntityLink } from "@/components/EntityLink";
+import { HeroBackground } from "@/components/hero/HeroBackground";
 import { StatTile } from "@/components/StatTile";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
@@ -19,7 +20,7 @@ const ENTRY_POINTS = [
 ];
 
 export default async function HomePage() {
-  const { db } = await pageContext();
+  const { db, nonce } = await pageContext();
   const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(8), db.zones()]);
   const articles = visibleArticles();
   const news = articles.filter((a) => a.section === "news").slice(0, 3);
@@ -30,27 +31,31 @@ export default async function HomePage() {
     <div className="space-y-14">
       {/* Hero + central search */}
       <section aria-labelledby="hero-title" className="relative overflow-hidden rounded-2xl border border-ink-700 bg-[radial-gradient(900px_320px_at_50%_0,rgb(108_65_199/0.28),transparent_70%)] px-5 py-12 text-center sm:px-10 sm:py-16">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
-        <h1 id="hero-title" className="mx-auto mt-3 max-w-3xl font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-5xl">
-          Know Your World. <span className="text-gold-300">Know where it drops.</span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-mist">
-          AzerDex is a community-powered database and companion for World of Warcraft: Forever, built from real
-          in-game observations shared by players running the ForeverDB addon. Every rate shows its sample size.
-        </p>
-        <form action="/database" method="get" role="search" className="mx-auto mt-8 flex max-w-2xl flex-col gap-2 sm:flex-row">
-          <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
-          <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
-            placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
-            className="field h-12 flex-1 text-base" />
-          <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
-        </form>
-        <div className="rule-ornament mx-auto mt-10 max-w-md" />
-        <div className="mx-auto mt-6 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Items" value={fmtInt(c.items ?? 0)} />
-          <StatTile label="Sources" value={fmtInt(c.sources ?? 0)} hint="creatures, nodes, pools" />
-          <StatTile label="Zones" value={fmtInt(c.zones ?? 0)} />
-          <StatTile label="Last publish" value={fmtDate(meta.publishedAt)} />
+        <HeroBackground nonce={nonce} />
+        <div className="hero-vignette" />
+        <div className="relative z-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
+          <h1 id="hero-title" className="mx-auto mt-3 max-w-3xl font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-5xl">
+            Know Your World. <span className="text-gold-300">Know where it drops.</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-mist">
+            AzerDex is a community-powered database and companion for World of Warcraft: Forever, built from real
+            in-game observations shared by players running the ForeverDB addon. Every rate shows its sample size.
+          </p>
+          <form action="/database" method="get" role="search" className="mx-auto mt-8 flex max-w-2xl flex-col gap-2 sm:flex-row">
+            <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
+            <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
+              placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
+              className="field h-12 flex-1 text-base" />
+            <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
+          </form>
+          <div className="rule-ornament mx-auto mt-10 max-w-md" />
+          <div className="mx-auto mt-6 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label="Items" value={fmtInt(c.items ?? 0)} />
+            <StatTile label="Sources" value={fmtInt(c.sources ?? 0)} hint="creatures, nodes, pools" />
+            <StatTile label="Zones" value={fmtInt(c.zones ?? 0)} />
+            <StatTile label="Last publish" value={fmtDate(meta.publishedAt)} />
+          </div>
         </div>
       </section>
 
