@@ -24,19 +24,17 @@ No Supabase project, Resend account or Vercel setting was written to. Read-only 
 
 | Command | Result |
 | --- | --- |
-| `DENO_BIN=… FDB_REQUIRE_DENO=1 node --test tests/welcome-worker/*.test.mjs` | **43 / 43 pass** (`# tests 43 # pass 43 # fail 0 # skipped 0`) — worker 25, template-mode regression (TM-1…TM-11) 11, emblem/Deno bundle (AS-1…AS-6 incl. integrity) 7; real Deno 2.9.6 |
+| `DENO_BIN=… FDB_REQUIRE_DENO=1 node --test tests/welcome-worker/*.test.mjs` | **44 / 44 pass** (`# tests 44 # pass 44 # fail 0 # skipped 0`) — worker 26 (incl. recipient validation and PNG structure checks), template-mode regression (TM-1…TM-11) 11, emblem/Deno bundle (AS-1…AS-6 incl. integrity) 7; real Deno 2.9.6 |
 | `database/tests/welcome/stack.sh up` (= 0012 → **0014** → 0015, the order of a real project) + `node --test --test-concurrency=1 database/tests/welcome/*.test.mjs` | **67 / 67 pass** — privileges 9, real-GoTrue provenance 20, worker RPCs 26, worker↔DB 8, rollback/kill-switch/reinstall 4 |
 | `database/ops/0015_staging_verification.sql` on that database | `OK` (privileges, forced RLS, 12 functions, 2 triggers) |
 | Account suite on a fresh stack with 0012 **+ 0015** (`node --test --test-concurrency=1 database/tests/account/*.test.mjs`) | **219 / 219 pass** |
 | Then `stack.sh apply14` (**0014 applied AFTER 0015**) + enrollment suite **without** `04_concurrency.test.mjs` | **88 / 88 pass** |
 | `node database/tests/welcome/mutation_check.mjs` (migration text, 20 mutants) | `MUTATION CHECK OK` (exit 0: every mutant killed except the 2 documented equivalents; the last itemised run on this same migration text was 18 killed / 2 survivors) |
 | Worker mutants (manual, template payload / breaker / idempotency key): drop `content_id`; html+template together; drop `CTA_URL`; no permanent-streak breaker; mode in idempotency key | **5 / 5 killed** (originals restored) |
-| `scripts/azerdex-welcome-hosted-provenance.mjs` against the local real-GoTrue stack (`STATS_MODE=pg`) | 5 pass, 0 fail, 2 inconclusive/skipped (S6 `email_change` needs both confirmations; S7 anonymous needs `ANON_KEY`) — validates the harness, **is not hosted evidence** |
+| `scripts/azerdex-welcome-hosted-provenance.mjs` against the local real-GoTrue stack (`STATS_MODE=pg`, `ANON_KEY` set) | exit 0: S1–S5 and S7 pass, S6 informational; **7 synthetic users created and 7 deleted, outbox restored**. Guard negatives (production ref, look-alike hosts, `http`, ports, wrong ref format, non-loopback PGHOST) all refused. Validates the harness only — **not hosted evidence** |
 | `web`: `npm run lint`, `npm run typecheck`, `npx vitest run` | lint clean, typecheck clean, **19 files / 397 tests pass** (includes the merged account/enrollment unit tests; no web file changed by this PR) |
 
-**Known pre-existing flake on `main` (not caused by 0015):** `database/tests/enrollment/04_concurrency.test.mjs` → "ticket revocation racing redemption (30 rounds)" fails intermittently with `device_limit`
-instead of `enrolled`/`ticket_revoked` (30 rounds share one account; once enough rounds enrol the device limit is hit). Measured on **fresh** stacks: **2 of 3 runs failed WITHOUT 0015, 1 of 3 WITH it**.
-It is excluded from this PR's compatibility CI step (documented in the workflow) and a separate fix task was queued for the owner. Everything else in the enrollment suite passes.
+**Known flake in the existing enrollment suite (not caused by 0015; observed LOCALLY):** `database/tests/enrollment/04_concurrency.test.mjs` → "ticket revocation racing redemption (30 rounds)" failed intermittently with `device_limit` instead of `enrolled`/`ticket_revoked` (the 30 rounds share one account; once enough rounds enrol the account hits its device limit, so the outcome depends on how many races are won). Observed on **fresh** local stacks: 2 of 3 runs failed WITHOUT 0015 and 1 of 3 WITH it (and it passed in the full runs above), i.e. it does not depend on 0015. It runs unfiltered in `main`'s own CI and passed there for #56, so its failure rate is evidently environment/load dependent: this is **not** a claim about CI on `main`. It is excluded from this PR's compatibility step only (documented in the workflow); a separate fix task was queued. Everything else in the enrollment suite passes.
 
 **Not executed — not PASS:** hosted Supabase/Auth; the deployed Edge Function (any path); Supabase's own bundler; real Resend from the worker; Gmail mobile / Outlook rendering; direct *anonymous* HTTPS request to `https://azerdex.com/`;
 Windows/Companion beyond CI; Web E2E locally (CI runs it).
@@ -76,7 +74,7 @@ Windows/Companion beyond CI; Web E2E locally (CI runs it).
 | **G-5** | Resend domain verified, sending on, open **and** click tracking OFF | **PASS — owner-attested** (not independently verifiable; re-check in the dashboard before first send) |
 | **G-7** | Deployed bundle contains the emblem | **Local PASS** (graph-only bundle, no file-read permission, corrupted emblem fails closed) and the design no longer depends on static files; **hosted check OPEN** |
 | **B-1** | CTA `https://azerdex.com/` usable by an anonymous visitor | **OPEN** — see below |
-| **G-2** | Provenance on the **hosted** Auth version | **OPEN** — harness ready (`scripts/azerdex-welcome-hosted-provenance.mjs`), needs a staging project |
+| **G-2** | Provenance on the **hosted** Auth version | **OPEN** — harness ready and hardened (strict host guard, cleanup of its synthetic users, dispatch re-check), needs a staging project |
 | **G-3** | Isolated hosted staging integration | **OPEN** — plan and costs in [staging-plan.md](staging-plan.md); needs one owner approval |
 | **G-6** | Two explicit approvals (infrastructure rollout; first real recipient) | **OPEN** |
 | Deployed worker send path (template mode) | | **OPEN** — direct provider success does **not** imply this path; verified only by mocked tests so far |
@@ -94,7 +92,7 @@ Windows/Companion beyond CI; Web E2E locally (CI runs it).
 ## Owner-run acceptance steps (minimum safe path)
 
 1. **Approve one free staging project** (`azerdex-welcome-staging`, org `Hearth & Byte`, eu-west-1, $0) — [staging-plan.md §3](staging-plan.md).
-2. Staging setup and checks ([staging-plan.md §4–5](staging-plan.md)): migrations incl. 0014 → 0015 (switches OFF), `0015_staging_verification.sql`, REST authorization probes, deploy the function, G-2 harness (`exit 0`, no `inconclusive`), G-7 hosted invocation answers `ok`/`disabled`.
+2. Staging setup and checks ([staging-plan.md §4–5](staging-plan.md)): migrations incl. 0014 → 0015 (switches OFF), `0015_staging_verification.sql`, REST authorization probes, deploy the function, G-2 harness (`exit 0`, S1–S5 and S7 pass with `ANON_KEY`, cleanup restored; S6 informational), hosted G-7: an authorized invocation with the flag on and dispatch OFF answers `state: ok` (`disabled` proves nothing about the emblem).
 3. **A-3/A-4 with an owner-controlled recipient only** (needs your explicit approval and your own `AZERDEX_WELCOME_ENABLED=true`): register → confirm → exactly one welcome; repeat link, login, password reset, e-mail change → none; confirm `Reply-To: support@azerdex.com`; Gmail mobile and Outlook (R-1…R-3); recommended `AZERDEX_WELCOME_MODE=template`.
 4. **A-5 drills:** wrong `RESEND_API_KEY` (expect `provider_auth_failed`, nobody parked), template renamed/unpublished (expect ≤ 3 parked, then recover with `operator_requeue`), kill switch, secret rotation, unauthenticated invocation → 401.
 5. **B-1:** decide the landing-page option and verify anonymous `200`.

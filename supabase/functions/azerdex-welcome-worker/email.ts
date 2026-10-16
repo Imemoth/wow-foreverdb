@@ -38,6 +38,11 @@ export function renderHtml(ctaUrl: string): string {
 </table></td></tr></table></body></html>`;
 }
 
+/** Plain ASCII addr-spec only: no quoted local parts, display names, commas, angle brackets, whitespace or non-ASCII (IDN users are not welcomed in V1). */
+export function isPlainAddress(a: string): boolean {
+  return a.length <= 254 && /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(a);
+}
+
 export interface ResendPayload {
   [k: string]: unknown;
 }

@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { crc32 } from "node:zlib";
 import assert from "node:assert/strict";
 import { loadConfig, missingSettings, isAllowedDbUrl } from "../../supabase/functions/azerdex-welcome-worker/config.ts";
 import { validateLogo, LogoError } from "../../supabase/functions/azerdex-welcome-worker/logo.ts";
@@ -76,6 +77,12 @@ test("WT-4 the emblem is validated BEFORE any send: missing, non-PNG, wrong size
   assert.throws(() => validateLogo(new Uint8Array([...good, 0])), (e) => e.code === "logo_corrupt", "trailing byte after IEND");
   assert.throws(() => validateLogo(good.slice(0, good.length - 12)), (e) => e.code === "logo_corrupt", "IEND chunk removed");
   assert.throws(() => validateLogo(good.slice(0, good.length - 5)), (e) => e.code === "logo_corrupt", "truncated");
+  // structure: IEND before any IDAT, or a non-empty IEND, or an IHDR of the wrong length (each with a VALID crc, so only the structure check can catch it)
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc32(td)); return Buffer.concat([len, td, c]); };
+  const sig = Buffer.from(good.slice(0, 8)), ihdr = Buffer.from(good.slice(8, 8 + 25));
+  assert.throws(() => validateLogo(new Uint8Array(Buffer.concat([sig, ihdr, chunk("IEND", Buffer.alloc(0))]))), (e) => e.code === "logo_corrupt", "IEND without IDAT");
+  const idat = Buffer.from(good.slice(8 + 25, good.length - 12));
+  assert.throws(() => validateLogo(new Uint8Array(Buffer.concat([sig, ihdr, idat, chunk("IEND", Buffer.from([1]))]))), (e) => e.code === "logo_corrupt", "non-empty IEND");
   for (const bad of [null, makePng(10, 10), new Uint8Array([1, 2, 3])]) {
     const h = harness({ logo: async () => bad });
     const s = await runOnce(h.deps);
@@ -256,6 +263,19 @@ test("WT-15 a failing finish call never throws (the lease expiry is the safety n
   const s = await runOnce(h.deps);
   assert.equal(s.sent, 1);
   assert.equal(s.finish_failed, 1);
+});
+
+test("WT-15b recipients that are not a plain ASCII addr-spec are never sent to the provider (parked as permanent, no breaker count)", async () => {
+  const bad = ['"a b"@example.test', "a@b.test, c@d.test", "A <a@b.test>", "a@b", "ünï@example.test", "a@exa mple.test", "a@@b.test", "x".repeat(65) + "@example.test", ""];
+  const jobs = bad.map((r, i) => job({ user_id: `u${i}`, lease_token: `l${i}`, idempotency_key: `k${i}`, recipient: r }));
+  const h = harness({ jobs });
+  const s = await runOnce(h.deps);
+  assert.equal(h.calls.fetch.length, 0, "provider never called");
+  assert.equal(s.permanent, bad.length);
+  assert.ok(h.calls.finish.every((f) => f.outcome === "permanent" && f.error_code === "provider_rejected"));
+  assert.notEqual(s.state, "circuit_open", "local rejections do not trip the provider breaker");
+  const ok = harness({ jobs: [job({ recipient: "first.last+tag@sub.example.test" })] });
+  assert.equal((await runOnce(ok.deps)).sent, 1);
 });
 
 test("WT-16 never sends more than the per-run cap even if the database returns more", async () => {

@@ -38,17 +38,23 @@ function crc32(bytes: Uint8Array, start: number, end: number): number {
 /** Every chunk CRC must match, IDAT must exist, IEND must be last and nothing may follow it: a corrupted or tampered file fails closed. */
 function assertIntegrity(bytes: Uint8Array, view: DataView): void {
   let off = 8;
+  let first = true;
   let sawIdat = false;
   let sawIend = false;
   while (off < bytes.length) {
     if (sawIend || off + 12 > bytes.length) throw new LogoError("logo_corrupt");
     const len = view.getUint32(off);
+    if (first && len !== 13) throw new LogoError("logo_corrupt"); // IHDR is exactly 13 bytes
+    first = false;
     const end = off + 8 + len;
     if (end + 4 > bytes.length) throw new LogoError("logo_corrupt");
     if (crc32(bytes, off + 4, end) !== view.getUint32(end)) throw new LogoError("logo_corrupt");
     const type = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
     if (type === "IDAT") sawIdat = true;
-    if (type === "IEND") sawIend = true;
+    if (type === "IEND") {
+      if (!sawIdat || len !== 0) throw new LogoError("logo_corrupt"); // image data must precede IEND, which is empty
+      sawIend = true;
+    }
     off = end + 4;
   }
   if (!sawIdat || !sawIend || off !== bytes.length) throw new LogoError("logo_corrupt");

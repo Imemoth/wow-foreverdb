@@ -1,6 +1,6 @@
 // One bounded worker run: claim -> send -> finish. All effects are injected so the whole thing is testable with a mocked database and
 // a mocked Resend. Logs contain counts and allowlisted codes only; never an address, a key, a payload or a provider body.
-import { buildPayload } from "./email.ts";
+import { buildPayload, isPlainAddress } from "./email.ts";
 import { missingSettings, type WorkerConfig } from "./config.ts";
 import { LogoError, validateLogo, type Logo } from "./logo.ts";
 import { sendEmail, type FetchLike, type SendOutcome } from "./resend.ts";
@@ -88,6 +88,13 @@ export async function runOnce(d: RunDeps): Promise<RunSummary> {
       stopped ??= streak >= CIRCUIT_BREAKER ? "circuit_open" : "ok";
       continue;
     }
+    if (!isPlainAddress(job.recipient)) {
+      // Never hand an unusual address form to the provider (it could be parsed differently there than by Auth). Local decision: not a provider
+      // failure, so it does not count toward the circuit breaker; the event is parked for the operator.
+      s.permanent++;
+      await finish(d, s, { user_id: job.user_id, lease_token: job.lease_token, outcome: "permanent", error_code: "provider_rejected" });
+      continue;
+    }
     const out: SendOutcome = await sendEmail({
       fetch: d.fetch,
       apiKey: d.cfg.resendApiKey,
@@ -100,8 +107,8 @@ export async function runOnce(d: RunDeps): Promise<RunSummary> {
       s.sent++;
       await finish(d, s, { user_id: job.user_id, lease_token: job.lease_token, outcome: "sent", provider_id: out.providerId });
     } else if (out.kind === "permanent" && out.code === "provider_auth") {
-      // A revoked key or unverified domain is an operator problem, not a per-user problem: give the attempt back, stop the run, alert.
-      s.permanent++;
+      // A revoked key or unverified domain is an operator problem, not a per-user problem: give the attempt back (nobody is parked, so this is
+      // deliberately NOT counted as `permanent`), stop the run, alert.
       stopped = "provider_auth_failed";
       d.log("provider_auth_failed", { claimed: s.claimed });
       await release(job);

@@ -18,6 +18,13 @@ select (length(:'worker_secret') >= 32) as secret_ok \gset
 -- the statement) it could reach the server log; Supabase-hosted projects do not log statement text by default. Check log settings first.
 -- Scheduling does NOT start sending: the worker flag AZERDEX_WELCOME_ENABLED and both database switches must also be ON (runbook §5).
 \set ON_ERROR_STOP on
+-- The secret is sent to this URL every minute: only the exact Supabase Edge Function URL form is accepted (https, 20-char project ref, this function).
+select (:'fn_url' ~ '^https://[a-z0-9]{20}\.supabase\.co/functions/v1/azerdex-welcome-worker$') as url_ok \gset
+\if :url_ok
+\else
+\echo 'refusing: fn_url must look like https://<20-char-ref>.supabase.co/functions/v1/azerdex-welcome-worker'
+\quit 1
+\endif
 begin;
 select vault.create_secret(:'worker_secret', 'azerdex_worker_secret', 'AzerDex welcome worker invocation secret (rotate per runbook)')
  where not exists (select 1 from vault.secrets where name = 'azerdex_worker_secret');

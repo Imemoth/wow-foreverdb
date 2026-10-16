@@ -52,11 +52,11 @@ Without it nothing else here can proceed. If the owner prefers C (Pro + branch),
    Also `curl "$STAGING_REST/azerdex_welcome_outbox"` → 404 (the schema is not exposed).
 5. Secrets (Edge Function secrets, names only): `AZERDEX_WORKER_SECRET`, `RESEND_API_KEY`, `AZERDEX_WELCOME_MODE`; **not set**: `AZERDEX_WELCOME_ENABLED`. Optional `AZERDEX_WORKER_DB_KEY`. The Resend key: the owner decides which key to use for staging; **no key is created, rotated or revoked by this plan**.
 6. Deploy the function to staging only: `supabase functions deploy azerdex-welcome-worker --project-ref <STAGING_REF>` (any deploy path now works: the emblem is in the import graph). Unauthenticated POST → 401. Authorized POST with the flag unset → `{"state":"disabled"}`.
-7. Schedule: `database/ops/0015_schedule_welcome_worker.sql` (still inert while the flag is unset).
+7. Schedule: `database/ops/0015_schedule_welcome_worker.sql` (still inert while the flag is unset; it refuses any URL that is not `https://<20-char-ref>.supabase.co/functions/v1/azerdex-welcome-worker` and a secret shorter than 32 characters).
 
 ## 5. Validation
 
-**G-7 (hosted)** — authorized invocation after enabling the flag must answer `state: ok` (queue empty), **never** `logo_invalid`; response size/time sane; function logs show `run_complete` with `mode`. A corrupted bundle cannot be simulated hosted; it is proven by the local Deno test (AS-6).
+**G-7 (hosted)** — an authorized invocation with the worker flag **on** and dispatch **OFF** must answer `state: ok` (queue empty): only `ok` proves the emblem validates on the hosted runtime (`disabled` proves authentication and the flag only), and `logo_invalid` is a failure; response size/time sane; function logs show `run_complete` with `mode`. A corrupted bundle cannot be simulated hosted; it is proven by the local Deno test (AS-6).
 
 **G-2 (hosted GoTrue provenance)** — drive the matrix without sending mail, with the harness (staging only; refuses the production ref):
 ```
@@ -65,7 +65,7 @@ export SERVICE_KEY="…" ANON_KEY="…"      # read from your password manager, 
 # precondition on STAGING: select private.azerdex_welcome_set_switch(true, null);  -- intake ON, dispatch stays OFF
 node scripts/azerdex-welcome-hosted-provenance.mjs
 ```
-Scenarios S1–S7 (signup confirm = 1 event; repeat = none; recovery on an unconfirmed signup = none; recovery of a confirmed account = none; recovery-before-signup-link = none; e-mail change = none; anonymous = none). **PASS only if the exit code is 0 and no scenario is `inconclusive`**; `inconclusive` (e.g. an `email_change` verify that needs both confirmations) must be repeated manually with real mail to an owner-controlled team address. If any expectation fails the rule does **not** hold on the hosted Auth: **stop, keep sending disabled** and report (the rule fails closed by design: a hosted difference normally shows as *zero* events in S1, not extra events). The harness is validated against the local real-GoTrue stack only (5 pass, 0 fail, 2 inconclusive/skipped).
+Scenarios S1–S7 (signup confirm = 1 event; repeat = none; recovery on an unconfirmed signup = none; recovery of a confirmed account = none; recovery-before-signup-link = none; e-mail change = informational; anonymous = none). **G-2 PASS only if the exit code is 0, S1–S5 and S7 are `pass: true` (S7 needs `ANON_KEY`) and the `cleanup` report shows every synthetic user deleted and the outbox restored**; S6 is informational (it cannot fire the confirm trigger and secure e-mail change needs both confirmations: repeat by hand with real mail to an owner-controlled team address if wanted). The harness refuses anything but `https://<ref>.supabase.co` for both URLs, deletes the users it creates, and aborts if dispatch is ever on. If S1 shows no event, check first that `activation_at` is set (`select activation_at from private.azerdex_welcome_config`). If any expectation fails the rule does **not** hold on the hosted Auth: **stop, keep sending disabled** and report (the rule fails closed by design: a hosted difference normally shows as *zero* events in S1, not extra events). The harness is validated against the local real-GoTrue stack only (exit 0; 7 synthetic users created and deleted; guard negatives refused).
 Also capture the hosted Auth version (dashboard → Infrastructure) in the evidence.
 
 **G-3 (hosted integration)** — with dispatch still OFF: switches, privileges (step 3–4), denied anonymous invocation, kill switch (`0015_kill_switch.sql` / restore), reconciler (`select private.azerdex_welcome_reconcile()` after a simulated trigger failure is covered by local PV-14; hosted: confirm `azerdex_welcome_stats()` counters). Lease/retry/idempotency/unknown-outcome behaviour is database logic proven locally (WK-1…WK-26, E2E-1…8); on staging repeat only: one **owner-controlled recipient** end to end (needs explicit approval, §6), 429/timeout drills via the wrong-key drill, and confirm no interaction with production data (the staging project shares nothing with `wow-forever`).
@@ -77,7 +77,7 @@ Sending any real e-mail from staging (A-3/A-4) uses **only an owner-controlled r
 ## 7. Rollback and teardown
 
 1. Kill switch first: `database/rollback/0015_kill_switch.sql`; `supabase secrets unset AZERDEX_WELCOME_ENABLED`; `database/ops/0015_unschedule_welcome_worker.sql`.
-2. `supabase functions delete azerdex-welcome-worker --project-ref <STAGING_REF>`; unset the staging secrets; if a staging-only Resend key was used, the **owner** revokes it (this plan never touches keys).
+2. `supabase functions delete azerdex-welcome-worker --project-ref <STAGING_REF>`; unset the staging secrets; remove the Vault copies of the scheduler secret/URL (the commented teardown statement in `database/ops/0015_unschedule_welcome_worker.sql`); if a staging-only Resend key was used, the **owner** revokes it (this plan never touches keys).
 3. Optional schema rollback: `database/rollback/0015_rollback.sql` then `database/ops/0015_record_migration_ledger.sql -v name=rollback_azerdex_welcome_outbox`.
 4. Delete the project (dashboard) once acceptance evidence is recorded in `acceptance.md`. Confirm `list_projects` shows only the original projects and `wow-forever` is untouched (ledger unchanged apart from the owner's own steps).
 

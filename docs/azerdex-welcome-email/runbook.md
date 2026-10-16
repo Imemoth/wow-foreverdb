@@ -6,8 +6,8 @@ for experiments), and requires the owner approvals in [acceptance.md](acceptance
 ## 1. Prerequisites (do not skip)
 
 1. Gate B-1: `https://azerdex.com/` is publicly reachable **for an anonymous visitor** and useful. The domain is assigned and verified, but Vercel Authentication (SSO) protects all deployments of the project; confirm from a logged-out browser (`curl -sI https://azerdex.com/` → 200, not 401/login redirect). Changing protection needs owner approval. If not satisfied, do not enable sending.
-2. Gate G-2: run `node scripts/azerdex-welcome-hosted-provenance.mjs` against the **hosted staging** Auth ([staging-plan.md §5](staging-plan.md)); PASS needs exit code 0 and no `inconclusive` scenario (signup confirm = 1 event; recovery on an unconfirmed signup = 0 events; …).
-3. Asset: the emblem is committed (`azerdex-logo.png`) **and embedded** in the function's import graph (`logo-data.ts`, regenerate with `node scripts/embed-azerdex-logo.mjs` after any change to the PNG; the test suite fails if it is stale). Any deploy path works. After the first staging deploy an authorized invocation must answer `state: ok` (or `disabled`), **never** `logo_invalid` (hosted G-7).
+2. Gate G-2: run `node scripts/azerdex-welcome-hosted-provenance.mjs` against the **hosted staging** Auth ([staging-plan.md §5](staging-plan.md)); PASS = exit code 0 with S1–S5 **and S7** (needs `ANON_KEY`) `pass: true` and the cleanup report restored (S6 is informational). The harness deletes every synthetic user it creates.
+3. Asset: the emblem is committed (`azerdex-logo.png`) **and embedded** in the function's import graph (`logo-data.ts`, regenerate with `node scripts/embed-azerdex-logo.mjs` after any change to the PNG; the test suite fails if it is stale). Any deploy path works. Hosted G-7 passes **only** when an authorized invocation answers `state: ok` with the worker flag **on** and dispatch **OFF** (the emblem is validated before the queue is touched); `disabled` only proves authentication and the flag, it says nothing about the emblem; `logo_invalid` is a failure.
 4. Resend: **G-4 PASS** (template + CID proven directly, owner test 2026-10-16, Gmail desktop). Domain `azerdex.com` verified, sending enabled, **open and click tracking OFF** — *owner-attested 2026-10-14 (G-5 PASS, not independently verifiable from this repository; re-check in the dashboard before first send)*. Create a **sending-only** API key restricted to that domain.
 
 ## 2. Configure secrets (never in git, Vercel, web, Companion, addon, chat or logs)
@@ -69,7 +69,7 @@ Re-enable only after the cause is understood: `database/rollback/0015_kill_switc
 `unknown_outcomes > 0`, `trigger_failures_open > 0` (`signup_trigger_failures_open` = a user whose candidate was lost: they will not be welcomed; this is fail-safe), `verified_not_enqueued > 0` for more than a few minutes, or the Edge Function log shows repeated `run_complete` with
 `ambiguous`/`retry`. Alert text must carry **counts only**: no address, no user id. Function logs contain counts and allowlisted codes only (asserted by tests).
 
-**Provider key / domain problem:** the worker log event `provider_auth_failed` (and `state: provider_auth_failed` in the response) means Resend answered 401/403. No user is parked; jobs are released and retried each minute until you fix the key or domain verification. Alert on this event.
+**Provider key / domain problem:** the worker log event `provider_auth_failed` (and `state: provider_auth_failed` in the response) means Resend answered 401/403. No user is parked; jobs are released with their attempt given back and looked at again about every 5 minutes until you fix the key or domain verification. Alert on this event.
 
 **Changing the sending mode (`AZERDEX_WELCOME_MODE` html ↔ template):** only with an empty retry queue. `select public.azerdex_welcome_stats()` must show **no** `retry` and **no** `leased` rows (or wait 24 h): the idempotency key is the same in both modes, so a changed payload under a reused key is answered 409 by the provider and the event would burn attempts and end in `review_required` (resend-integration.md). Never edit or unpublish the `azerdex-welcome-v1` template while events are in flight; a template-wide mistake parks at most 3 users per run: fix the template, then `operator_requeue` them.
 
@@ -84,6 +84,11 @@ Re-enable only after the cause is understood: `database/rollback/0015_kill_switc
 Never re-send "just in case": a duplicate welcome is a worse outcome than a missed one. There is no public resend button.
 
 ## 9. Safe retry and recovery without duplicates
+
+**Provider outage or quota exhaustion (429/5xx for hours):** each retry consumes an attempt (cap 6, backoff 1…16 min), so a long outage parks queued events as `review_required` with `last_error_code = 'attempts_exhausted'`. Prevent it by switching dispatch OFF (`0015_kill_switch.sql`: no attempts are consumed) when you see sustained 429/5xx or a provider status incident. Recover afterwards: events parked with `attempts_exhausted` **and `unknown_outcome = false`** only ever saw definite non-sends (429, released attempts), so they can be requeued in bulk without a provider-history check:
+`select private.azerdex_welcome_operator_requeue(user_id, true) from private.azerdex_welcome_outbox where status = 'review_required' and last_error_code = 'attempts_exhausted' and not unknown_outcome;`
+Rows with `unknown_outcome = true` still need the per-event provider check (§8). Alert on `review_required > 0`.
+
 
 * `retry` rows retry themselves (same key, backoff, ≤ 6 attempts). Leave them.
 * After an outage the queue drains by itself within its limits (10 per minute); events older than the idempotency window with an unknown outcome stop for review, not for re-send.

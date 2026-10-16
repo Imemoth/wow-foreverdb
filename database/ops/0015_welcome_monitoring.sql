@@ -5,3 +5,7 @@ select left(user_id::text, 8) as user, status, attempts, unknown_outcome, last_e
   from private.azerdex_welcome_outbox
  where status in ('review_required', 'retry', 'leased') and updated_at < now() - interval '10 minutes'
  order by updated_at limit 50;
+
+-- Why events ended up in review (counts by reason; no identifiers). attempts_exhausted with unknown_outcome = false = only definite non-sends
+-- (bulk-requeueable, runbook §9); unknown_outcome = true needs the per-event provider check (runbook §8).
+select last_error_code, unknown_outcome, count(*) as events from private.azerdex_welcome_outbox where status = 'review_required' group by 1, 2 order by 3 desc;

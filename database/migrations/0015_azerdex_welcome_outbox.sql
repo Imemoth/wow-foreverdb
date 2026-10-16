@@ -31,7 +31,7 @@
 --
 -- DATA PRESERVATION: only new objects (four tables, twelve functions, two triggers on auth.users). No existing table row or function is
 -- altered. NOTHING is applied to any Supabase project by the repository; apply only after explicit owner approval (kill switches stay OFF).
--- Numbering: 0012 applied; 0013 is a restore script only; 0014 is reserved by PR #56 (unmerged, untouched); 0010 reserved. 0015 is the
+-- Numbering: 0012 applied; 0013 is a restore script only; 0014 (zero-touch enrollment, PR #56) is merged to main and recorded in the production ledger; 0010 reserved. 0015 is the
 -- next free ID and is independent of 0014 (neither references the other).
 -- Rollback / kill switch: database/rollback/0015_*.sql. Scheduler (pg_cron + pg_net): database/ops/0015_schedule_welcome_worker.sql (manual).
 

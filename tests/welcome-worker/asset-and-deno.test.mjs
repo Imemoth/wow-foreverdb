@@ -66,7 +66,9 @@ test("AS-3 the emblem is embedded, not read from disk: generated module is curre
   assert.equal(createHash("sha256").update(bytes).digest("hex"), LOGO_PNG_SHA256);
   const index = fs.readFileSync(path.join(fnDir, "index.ts"), "utf8");
   assert.match(index, /from "\.\/logo-data\.ts"/);
-  assert.ok(!/Deno\.readFile|readTextFile|import\.meta\.url/.test(index), "no runtime file read");
+  for (const f of fs.readdirSync(fnDir).filter((x) => x.endsWith(".ts"))) { // EVERY worker source, not just the entry point
+    assert.ok(!/Deno\.(readFile|readTextFile|open|readDir|stat)|node:fs|import\.meta\.url/.test(fs.readFileSync(path.join(fnDir, f), "utf8")), `${f}: no runtime file access`);
+  }
   assert.ok(!/^\s*static_files\s*=/m.test(configToml), "no static_files: API-based deploys cannot ship them");
   assert.match(configToml, /^verify_jwt\s*=\s*false/m);
 });
