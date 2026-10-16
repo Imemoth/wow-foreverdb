@@ -117,10 +117,11 @@ describe("races between different tickets", () => {
   });
 
   it("ticket revocation racing redemption: always exactly one of {enrolled, revoked}, never both, never neither (30 rounds)", async () => {
-    const acct = await w.account();
     let enrolled = 0;
     let revoked = 0;
     for (let round = 0; round < 30; round += 1) {
+      // fresh account per round: devices enrolled by earlier rounds must not eat into the device limit
+      const acct = await w.account();
       await w.admin.query("update private.enrollment_tickets set created_at = now() - interval '2 hours', expires_at = now() + interval '166 hours' where account_uid = $1", [acct.uid]);
       const t = await w.ticket(acct);
       const d = await w.device();
