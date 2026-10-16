@@ -9,7 +9,25 @@ public class FeatureGateTests
     private static AccountGateDecision Eval(params (string Name, string Value)[] vars)
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null);
+        // Simulates an owner-approved build: the compiled approvals are OFF on the release line (see Compiled_approvals_are_off...).
+        return AccountFeatureGate.EvaluateWithApprovals(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true));
+    }
+
+    [Fact]
+    public void Compiled_approvals_are_off_and_the_private_pilot_stays_closed_without_an_owner_approved_code_change()
+    {
+        Assert.False(AccountFeatureGate.PrivateProjectPilotApproved);
+        Assert.False(AccountFeatureGate.CompiledApprovals.PrivatePilot);
+        var env = new Dictionary<string, string>
+        {
+            [AccountFeatureGate.ModeVariable] = "private-pilot",
+            [AccountFeatureGate.UrlVariable] = PrivateUrl,
+            [AccountFeatureGate.KeyVariable] = PrivateKey,
+            [AccountFeatureGate.ProjectRefVariable] = AccountFeatureGate.ProductionProjectRef
+        };
+        var d = AccountFeatureGate.Evaluate(n => env.TryGetValue(n, out var v) ? v : null);
+        Assert.False(d.AccountsEnabled);
+        Assert.Null(d.Endpoint);
     }
 
     private const string Key = "sb_publishable_testkey";
@@ -110,6 +128,114 @@ public class FeatureGateTests
             (AccountFeatureGate.UrlVariable, url),
             (AccountFeatureGate.KeyVariable, Key));
         Assert.Equal(expected, d.AccountsEnabled);
+    }
+
+    // ---------- owner-approved private project pilot (never the default) ----------
+
+    private const string PrivateUrl = "https://klxhikdlfwgxurdyexdi.supabase.co";
+    private const string PrivateKey = "sb_publishable_abcdefghijklmnopqrstuvwxyz123456";
+
+    private static (string, string)[] PrivatePilot(string url = PrivateUrl, string key = PrivateKey, string projectRef = AccountFeatureGate.ProductionProjectRef) =>
+        new[]
+        {
+            (AccountFeatureGate.ModeVariable, "private-pilot"),
+            (AccountFeatureGate.UrlVariable, url),
+            (AccountFeatureGate.KeyVariable, key),
+            (AccountFeatureGate.ProjectRefVariable, projectRef)
+        };
+
+    [Fact]
+    public void Owner_private_pilot_allows_only_exact_project_and_isolates_credential_vault()
+    {
+        var d = Eval(PrivatePilot());
+        Assert.True(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.PrivatePilot, d.Environment);
+        Assert.Equal(PrivateUrl, d.Endpoint!.BaseUrl);
+        Assert.Contains("account-test", d.CredentialSubdirectory);
+        Assert.Contains("private-pilot", d.CredentialSubdirectory);
+        Assert.False(Eval((AccountFeatureGate.ModeVariable, "production"),
+            (AccountFeatureGate.UrlVariable, PrivateUrl),
+            (AccountFeatureGate.KeyVariable, PrivateKey),
+            (AccountFeatureGate.ProjectRefVariable, AccountFeatureGate.ProductionProjectRef)).AccountsEnabled);
+        Assert.False(Eval().AccountsEnabled);
+    }
+
+    [Theory]
+    [InlineData("http://klxhikdlfwgxurdyexdi.supabase.co")]
+    [InlineData("https://abcdefghijklmnopqrst.supabase.co")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co.evil.example")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co:444")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co/rest/v1")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co?red=1")]
+    [InlineData("https://user@klxhikdlfwgxurdyexdi.supabase.co")]
+    public void Private_pilot_rejects_any_alternate_origin_path_or_scheme(string url)
+    {
+        Assert.False(Eval(PrivatePilot(url: url)).AccountsEnabled);
+    }
+
+    [Fact]
+    public void Private_pilot_rejects_wrong_ref_or_legacy_secret_keys()
+    {
+        Assert.False(Eval(PrivatePilot(projectRef: Ref)).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "sb_secret_abcdefghijklmnopqrstuvwxyz123456")).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "sb_publishable_short")).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "eyJhbGciOiJIUzI1NiJ9.test.signature")).AccountsEnabled);
+    }
+
+    [Fact]
+    public async Task Private_pilot_network_guard_allows_only_approved_https_origin()
+    {
+        var handler = new FakeHandler(new FakeSupabase());
+        using var client = new HttpClient(new ProductionHostGuardHandler(
+            handler, enforce: true, privatePilotOrigin: new Uri(PrivateUrl)));
+        var ok = await client.PostAsync(PrivateUrl + "/auth/v1/token?grant_type=password", new StringContent("{}"));
+        Assert.NotNull(ok);
+        Assert.Single(handler.RequestUris);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("https://abcdefghijklmnopqrst.supabase.co/auth/v1/signup", new StringContent("{}")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("http://klxhikdlfwgxurdyexdi.supabase.co/auth/v1/signup", new StringContent("{}")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("https://klxhikdlfwgxurdyexdi.supabase.co:444/auth/v1/signup", new StringContent("{}")));
+        Assert.Single(handler.RequestUris);
+    }
+
+    [Fact]
+    public async Task Private_pilot_sign_in_only_has_no_ingest_claim_or_anonymous_creation()
+    {
+        var server = new FakeSupabase();
+        server.AddRegisteredUser("owner@example.test", "new-password-with-12-chars");
+        var handler = new FakeHandler(server);
+        var dir = TestEnv.NewDirectory();
+        var productionVault = new SessionVault(dir, TestEnv.Protector());
+        var existing = server.AddAnonymousUser();
+        productionVault.Primary.Write(server.IssueSession(existing.Id), SlotMarker.For(SessionKind.Anonymous));
+        var originalFiles = TestEnv.ReadTopLevelFiles(dir);
+
+        var gate = Eval(PrivatePilot());
+        var runtime = AccountRuntime.Create(gate,
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: handler, protector: TestEnv.Protector(), productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.Equal(SessionState.LoggedOut, runtime.Sessions.Status.State);
+        Assert.Equal(StartAnonymousOutcome.FeatureDisabled, await runtime.Sessions.StartAnonymousAsync(false));
+        Assert.Equal(SignInOutcome.Success, await runtime.Sessions.SignInRegisteredAsync(
+            "owner@example.test", "new-password-with-12-chars".ToCharArray()));
+
+        Assert.Equal(ClaimStartOutcome.FeatureDisabled, (await runtime.Claims.StartClaimAsync("installation", default)).Outcome);
+        Assert.False((await runtime.Rpc.ClaimStartAsync("not-a-token", "installation", default)).Ok);
+        Assert.False((await runtime.Rpc.IngestAsync("not-a-token", "{}", default)).Ok);
+        var blocked = await runtime.Sync.SyncAsync("installation", "{}", 1, true, default);
+        Assert.Equal(SyncOutcome.Blocked, blocked.Outcome);
+        Assert.Equal(BlockReason.FeatureDisabled, blocked.Reason);
+
+        // No Account client mutation call made by this login-only pilot.
+        Assert.NotEmpty(handler.RequestUris); // only password grant and user verification
+        Assert.DoesNotContain(handler.RequestUris, u =>
+            u.AbsolutePath.Contains("rpc/", StringComparison.OrdinalIgnoreCase) ||
+            u.AbsolutePath.Contains("signup", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(originalFiles, TestEnv.ReadTopLevelFiles(dir));
     }
 
     [Fact]

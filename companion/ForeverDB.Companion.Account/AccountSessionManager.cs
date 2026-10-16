@@ -105,8 +105,10 @@ public sealed class AccountSessionManager
         GoTrueClient auth,
         bool accountsEnabled,
         TimeProvider? clock = null,
-        TimeSpan? lockTimeout = null)
+        TimeSpan? lockTimeout = null,
+        bool allowAnonymousCreation = true)
     {
+        _allowAnonymousCreation = allowAnonymousCreation;
         _vault = vault;
         _gate = gate;
         _auth = auth;
@@ -115,6 +117,8 @@ public sealed class AccountSessionManager
         _lockTimeout = lockTimeout ?? TimeSpan.FromSeconds(30);
         _status = AccountStatus.Initial(accountsEnabled);
     }
+
+    private readonly bool _allowAnonymousCreation;
 
     public bool AccountsEnabled { get; }
 
@@ -514,6 +518,9 @@ public sealed class AccountSessionManager
     /// </summary>
     public async Task<StartAnonymousOutcome> StartAnonymousAsync(bool confirmReplaceLostIdentity, CancellationToken ct = default)
     {
+        // An owner-only registered-login pilot must never create extra anonymous
+        // identities on the one shared production Supabase instance.
+        if (!_allowAnonymousCreation) return StartAnonymousOutcome.FeatureDisabled;
         SessionLease lease;
         try
         {

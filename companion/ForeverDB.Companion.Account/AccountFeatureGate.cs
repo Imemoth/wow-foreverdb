@@ -7,7 +7,8 @@ public enum AccountEnvironment
     /// <summary>Production behaviour of 0.8.x: anonymous sessions only. Account System V1 is OFF.</summary>
     ProductionAnonymousOnly,
     Local,
-    Staging
+    Staging,
+    PrivatePilot
 }
 
 /// <summary>Where Companion Auth and RPC traffic goes (the same project for both, never mixed).</summary>
@@ -38,6 +39,18 @@ public static class AccountFeatureGate
     /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
     public const bool ProductionAccountAuthApproved = false;
 
+    // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
+    // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.
+    public static readonly bool PrivateProjectPilotApproved = false;
+
+    /// <summary>
+    /// Pure test seam: which compiled approvals a gate evaluation assumes. The runtime never supplies one (it calls
+    /// <see cref="EvaluateFromEnvironment"/>), so ONLY the compiled flags above decide live availability.
+    /// </summary>
+    public readonly record struct GateApprovals(bool PrivatePilot);
+
+    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved);
+
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
     public const string ModeVariable = "FOREVERDB_ACCOUNT_MODE";
@@ -47,13 +60,21 @@ public static class AccountFeatureGate
 
     private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
 
-    public static AccountGateDecision Evaluate(Func<string, string?> getVariable)
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
+        EvaluateWithApprovals(getVariable, CompiledApprovals);
+
+    public static AccountGateDecision EvaluateWithApprovals(Func<string, string?> getVariable, GateApprovals approvals)
     {
         var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
 
         if (mode.Length == 0 || mode == "disabled")
         {
             return Off("Account features are disabled (default).");
+        }
+
+        if (mode == "private-pilot")
+        {
+            return EvaluatePrivatePilot(getVariable, approvals);
         }
 
         if (mode == "production")
@@ -141,6 +162,45 @@ public static class AccountFeatureGate
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));
 
+    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals)
+    {
+        if (!approvals.PrivatePilot)
+            return Off("Private project pilot is not approved in this build.");
+
+        var url = (getVariable(UrlVariable) ?? "").Trim();
+        var key = (getVariable(KeyVariable) ?? "").Trim();
+        var confirmedRef = (getVariable(ProjectRefVariable) ?? "").Trim();
+
+        // Permit exactly one known HTTPS Supabase origin; never a custom host,
+        // redirect, alternate port, userinfo, query or API path.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !uri.IsDefaultPort ||
+            uri.IdnHost != $"{ProductionProjectRef}.supabase.co" ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            (uri.AbsolutePath != "/" && uri.AbsolutePath.Length != 0) ||
+            !string.Equals(confirmedRef, ProductionProjectRef, StringComparison.Ordinal))
+        {
+            return Off("Private pilot requires the exact Supabase HTTPS origin and confirmed project reference.");
+        }
+
+        // The existing production project is shared with anonymous Companion
+        // users. Never accept service-role keys, secret keys, or legacy JWT keys.
+        if (!Regex.IsMatch(key, "^sb_publishable_[A-Za-z0-9_-]{20,}$", RegexOptions.CultureInvariant) ||
+            ContainsProductionReference(key))
+        {
+            return Off("Private pilot requires a modern publishable key; legacy and secret keys are refused.");
+        }
+
+        return new AccountGateDecision(
+            AccountEnvironment.PrivatePilot, true,
+            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, "private-pilot"),
+            $"account-test{Path.DirectorySeparatorChar}private-pilot-{ProductionProjectRef}",
+            "Private owner pilot: registered sign-in enabled, claims and uploads disabled.");
+    }
+
     private static AccountGateDecision Off(string reason) =>
         new(AccountEnvironment.ProductionAnonymousOnly, false, null, "", reason);
 
@@ -200,18 +260,34 @@ internal static class JwtInspectorRole
 public sealed class ProductionHostGuardHandler : DelegatingHandler
 {
     private readonly bool _enforce;
+    private readonly Uri? _privatePilotOrigin;
 
-    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce) : base(inner)
+    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce, Uri? privatePilotOrigin = null) : base(inner)
     {
         _enforce = enforce;
+        _privatePilotOrigin = privatePilotOrigin;
     }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (_enforce && request.RequestUri is { } uri &&
-            uri.ToString().Contains(AccountFeatureGate.ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+        if (_enforce && request.RequestUri is { } uri)
         {
-            throw new InvalidOperationException("Account traffic to the production project is blocked.");
+            if (_privatePilotOrigin is { } approved)
+            {
+                // A private pilot cannot be redirected off its exact allowlisted
+                // project, even to another HTTPS host or a different port.
+                if (uri.Scheme != Uri.UriSchemeHttps ||
+                    uri.IdnHost != approved.IdnHost ||
+                    uri.Port != approved.Port ||
+                    !string.IsNullOrEmpty(uri.UserInfo))
+                {
+                    throw new InvalidOperationException("Private account pilot request refused: unexpected host.");
+                }
+            }
+            else if (uri.ToString().Contains(AccountFeatureGate.ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Account traffic to the production project is blocked.");
+            }
         }
 
         return base.SendAsync(request, cancellationToken);

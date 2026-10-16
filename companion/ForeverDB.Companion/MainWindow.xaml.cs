@@ -98,7 +98,7 @@ public partial class MainWindow : Window
             _settings.SupabaseKey,
             "production");
         var runtimeKey =
-            $"{gate.AccountsEnabled}|{gate.Endpoint?.BaseUrl}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
+            $"{gate.Environment}|{gate.AccountsEnabled}|{gate.CredentialSubdirectory}|{gate.Endpoint?.BaseUrl}|{gate.Endpoint?.PublishableKey}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
 
         if (_account is null ||
             _accountRuntimeKey != runtimeKey)

@@ -4,6 +4,18 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Companion — registered sign-in for existing private Supabase (PR #54, draft)
+
+- [x] Owner explicitly approved lifting the blanket existing-project registration ban **for a private Companion pilot only** (2026-10-12).
+- [x] Draft PR [#54](https://github.com/Imemoth/wow-foreverdb/pull/54) (base: draft PR #53): `FOREVERDB_ACCOUNT_MODE=private-pilot` exact-host connection, separate DPAPI test vault, **registered sign-in/sign-out enabled**. The public production flag stays OFF, and default anonymous Companion is unchanged.
+- [x] Pilot code disables anonymous account creation, claim-code generation, snapshot ingest, owner selection, and automatic post-login sync at multiple independent layers. No live ownership data changed.
+- [ ] Windows Companion CI and independent safety review on the final PR #54 head.
+- [ ] Owner-run isolated-vault login/logout/refresh verification, original credential hash check, and read-only Supabase preservation baseline; **W1a, W4 and W7/W8 are not yet accepted**.
+- [x] `PrivateProjectPilotApproved` reverted to `false` before the merge to `main` (2026-10-16); gate tests use an injected-approval seam and assert the compiled default is closed. Public `ProductionAccountAuthApproved=false`.
+- [ ] Separately review and explicitly approve **throwaway-installation** claim/ingest support only after the login-only pilot passes, never with one of the 7 valuable historical installations first.
+
+Runbook: [Private project Companion pilot](account-v1/private-project-companion-pilot.md).
+
 ## Account V1 — single existing Supabase project candidate (2026-10-12)
 
 - [x] Separate code-only branch for a **protected, owner-only account pilot** using the existing private Supabase Auth project and for eventual production-compatible Auth configuration.
