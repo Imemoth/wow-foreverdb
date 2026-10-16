@@ -9,7 +9,32 @@ public class FeatureGateTests
     private static AccountGateDecision Eval(params (string Name, string Value)[] vars)
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null);
+        // Simulates an owner-approved build: the compiled approvals are OFF on the release line (see Compiled_approvals_are_off...).
+        return AccountFeatureGate.EvaluateWithApprovals(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
+    }
+
+    [Fact]
+    public void Compiled_approvals_are_off_and_the_private_pilot_stays_closed_without_an_owner_approved_code_change()
+    {
+        Assert.False(AccountFeatureGate.PrivateProjectPilotApproved);
+        Assert.False(AccountFeatureGate.CompiledApprovals.PrivatePilot);
+        Assert.False(AccountFeatureGate.PrivateProjectClaimPilotApproved);
+        Assert.False(AccountFeatureGate.CompiledApprovals.ClaimPilot);
+        var env = new Dictionary<string, string>
+        {
+            [AccountFeatureGate.ModeVariable] = "private-pilot",
+            [AccountFeatureGate.UrlVariable] = PrivateUrl,
+            [AccountFeatureGate.KeyVariable] = PrivateKey,
+            [AccountFeatureGate.ProjectRefVariable] = AccountFeatureGate.ProductionProjectRef
+        };
+        var d = AccountFeatureGate.Evaluate(n => env.TryGetValue(n, out var v) ? v : null);
+        Assert.False(d.AccountsEnabled);
+        Assert.Null(d.Endpoint);
+        env[AccountFeatureGate.ModeVariable] = "private-claim-pilot";
+        env[AccountFeatureGate.ClaimInstallationVariable] = "fresh-test-install-001";
+        var c = AccountFeatureGate.Evaluate(n => env.TryGetValue(n, out var v) ? v : null);
+        Assert.False(c.AccountsEnabled);
+        Assert.Null(c.Endpoint);
     }
 
     private const string Key = "sb_publishable_testkey";
@@ -110,6 +135,237 @@ public class FeatureGateTests
             (AccountFeatureGate.UrlVariable, url),
             (AccountFeatureGate.KeyVariable, Key));
         Assert.Equal(expected, d.AccountsEnabled);
+    }
+
+    // ---------- owner-approved private project pilot (never the default) ----------
+
+    private const string PrivateUrl = "https://klxhikdlfwgxurdyexdi.supabase.co";
+    private const string PrivateKey = "sb_publishable_abcdefghijklmnopqrstuvwxyz123456";
+
+    private static (string, string)[] PrivatePilot(string url = PrivateUrl, string key = PrivateKey, string projectRef = AccountFeatureGate.ProductionProjectRef) =>
+        new[]
+        {
+            (AccountFeatureGate.ModeVariable, "private-pilot"),
+            (AccountFeatureGate.UrlVariable, url),
+            (AccountFeatureGate.KeyVariable, key),
+            (AccountFeatureGate.ProjectRefVariable, projectRef)
+        };
+
+    [Fact]
+    public void Owner_private_pilot_allows_only_exact_project_and_isolates_credential_vault()
+    {
+        var d = Eval(PrivatePilot());
+        Assert.True(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.PrivatePilot, d.Environment);
+        Assert.Equal(PrivateUrl, d.Endpoint!.BaseUrl);
+        Assert.Contains("account-test", d.CredentialSubdirectory);
+        Assert.Contains("private-pilot", d.CredentialSubdirectory);
+        Assert.False(Eval((AccountFeatureGate.ModeVariable, "production"),
+            (AccountFeatureGate.UrlVariable, PrivateUrl),
+            (AccountFeatureGate.KeyVariable, PrivateKey),
+            (AccountFeatureGate.ProjectRefVariable, AccountFeatureGate.ProductionProjectRef)).AccountsEnabled);
+        Assert.False(Eval().AccountsEnabled);
+    }
+
+    [Theory]
+    [InlineData("http://klxhikdlfwgxurdyexdi.supabase.co")]
+    [InlineData("https://abcdefghijklmnopqrst.supabase.co")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co.evil.example")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co:444")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co/rest/v1")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co?red=1")]
+    [InlineData("https://user@klxhikdlfwgxurdyexdi.supabase.co")]
+    public void Private_pilot_rejects_any_alternate_origin_path_or_scheme(string url)
+    {
+        Assert.False(Eval(PrivatePilot(url: url)).AccountsEnabled);
+    }
+
+    [Fact]
+    public void Private_pilot_rejects_wrong_ref_or_legacy_secret_keys()
+    {
+        Assert.False(Eval(PrivatePilot(projectRef: Ref)).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "sb_secret_abcdefghijklmnopqrstuvwxyz123456")).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "sb_publishable_short")).AccountsEnabled);
+        Assert.False(Eval(PrivatePilot(key: "eyJhbGciOiJIUzI1NiJ9.test.signature")).AccountsEnabled);
+    }
+
+    [Fact]
+    public async Task Private_pilot_network_guard_allows_only_approved_https_origin()
+    {
+        var handler = new FakeHandler(new FakeSupabase());
+        using var client = new HttpClient(new ProductionHostGuardHandler(
+            handler, enforce: true, privatePilotOrigin: new Uri(PrivateUrl)));
+        var ok = await client.PostAsync(PrivateUrl + "/auth/v1/token?grant_type=password", new StringContent("{}"));
+        Assert.NotNull(ok);
+        Assert.Single(handler.RequestUris);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("https://abcdefghijklmnopqrst.supabase.co/auth/v1/signup", new StringContent("{}")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("http://klxhikdlfwgxurdyexdi.supabase.co/auth/v1/signup", new StringContent("{}")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.PostAsync("https://klxhikdlfwgxurdyexdi.supabase.co:444/auth/v1/signup", new StringContent("{}")));
+        Assert.Single(handler.RequestUris);
+    }
+
+    [Fact]
+    public async Task Private_pilot_sign_in_only_has_no_ingest_claim_or_anonymous_creation()
+    {
+        var server = new FakeSupabase();
+        server.AddRegisteredUser("owner@example.test", "new-password-with-12-chars");
+        var handler = new FakeHandler(server);
+        var dir = TestEnv.NewDirectory();
+        var productionVault = new SessionVault(dir, TestEnv.Protector());
+        var existing = server.AddAnonymousUser();
+        productionVault.Primary.Write(server.IssueSession(existing.Id), SlotMarker.For(SessionKind.Anonymous));
+        var originalFiles = TestEnv.ReadTopLevelFiles(dir);
+
+        var gate = Eval(PrivatePilot());
+        var runtime = AccountRuntime.Create(gate,
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: handler, protector: TestEnv.Protector(), productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.Equal(SessionState.LoggedOut, runtime.Sessions.Status.State);
+        Assert.Equal(StartAnonymousOutcome.FeatureDisabled, await runtime.Sessions.StartAnonymousAsync(false));
+        Assert.Equal(SignInOutcome.Success, await runtime.Sessions.SignInRegisteredAsync(
+            "owner@example.test", "new-password-with-12-chars".ToCharArray()));
+
+        Assert.Equal(ClaimStartOutcome.FeatureDisabled, (await runtime.Claims.StartClaimAsync("installation", default)).Outcome);
+        Assert.False((await runtime.Rpc.ClaimStartAsync("not-a-token", "installation", default)).Ok);
+        Assert.False((await runtime.Rpc.IngestAsync("not-a-token", "{}", default)).Ok);
+        var blocked = await runtime.Sync.SyncAsync("installation", "{}", 1, true, default);
+        Assert.Equal(SyncOutcome.Blocked, blocked.Outcome);
+        Assert.Equal(BlockReason.PilotUploadDisabled, blocked.Reason);
+
+        // No Account client mutation call made by this login-only pilot.
+        Assert.NotEmpty(handler.RequestUris); // only password grant and user verification
+        Assert.DoesNotContain(handler.RequestUris, u =>
+            u.AbsolutePath.Contains("rpc/", StringComparison.OrdinalIgnoreCase) ||
+            u.AbsolutePath.Contains("signup", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(originalFiles, TestEnv.ReadTopLevelFiles(dir));
+    }
+
+    // ---------- opt-in ONE-installation claim pilot: login-only stays the default ----------
+
+    private static (string, string)[] ClaimPilot(string installation) =>
+        PrivatePilot().Select(p => p.Item1 == AccountFeatureGate.ModeVariable
+            ? (p.Item1, "private-claim-pilot")
+            : p).Append((AccountFeatureGate.ClaimInstallationVariable, installation)).ToArray();
+
+    [Fact]
+    public void Claim_pilot_requires_a_specific_installation_and_does_not_enable_standard_private_pilot_claims()
+    {
+        Assert.Equal(AccountEnvironment.PrivatePilot, Eval(PrivatePilot()).Environment);
+        Assert.Null(Eval(PrivatePilot()).ScopedClaimInstallationId);
+        Assert.False(Eval(ClaimPilot("")).AccountsEnabled);
+        Assert.False(Eval(ClaimPilot("short")).AccountsEnabled);
+        var ok = Eval(ClaimPilot("fresh-test-install-001"));
+        Assert.True(ok.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.PrivateClaimPilot, ok.Environment);
+        Assert.Equal("fresh-test-install-001", ok.ScopedClaimInstallationId);
+        Assert.Equal(Eval(PrivatePilot()).CredentialSubdirectory, ok.CredentialSubdirectory);
+        Assert.False(Eval().AccountsEnabled);
+    }
+
+    [Fact]
+    public async Task Claim_pilot_imports_only_anonymous_copy_and_permits_code_for_one_installation()
+    {
+        var server = new FakeSupabase();
+        var anonymous = server.AddAnonymousUser();
+        var registered = server.AddRegisteredUser("owner@example.test", "an-example-long-password");
+        server.SetOwner("fresh-test-install-001", anonymous.Id);
+        server.SetOwner("untouched-install-002", anonymous.Id);
+        var handler = new FakeHandler(server);
+        var dir = TestEnv.NewDirectory();
+        var protector = TestEnv.Protector();
+        var original = new SessionVault(dir, protector);
+        original.Primary.Write(server.IssueSession(anonymous.Id), SlotMarker.For(SessionKind.Anonymous));
+        var baseline = TestEnv.ReadTopLevelFiles(dir);
+        var gate = Eval(ClaimPilot("fresh-test-install-001"));
+        var runtime = AccountRuntime.Create(gate,
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: handler, protector: protector, productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.True(runtime.Sessions.Status.HasLegacyOwner);
+        Assert.Equal(SignInOutcome.Success, await runtime.Sessions.SignInRegisteredAsync(
+            "owner@example.test", "an-example-long-password".ToCharArray()));
+        Assert.Equal(baseline, TestEnv.ReadTopLevelFiles(dir));
+
+        var forbidden = await runtime.Claims.StartClaimAsync("untouched-install-002", default);
+        Assert.Equal(ClaimStartOutcome.FeatureDisabled, forbidden.Outcome);
+        Assert.Equal(LinkCheckOutcome.Unavailable,
+            await runtime.Claims.CheckLinkStatusAsync("untouched-install-002", default));
+        Assert.Empty(server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start"));
+
+        Assert.Equal(StartAnonymousOutcome.FeatureDisabled,
+            await runtime.Sessions.StartAnonymousAsync(false));
+        Assert.Equal(ForgetOutcome.FeatureDisabled,
+            await runtime.Sessions.ForgetLegacyOwnerAsync(true, true));
+        var noRefresh = await runtime.Sessions.RefreshNowAsync(SlotRole.LegacyOwner);
+        Assert.False(noRefresh.Ok);
+        Assert.False((await runtime.Rpc.IngestAsync("test-token", "{}", default)).Ok);
+        var rejectedUpload = await runtime.Sync.SyncAsync("fresh-test-install-001", "{}", 1, true, default);
+        Assert.Equal(SyncOutcome.Blocked, rejectedUpload.Outcome);
+        Assert.Equal(BlockReason.PilotUploadDisabled, rejectedUpload.Reason);
+        Assert.Empty(server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth"));
+
+        var claim = await runtime.Claims.StartClaimAsync("fresh-test-install-001", default);
+        Assert.Equal(ClaimStartOutcome.Granted, claim.Outcome);
+        Assert.Single(server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start"));
+        Assert.True(server.Redeem(claim.Offer!.DisplayCode.Replace("FDB-", "").Replace("-", ""), registered.Id));
+        Assert.Equal(LinkCheckOutcome.TransferConfirmed,
+            await runtime.Claims.CheckLinkStatusAsync("fresh-test-install-001", default));
+        Assert.Equal(baseline, TestEnv.ReadTopLevelFiles(dir));
+    }
+
+    [Fact]
+    public async Task Expired_legacy_owner_copy_reports_safe_refresh_route_without_network_claim()
+    {
+        var server = new FakeSupabase();
+        var anonymous = server.AddAnonymousUser();
+        server.AddRegisteredUser("owner@example.test", "an-example-long-password");
+        server.SetOwner("fresh-test-install-001", anonymous.Id);
+        var handler = new FakeHandler(server);
+        var dir = TestEnv.NewDirectory();
+        var protector = TestEnv.Protector();
+        var original = new SessionVault(dir, protector);
+        var session = server.IssueSession(anonymous.Id);
+        session.ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeSeconds();
+        original.Primary.Write(session, SlotMarker.For(SessionKind.Anonymous));
+        var baseline = TestEnv.ReadTopLevelFiles(dir);
+
+        var runtime = AccountRuntime.Create(Eval(ClaimPilot("fresh-test-install-001")),
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: handler, protector: protector, productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.True(runtime.Sessions.Status.HasLegacyOwner);
+        var token = await runtime.Sessions.GetAccessTokenAsync(SlotRole.LegacyOwner);
+        Assert.False(token.Ok);
+        Assert.Equal(SessionFault.LegacyOwnerRefreshRequired, token.Fault);
+        var claim = await runtime.Claims.StartClaimAsync("fresh-test-install-001", default);
+        Assert.Equal(ClaimStartOutcome.AnonymousTokenNeedsRefresh, claim.Outcome);
+        Assert.Null(claim.Offer);
+        Assert.Contains("normal anonymous Companion", AccountMessages.Describe(claim.Outcome));
+        Assert.Empty(server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start"));
+        Assert.Equal(baseline, TestEnv.ReadTopLevelFiles(dir));
+    }
+
+    [Fact]
+    public async Task Claim_pilot_does_not_import_a_registered_production_identity()
+    {
+        var server = new FakeSupabase();
+        var registered = server.AddRegisteredUser("owner@example.test", "an-example-long-password");
+        var dir = TestEnv.NewDirectory();
+        var protector = TestEnv.Protector();
+        var original = new SessionVault(dir, protector);
+        original.Primary.Write(server.IssueSession(registered.Id), SlotMarker.For(SessionKind.Registered));
+        var before = TestEnv.ReadTopLevelFiles(dir);
+        var runtime = AccountRuntime.Create(Eval(ClaimPilot("fresh-test-install-001")),
+            new AccountEndpoint(PrivateUrl, PrivateKey, "production"),
+            handler: new FakeHandler(server), protector: protector, productionDirectory: dir);
+        await runtime.Sessions.InitializeAsync();
+        Assert.False(runtime.Sessions.Status.HasLegacyOwner);
+        Assert.Equal(before, TestEnv.ReadTopLevelFiles(dir));
     }
 
     [Fact]

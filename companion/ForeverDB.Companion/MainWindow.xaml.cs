@@ -98,7 +98,7 @@ public partial class MainWindow : Window
             _settings.SupabaseKey,
             "production");
         var runtimeKey =
-            $"{gate.AccountsEnabled}|{gate.Endpoint?.BaseUrl}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
+            $"{gate.Environment}|{gate.AccountsEnabled}|{gate.CredentialSubdirectory}|{gate.Endpoint?.BaseUrl}|{gate.Endpoint?.PublishableKey}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
 
         if (_account is null ||
             _accountRuntimeKey != runtimeKey)
@@ -129,13 +129,19 @@ public partial class MainWindow : Window
         RefreshAccountUi();
         _ = RunAccountBackgroundChecksAsync(account);
 
+        // Zero-touch (gate open only): learn the device-owned installation from local files before ANY sync can start, so the
+        // anonymous path never uploads it. No network here; enrollment itself runs in the background below.
+        account.Device?.Enrollment.LoadLocalState();
+        RefreshDeviceUi();
+
         _syncService = new SyncService(
             account.Sync,
             MapMetadataStore.Merge,
             snapshot =>
                 _ = MapPrewarm.RunAsync(
                     effective,
-                    snapshot));
+                    snapshot),
+            account.Device?.Sync);
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -163,6 +169,7 @@ public partial class MainWindow : Window
                 () =>
                 {
                     RecordSyncError(
+                        blocked.Message ??
                         AccountMessages.Describe(
                             blocked.Reason));
                     RefreshAccountUi();
@@ -225,6 +232,8 @@ public partial class MainWindow : Window
         RefreshSyncHealthUi();
 
         TryDiscoverInstallations();
+
+        _ = RunDeviceBackgroundAsync(account);
 
         if (_settings.AutoSync &&
             _watcher is not null)

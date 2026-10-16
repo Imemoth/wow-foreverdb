@@ -1,6 +1,6 @@
 # Migration 0012 — deployment, rollback and incident recovery (runbook)
 
-Status: **prepared in PR C; NOT applied anywhere real.** Applying `0012` to the production Supabase project, applying the reserved migration `0010`, changing production ownership records, creating Auth users in production, changing Supabase settings or deploying account functions to a release all require **explicit owner approval** and are outside PR C.
+Status update **2026-10-12**: migration `account_ownership_claims` (`0012`) was **APPLIED to the existing private `wow-forever` Supabase project**, recorded by Supabase ledger version `20261012124839`. The pre-existing text below describes the original preparation and the still-mandatory recovery procedures; it is not the current deployment status. **The public site, account activation, ownership transfers and migrations `0010`/`0013` remain untouched.** The owner-run `0012` deployment was executed separately via Supabase-managed migration transaction; it was **not** applied by PR C or PR #53. Future changes to ownership, Auth users, settings, other migrations or releases still require explicit approval. Full disaster-recovery restoration remains untested.
 
 Files:
 

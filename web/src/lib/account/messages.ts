@@ -55,3 +55,26 @@ export const LOGIN_REASONS: Record<string, { text: string; tone: "info" | "warn"
   password_reset: { text: "Your password was changed and every other session was signed out, including the Companion (sign in there again). Sign in here with the new password.", tone: "info" },
   unavailable: { text: "Sign-in is temporarily unavailable. Please try again shortly.", tone: "warn" },
 };
+
+/**
+ * Device registry / activation-file answers (zero-touch enrollment). The keys are also the ONLY notice codes the page accepts from
+ * `?notice=` (a closed list: arbitrary text in the URL is never shown).
+ */
+export const DEVICE_MESSAGES: Record<string, string> = {
+  ticket_limit: "You already have 5 unused activation files (or created 10 in the last hour). Revoke one you no longer need, or wait until one expires, then try again.",
+  outcome_unknown: "We could not confirm whether the activation file was created, and its content did not reach you. Check the list below, then simply download a new file (an unused one can be revoked).",
+  not_available: "This item could not be revoked. It may already be used, revoked or expired. Reload the list to see its current state.",
+  rate_limited: "Too many requests. Please wait a minute and try again.",
+  unauthenticated: "Your session has ended. Please sign in again.",
+  forbidden: "This request was refused. Reload the page and try again.",
+  csrf: "Your page was open too long. Please reload it and try again.",
+  invalid_input: "That request was not valid. Reload the page and try again.",
+  temporarily_unavailable: "The service is temporarily unavailable. Please try again shortly.",
+  account_unavailable: "Accounts are temporarily unavailable.",
+  network: "Could not reach the server. Check your connection, then check the list before trying again.",
+  error: "Something went wrong. Please try again.",
+};
+
+export function deviceMessageFor(code: unknown): string {
+  return (typeof code === "string" && Object.hasOwn(DEVICE_MESSAGES, code) && DEVICE_MESSAGES[code]) || DEVICE_MESSAGES.error!;
+}

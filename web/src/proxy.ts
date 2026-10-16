@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
-import { API_CSP, BASE_SECURITY_HEADERS, HSTS, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
+import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
 import {
@@ -71,15 +71,17 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   const { pathname } = request.nextUrl;
-  const isApi = pathname.startsWith("/api/") || isAccountApiPath(pathname);
+  const isAccountApi = isAccountApiPath(pathname);
+  const isApi = pathname.startsWith("/api/") || isAccountApi;
   // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
-  // deployment, production included), never leaks a referrer, and never receives the anonymous rate-limit cookie.
+  // deployment, production included), never leaks an account path/query in Referer, and never receives the anonymous rate-limit cookie.
   const isAccount = isAccountPath(pathname);
   const accountHeaders: Record<string, string> = isAccount
     ? {
-        "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer",
+        "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",
+        "Referrer-Policy": isAccountApi ? "no-referrer" : SENSITIVE_PAGE_REFERRER_POLICY,
         // API responses carry no markup; pages get the nonce CSP below.
-        ...(isAccountApiPath(pathname) ? { "Content-Security-Policy": API_CSP } : {}),
+        ...(isAccountApi ? { "Content-Security-Policy": API_CSP } : {}),
       }
     : {};
   const https = env.SITE_URL.startsWith("https://");

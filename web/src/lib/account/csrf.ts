@@ -59,6 +59,24 @@ export function originAllowed(headers: Headers, siteOrigin: string): boolean {
 
 export type CsrfVerdict = "ok" | "origin" | "content_type" | "token";
 
+/**
+ * Native HTML <form method="post"> variant (used ONLY where the response must be a file download that may not pass through page
+ * JavaScript: the activation file). A form cannot send the JSON content type or the custom header, so the proof is different but
+ * not weaker: (1) the exact site Origin (or Sec-Fetch-Site: same-origin) as above, (2) the form content type, (3) a token in the
+ * body whose HMAC covers nonce, expiry and the WEB SESSION ID (see `csrfBinding`): it is minted server-side into the page of a
+ * signed-in user, so another site can neither read nor forge it, and it is useless with any other session. The session cookie is
+ * SameSite=Lax, so a cross-site form post would not even carry it.
+ */
+export const FORM_CSRF_FIELD = "csrf";
+export function verifyFormRequest(headers: Headers, siteOrigin: string): "ok" | "origin" | "content_type" {
+  if (!originAllowed(headers, siteOrigin)) return "origin";
+  const type = (headers.get("content-type") ?? "").toLowerCase();
+  return type === "application/x-www-form-urlencoded" || type.startsWith("application/x-www-form-urlencoded;") ? "ok" : "content_type";
+}
+export async function verifyFormToken(secret: string, token: unknown, session: StoredSession | null, now?: number): Promise<boolean> {
+  return typeof token === "string" && (await checkCsrf(secret, token, csrfBinding(session), now)) !== null;
+}
+
 export async function verifyCsrf(opts: {
   headers: Headers;
   jar: CookieJar;

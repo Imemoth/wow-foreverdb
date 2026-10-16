@@ -7,7 +7,9 @@ public enum AccountEnvironment
     /// <summary>Production behaviour of 0.8.x: anonymous sessions only. Account System V1 is OFF.</summary>
     ProductionAnonymousOnly,
     Local,
-    Staging
+    Staging,
+    PrivatePilot,
+    PrivateClaimPilot
 }
 
 /// <summary>Where Companion Auth and RPC traffic goes (the same project for both, never mixed).</summary>
@@ -22,7 +24,8 @@ public sealed record AccountGateDecision(
     bool AccountsEnabled,
     AccountEndpoint? Endpoint,
     string CredentialSubdirectory,
-    string Reason);
+    string Reason,
+    string? ScopedClaimInstallationId = null);
 
 /// <summary>
 /// Fail-closed capability gate for Account System V1 (registered login, claims, ownership routing).
@@ -38,6 +41,35 @@ public static class AccountFeatureGate
     /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
     public const bool ProductionAccountAuthApproved = false;
 
+    // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
+    // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.
+    public static readonly bool PrivateProjectPilotApproved = false;
+
+    /// <summary>
+    /// Pure test seam: which compiled approvals a gate evaluation assumes. The runtime never supplies one (it calls
+    /// <see cref="EvaluateFromEnvironment"/>), so ONLY the compiled flags above decide live availability.
+    /// </summary>
+    public readonly record struct GateApprovals(bool PrivatePilot, bool ClaimPilot = false);
+
+    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved, PrivateProjectClaimPilotApproved);
+
+    // Owner-authorized one-installation claim experiment. OFF on the release line (reverted before the merge to main,
+    // 2026-10-16), independently of the login pilot flag; re-enabling is a separate owner-approved code change.
+    public static readonly bool PrivateProjectClaimPilotApproved = false;
+    public const string ClaimInstallationVariable = "FOREVERDB_ACCOUNT_CLAIM_INSTALLATION";
+
+    /// <summary>
+    /// Zero-touch enrollment and registered device sync (ADR-017). Compile-time, like the other approvals: no setting, file or
+    /// environment variable flips it. Local/Staging endpoints may use the feature without it; the private pilot projects may not.
+    /// </summary>
+    public const bool ZeroTouchEnrollmentApproved = false;
+
+    /// <summary>
+    /// Automatic (watcher/startup) upload for a registered device. Stays off until a dedicated owner acceptance (spec A4):
+    /// a registered device only ever uploads on an explicit Sync now.
+    /// </summary>
+    public const bool DeviceAutoSyncApproved = false;
+
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
     public const string ModeVariable = "FOREVERDB_ACCOUNT_MODE";
@@ -47,13 +79,21 @@ public static class AccountFeatureGate
 
     private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
 
-    public static AccountGateDecision Evaluate(Func<string, string?> getVariable)
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
+        EvaluateWithApprovals(getVariable, CompiledApprovals);
+
+    public static AccountGateDecision EvaluateWithApprovals(Func<string, string?> getVariable, GateApprovals approvals)
     {
         var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
 
         if (mode.Length == 0 || mode == "disabled")
         {
             return Off("Account features are disabled (default).");
+        }
+
+        if (mode == "private-pilot" || mode == "private-claim-pilot")
+        {
+            return EvaluatePrivatePilot(getVariable, approvals, claimPilot: mode == "private-claim-pilot");
         }
 
         if (mode == "production")
@@ -138,8 +178,69 @@ public static class AccountFeatureGate
             "Staging account test mode.");
     }
 
+    /// <summary>
+    /// True when zero-touch enrollment and device sync may run: an isolated Local/Staging gate, or a private pilot gate once
+    /// <see cref="ZeroTouchEnrollmentApproved"/> is flipped by a reviewed code change. The default production mode is never eligible.
+    /// </summary>
+    public static bool ZeroTouchAvailable(AccountGateDecision gate) =>
+        gate.AccountsEnabled &&
+        (gate.Environment is AccountEnvironment.Local or AccountEnvironment.Staging ||
+         (gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot && ZeroTouchEnrollmentApproved));
+
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));
+
+    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals, bool claimPilot)
+    {
+        if (claimPilot && !approvals.ClaimPilot)
+            return Off("Private installation claim pilot is not approved in this build.");
+
+        if (!approvals.PrivatePilot)
+            return Off("Private project pilot is not approved in this build.");
+
+        var url = (getVariable(UrlVariable) ?? "").Trim();
+        var key = (getVariable(KeyVariable) ?? "").Trim();
+        var confirmedRef = (getVariable(ProjectRefVariable) ?? "").Trim();
+
+        // Permit exactly one known HTTPS Supabase origin; never a custom host,
+        // redirect, alternate port, userinfo, query or API path.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !uri.IsDefaultPort ||
+            uri.IdnHost != $"{ProductionProjectRef}.supabase.co" ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            (uri.AbsolutePath != "/" && uri.AbsolutePath.Length != 0) ||
+            !string.Equals(confirmedRef, ProductionProjectRef, StringComparison.Ordinal))
+        {
+            return Off("Private pilot requires the exact Supabase HTTPS origin and confirmed project reference.");
+        }
+
+        // The existing production project is shared with anonymous Companion
+        // users. Never accept service-role keys, secret keys, or legacy JWT keys.
+        if (!Regex.IsMatch(key, "^sb_publishable_[A-Za-z0-9_-]{20,}$", RegexOptions.CultureInvariant) ||
+            ContainsProductionReference(key))
+        {
+            return Off("Private pilot requires a modern publishable key; legacy and secret keys are refused.");
+        }
+
+        var claimedInstallation = (getVariable(ClaimInstallationVariable) ?? "").Trim();
+        if (claimPilot &&
+            (!Regex.IsMatch(claimedInstallation, "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant) ||
+             claimedInstallation.Length < 16))
+            return Off("Claim pilot requires a single explicitly selected test installation ID.");
+
+        return new AccountGateDecision(
+            claimPilot ? AccountEnvironment.PrivateClaimPilot : AccountEnvironment.PrivatePilot,
+            true,
+            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, claimPilot ? "private-claim-pilot" : "private-pilot"),
+            $"account-test{Path.DirectorySeparatorChar}private-pilot-{ProductionProjectRef}",
+            claimPilot
+                ? "One-installation claim pilot: registered login and scoped claim code only. Ingest and owner selection disabled."
+                : "Private owner pilot: registered sign-in enabled, claims and uploads disabled.",
+            claimPilot ? claimedInstallation : null);
+    }
 
     private static AccountGateDecision Off(string reason) =>
         new(AccountEnvironment.ProductionAnonymousOnly, false, null, "", reason);
@@ -200,18 +301,34 @@ internal static class JwtInspectorRole
 public sealed class ProductionHostGuardHandler : DelegatingHandler
 {
     private readonly bool _enforce;
+    private readonly Uri? _privatePilotOrigin;
 
-    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce) : base(inner)
+    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce, Uri? privatePilotOrigin = null) : base(inner)
     {
         _enforce = enforce;
+        _privatePilotOrigin = privatePilotOrigin;
     }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (_enforce && request.RequestUri is { } uri &&
-            uri.ToString().Contains(AccountFeatureGate.ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+        if (_enforce && request.RequestUri is { } uri)
         {
-            throw new InvalidOperationException("Account traffic to the production project is blocked.");
+            if (_privatePilotOrigin is { } approved)
+            {
+                // A private pilot cannot be redirected off its exact allowlisted
+                // project, even to another HTTPS host or a different port.
+                if (uri.Scheme != Uri.UriSchemeHttps ||
+                    uri.IdnHost != approved.IdnHost ||
+                    uri.Port != approved.Port ||
+                    !string.IsNullOrEmpty(uri.UserInfo))
+                {
+                    throw new InvalidOperationException("Private account pilot request refused: unexpected host.");
+                }
+            }
+            else if (uri.ToString().Contains(AccountFeatureGate.ProductionProjectRef, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Account traffic to the production project is blocked.");
+            }
         }
 
         return base.SendAsync(request, cancellationToken);

@@ -91,7 +91,7 @@ No capability is called complete on mocks alone; see [acceptance-and-owner-actio
 | M6 logout scope, unpinned query, body-less sign-up | fixed in code: query pinning, `scope=local`, strict `AUTH_BODIES` (tests) |
 | M7 route/cookie contradiction, CSRF cookie, proxy gaps | unified on `/account/api/*`; signed CSRF token with `ACCOUNT_CSRF_SECRET` (validator + tests); proxy changes listed for PR B; static test forbids `app/api/account` |
 | M8 refresh on serverless, single-session setting | design no longer relies on single-flight; settings that couple sessions must be off |
-| M9 referrer/token leakage | `no-referrer`, `replaceState`, no query logging |
+| M9 referrer/token leakage | Account HTML `strict-origin` (path/query hidden while native same-origin form Origin remains concrete), API/file `no-referrer`, `replaceState`, no query logging |
 | M10 weak boundary tests | AST import scan (`ts.preProcessFile`), all source extensions, `NEXT_PUBLIC` and `accountAuth` bans, URL-builder allowlists, mutation-tested |
 | L1 port in staging origin | fixed (tests) |
 | L2 opaque publishable key cannot be bound to a project | accepted: the URL/ref confirmation is the binding; the staging project's key is owner-supplied |

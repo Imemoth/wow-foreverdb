@@ -47,7 +47,7 @@ export default async function InstallationsPage() {
           ))}
         </ul>
       )}
-      <p className="mt-6 flex gap-4 text-sm"><Link href="/account/link">Link another installation</Link><Link href="/account">Back to your account</Link></p>
+      <p className="mt-6 flex gap-4 text-sm"><Link href="/account/link">Link another installation</Link><Link href="/account/devices">Your computers</Link><Link href="/account">Back to your account</Link></p>
     </div>
   );
 }

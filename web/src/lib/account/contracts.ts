@@ -280,6 +280,7 @@ export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
   "/account",
   "/account/link",
   "/account/installations",
+  "/account/devices",
   "/account/guildbook",
   "/account/security",
 ];

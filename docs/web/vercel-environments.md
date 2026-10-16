@@ -1,5 +1,8 @@
 # ForeverDB Web — Vercel environments, deployment protection and release controls
 
+> **2026-10-12 draft Account V1 candidate only:** A separate server-side Account Auth/RPC boundary may **eventually** use the existing private Supabase HTTPS gateway in a protected owner-only pilot or separately approved production release. This is **not** a public-data connection and does not relax the `PUBLIC_READ_DATABASE_URL` or `NEXT_PUBLIC_*` isolation rules. Both code approval flags remain OFF and no Vercel/production activation has occurred. See [the Account V1 single-project runbook](../account-v1/single-project-candidate.md). The public-site architecture below remains binding.
+
+
 Status of this document: **PREVIEW HARDENED (code) / production still BLOCKED.** Written for the PR `web/vercel-preview-hardening`. Nothing here enables production mode, provisions the public database, or publishes real observations.
 
 ## 1. Architecture decisions this document implements

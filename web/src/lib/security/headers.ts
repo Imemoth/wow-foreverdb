@@ -24,6 +24,12 @@ export function buildPageCsp(nonce: string, opts: { dev: boolean; turnstile: boo
 
 export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
 
+/**
+ * Hides sensitive paths and queries while preserving a concrete Origin on same-origin native form POSTs.
+ * `no-referrer` would serialize those non-CORS request origins as `null`, which our fail-closed CSRF guard rejects.
+ */
+export const SENSITIVE_PAGE_REFERRER_POLICY = "strict-origin" as const;
+
 /** Headers applied to every response (see also next.config.ts). */
 export const BASE_SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",

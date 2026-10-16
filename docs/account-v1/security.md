@@ -1,5 +1,8 @@
 # Account System V1 — threat model, abuse prevention, negative-test matrix
 
+> **2026-10-12 candidate addendum (draft PR #53; OFF):** The new [single-project candidate](single-project-candidate.md) proposes a tightly scoped server-only exception to the original A1/A19 blanket private-project Auth prohibition for an **owner-approved**, protected Preview pilot and a separately approved real production release. Neither compiled flag is enabled. The existing A24 direct-GoTrue threat, account/Companion owner-isolation criteria, lack of hosted/Windows acceptance and public-read-database separation are **unchanged**. The historical V1 findings below describe the original, stricter pre-candidate architecture; do not interpret them as evidence of approval.
+
+
 Scope: the Auth-only web boundary, the installation-claim protocol, account Guildbook reads and the Companion's registered sessions. The public-site model remains in [../web/threat-model.md](../web/threat-model.md).
 
 ## 1. Assets

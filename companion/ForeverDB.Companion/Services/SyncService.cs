@@ -20,6 +20,7 @@ public sealed class SyncService
     private readonly ForeverDbExportParser _parser = new();
     private readonly Action<IEnumerable<ForeverDbMap>>? _mapSink;
     private readonly Action<ForeverDbSnapshot>? _afterSynced;
+    private readonly DeviceSyncService? _device;
     private readonly Dictionary<string, string> _knownFiles =
         new(StringComparer.Ordinal);
 
@@ -31,8 +32,10 @@ public sealed class SyncService
     public SyncService(
         InstallationSyncCoordinator coordinator,
         Action<IEnumerable<ForeverDbMap>>? mapSink = null,
-        Action<ForeverDbSnapshot>? afterSynced = null)
+        Action<ForeverDbSnapshot>? afterSynced = null,
+        DeviceSyncService? device = null)
     {
+        _device = device;
         _coordinator = coordinator;
         _mapSink = mapSink;
         _afterSynced = afterSynced;
@@ -107,6 +110,13 @@ public sealed class SyncService
             },
             SnapshotJson);
 
+        // Zero-touch: an installation owned by this computer's registered device (or about to be) never takes the anonymous path.
+        // Only the explicit Sync now uploads; the watcher and startup sync send nothing for it.
+        if (_device is { } device && device.Handles(snapshot.InstallationId))
+        {
+            return await SyncRegisteredDeviceAsync(device, snapshot, json, trigger, cancellationToken);
+        }
+
         var attempt = await _coordinator.SyncAsync(
             snapshot.InstallationId,
             json,
@@ -150,6 +160,52 @@ public sealed class SyncService
 
         return attempt;
     }
+
+    private async Task<SyncAttempt?> SyncRegisteredDeviceAsync(
+        DeviceSyncService device,
+        ForeverDbSnapshot snapshot,
+        string json,
+        SyncTrigger trigger,
+        CancellationToken cancellationToken)
+    {
+        var result = trigger == SyncTrigger.Manual
+            ? await device.SyncNowAsync(json, cancellationToken)
+            : await device.SyncAutomaticAsync(json, cancellationToken);
+
+        if (result.Outcome == DeviceSyncOutcome.Synced)
+        {
+            Authenticated?.Invoke();
+            SyncCompleted?.Invoke(
+                this,
+                new SyncCompletedEventArgs(
+                    DateTimeOffset.Now,
+                    snapshot.Sources.Count,
+                    snapshot.Guilds.Sum(guild => guild.Members.Count),
+                    trigger));
+            _afterSynced?.Invoke(snapshot);
+            _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);
+            return new SyncAttempt(SyncOutcome.Synced, BlockReason.None, InstallationOwnership.OwnedByRegisteredAccount, null, null);
+        }
+
+        if (result.Outcome == DeviceSyncOutcome.AutoSyncOff)
+        {
+            // By design, not an error: no message on every SavedVariables save.
+            return SyncAttempt.Blocked(BlockReason.DeviceAutoSyncOff, InstallationOwnership.OwnedByRegisteredAccount);
+        }
+
+        _coordinator.NoteDeviceUploadNotCompleted(snapshot.InstallationId, BlockReason.DeviceSyncNotCompleted);
+        SyncBlocked?.Invoke(
+            this,
+            new SyncBlockedEventArgs(
+                snapshot.InstallationId,
+                BlockReason.DeviceSyncNotCompleted,
+                result.Outcome == DeviceSyncOutcome.Failed,
+                result.Message));
+        return new SyncAttempt(
+            result.Outcome == DeviceSyncOutcome.Failed ? SyncOutcome.Failed : SyncOutcome.Blocked,
+            BlockReason.DeviceSyncNotCompleted,
+            InstallationOwnership.OwnedByRegisteredAccount, null, null);
+    }
 }
 
 public sealed record SyncCompletedEventArgs(
@@ -161,4 +217,5 @@ public sealed record SyncCompletedEventArgs(
 public sealed record SyncBlockedEventArgs(
     string InstallationId,
     BlockReason Reason,
-    bool Failed);
+    bool Failed,
+    string? Message = null);

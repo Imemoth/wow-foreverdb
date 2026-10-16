@@ -35,6 +35,12 @@ public partial class MainWindow
 
     private void AttachAccountHandlers(AccountRuntime account)
     {
+        if (account.Device is { } device)
+        {
+            device.Context.StatusChanged += _ =>
+                Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+        }
+
         account.Sessions.StatusChanged += _ =>
             Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
 
@@ -43,6 +49,81 @@ public partial class MainWindow
 
         account.Sessions.IdentityChanged += _ =>
             Dispatcher.BeginInvoke(new Action(OnAccountIdentityChanged));
+    }
+
+    /// <summary>
+    /// Zero-touch: runs only when the gate created a device runtime. Finds an activation file, enrolls, then classifies the device
+    /// with the server. Background, never blocks the UI, and a failure only changes the Registered device line.
+    /// </summary>
+    private async Task RunDeviceBackgroundAsync(
+        AccountRuntime account)
+    {
+        if (account.Device is not { } device)
+        {
+            return;
+        }
+
+        try
+        {
+            var state = await device.Enrollment.InitializeAsync();
+
+            if (state.State == DeviceState.Registered)
+            {
+                await device.Sync.CheckStatusAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // The status line already carries the outcome; nothing here may disturb the UI.
+        }
+        finally
+        {
+            await Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+        }
+    }
+
+    private async void DeviceRetry_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_account is { } account)
+        {
+            await RunDeviceBackgroundAsync(account);
+        }
+    }
+
+    private void RefreshDeviceUi()
+    {
+        if (DevicePanel is null)
+        {
+            return;
+        }
+
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(RefreshDeviceUi));
+            return;
+        }
+
+        // Nothing is shown unless a device runtime exists (gate open) and there is something to say.
+        var device = _account?.Device;
+        var status = device?.Status;
+
+        if (device is null ||
+            status is null ||
+            status.State == DeviceState.Anonymous)
+        {
+            DevicePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DevicePanel.Visibility = Visibility.Visible;
+        DeviceHeadlineText.Text = AccountMessages.Headline(status.State);
+        DeviceDetailText.Text = status.Message;
+        DeviceRetryButton.Visibility =
+            status.State == DeviceState.PendingActivation
+                ? Visibility.Visible
+                : Visibility.Collapsed;
     }
 
     private async Task RunAccountBackgroundChecksAsync(
@@ -145,16 +226,24 @@ public partial class MainWindow
         var status = account.Sessions.Status;
         var enabled = status.AccountsEnabled;
 
+        RefreshDeviceUi();
+
         AccountHeadlineText.Text =
             AccountMessages.Headline(
                 status,
                 status.VerifiedEmail);
         AccountDetailText.Text =
             AccountMessages.Detail(status);
+        var claimPilot = account.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
+        var privatePilot = account.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
         AccountEnvironmentText.Text =
-            enabled
-                ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
-                : "Account features are off in this build. ForeverDB works anonymously, exactly like before.";
+            claimPilot
+                ? "Owner-only claim pilot: only one selected installation can request a link code. Uploads, owner selection and anonymous creation remain disabled."
+                : privatePilot
+                ? "Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
+                : enabled
+                    ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
+                    : "Account features are off in this build. ForeverDB works anonymously, exactly like before.";
 
         var loggedOut = status.State == SessionState.LoggedOut;
         var lost = status.State == SessionState.AnonymousIdentityLost;
@@ -188,7 +277,7 @@ public partial class MainWindow
                 ? "Sign in to a ForeverDB account (keeps this identity)"
                 : "Sign in to a ForeverDB account";
         AccountUseAnonymousButton.Visibility =
-            loggedOut
+            loggedOut && !privatePilot
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
@@ -203,7 +292,7 @@ public partial class MainWindow
                 : Visibility.Collapsed;
 
         AccountLegacyPanel.Visibility =
-            status.HasLegacyOwner && enabled
+            status.HasLegacyOwner && enabled && !claimPilot
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         AccountLegacyText.Text =
@@ -255,6 +344,10 @@ public partial class MainWindow
         AccountStatus status)
     {
         var enabled = status.AccountsEnabled;
+        var claimPilot = _account?.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
+        var permittedClaim = claimPilot &&
+            string.Equals(record.InstallationId, _account?.Gate.ScopedClaimInstallationId, StringComparison.Ordinal);
+        var privatePilot = _account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
         var ownership = record.Ownership;
 
         var detail =
@@ -291,22 +384,23 @@ public partial class MainWindow
                     ? Visibility.Collapsed
                     : Visibility.Visible,
             ClaimVisibility =
-                enabled && anonymousOwned
+                enabled && (!privatePilot || permittedClaim) && anonymousOwned
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             CheckVisibility =
                 enabled &&
+                (!privatePilot || permittedClaim) &&
                 (record.ClaimPending ||
                  ownership == InstallationOwnership.Unchecked ||
                  ownership == InstallationOwnership.TransferredSignInRequired)
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAccountVisibility =
-                enabled && selection && status.State == SessionState.Registered
+                enabled && !privatePilot && selection && status.State == SessionState.Registered
                     ? Visibility.Visible
                     : Visibility.Collapsed,
             ChooseAnonymousVisibility =
-                enabled && selection && anonymousAvailable
+                enabled && !privatePilot && selection && anonymousAvailable
                     ? Visibility.Visible
                     : Visibility.Collapsed
         };
@@ -329,6 +423,9 @@ public partial class MainWindow
 
     private async Task ResyncAfterIdentityChangeAsync()
     {
+        // Signing in to the real project for the first owner pilot must NOT
+        // auto-upload existing installations, even if AutoSync was enabled.
+        if (_account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot) return;
         var service = _syncService;
         var watcher = _watcher;
 
