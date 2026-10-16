@@ -68,6 +68,14 @@ test("WT-4 the emblem is validated BEFORE any send: missing, non-PNG, wrong size
   assert.throws(() => validateLogo(makePng(128, 129)), (e) => e.code === "logo_wrong_size");
   assert.throws(() => validateLogo(new Uint8Array(20_000).fill(1)), (e) => e.code === "logo_too_large");
   assert.equal(validateLogo(makePng()).bytes > 0, true);
+  // integrity: a flipped byte, trailing data, a truncated tail or a missing IEND must fail closed (a corrupted or tampered attachment is never sent)
+  const good = makePng();
+  const flip = (i) => { const b = new Uint8Array(good); b[i] ^= 0xff; return b; };
+  assert.throws(() => validateLogo(flip(good.length - 20)), (e) => e.code === "logo_corrupt", "bad CRC in IDAT/IEND region");
+  assert.throws(() => validateLogo(flip(30)), (e) => e.code === "logo_corrupt", "bad IHDR CRC");
+  assert.throws(() => validateLogo(new Uint8Array([...good, 0])), (e) => e.code === "logo_corrupt", "trailing byte after IEND");
+  assert.throws(() => validateLogo(good.slice(0, good.length - 12)), (e) => e.code === "logo_corrupt", "IEND chunk removed");
+  assert.throws(() => validateLogo(good.slice(0, good.length - 5)), (e) => e.code === "logo_corrupt", "truncated");
   for (const bad of [null, makePng(10, 10), new Uint8Array([1, 2, 3])]) {
     const h = harness({ logo: async () => bad });
     const s = await runOnce(h.deps);

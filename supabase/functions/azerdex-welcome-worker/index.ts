@@ -3,6 +3,7 @@
 // check below (supabase/config.toml documents this; never use it for anything but this function).
 import { loadConfig } from "./config.ts";
 import { createDb } from "./db.ts";
+import { LOGO_PNG_BASE64 } from "./logo-data.ts";
 import { runOnce } from "./worker.ts";
 
 const enc = new TextEncoder();
@@ -36,17 +37,19 @@ export async function handle(req: Request, env: { get(n: string): string | undef
   return json(200, summary);
 }
 
-declare const Deno: { env: { get(n: string): string | undefined }; readFile(u: URL): Promise<Uint8Array>; serve(h: (r: Request) => Promise<Response> | Response): void };
+declare const Deno: { env: { get(n: string): string | undefined }; serve(h: (r: Request) => Promise<Response> | Response): void };
+
+/** The emblem is part of the import graph (logo-data.ts), so every deploy path bundles it; validateLogo still checks it before every run. */
+export function embeddedLogoBytes(): Uint8Array {
+  const bin = atob(LOGO_PNG_BASE64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
 
 if (typeof Deno !== "undefined" && typeof Deno.serve === "function") {
   Deno.serve((req) =>
-    handle(req, Deno.env, (u, i) => fetch(u, i), async () => {
-      try {
-        return await Deno.readFile(new URL("./azerdex-logo.png", import.meta.url));
-      } catch {
-        return null;
-      }
-    }).catch((e) => {
+    handle(req, Deno.env, (u, i) => fetch(u, i), async () => embeddedLogoBytes()).catch((e) => {
       console.log(JSON.stringify({ fn: "azerdex-welcome-worker", event: "handler_failed", code: String((e as Error)?.name ?? "error").slice(0, 40) }));
       return json(500, { error: "internal" });
     }),

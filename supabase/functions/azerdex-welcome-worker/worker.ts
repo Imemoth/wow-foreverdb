@@ -106,7 +106,10 @@ export async function runOnce(d: RunDeps): Promise<RunSummary> {
       d.log("provider_auth_failed", { claimed: s.claimed });
       await release(job);
     } else if (out.kind === "permanent") {
+      // A per-recipient rejection parks that user. Several in a row look systemic (for example a renamed or unpublished template in
+      // `template` mode answers 4xx for EVERY recipient), so they also count toward the breaker: at most 3 users are parked per run.
       s.permanent++;
+      streak++;
       await finish(d, s, { user_id: job.user_id, lease_token: job.lease_token, outcome: "permanent", error_code: out.code });
     } else if (out.kind === "retry") {
       s.retry++;
@@ -120,7 +123,7 @@ export async function runOnce(d: RunDeps): Promise<RunSummary> {
     if (streak >= CIRCUIT_BREAKER && !stopped) stopped = "circuit_open";
   }
   if (stopped && stopped !== "ok") s.state = stopped;
-  d.log("run_complete", { claimed: s.claimed, sent: s.sent, retry: s.retry, ambiguous: s.ambiguous, permanent: s.permanent });
+  d.log("run_complete", { mode: d.cfg.mode, claimed: s.claimed, sent: s.sent, retry: s.retry, ambiguous: s.ambiguous, permanent: s.permanent });
   return s;
 }
 

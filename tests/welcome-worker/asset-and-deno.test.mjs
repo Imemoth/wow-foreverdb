@@ -1,8 +1,8 @@
 // Regression tests for the CID emblem (G-1) and for the deployed-bundle layout (G-7), run on a REAL Deno runtime.
 //
-// What is proven: the emblem is committed, is a valid 128x128 PNG within the size cap, is declared in supabase/config.toml `static_files`,
-// and the entry point (Deno.serve) really finds it when only the files a deployment would contain (the local import graph reported by
-// `deno info` + the declared static_files) are present. What is NOT proven here: Supabase's own bundler/deploy (needs a hosted project).
+// What is proven: the emblem is committed, is a valid 128x128 PNG within the size cap, is EMBEDDED in the import graph (logo-data.ts, generated and
+// sha256-checked against the PNG) and the entry point (Deno.serve) works when ONLY the local import graph reported by `deno info` is present and
+// the process has NO file-read permission. What is NOT proven here: Supabase's own bundler/deploy (needs a hosted project).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -57,14 +57,18 @@ test("AS-2 the emblem is the pinned asset (a changed file must be a conscious, r
   assert.equal(sha, recorded);
 });
 
-test("AS-3 supabase/config.toml declares the emblem as a static file of exactly this function, and the code reads that same name", () => {
-  const m = configToml.match(/^\[functions\.azerdex-welcome-worker\][^[]*?^static_files\s*=\s*\[([^\]]*)\]/ms); // line-anchored: a commented-out entry does not count
-  assert.ok(m, "static_files is declared under [functions.azerdex-welcome-worker]");
-  const files = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-  assert.deepEqual(files, ["./functions/azerdex-welcome-worker/azerdex-logo.png"]);
-  assert.ok(fs.existsSync(path.join(root, "supabase", files[0])));
-  assert.match(fs.readFileSync(path.join(fnDir, "index.ts"), "utf8"), /new URL\("\.\/azerdex-logo\.png", import\.meta\.url\)/);
-  assert.match(configToml, /verify_jwt\s*=\s*false/);
+test("AS-3 the emblem is embedded, not read from disk: generated module is current, decodes to the pinned PNG, the code reads no file, and config relies on no static_files", async () => {
+  const gen = spawnSync("node", [path.join(root, "scripts/embed-azerdex-logo.mjs"), "--check"], { encoding: "utf8" });
+  assert.equal(gen.status, 0, gen.stdout + gen.stderr);
+  const { LOGO_PNG_BASE64, LOGO_PNG_SHA256 } = await import("../../supabase/functions/azerdex-welcome-worker/logo-data.ts");
+  const bytes = Buffer.from(LOGO_PNG_BASE64, "base64");
+  assert.deepEqual(new Uint8Array(bytes), new Uint8Array(fs.readFileSync(png)));
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), LOGO_PNG_SHA256);
+  const index = fs.readFileSync(path.join(fnDir, "index.ts"), "utf8");
+  assert.match(index, /from "\.\/logo-data\.ts"/);
+  assert.ok(!/Deno\.readFile|readTextFile|import\.meta\.url/.test(index), "no runtime file read");
+  assert.ok(!/^\s*static_files\s*=/m.test(configToml), "no static_files: API-based deploys cannot ship them");
+  assert.match(configToml, /^verify_jwt\s*=\s*false/m);
 });
 
 test("AS-4 no externally hosted image is configured anywhere in the worker sources", () => {
@@ -80,8 +84,8 @@ function localGraph() {
   return JSON.parse(r.stdout).modules.filter((m) => m.kind === "esm" && m.local).map((m) => m.local);
 }
 
-/** Copy ONLY what a deployment would contain: the local import graph + the declared static files. */
-function stageBundle({ withStatic }) {
+/** Copy ONLY what a deployment would contain: the local import graph (no static files exist in this design). */
+function stageBundle({ tamper = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "azerdex-bundle-"));
   const dest = path.join(dir, "functions/azerdex-welcome-worker");
   fs.mkdirSync(dest, { recursive: true });
@@ -89,7 +93,10 @@ function stageBundle({ withStatic }) {
     assert.ok(f.startsWith(fnDir), `unexpected local module outside the function directory: ${f}`);
     fs.copyFileSync(f, path.join(dest, path.basename(f)));
   }
-  if (withStatic) fs.copyFileSync(png, path.join(dest, "azerdex-logo.png"));
+  if (tamper) { // flip one base64 character of the embedded emblem: a corrupted bundle must fail closed
+    const f = path.join(dest, "logo-data.ts");
+    fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/(LOGO_PNG_BASE64 =\s*")(.{40})(.)/s, (_m, a, b, c) => `${a}${b}${c === "A" ? "B" : "A"}`));
+  }
   return { dir, entry: path.join(dest, "index.ts") };
 }
 
@@ -109,7 +116,7 @@ async function runEntry({ entry, dir }, dbCalls) {
   await new Promise((r) => probe.listen(0, "127.0.0.1", r));
   const port = probe.address().port;
   await new Promise((r) => probe.close(r));
-  const child = spawn(denoBin, ["run", `--allow-net=127.0.0.1:${port},127.0.0.1:${dbPort}`, `--allow-read=${dir}`, "--allow-env=AZERDEX_WELCOME_ENABLED,AZERDEX_WELCOME_MODE,AZERDEX_WELCOME_MAX_PER_RUN,AZERDEX_WORKER_SECRET,RESEND_API_KEY,SUPABASE_URL,AZERDEX_WORKER_DB_KEY,SUPABASE_SERVICE_ROLE_KEY", entry], {
+  const child = spawn(denoBin, ["run", `--allow-net=127.0.0.1:${port},127.0.0.1:${dbPort}`, "--allow-env=AZERDEX_WELCOME_ENABLED,AZERDEX_WELCOME_MODE,AZERDEX_WELCOME_MAX_PER_RUN,AZERDEX_WORKER_SECRET,RESEND_API_KEY,SUPABASE_URL,AZERDEX_WORKER_DB_KEY,SUPABASE_SERVICE_ROLE_KEY", entry], {
     env: {
       PATH: process.env.PATH, HOME: dir, DENO_DIR: path.join(dir, ".deno"),
       DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${port}`,
@@ -130,9 +137,9 @@ async function runEntry({ entry, dir }, dbCalls) {
   return { call, log: () => log, stop: async () => { child.kill(); await new Promise((r) => db.close(r)); } };
 }
 
-test("AS-5 [Deno] deployed layout WITH the declared static file: Deno.serve authenticates, finds the emblem and reaches the database (no send: queue empty)", { skip: !haveDeno && process.env.FDB_REQUIRE_DENO !== "1" && "BLOCKED: deno not installed" }, async () => {
+test("AS-5 [Deno] deployed layout (import graph only, NO file-read permission): Deno.serve authenticates, validates the embedded emblem and reaches the database (no send: queue empty)", { skip: !haveDeno && process.env.FDB_REQUIRE_DENO !== "1" && "BLOCKED: deno not installed" }, async () => {
   assert.ok(haveDeno, "deno is required (FDB_REQUIRE_DENO=1)");
-  const b = stageBundle({ withStatic: true });
+  const b = stageBundle();
   const dbCalls = [];
   const s = await runEntry(b, dbCalls);
   try {
@@ -149,9 +156,9 @@ test("AS-5 [Deno] deployed layout WITH the declared static file: Deno.serve auth
   } finally { await s.stop(); fs.rmSync(b.dir, { recursive: true, force: true }); }
 });
 
-test("AS-6 [Deno] the SAME layout WITHOUT the static file fails closed: logo_invalid, no claim, nothing sent (the regression a missing static_files entry would cause)", { skip: !haveDeno && process.env.FDB_REQUIRE_DENO !== "1" && "BLOCKED: deno not installed" }, async () => {
+test("AS-6 [Deno] a CORRUPTED embedded emblem fails closed: logo_invalid, no claim, nothing sent", { skip: !haveDeno && process.env.FDB_REQUIRE_DENO !== "1" && "BLOCKED: deno not installed" }, async () => {
   assert.ok(haveDeno, "deno is required (FDB_REQUIRE_DENO=1)");
-  const b = stageBundle({ withStatic: false });
+  const b = stageBundle({ tamper: true });
   const dbCalls = [];
   const s = await runEntry(b, dbCalls);
   try {
