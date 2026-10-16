@@ -126,6 +126,195 @@ describe("account auth configuration: refusals", () => {
   });
 });
 
+
+describe("Vercel Upstash Marketplace REST credentials", () => {
+  const marketplace = {
+    RATE_LIMIT_BACKEND: "upstash",
+    UPSTASH_REDIS_REST_KV_REST_API_URL: "https://primary-upstash.example.upstash.io",
+    UPSTASH_REDIS_REST_KV_REST_API_TOKEN: "t".repeat(40),
+  };
+
+  it("accepts integration REST API names without requiring manual secret duplication", () => {
+    const r = evaluateEnv(marketplace);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.env.UPSTASH_REDIS_REST_URL).toBe(marketplace.UPSTASH_REDIS_REST_KV_REST_API_URL);
+    expect(r.env.UPSTASH_REDIS_REST_TOKEN).toBe(marketplace.UPSTASH_REDIS_REST_KV_REST_API_TOKEN);
+  });
+
+  it("refuses conflicting manual and marketplace credentials rather than guessing", () => {
+    const url = evaluateEnv({ ...marketplace, UPSTASH_REDIS_REST_URL: "https://different.example.upstash.io" });
+    expect(url.ok).toBe(false);
+    expect(!url.ok && url.issues.join(" ")).toMatch(/REST_URL conflicts with marketplace REST API URL/);
+    const token = evaluateEnv({ ...marketplace, UPSTASH_REDIS_REST_TOKEN: "x".repeat(40) });
+    expect(token.ok).toBe(false);
+    expect(!token.ok && token.issues.join(" ")).toMatch(/REST_TOKEN conflicts with marketplace REST API token/);
+    expect(!token.ok && token.issues.join(" ")).not.toContain("tttt");
+  });
+
+  it("does not mistake the Upstash Redis connection URL for the REST endpoint", () => {
+    const r = evaluateEnv({ RATE_LIMIT_BACKEND: "upstash", UPSTASH_REDIS_REST_REDIS_URL: "rediss://redis.example:6380", UPSTASH_REDIS_REST_KV_URL: "redis://redis.example:6379" });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.issues.join(" ")).toMatch(/upstash rate limiter requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN/);
+  });
+});
+
+describe("single-project Auth pilot and production candidate: owner-gated policies", () => {
+  const PRIVATE_URL = "https://" + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co";
+  const modernKey = "sb_publishable_" + "z".repeat(40);
+  const privateAuth = {
+    ACCOUNT_AUTH_URL: PRIVATE_URL,
+    ACCOUNT_AUTH_PROJECT_REF: PRIVATE_PRODUCTION_PROJECT_REF,
+    ACCOUNT_AUTH_PUBLISHABLE_KEY: modernKey,
+    ACCOUNT_CSRF_SECRET: CSRF,
+  };
+  const pilot = { ...privateAuth, ACCOUNT_AUTH_MODE: "pilot" };
+  const production = { ...privateAuth, ACCOUNT_AUTH_MODE: "production" };
+  const ownerPilot = { pilot: true, production: false };
+  const ownerProduction = { pilot: false, production: true };
+  const releaseCtx: AccountAuthContext = { hosted: true, deployment: "production", platformEnv: "production" };
+
+  it("allows only the explicitly source-approved Preview pilot, while production stays code-blocked", () => {
+    // The compiled pilot approval is OFF on the release line: the environment alone must never open the pilot.
+    expect(issues(pilot, previewCtx)).toMatch(/owner-approved code change/);
+    expect(evaluateAccountAuth(pilot, previewCtx, ownerPilot).issues).toEqual([]);
+    expect(issues(production, releaseCtx)).toMatch(/owner-approved code change/);
+    // The approval is compiled into this TEMPORARY protected-pilot branch, not controlled by environment flags.
+    // A simulation with compiled approval revoked must stay closed for either mode.
+    expect(evaluateAccountAuth(pilot, previewCtx, { pilot: false, production: false }).issues.join(" "))
+      .toMatch(/owner-approved code change/);
+    const fakeApproval = { ...pilot, ACCOUNT_AUTH_PILOT_APPROVED: "false" };
+    expect(issues(fakeApproval, previewCtx)).toMatch(/unknown account-auth variable/);
+    // No environment var may approve public production.
+    const productionSpoof = { ...production, ACCOUNT_AUTH_PRODUCTION_APPROVED: "true" };
+    expect(issues(productionSpoof, releaseCtx)).toMatch(/owner-approved code change/);
+  });
+
+  it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
+    const r = evaluateAccountAuth(pilot, previewCtx, ownerPilot);
+    expect(r.issues).toEqual([]);
+    expect(r.config).toMatchObject({
+      mode: "pilot", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
+    });
+    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+  });
+
+  it("accepts production only after separate code approval and matching real Vercel Production signals", () => {
+    const r = evaluateAccountAuth(production, releaseCtx, ownerProduction);
+    expect(r.issues).toEqual([]);
+    expect(r.config).toMatchObject({
+      mode: "production", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
+    });
+    expect(evaluateAccountAuth(production, previewCtx, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    expect(evaluateAccountAuth(production, demoCtx, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    expect(evaluateAccountAuth(production, local, ownerProduction).issues.join(" ")).toMatch(/Vercel's production environment/);
+    // Pilot approval must not authorize production and vice versa.
+    expect(evaluateAccountAuth(production, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/owner-approved/);
+    expect(evaluateAccountAuth(pilot, previewCtx, ownerProduction).issues.join(" ")).toMatch(/owner-approved/);
+  });
+
+  it("allows no other Supabase project or alternate host in either approved private mode", () => {
+    for (const [authEnv, context, approval] of [
+      [pilot, previewCtx, ownerPilot],
+      [production, releaseCtx, ownerProduction],
+    ] as const) {
+      const badHost = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: STAGING_URL, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, context, approval);
+      expect(badHost.issues.join(" ")).toMatch(/approved PRIVATE production project/);
+      const badRef = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, context, approval);
+      expect(badRef.issues.join(" ")).toMatch(/PROJECT_REF must equal/);
+      const wrongHost = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: PRIVATE_URL + ".attacker.example" }, context, approval);
+      expect(wrongHost.issues.join(" ")).toMatch(/supabase\.co origin/);
+      const withPath = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_URL: PRIVATE_URL + "/auth/v1" }, context, approval);
+      expect(withPath.issues.join(" ")).toMatch(/origin only/);
+      const withSecret = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_secret_" + "a".repeat(32) }, context, approval);
+      expect(withSecret.issues.join(" ")).toMatch(/SECRET key/);
+      const legacyKey = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: jwt({ role: "anon", ref: PRIVATE_PRODUCTION_PROJECT_REF }) }, context, approval);
+      expect(legacyKey.issues.join(" ")).toMatch(/modern publishable key/);
+      const blankPublishable = evaluateAccountAuth({ ...authEnv, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_publishable_" }, context, approval);
+      expect(blankPublishable.issues.join(" ")).toMatch(/well-formed/);
+    }
+  });
+
+  it("requires Upstash, CSRF and Turnstile for an approved PRIVATE project pilot", () => {
+    const preview: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "account-preview.example.vercel.app",
+      FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture",
+      ...pilot,
+    };
+    const withoutLimiter = evaluateEnv(preview, ownerPilot);
+    expect(withoutLimiter.ok).toBe(false);
+    expect(!withoutLimiter.ok && withoutLimiter.issues.join(" ")).toMatch(/pilot requires the upstash/);
+
+    const withLimiter: RawEnv = {
+      ...preview,
+      RATE_LIMIT_BACKEND: "upstash", UPSTASH_REDIS_REST_URL: "https://x.upstash.io",
+      UPSTASH_REDIS_REST_TOKEN: "t".repeat(40), RATE_LIMIT_SALT: "s".repeat(40),
+    };
+    const missingCaptcha = evaluateEnv(withLimiter, ownerPilot);
+    expect(missingCaptcha.ok).toBe(false);
+    expect(!missingCaptcha.ok && missingCaptcha.issues.join(" ")).toMatch(/pilot requires server-side Turnstile/);
+
+    const valid: RawEnv = {
+      ...withLimiter, TURNSTILE_SECRET_KEY: "t".repeat(40),
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "p".repeat(40), CHALLENGE_COOKIE_SECRET: "c".repeat(40),
+    };
+    const accepted = evaluateEnv(valid, ownerPilot);
+    expect(accepted.ok).toBe(true);
+    expect(accepted.ok && accepted.env.accountAuth?.mode).toBe("pilot");
+    expect(accepted.ok && accepted.env.FOREVERDB_DATA_SOURCE).toBe("fixture");
+    const publicLeak = evaluateEnv({ ...valid, NEXT_PUBLIC_SUPABASE_URL: PRIVATE_URL }, ownerPilot);
+    expect(publicLeak.ok).toBe(false);
+    expect(!publicLeak.ok && publicLeak.issues.join(" ")).toMatch(/NEXT_PUBLIC_SUPABASE_URL: private backend credentials/);
+  });
+
+  it("accepts production policy ONLY with separate public read DB and full release controls", () => {
+    const prod: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
+      FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
+      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      SITE_URL: "https://wow-foreverdb.vercel.app",
+      RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
+      UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
+      TRUSTED_IP_HEADER: "x-real-ip", TURNSTILE_SECRET_KEY: "t".repeat(40),
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "p".repeat(40), CHALLENGE_COOKIE_SECRET: "c".repeat(40),
+      ...production,
+    };
+    const good = evaluateEnv(prod, ownerProduction);
+    expect(good.ok).toBe(true);
+    expect(good.ok && good.env.accountAuth?.mode).toBe("production");
+    const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
+    expect(fixture.ok).toBe(false);
+    expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);
+    const privateDb = evaluateEnv({ ...prod, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
+    expect(privateDb.ok).toBe(false);
+    expect(!privateDb.ok && privateDb.issues.join(" ")).toMatch(/PRIVATE production database/);
+  });
+
+  it("blocks public production and any pilot on the wrong Vercel target despite deployment environment values", () => {
+    const base: RawEnv = {
+      VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
+      FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
+      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      SITE_URL: "https://wow-foreverdb.vercel.app",
+      RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
+      UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
+      TRUSTED_IP_HEADER: "x-real-ip",
+    };
+    const r = evaluateEnv({ ...base, ...production });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
+    const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
+    expect(rp.ok).toBe(false);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/protected Vercel preview/);
+    // The pilot's source-code approval must not create public access or a public backend credential.
+    const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
+    expect(x.ok).toBe(false);
+    expect(!x.ok && x.issues.join(" ")).toMatch(/NEXT_PUBLIC_ACCOUNT_BACKEND: references the PRIVATE/);
+  });
+});
+
 describe("integration with the global environment validator", () => {
   const demo: RawEnv = {
     VERCEL: "1",

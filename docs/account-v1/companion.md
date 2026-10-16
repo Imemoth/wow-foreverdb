@@ -182,7 +182,7 @@ Not claimed as passed by CI. **Environment rule:** with `FOREVERDB_ACCOUNT_MODE=
 | W6 | Two Companion windows/processes started together; one identity, no re-auth | staging vault | staging only | pending |
 | W7 | Start a claim; code shown once; copy; expiry; hide; no code in the vault directory or settings | staging, test installation | staging only | pending |
 | W8 | Redeem on the website; Companion shows *transferred*, asks to sign in, then syncs with the account | staging + PR E preview (`/account/link`, now technically testable) | staging only | **pending (owner)**: record in [windows-acceptance-checklist.md](windows-acceptance-checklist.md) |
-| W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | either; no sync needed | none | pending |
+| W9 | Visual review of the ACCOUNT tab in the dark theme at 100/150 % scaling | either; no sync needed | none | **PASS (owner screenshots, 2026-10-12)**: narrow/wide windows and owner-reported 100/150% Windows scaling, readable/no clipping; recorded in [Windows checklist](windows-acceptance-checklist.md) |
 | W10 | Gate closed: ACCOUNT tab shows features off; no account request is made (inspect with a proxy/firewall rule that blocks the production host: the Companion must stay usable offline) | production vault, AutoSync OFF | none | pending |
 
 ## 14a. Independent security review (PR D)
@@ -219,4 +219,4 @@ Accepted/info: `fdb_installation_link_status` requires exactly `{state}` (an add
 * An active stolen anonymous bearer can still start a claim (residual risk already accepted in the protocol §6).
 * `AnonymousIdentityLost` after a rejection discovered at an unusual moment bumps the identity generation, which cancels in-flight work; this is intentional.
 * The clipboard cannot be guaranteed clear if another program overwrote or monitors it.
-* WPF visuals are verified for compilation by CI only until W9.
+* WPF visual compilation was CI verified; W9 ACCOUNT-tab manual visual acceptance is now PASS (owner 2026-10-12 screenshots). Other Windows scenarios and network/identity behaviors are not inferred from W9.

@@ -1,5 +1,8 @@
 # Account System V1 — acceptance and owner actions
 
+> **Current status (2026-10-12):** Owner-authorized, Vercel-SSO-protected single-project **Preview pilot ACTIVE**, with registration, confirmation, logout, fresh password login and initial empty private-data pages verified by owner screenshots; see §4a. PR #53 is draft/unmerged and public Production OFF. The original isolated-staging plan below remains as historical acceptance criteria; cross-account, password recovery, refresh/expiry, A24 and public go-live gates are **PENDING**.
+
+
 ## 1. Evidence ledger rules
 
 Each capability carries exactly one state; it only moves forward when the named evidence exists.
@@ -48,7 +51,34 @@ Nothing below was done by this work. Items marked **approval** change real setti
 
 ## 4. Explicit non-actions (verified, current)
 
-Migration `0012` exists in the repository (PR C) but was applied to **no** real database (only disposable CI databases); migration `0010` is not applied; the production ledger ends at `0011`; no Supabase setting, email provider, credential, billing or Vercel configuration was changed; `release`, the Vercel Production Branch and Vercel Authentication are untouched; no service-role credential exists in the website; production activation is blocked by code.
+**Historical PR E baseline:** when this acceptance report was originally written, 0012 had only run in disposable CI and the ledger ended at 0011. **Later owner-run update (2026-10-12):** 0012 `account_ownership_claims` is now applied to existing private Supabase, ledger version `20261012124839`; data fingerprints and owner counts verified unchanged, new account tables empty. The custom dump was archive-read checked but not restored to a disposable database. Email SMTP has been configured separately, and a test invite was delivered (spam placement); the test user was removed. That was the pre-pilot state; the later protected Preview pilot is now active (see §4a), while Vercel public Production/release account activation remains OFF. This does not complete the remaining acceptance gates.
+
+## 4a. Owner protected Preview pilot – observed runtime acceptance (2026-10-12)
+
+This is a **single-user, SSO-protected Vercel Preview pilot on the existing private Supabase project**; it does not advance the formal multi-user STAGING VERIFIED or public PRODUCTION APPROVED gates.
+
+| Owner-run observation | Status | Basis and remaining scope |
+| --- | --- | --- |
+| Register with Cloudflare Turnstile, email confirmation | **PASS (protected pilot)** | Owner screenshots: `/account/register` form, generic `Check your email` response, Gmail **Inbox** arrival, confirmation interstitial, explicit confirm action, account profile. Resend delivery recorded. |
+| Registered user / confirmed email / Auth session | **PASS (read-only DB verification)** | One registered confirmed Auth user and an Auth session observed; existing eight anonymous users unaffected. |
+| Sign out then password sign-in, own profile restored | **PASS (owner browser)** | Screenshots show `You have been signed out`, then re-login and profile with `Email confirmed`. This does **not** establish refresh-token rotation or session expiry behavior. |
+| Own installations and private Guildbook while unlinked | **PASS for initial empty state only** | Both pages render the correct `No installation is linked` message; DB link count 0, historical installation rows 7, guilds 2, members 46. Not evidence of cross-account isolation. |
+| Logged-out direct private Guildbook access | **PASS (owner reported, 2026-10-12)** | After clicking Sign out, owner opened the protected private Guildbook URL directly and confirmed the page denied private access / required sign-in. This is a **single-account logged-out** boundary test, not a cross-account ownership test. |
+| F5 browser session persistence | **PASS (owner reported, 2026-10-12)** | Owner explicitly confirmed reloading the signed-in Account page with F5 preserved access and the same profile. **This does NOT verify token refresh, expiry or rotation.** |
+| Two independent browser sessions, session-local logout | **PASS (owner reported, 2026-10-12)** | Owner signed in to the protected Preview both in normal Chrome and in an incognito window (after separate Vercel SSO sign-in). Signing out of ForeverDB inside incognito did not end the normal Chrome ForeverDB session: after F5 the normal Account page remained authenticated. This confirms **session-local logout** in the two-browser test; it is NOT proof of global logout or cross-account data isolation. |
+| Automatic refresh / session expiration | **PENDING** | Requires observed token expiry/rotation (not just F5) and revoked/expired-token denial. |
+| Password recovery (email + new password + sign-in) | **PASS (owner browser, 2026-10-12)** | Owner screenshots show Turnstile, generic recovery request response, reset email in Gmail **Inbox**, explicit confirmation interstitial, new-password form, redirect to login with successful reset notice, rejected original password, and successful login with changed password. This establishes password replacement but is not by itself a multi-session revocation test. |
+| Password reset revokes a separately active web session | **PASS (owner-reported two-browser E2E, 2026-10-12)** | After resetting the registered account's password, owner refreshed the other browser's previously authenticated protected page; it redirected to Sign In with `Your session has expired. Please sign in again.` (screenshot `image(20261012-155739).png`). Verifies cross-browser invalidation for that observed web session, not exhaustive revocation across all devices or registered Companion sessions. |
+| Ownership claim / transfer and two-account Guildbook isolation | **PENDING** | No claim code used; existing anonymous installation owners not touched. |
+| Public production readiness and direct-GoTrue abuse A24 | **BLOCKED / PENDING** | No public promotion, PR #53 remains draft/unmerged; direct Auth project-wide abuse protections and recovery rehearsal still open. |
+
+**Read-only Supabase after owner password-reset test (2026-10-12):** 1 registered and confirmed test account; `last_sign_in_at` populated; 1 recorded Auth session at inspection time; 8 anonymous Auth identities, 7 installations, 2 guilds, 46 member rows, and **0 account links**. Account/Companion ownership has not been transferred. This snapshot is not a historical session revocation proof.
+
+**UX note:** The success banner currently says sessions were signed out \"including the Companion.\" This applies to Companion **registered sessions of the reset account**, not the unrelated anonymous Companion technical Auth identity; copy should explicitly distinguish them to prevent concern about anonymous sync. No change to account permissions or anonymous session is required.
+
+**Post-reset protection readback (read-only, 2026-10-12):** 8 anonymous Auth users; 1 registered user; 7 installations; 2 Guildbook guilds; 46 member records; **0** owner-account links. This confirms counts, not a full byte-for-byte database fingerprint or proof of Companion token continuity. Existing anonymous production installation claims remain **PENDING** and must not be tested against a valuable real installation without a separate preservation protocol.
+
+**Deferred UI roadmap:** Show current account's `last_sign_in_at` in profile with Europe/Budapest timezone, then separately design a bounded, privacy-protected `Recent sign-ins` history with retention and account ownership. See [ROADMAP](../ROADMAP.md); no new table/ACL introduced here.
 
 ## 5. Direct Auth abuse: enforceable acceptance criteria (threat A24)
 

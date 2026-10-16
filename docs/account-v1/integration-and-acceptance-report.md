@@ -1,5 +1,8 @@
 # Account System V1 — PR E: integration and acceptance report
 
+> **Later draft candidate (2026-10-12):** [Single-project Account Auth](single-project-candidate.md) in draft PR #53 changes the proposed future deployment policy, **not** the PR E integration test evidence. Candidate flags are OFF. Do not label PR E staging or Windows tests as passed on the strength of this proposal. Sections below are the as-built historical report for PR E.
+
+
 Branch `account/v1-end-to-end-integration`, base `main` `0b05c26`. **Nothing here was deployed, applied to a hosted project, or activated.** This report keeps the evidence states apart; none implies another.
 
 ## 1. Evidence ledger (PR E)
