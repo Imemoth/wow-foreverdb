@@ -11,7 +11,8 @@ public class DeviceGateTests
     private static AccountGateDecision Eval(params (string Name, string Value)[] vars)
     {
         var map = vars.ToDictionary(v => v.Name, v => v.Value);
-        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null);
+        // Simulates owner-approved pilot builds; the compiled login/claim approvals are OFF on the release line (asserted below).
+        return AccountFeatureGate.Evaluate(n => map.TryGetValue(n, out var v) ? v : null, new AccountFeatureGate.GateApprovals(PrivatePilot: true, ClaimPilot: true));
     }
 
     private static AccountGateDecision PrivatePilot(bool claim)
@@ -44,15 +45,15 @@ public class DeviceGateTests
     }
 
     [Fact]
-    public void No_other_approval_flag_was_added_and_the_existing_pilot_flags_were_not_flipped()
+    public void No_other_approval_flag_was_added_and_every_pilot_flag_is_off_on_the_release_line()
     {
         var approvals = typeof(AccountFeatureGate).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.FieldType == typeof(bool)).Select(f => f.Name).OrderBy(n => n).ToArray();
         Assert.Equal(
             new[] { "DeviceAutoSyncApproved", "PrivateProjectClaimPilotApproved", "PrivateProjectPilotApproved", "ProductionAccountAuthApproved", "ZeroTouchEnrollmentApproved" },
             approvals);
-        Assert.True(AccountFeatureGate.PrivateProjectPilotApproved);        // unchanged on this DRAFT branch
-        Assert.True(AccountFeatureGate.PrivateProjectClaimPilotApproved);   // unchanged on this DRAFT branch
+        Assert.False(AccountFeatureGate.PrivateProjectPilotApproved);
+        Assert.False(AccountFeatureGate.PrivateProjectClaimPilotApproved);
     }
 
     [Fact]

@@ -21,6 +21,8 @@ Facts read from GitHub on 2026-10-13 (all four PRs are **draft**, nothing is mer
 | `ProductionAccountAuthApproved`, `PRODUCTION_ACCOUNT_AUTH_APPROVED` | companion / web | false | — |
 | `ZeroTouchEnrollmentApproved`, `DeviceAutoSyncApproved` | companion | **false** (added by #56, no approval granted) | #56 |
 
+> **2026-10-16:** the three pilot flags above were reverted to **false** before the merge to `main` (see [release-integration-2026-10-16.md](release-integration-2026-10-16.md)); `--require-off` prints `OK`.
+
 #56 adds **no** new enabled approval and flips none of the existing ones (the owner's pilot still depends on them). Zero-touch enrollment is
 usable only against an isolated local/staging endpoint, or against the private pilot project once `ZeroTouchEnrollmentApproved` is flipped by a
 reviewed change.
