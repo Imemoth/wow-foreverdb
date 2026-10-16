@@ -4,6 +4,7 @@
 Run from the repository root:  python3 scripts/check-companion-account.py
 Exit code 0 = all checks passed. Every failure is printed; no secret value is ever printed.
 """
+import os
 import pathlib
 import re
 import sys
@@ -125,7 +126,20 @@ for p in companion_files:
         check(rel in allowed_ref_files, f"{rel}: mentions the production project reference")
 gate = read("companion/ForeverDB.Companion.Account/AccountFeatureGate.cs")
 check("public const bool ProductionAccountAuthApproved = false;" in gate, "ProductionAccountAuthApproved must stay false")
-check("public const bool ZeroTouchEnrollmentApproved = false;" in gate, "ZeroTouchEnrollmentApproved must stay false")
+# The only permitted non-OFF value is a separate, explicitly named owner-only
+# pilot source branch with an unambiguous runbook. This exception MUST NEVER work
+# on main/release or a production/public release; check-pilot-flags --require-off
+# remains the independent strict merge gate.
+owner_pilot_ref = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME")
+owner_pilot_allowed = (
+    owner_pilot_ref == "companion/private-zero-touch-owner-pilot-20261013"
+    and (ROOT / "docs/account-v1/owner-only-zero-touch-pilot.md").is_file()
+)
+check(
+    "public const bool ZeroTouchEnrollmentApproved = false;" in gate
+    or (owner_pilot_allowed and "public const bool ZeroTouchEnrollmentApproved = true;" in gate),
+    "ZeroTouchEnrollmentApproved must stay false except on the named owner-only pilot branch",
+)
 check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSyncApproved must stay false")
 
 # Tests may only use the production host as a deny-list fixture.

@@ -62,7 +62,11 @@ public static class AccountFeatureGate
     /// Zero-touch enrollment and registered device sync (ADR-017). Compile-time, like the other approvals: no setting, file or
     /// environment variable flips it. Local/Staging endpoints may use the feature without it; the private pilot projects may not.
     /// </summary>
-    public const bool ZeroTouchEnrollmentApproved = false;
+    // OWNER-ONLY BUILD (2026-10-13): this branch is NEVER merged or released.
+    // Requires a process-local FOREVERDB_ACCOUNT_MODE=private-pilot + exact project.
+    // Default account mode stays disabled; registered AutoSync and public production stay OFF.
+    // Restore false before any main/release integration (scripts/check-pilot-flags.py --require-off).
+    public const bool ZeroTouchEnrollmentApproved = true;
 
     /// <summary>
     /// Automatic (watcher/startup) upload for a registered device. Stays off until a dedicated owner acceptance (spec A4):
