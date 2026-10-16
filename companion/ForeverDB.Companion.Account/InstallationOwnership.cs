@@ -54,7 +54,11 @@ public enum BlockReason
     FeatureDisabled,
     PilotUploadDisabled,
     CredentialUnavailable,
-    InvalidRequest
+    InvalidRequest,
+    /// <summary>The installation belongs to this computer's registered device: automatic upload is off, only Sync now uploads.</summary>
+    DeviceAutoSyncOff,
+    /// <summary>The registered-device upload did not run or was refused; the Registered device line says why.</summary>
+    DeviceSyncNotCompleted
 }
 
 public sealed record SyncAttempt(

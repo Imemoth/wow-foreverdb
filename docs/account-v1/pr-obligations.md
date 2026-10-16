@@ -39,7 +39,7 @@ Claim and ownership rules in [ownership-claim-protocol.md](ownership-claim-proto
 
 1. All Auth traffic through one wrapper that enforces `isAllowedAuthRequest(method, pathAndQuery, {callbackUrl})` and the strict `AUTH_BODIES`; logout always `scope=local`; no email change; no body-less sign-up.
 2. Server-confirmed user (`getUser()`) for every private page and API; `getClaims()` only for low-risk rendering; no `getSession()` data for authorization.
-3. Cookie `__Secure-fdb_acct`, `Path=/account`, HttpOnly, SameSite=Lax; signed CSRF token (`ACCOUNT_CSRF_SECRET`); Origin and `Sec-Fetch-Site` checks; GET interstitial for confirmation and recovery; `Referrer-Policy: no-referrer` and `history.replaceState` on `/account`; no query strings in logs.
+3. Cookie `__Secure-fdb_acct`, `Path=/account`, HttpOnly, SameSite=Lax; signed CSRF token (`ACCOUNT_CSRF_SECRET`); Origin and `Sec-Fetch-Site` checks; GET interstitial for confirmation and recovery; Account HTML `Referrer-Policy: strict-origin` (origin only, never path/query), Account API/file `no-referrer`, and `history.replaceState` on `/account`; no query strings in logs.
 4. Routes only under `/account` and `/account/api/*` (static test forbids `src/app/api/account`); proxy edge rules for POST `/account/api/*`; `/account/**` excluded from anonymous-cookie issuance; `private, no-store` and noindex everywhere.
 5. Website-side Turnstile is verified server-side before sign-up and recovery. **It is bot protection for website routes only** and is documented as such everywhere; it is not presented as protection for GoTrue (threat A24).
 6. A CI job running the Supabase local stack (real GoTrue, PostgREST, Postgres, Mailpit): sign-up, confirmation through captured mail, login, logout (and that the **Companion-style session survives a web logout**), recovery, CSRF, redirect, enumeration, bundle scan, header checks. No installation or Guildbook access in this PR.
@@ -51,3 +51,17 @@ Claim and ownership rules in [ownership-claim-protocol.md](ownership-claim-proto
 - The Auth-to-website IP attribution question (L-8 / AT-7: do server-side calls from the website share one Auth rate-limit bucket?) must be answered with evidence before PR B is called STAGING VERIFIED; PR B's own per-IP throttle must be stricter than the Auth per-IP limits so an attacker cannot exhaust a shared bucket through the website.
 - The abuse-prevention acceptance criteria in [acceptance-and-owner-actions.md §5](acceptance-and-owner-actions.md) are **not** satisfied by either PR's code; they are owner-run staging and pre-production gates. Neither PR may describe the direct-Auth abuse risk (A24) as resolved.
 - Node.js 24.x, lint, typecheck, full unit suite, canary build and bundle scan, Playwright, publisher/pipeline and the release gate all green on the final head; independent security review of the final diff; no merge without the owner's decision.
+
+## Zero-touch stack (#56 / #57 / #59) — obligation status as of 2026-10-16
+
+| Obligation | Status |
+| --- | --- |
+| Activation download works on the protected fix Preview (#59) | **PASS** (owner-reported) |
+| Linux CI on #59 code head `1b4d59c` (web quality/E2E/release gate, account web-auth/E2E/ownership SQL, publisher, collector, CodeQL) | **PASS** (head `ae3e20e` is docs-only) |
+| Windows Companion CI on the row-state fix | **PASS** on `92d8e80` ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38865737184)); owner on-screen check NOT TESTED |
+| One ticket consumed, one device registered, manual sync with empty payload (#57) | **PASS** (owner-reported) |
+| Non-empty registered-device ingest and Guildbook display | **NOT TESTED** |
+| Preservation check (six anonymous installations, 140 source-stat rows, 46 Guildbook members) after the pilot | **NOT VERIFIED** (owner-run read-only query in the closure record) |
+| Pilot flags off on every merge commit (`check-pilot-flags.py --require-off`) | **BLOCKED** until flipped per PR; currently 3 flags true |
+| Z13 one-download installer integration | **NOT IMPLEMENTED** — public-release blocker, not a pilot blocker |
+| Merge / ready-for-review of #56, #57, #59 | **NOT DONE — requires explicit owner authorization**; #57 never merges |

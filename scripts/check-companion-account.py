@@ -96,10 +96,17 @@ for name in ("SupabaseAuthService", "SessionStore"):
 
 # No implicit anonymous sign-up: the only caller of SignUpAnonymouslyAsync is the explicit StartAnonymousAsync.
 callers = [p.relative_to(ROOT).as_posix() for p in companion_files if "SignUpAnonymouslyAsync" in p.read_text(encoding="utf-8")]
+# Zero-touch (ADR-017) adds the device's own anonymous identity: created only by DeviceSessionProvider.CreateAsync, which the
+# enrollment flow alone may reach with allowCreate = true.
 check(sorted(callers) == [
     "companion/ForeverDB.Companion.Account/AccountSessionManager.cs",
+    "companion/ForeverDB.Companion.Account/DeviceContext.cs",
     "companion/ForeverDB.Companion.Account/GoTrueClient.cs",
 ], f"unexpected SignUpAnonymouslyAsync callers: {callers}")
+device_ctx = read("companion/ForeverDB.Companion.Account/DeviceContext.cs")
+check(device_ctx.count("SignUpAnonymouslyAsync") == 1, "DeviceContext must sign up anonymously in exactly one place")
+check("allowCreate: true" not in read("companion/ForeverDB.Companion.Account/DeviceSyncService.cs"),
+      "DeviceSyncService must never create a device identity")
 manager = read("companion/ForeverDB.Companion.Account/AccountSessionManager.cs")
 check(manager.count("SignUpAnonymouslyAsync") == 1, "AccountSessionManager must sign up anonymously in exactly one (explicit) place")
 
@@ -118,6 +125,8 @@ for p in companion_files:
         check(rel in allowed_ref_files, f"{rel}: mentions the production project reference")
 gate = read("companion/ForeverDB.Companion.Account/AccountFeatureGate.cs")
 check("public const bool ProductionAccountAuthApproved = false;" in gate, "ProductionAccountAuthApproved must stay false")
+check("public const bool ZeroTouchEnrollmentApproved = false;" in gate, "ZeroTouchEnrollmentApproved must stay false")
+check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSyncApproved must stay false")
 
 # Tests may only use the production host as a deny-list fixture.
 for p in (ROOT / "tests" / "companion-account").rglob("*.cs"):

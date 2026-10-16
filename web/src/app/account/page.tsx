@@ -55,6 +55,7 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
         <ul className="space-y-1 text-sm">
           <li><Link href="/account/link">Link an installation</Link></li>
           <li><Link href="/account/installations">Your installations</Link></li>
+          <li><Link href="/account/devices">Your computers and activation files</Link></li>
           <li><Link href="/account/guildbook">Private Guildbook</Link></li>
         </ul>
       </section>

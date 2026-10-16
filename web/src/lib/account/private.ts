@@ -52,6 +52,14 @@ export function readFailure(f: RpcFailure): NextResponse {
 }
 
 /**
+ * Maps a failed MUTATING RPC. A lost reply is an UNKNOWN outcome (502, never retried automatically; `reconcile` names the page that
+ * shows the real state); every other failure definitely changed nothing.
+ */
+export function mutationFailure(f: RpcFailure, reconcile: string): NextResponse {
+  return f.kind === "unknown_outcome" ? failure(502, "outcome_unknown", { reconcile }) : readFailure(f);
+}
+
+/**
  * Runs the rest of a private handler; an exception after `authenticate` must not lose a refresh that already rotated the token
  * (the browser would keep the spent one and be signed out): the rotated session is persisted on the generic error answer too.
  */

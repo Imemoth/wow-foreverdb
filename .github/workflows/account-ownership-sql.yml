@@ -73,6 +73,21 @@ jobs:
       - name: Integration suite (LS-1..LS-9, LS-11, claims, concurrency, preservation, rollback/recovery rehearsal, existing regressions)
         run: node --test --test-concurrency=1 database/tests/account/*.test.mjs
 
+      # Zero-touch enrollment (migration 0014, ADR-017). Applied AFTER the 0012 suite on purpose: that suite asserts that exactly the 0012
+      # functions exist. Nothing here touches a real Supabase project.
+      - name: Apply 0014 (zero-touch enrollment; pre-flight, forward migration, in-migration privilege assertions)
+        run: database/tests/account/stack.sh apply14
+
+      - name: Re-apply the 0014 body (idempotent objects)
+        run: database/tests/account/stack.sh apply14
+
+      - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
+        run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
+
+      - name: Mutation check 0014 (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
+        run: node database/tests/enrollment/mutation_check.mjs
+
       - name: Mutation check (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/account/mutation_check.mjs

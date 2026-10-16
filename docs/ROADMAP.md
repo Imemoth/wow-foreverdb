@@ -4,6 +4,24 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
+
+- [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.
+- [x] Bootstrap TTL: **7 days (168 hours)**, single use, independently revocable. After redemption, persist a distinct **device-scoped** credential, not a packaged account refresh token. A lapsed ticket can be replaced from the signed-in website without re-downloading the binary.
+- [x] Anon download and existing historical anonymous installations remain supported. A previously owned anonymous installation still needs one-time explicit claim; new registered installations must never auto-claim an already owned ID.
+- [x] Owner's 2026-10-13 visual acceptance: web Guildbook correctly shows both linked Guilds (25 + 21 = 46 members); after sign-out the private Guildbook requested sign-in. Registered cross-account negative test remains separately pending.
+- [x] Independent ADR for account-bound ticket -> device-scoped authentication -> owned-installation ingest, including legacy JWT compatibility, race-safe first enrollment and 7-day bearer leakage risk.
+- [x] (implemented on PR #56, draft; **Windows/staging acceptance NOT executed**, see [acceptance-zero-touch.md](account-v1/acceptance-zero-touch.md)) Website protected download/activation issue + revoke, Companion first-run device credential storage and enrollment, registered manual ingest, multi-PC independence and revocation.
+- [ ] A/B/C/D negative, race, access control, Windows and browser CI; 6 historical anonymous owner fingerprints unchanged; no automatic public activation.
+- [x] **Owner UX decision (2026-10-13):** personalized registered downloads must be **one click / one download**; no separate activation-file download, code entry, Companion login, or manual placement in the public release. Existing split-file `.fdbact` activation is acceptable **only for the #57 private owner pilot**.
+- [ ] **Public Account V1 release blocker — one-download installer integration:** supply one signed/reproducible generic installer with securely handled account-bound 168-hour bootstrap; installer-to-Companion handoff automatic, no raw token in signed/public bundle, logs, URL or web cache. Complete Windows 10+11 E2E (first PC, second PC, anon mode, offline/recovery, ticket expiry, no additional login) before release. A single ZIP needing manual movement of two files does **not** satisfy the gate. See [specification §A-release](account-v1/zero-touch-enrollment-registered-sync.md).
+- [x] **Owner pilot (2026-10-16, owner-reported):** #59 Preview `strict-origin` + activation download 200; one `.fdbact` consumed (#57); one registered device visible; Companion 0.9.0-alpha sign-in and registered-device manual Sync Now OK, AutoSync OFF, Last Error None. **Empty payload only (0 sources, 0 Guildbook members): non-empty ingest NOT TESTED.** Record: [zero-touch-pilot-closure.md](account-v1/zero-touch-pilot-closure.md).
+- [x] Companion installation panel stayed `Not checked yet` after a successful device upload: UI/state defect, fixed (display only, no authorization change); Windows CI PASS on `92d8e80`; owner on-screen check pending.
+- [ ] Open: non-empty device ingest, 6/140/46 preservation re-check, Z4–Z10, merge-time `check-pilot-flags.py --require-off`, Z13 (public-release blocker). #57 stays owner-only and unmerged.
+- [ ] Separate integration/release gate: disable temporary code-level pilot flags and complete security reviews before any main/release merge, preserving the protected active preview during transition.
+
+Specification: [7-day Zero-Touch Enrollment + Registered Sync](account-v1/zero-touch-enrollment-registered-sync.md). Decision: [ADR-017](account-v1/adr-017-zero-touch-enrollment.md). Merge order and pilot-flag gate: [integration-and-release-order.md](account-v1/integration-and-release-order.md).
+
 ## Account V1 — owner-approved single-installation claim pilot (PR #55, draft)
 
 - [x] Owner approved lifting the existing single-project Companion claim-code restriction, scoped to a private pilot (2026-10-12).

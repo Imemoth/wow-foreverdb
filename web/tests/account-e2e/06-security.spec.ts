@@ -63,7 +63,7 @@ test("CSRF / Origin / Fetch-Metadata / content-type matrix on every private POST
   expect(await ownerOf(db, comp.installationId)).toBe(comp.id.uid);
 });
 
-test("every private route and page: private no-store, noindex, no referrer, API CSP; no cookie issued beyond the session/CSRF ones; no caching of account data", async ({ playwright }) => {
+test("every private route and page: private no-store, noindex, path-hiding referrer policy, API CSP; no cookie beyond session/CSRF; no account-data caching", async ({ playwright }) => {
   const a = await webUser(playwright, "hdr");
   const comp = await companionWithInstallation();
   expect((await link(a.c, await startClaim(comp), a.password)).status()).toBe(200);
@@ -77,7 +77,7 @@ test("every private route and page: private no-store, noindex, no referrer, API 
     const h = r.headers();
     expect(h["cache-control"], r.url()).toBe("private, no-store");
     expect(h["x-robots-tag"], r.url()).toBe("noindex, nofollow");
-    expect(h["referrer-policy"], r.url()).toBe("no-referrer");
+    expect(h["referrer-policy"], r.url()).toBe(r.url().includes("/account/api/") ? "no-referrer" : "strict-origin");
     expect(h["x-content-type-options"], r.url()).toBe("nosniff");
     expect(h["access-control-allow-origin"], r.url()).toBeUndefined();
     expect(setCookies(r).map((c) => c.name).filter((n) => !/^(fdb_acct(\.\d)?|fdb_csrf)$/.test(n)), r.url()).toEqual([]);

@@ -46,6 +46,21 @@ switch (command)
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { outcome = outcome.ToString(), state = manager.Status.State.ToString() }));
         break;
     }
+    case "enroll":
+    {
+        // Zero-touch enrollment from a separate process. options: <activationDir> <installationId>
+        var deviceDir = Path.Combine(dir, DeviceContract.DeviceSubdirectory);
+        var context = new DeviceContext(
+            deviceDir, protector, new CrossProcessSessionGate(deviceDir),
+            new GoTrueClient(http, endpoint), new DeviceRpcClient(http, endpoint));
+        var service = new DeviceEnrollmentService(
+            context,
+            new FileActivationSource(new[] { new ActivationSearchLocation(options[0], "*.fdbact") }),
+            () => new[] { options[1] });
+        var status = await service.InitializeAsync();
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { state = status.State.ToString(), detail = status.Detail.ToString() }));
+        break;
+    }
     case "hold":
     {
         // Take the gate, announce it, hold for N ms (or forever with --die to be killed while holding).

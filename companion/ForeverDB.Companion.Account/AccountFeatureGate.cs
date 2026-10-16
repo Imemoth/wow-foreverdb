@@ -58,6 +58,18 @@ public static class AccountFeatureGate
     public static readonly bool PrivateProjectClaimPilotApproved = false;
     public const string ClaimInstallationVariable = "FOREVERDB_ACCOUNT_CLAIM_INSTALLATION";
 
+    /// <summary>
+    /// Zero-touch enrollment and registered device sync (ADR-017). Compile-time, like the other approvals: no setting, file or
+    /// environment variable flips it. Local/Staging endpoints may use the feature without it; the private pilot projects may not.
+    /// </summary>
+    public const bool ZeroTouchEnrollmentApproved = false;
+
+    /// <summary>
+    /// Automatic (watcher/startup) upload for a registered device. Stays off until a dedicated owner acceptance (spec A4):
+    /// a registered device only ever uploads on an explicit Sync now.
+    /// </summary>
+    public const bool DeviceAutoSyncApproved = false;
+
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
     public const string ModeVariable = "FOREVERDB_ACCOUNT_MODE";
@@ -165,6 +177,15 @@ public static class AccountFeatureGate
             $"account-test{Path.DirectorySeparatorChar}staging-{projectRef}",
             "Staging account test mode.");
     }
+
+    /// <summary>
+    /// True when zero-touch enrollment and device sync may run: an isolated Local/Staging gate, or a private pilot gate once
+    /// <see cref="ZeroTouchEnrollmentApproved"/> is flipped by a reviewed code change. The default production mode is never eligible.
+    /// </summary>
+    public static bool ZeroTouchAvailable(AccountGateDecision gate) =>
+        gate.AccountsEnabled &&
+        (gate.Environment is AccountEnvironment.Local or AccountEnvironment.Staging ||
+         (gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot && ZeroTouchEnrollmentApproved));
 
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));

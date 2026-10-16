@@ -275,6 +275,35 @@ describe("challenge endpoint: origin, content-type and token validation", () => 
   });
 });
 
+describe("account page request metadata", () => {
+  it("uses strict-origin so a native same-origin form POST keeps its real Origin without leaking an account path", async () => {
+    const h = await load();
+    const res = await h.proxy(new NextRequest(`${SITE}/account/devices`, {
+      headers: { "x-real-ip": "203.0.113.42" },
+    }));
+    expect(passedProxy(res)).toBe(true);
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin");
+  });
+
+  it("keeps literal null Origin rejected at the account API edge while a concrete same-origin POST passes", async () => {
+    const h = await load();
+    const request = (origin: string) => new NextRequest(`${SITE}/account/api/enrollment/download`, {
+      method: "POST",
+      headers: {
+        origin,
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/x-www-form-urlencoded",
+        "x-real-ip": "203.0.113.43",
+      },
+      body: "csrf=opaque-test-value",
+    });
+    const rejected = await h.proxy(request("null"));
+    expect(rejected.status).toBe(403);
+    expect(rejected.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(passedProxy(await h.proxy(request(SITE)))).toBe(true);
+  });
+});
+
 describe("challenge endpoint: body-size enforcement (P1)", () => {
   const big = (n: number) => JSON.stringify({ token: "t".repeat(n) });
 

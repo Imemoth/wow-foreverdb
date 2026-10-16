@@ -46,6 +46,26 @@ public sealed class InstallationSyncCoordinator
         _records.TryAdd(installationId, new InstallationRecord(installationId, InstallationOwnership.Unchecked, null, BlockReason.None, null, false));
     }
 
+    /// <summary>
+    /// Display state only, no authorization decision: the registered-device path (<c>fdb_device_ingest</c>) re-checks the device,
+    /// its credential and the CURRENT ownership server-side, so an accepted upload is the server's verdict that the account owns
+    /// the installation. Called exclusively after such an accepted upload.
+    /// </summary>
+    public void NoteDeviceUploadAccepted(string installationId)
+    {
+        var now = _clock.GetUtcNow();
+        Update(installationId, r => r with { Ownership = InstallationOwnership.OwnedByRegisteredAccount, OwnerRole = null, LastBlock = BlockReason.None, LastSyncedAt = now });
+    }
+
+    /// <summary>
+    /// A registered-device upload ran and was refused or failed: any earlier "owned" display is no longer backed by evidence,
+    /// so it returns to unverified and shows why. Never asserts ownership.
+    /// </summary>
+    public void NoteDeviceUploadNotCompleted(string installationId, BlockReason reason)
+    {
+        Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = reason });
+    }
+
     public void MarkClaimPending(string installationId, bool pending)
     {
         Update(installationId, r => r with { ClaimPending = pending });
