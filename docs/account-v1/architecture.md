@@ -103,7 +103,7 @@ sequenceDiagram
   P-->>B: approved (no ownership change)
   C->>W: scheduled poll (exact anon session + poll secret)
   W->>P: fdb_device_pair_poll
-  P->>P: one transaction: lock, recheck, transfer/link, device insert, connected
+  P->>P: one transaction: lock, recheck, transfer/provenance, device insert, connected
   P-->>C: connected device ID; no credential returned
   C->>C: atomically promote DPAPI pending credential; AutoSync remains off
 ```

@@ -10,38 +10,44 @@ project. Owner tests use a separately approved staging environment and universal
 | BP-01 | successful new-installation pairing | pending -> approved -> connected; one owner, device, audit; manual ingest accepted |
 | BP-02 | anonymous installation pairing | exact anonymous owner transfers; ID and all historical hashes/counts preserved |
 | BP-03 | logged out -> login -> approval | signed pairing cookie survives fixed return path; page shows request and current account |
-| BP-04 | expired request | DB clock wins under lock; no owner/device/link change; fresh Connect Account recovers |
-| BP-05 | denied request | poll returns denied; no owner/device/link; local pending secrets securely removed |
+| BP-04 | expired request | DB clock wins under lock; no owner/device/provenance change; fresh Connect Account recovers |
+| BP-05 | denied request | poll returns denied; no owner/device/provenance write; local pending secrets securely removed |
 | BP-06 | Companion cancel pending/approved | terminal denied; no transfer; cancel after connected does not revoke device |
 | BP-07 | locator replay | terminal request cannot approve/redeem again and reveals no account identity |
 | BP-08 | poll-secret replay | wrong UID, wrong session of same UID, registered JWT and wrong secret all fail identically |
 | BP-09 | token refresh | expired access token refreshed with same GoTrue session ID continues; new session ID is rejected |
 | BP-10 | concurrent two-account approval | exactly one approved account, generic loser response, no owner change before poll |
 | BP-11 | concurrent approval/deny/expiry | one valid transition; consistent timestamps; no partial writes |
-| BP-12 | concurrent redemption | two polls create exactly one device/link/ownership update/success audit; second is read-only |
+| BP-12 | concurrent redemption | two polls create exactly one device/ownership update/provenance write/success audit; second is read-only |
 | BP-13 | lost start reply | identical retry returns one row/same expiry; changed verifier conflicts |
 | BP-14 | lost connected reply | repeat poll/device status confirms same credential; no extra writes |
 | BP-15 | wrong registered account | existing account-owned installation cannot move; owner and device remain unchanged |
 | BP-16 | account switches after page render | old CSRF fails; reload names new account; stale tab cannot target replaced cookie |
-| BP-17 | session fixation attempts | forged/sibling/expired cookie and mismatched body ID fail; GET alone has no mutation |
+| BP-17 | session fixation attempts | forged/sibling/expired cookie and mismatched body ID fail; known valid locator can be selected but GET alone has no mutation and approval still needs current account/CSRF |
 | BP-18 | CSRF/Origin/content-type attacks | cross-site approve/deny refused before RPC; no CORS; login CSRF covered |
-| BP-19 | rate and poll interval | all documented budgets enforced; early polling gets increasing Retry-After, no state leak |
-| BP-20 | device revoked | status/ingest denied; pairing state revoked; same-account explicit controlled re-enrollment works |
+| BP-19 | rate and poll interval | all budgets enforced; valid early poll backs off; invalid locator/secret/actor leaves per-pair budget, interval and next-poll timestamp unchanged |
+| BP-20 | device revoked | owner revoke, credential reuse and replacement each trigger pairing revoked; status/ingest denied; controlled re-enrollment works |
 | BP-21 | multiple installations/account | distinct devices and credentials; each can ingest only its own installation |
 | BP-22 | installation/device substitution | start bindings immutable; poll input cannot override installation/device/hash/account |
-| BP-23 | account unavailable | deleted/banned/unconfirmed account cannot approve/redeem; no partial transfer |
+| BP-23 | account unavailable | deleted/banned/unconfirmed account or revoked/expired approving session terminally denies at redemption; no partial transfer |
 | BP-24 | initiating session revoked | poll/cancel fail; approval alone cannot transfer; request expires safely |
-| BP-25 | existing active device | duplicate pairing refused or idempotently reports connected; no second live device |
+| BP-25 | existing active device | pairing is refused until the website revokes the active device; no second live device |
 | BP-26 | `.fdbact` compatibility | ticket enrollment, rotation, revocation and lost-reply behavior retain current contract |
 | BP-27 | existing registered-device compatibility | pre-0016 rows pass new provenance constraint and manual ingest unchanged |
 | BP-28 | anonymous behavior | no pairing action means existing anonymous sync/collection unchanged |
 | BP-29 | feature gates | DB false blocks all RPCs; web/Companion flags false hide/refuse; env alone cannot enable production |
 | BP-30 | secret hygiene | URL/log/bundle/settings/artifacts contain no token, poll secret or device secret; fixed redacted strings only |
-| BP-31 | migration/rollback | both PR #58 orderings, kill switch, empty/nonempty rollback and reapply preserve data |
+| BP-31 | migration/rollback | both PR #58 orderings, kill switch, empty/nonempty rollback and explicit 0016 restore preserve data/ledger; 0014/0012 rollback is blocked while pairing provenance remains |
 | BP-32 | deadlock workload | pairing, claim, ticket enroll, ingest and revoke races finish within timeout with valid state |
 | BP-33 | browser UI/accessibility | computer/account/expiry explicit; approve and deny keyboard/screen-reader usable; responsive |
 | BP-34 | WPF states | waiting, approved, connected, expired, denied, revoked, offline, slow-down and retry text are correct |
 | BP-35 | AutoSync guard | pairing never changes AutoSync; registered automatic upload remains blocked; manual Sync now works |
+| BP-36 | controlled re-enrollment predicate | only latest revoked predecessor with same installation/account/initiator and allowed reason succeeds; active, wrong-field, disallowed-reason and stale-predecessor mutants fail |
+| BP-37 | approving-session race | logout/password-reset/session revoke racing redemption yields connected or terminal denied, never a partial owner/device write |
+| BP-38 | redemption failure classes | limit failures remain approved/retryable; ownership, predecessor, account/session and device-ID collisions terminally deny; gate/timeout failures do not mutate |
+| BP-39 | credential/device ID binding | official Companion creates equal embedded/separate UUIDs; mismatch mutation is rejected locally before start |
+| BP-40 | stolen anonymous bearer | bearer cannot redeem another pairing; attacker-started pairing still needs visible browser approval and expires/revokes safely |
+| BP-41 | pairing audit contract | exact event allowlist/columns/ACLs; one row per transition, one deferred row per limit reason, no row for invalid/early/gate/rate/infrastructure failures; locator/session/secrets absent |
 
 ## Test layers
 
@@ -88,7 +94,7 @@ non-empty registered ingest. CI runs lint, typecheck, unit/E2E suites, migration
 
 Browser Pairing V1 is ready for owner production decision only when:
 
-- BP-01 through BP-35 pass on the final commit, with no required job skipped;
+- BP-01 through BP-41 pass on the final commit, with no required job skipped;
 - OA-1 through OA-10 are recorded against approved disposable/staging resources;
 - independent security and architecture reviewers approve the final diff and all findings are fixed or explicitly owner-accepted;
 - migration 0016, kill switch, rollback and ledger order with PR #58 are rehearsed;

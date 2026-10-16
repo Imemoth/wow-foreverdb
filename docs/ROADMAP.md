@@ -14,6 +14,9 @@ polish and distribution work.
   [migration/rollback](account-v1/browser-pairing-migration-and-rollback.md),
   [test/acceptance](account-v1/browser-pairing-test-and-acceptance.md).
 - [x] Migration numbering resolved against PR #58: welcome outbox owns 0015; Browser Pairing reserves **0016** and ADR-019.
+- [x] Independent Stage A architecture and security review: no Critical finding; restore dependencies, exact re-enrollment,
+  approval-session liveness, revocation propagation and lock ordering resolved in the
+  [review report](account-v1/browser-pairing-architecture-review.md).
 - [ ] Stage B: migration 0016, fixed pairing APIs and Account approval page; database/web/production gates remain OFF.
 - [ ] Stage C: Companion Connect Account, DPAPI pending proof, system-browser handoff, polling/backoff and state UI; AutoSync remains OFF.
 - [ ] Stage D: disposable full-stack, concurrency, CSRF/Origin, account isolation, WPF/DPAPI, compatibility and security checks.

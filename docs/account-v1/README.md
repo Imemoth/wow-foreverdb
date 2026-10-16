@@ -19,6 +19,7 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [Browser Pairing V1 design](../superpowers/specs/2026-10-16-browser-pairing-v1-design.md) | Approved one-click browser-pairing architecture, reuse boundaries and release decision |
 | [ADR-019](adr-019-browser-pairing.md) / [API](browser-pairing-api-contract.md) / [state machine](browser-pairing-state-machine.md) | Pairing decision, exact device/browser contracts, session binding, lock order and atomic redemption |
 | [pairing threat model](browser-pairing-threat-model.md) / [migration](browser-pairing-migration-and-rollback.md) / [acceptance](browser-pairing-test-and-acceptance.md) | Abuse controls, migration 0016, rollback, automated and owner gates |
+| [pairing architecture review](browser-pairing-architecture-review.md) | Independent Stage A findings, frozen resolutions, residual risks and Stage B readiness |
 
 Related: [ADR-015..018](../web/architecture-decisions.md), [web threat model](../web/threat-model.md), [go-live checklist](../web/go-live-checklist.md), [release gates](../web/release-gates.md), [ROADMAP](../ROADMAP.md).
 

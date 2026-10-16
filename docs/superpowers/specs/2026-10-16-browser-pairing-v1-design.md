@@ -40,7 +40,7 @@ installer, merge a PR or activate a public route. It introduces no service-role 
 | Anonymous Supabase identity and DPAPI session vault | Authenticates the initiating Companion. No registered-user token is shared with it. |
 | `public.installations.owner_user_id` | Remains the sole ownership authority. No second ownership mapping is introduced. |
 | Migration 0012 live-session guards and installation advisory lock | Protect every ownership-sensitive state transition. |
-| `private.account_installations` and account audit | Records an anonymous-to-registered transfer, extended to identify a pairing instead of a claim code. |
+| Migration 0012 ownership conventions | Pairing keeps `public.installations.owner_user_id` authoritative and records transfer provenance on the pairing row; existing claim-link and account-audit schemas are not changed. |
 | Migration 0014 `private.devices` and device credential checks | Stores the connected device and continues to authorize status, rotation and ingest. |
 | `DeviceCredentialStore` and Windows DPAPI | Stores the active device credential; a new pending record is promoted after connection. |
 | Next.js Account BFF, signed session cookie, CSRF and Origin checks | Authenticates browser users and protects approve/deny. |
@@ -67,7 +67,8 @@ Before calling start, the Companion uses `RandomNumberGenerator` to create and D
 
 - a random UUIDv4 pairing locator (122 unpredictable bits);
 - a 256-bit polling secret;
-- a random UUID device ID and 256-bit device credential in the established `fdbd1_<device-id>_<secret>` format;
+- a random UUID device ID and 256-bit device credential in the established `fdbd1_<device-id>_<secret>` format, with the embedded
+  canonical device UUID exactly equal to the separately committed device ID;
 - the installation ID, creation time and expiry bound.
 
 Start sends the locator, SHA-256 polling-secret verifier, device ID and SHA-256 device-credential verifier. It never sends the raw
@@ -92,13 +93,14 @@ If no web session exists, the page sends the user through the existing login flo
 ### 4.4 Approval and redemption
 
 The browser page retrieves a sanitized preview: computer label, abbreviated installation ID, request time, expiry and state. It shows
-the current account address and requires a distinct **Approve** click. Approve stores the current registered UID from the verified
-server session; an account identifier is never accepted from the browser.
+the current account address and requires a distinct **Approve** click. Approve stores the current registered UID and exact GoTrue
+session ID from the verified server session; neither value is accepted from the browser.
 
 Approval changes only `PENDING -> APPROVED`. It does not move ownership and does not create a device. The next valid Companion poll
 performs the redemption transaction. Under the shared installation advisory lock it revalidates the initiating anonymous principal,
-pairing secret, expiry, selected account, installation owner, device constraints and account standing; then it changes ownership when
-needed, records the Account V1 link, inserts the device using the precommitted credential hash, and changes
+pairing secret, expiry, exact approving session, selected account, installation owner, device constraints and account standing; then
+it changes ownership when needed, records the previous owner on the pairing row, inserts the device using the precommitted credential
+hash, and changes
 `APPROVED -> CONNECTED` in one transaction.
 
 Because the credential already exists in the DPAPI pending record, a lost successful poll response is harmless: a later poll returns
@@ -120,20 +122,28 @@ poll schedule. It does not start a new pairing. If refresh fails, the refresh to
 ID, the request cannot be rebound; the UI reports that the pairing session is no longer valid and requires a new explicit Connect
 Account action. Sign-out, user deletion, banning or conversion of the anonymous identity also invalidates the pairing.
 
+Approval is bound independently to the exact registered browser session. Redemption locks and revalidates that `auth.sessions` row.
+If the approving browser session was logged out, revoked by password reset, expired or otherwise invalidated before redemption, the
+request becomes terminal `DENIED` with internal reason `approval_session_revoked`; the user must start and approve a new pairing.
+
 ## 6. Browser authorization and replay rules
 
 - A locator replay can select only the same five-minute row. It cannot poll or redeem because those operations also require the raw
   polling secret and exact anonymous session.
 - Approve and deny require a currently live, confirmed registered Account session, same-origin JSON, session-bound CSRF token, matching
   signed pairing cookie and body locator, and a database row lock.
-- The pairing cookie is freshly HMAC-signed and contains locator, browser nonce and expiry. A sibling domain or client-supplied cookie
-  cannot fix a valid value. Following a link may select a request but never mutates it.
+- The pairing cookie is freshly HMAC-signed and contains locator, browser nonce and expiry. A sibling domain or client-supplied unsigned
+  cookie cannot forge a value. A person who knows a valid locator can navigate another browser to it and cause that site to sign the
+  same selector; the explicit account-named approval, CSRF checks and Companion redemption proof prevent silent transfer.
 - If another tab replaces the pairing cookie, the body/cookie mismatch rejects the stale page. If the browser account changes, the old
   session-bound CSRF token fails. The page must reload, show the new account address and obtain a new CSRF token before approval.
 - The approving account comes only from the verified server session. Concurrent approvals by two accounts have one winner. The loser
   receives a generic terminal-state response which does not reveal the winning account.
-- An already registered installation can be paired only to its current account and only through the controlled re-enrollment rules.
-  Another account receives a generic ownership-conflict response.
+- An already registered installation can be paired only to its current account and only when it has no active device. Its latest
+  predecessor must be a revoked device for the same installation, account and initiating anonymous Auth UID, with reason
+  `owner_revoked`, `credential_reuse` or `replaced`. The owner must revoke an active device on the website before trying again. The
+  predicate is rechecked under lock at redemption, and success inserts a new active device rather than reviving a credential. Another
+  account receives a generic ownership-conflict response.
 - For an anonymously owned installation there is no pre-existing registered account to compare. The account visibly named on the
   confirmation screen becomes the owner only after the user explicitly approves and the initiating Companion redeems.
 - Terminal locators display only terminal status and cannot approve again. Cookies are cleared after approve/deny and on expiry.
@@ -147,7 +157,7 @@ The transaction invariants are:
 
 1. At most one non-terminal pairing exists for an installation and initiating Auth UID.
 2. Exactly one registered account can change a pending pairing to approved.
-3. Ownership transfer, Account V1 link insertion, device insertion and `CONNECTED` transition commit together or not at all.
+3. Ownership transfer, previous-owner provenance, device insertion and `CONNECTED` transition commit together or not at all.
 4. Exactly one device is associated with a pairing, and existing unique live-device constraints remain enforced.
 5. A successful repeated poll is read-only and returns the same connected device ID; it never creates another device or audit event.
 6. Denied, expired, canceled or revoked requests cannot transfer ownership or create a device.
@@ -163,6 +173,10 @@ change. Environment variables alone cannot activate production pairing.
 
 Migration 0014 tickets and `.fdbact` enrollment remain functional. Existing device rows keep their ticket provenance. Migration 0016
 adds pairing provenance without rewriting them. Existing registered device credentials, revocation and manual ingest remain compatible.
+An `AFTER UPDATE OF status` trigger on `private.devices` propagates every current or future transition to `revoked` to its connected
+pairing row, regardless of whether the cause is an owner action, credential reuse or same-identity replacement.
+Pairing uses its own private audit table with fixed events and a nonpublic audit reference, leaving migration 0012 audit constraints
+unchanged.
 AutoSync stays off independently of every pairing flag.
 
 ## 9. Delivery documents
@@ -173,6 +187,7 @@ AutoSync stays off independently of every pairing flag.
 - [Threat model](../../account-v1/browser-pairing-threat-model.md)
 - [Migration and rollback plan](../../account-v1/browser-pairing-migration-and-rollback.md)
 - [Test matrix and acceptance criteria](../../account-v1/browser-pairing-test-and-acceptance.md)
+- [Stage A architecture review](../../account-v1/browser-pairing-architecture-review.md)
 
 ## 10. Release decision
 

@@ -22,10 +22,12 @@ uses its exact anonymous UID and GoTrue session. The browser uses the existing r
 tokens. The database serializes approval and redemption using the same installation advisory lock used by ingest, claim transfer and
 ticket enrollment.
 
-The Companion generates and DPAPI-protects the pairing locator, polling secret and proposed device credential before start. Only
-verifiers for the two secrets are committed to the pairing row. Start is idempotent by locator. Approval chooses a registered account
-but has no ownership side effect. A poll carrying the polling secret and the exact initiating session performs ownership transfer and
-device registration atomically. The device credential never travels through the browser or pairing poll response.
+The Companion generates and DPAPI-protects the pairing locator, polling secret and proposed device credential before start. The UUID
+embedded in that credential must exactly equal the separately committed device ID. Only verifiers for the two secrets are committed
+to the pairing row. Start is idempotent by locator. Approval chooses a registered account and records the exact approving GoTrue
+session but has no ownership side effect. A poll carrying the polling secret and the exact initiating session revalidates both exact
+sessions and performs ownership transfer and device registration atomically. The device credential never travels through the browser
+or pairing poll response.
 
 The Next.js application remains an unprivileged BFF. Its five pairing API handlers are fixed adapters to allow-listed RPCs using the
 publishable key and the caller's own token. No service role, database password or generic RPC forwarding is added.
@@ -51,9 +53,13 @@ credential to web JavaScript or response handling.
 
 - Pairing introduces one private table, one private config row, narrow helpers and six public RPCs in migration 0016.
 - Migration 0014 device provenance must accept exactly one of an enrollment ticket or pairing session; existing rows are unchanged.
-- Migration 0012 transfer provenance must accept exactly one of a claim or pairing when an existing anonymous installation is moved.
+- Migration 0012 claim-link tables and constraints remain unchanged. The pairing row records `previous_owner_uid` for a pairing transfer.
 - The Companion needs a DPAPI-protected pending-pairing record and an atomic promotion path into the existing device store.
 - A locator remains visible in the initial browser URL. It is deliberately a short-lived selector, not a polling/redemption secret.
+- HMAC prevents cookie forgery, but a holder of a valid locator can make another browser select it. Account-named approval, CSRF and
+  Companion proof prevent silent transfer; nuisance denial and approval phishing remain documented residual risks.
+- A stolen live anonymous bearer can start a new pairing with attacker-chosen secrets. Browser approval is still required, and this
+  remains a phishing/persistent-device risk rather than proof that the process is the official Companion.
 - For an anonymous installation the server cannot know which registered account the human intended. The explicit confirmation page
   names the current account; that user decision establishes the account. Existing registered ownership never follows this rule and
   cannot be switched.
