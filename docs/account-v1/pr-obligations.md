@@ -58,7 +58,7 @@ Claim and ownership rules in [ownership-claim-protocol.md](ownership-claim-proto
 | --- | --- |
 | Activation download works on the protected fix Preview (#59) | **PASS** (owner-reported) |
 | Linux CI on #59 code head `1b4d59c` (web quality/E2E/release gate, account web-auth/E2E/ownership SQL, publisher, collector, CodeQL) | **PASS** (head `ae3e20e` is docs-only) |
-| Windows Companion CI on the row-state fix | **NOT TESTED** (pending on the new commit; no .NET SDK in the authoring sandbox) |
+| Windows Companion CI on the row-state fix | **PASS** on `92d8e80` ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38865737184)); owner on-screen check NOT TESTED |
 | One ticket consumed, one device registered, manual sync with empty payload (#57) | **PASS** (owner-reported) |
 | Non-empty registered-device ingest and Guildbook display | **NOT TESTED** |
 | Preservation check (six anonymous installations, 140 source-stat rows, 46 Guildbook members) after the pilot | **NOT VERIFIED** (owner-run read-only query in the closure record) |

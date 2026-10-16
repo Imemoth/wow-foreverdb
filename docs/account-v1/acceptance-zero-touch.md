@@ -59,7 +59,7 @@ The detailed security argument and Preview/Windows continuation gate are in [act
 | #57 pilot: one `.fdbact` consumed, one registered device on the web (pilot subset of Z2) | **PASS** (owner-reported) |
 | Companion 0.9.0-alpha sign-in; registered-device manual Sync Now, AutoSync OFF, Last Error None (pilot subset of Z3) | **PASS** (owner-reported), **0 sources / 0 Guildbook members — empty payload only** |
 | Non-empty ingest, Guildbook view of uploaded data, 6 anonymous / 140 / 46 preservation re-check | **NOT TESTED** / **NOT VERIFIED here** |
-| Installation panel `Not checked yet` after successful upload | **defect fixed in code; fix NOT TESTED on Windows** (Windows CI pending) |
+| Installation panel `Not checked yet` after successful upload | **defect fixed in code; Windows CI PASS on `92d8e80`; owner on-screen check NOT TESTED** |
 | Z4–Z10, Z11 on a merge commit, Z12 | **NOT TESTED** |
 | Z13 | **NOT IMPLEMENTED / BLOCKED** for public release |
 

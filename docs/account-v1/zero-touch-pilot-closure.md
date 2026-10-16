@@ -16,7 +16,7 @@ Owner-reported results are labelled as such; this record adds no PASS that the o
 | P7 | Non-empty data ingest through `fdb_device_ingest` (source stats, Guildbook members) | **NOT TESTED** | do not claim; needs a fixture/profile with data and explicit owner go-ahead |
 | P8 | Private Guildbook view of device-uploaded data (`/account/guildbook`) | **NOT TESTED** | nothing was uploaded to show |
 | P9 | Post-sync preservation check: six anonymous installations, 140 source-stat rows, 46 Guildbook members | **NOT VERIFIED here** | no production access was used for this closure; owner-run read-only check in §4 |
-| P10 | Installation panel shows `Not checked yet` after the successful device upload | **DEFECT (UI/state), fixed in code; fix NOT TESTED on Windows** | §2 |
+| P10 | Installation panel shows `Not checked yet` after the successful device upload | **DEFECT (UI/state), fixed in code; Windows CI PASS** on `92d8e80` ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38865737184): WPF Release build, Windows Account tests incl. the two new ones, regression checks, win-x64 publish). **Owner visual confirmation on Windows: NOT TESTED** | §2 |
 | P11 | Z4–Z10 (second PC, restart/reboot, revoke, expiry, B1 claim→device, conflict, copied-file) | **NOT TESTED** | |
 | P12 | Z13 one-download installer integration | **NOT IMPLEMENTED / BLOCKED** for public release | #57 pilot is exempt by decision |
 | P13 | Public release: flags off, Production, signed installer | **BLOCKED** | pilot flags are still `true`; see §5 |
@@ -43,8 +43,8 @@ Tests added (`tests/companion-account/DeviceIntegrationTests.cs`): row is `Unche
 owned and fires `InstallationChanged` only after an accepted manual sync, with zero anonymous ingests; a revoked device's refused sync clears an earlier
 owned state and never shows owned.
 
-**Verification status of the fix: NOT TESTED.** This sandbox has no .NET SDK and no route to download one, so neither the new tests nor the WPF
-build were run here. They run in the Windows CI job "Companion account auth (Windows)". The #57 pilot installer (`b3d8870`) predates the fix; seeing
+**Verification status of the fix:** the authoring sandbox has no .NET SDK, so nothing C# was run locally. The Windows CI job "Companion account auth (Windows)"
+was dispatched on `92d8e80` and every build/test/publish step **passed** ([run](https://github.com/Imemoth/wow-foreverdb/actions/runs/38865737184); per-test counts not read). Not observed by the owner on screen. The #57 pilot installer (`b3d8870`) predates the fix; seeing
 the corrected row on Windows needs a fresh pilot build (no new ticket is needed: the device credential already exists on the test profile).
 
 Known, accepted limitation: signing the *account* in or out resets all rows to `Unchecked` (identity-generation reset, existing behaviour); the next
