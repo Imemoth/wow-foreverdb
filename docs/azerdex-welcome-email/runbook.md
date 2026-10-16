@@ -1,14 +1,14 @@
 # Runbook — AzerDex welcome e-mail (deployment, operation, rollback)
 
 **Nothing here is executed by the repository.** Every step is owner-run, first on an isolated hosted staging project (never the single live private project
-for experiments), and requires the owner approvals in [acceptance.md](acceptance.md). Paths are relative to the repository root.
+for experiments), and requires the owner approvals in [acceptance.md](acceptance.md). Paths are relative to the repository root. The staging setup/validation/teardown, costs and the one owner decision it needs are in [staging-plan.md](staging-plan.md).
 
 ## 1. Prerequisites (do not skip)
 
 1. Gate B-1: `https://azerdex.com/` is publicly reachable **for an anonymous visitor** and useful. The domain is assigned and verified, but Vercel Authentication (SSO) protects all deployments of the project; confirm from a logged-out browser (`curl -sI https://azerdex.com/` → 200, not 401/login redirect). Changing protection needs owner approval. If not satisfied, do not enable sending.
-2. Gate G-2: re-run `database/tests/welcome/20_gotrue_provenance.test.mjs` logic against the hosted Auth version on staging (signup → confirm = 1 event; recovery on an unconfirmed signup = 0 events).
-3. Asset: `supabase/functions/azerdex-welcome-worker/azerdex-logo.png` is committed. After the first staging deploy, confirm the deployed function finds it: an authorized invocation must answer `state: ok` (or `disabled`), **never** `logo_invalid`.
-4. Resend: domain `azerdex.com` verified, sending enabled, **open and click tracking OFF** — *owner-attested 2026-10-14 (G-5 PASS, not independently verifiable from this repository; re-check in the dashboard before first send)*. Create a **sending-only** API key restricted to that domain.
+2. Gate G-2: run `node scripts/azerdex-welcome-hosted-provenance.mjs` against the **hosted staging** Auth ([staging-plan.md §5](staging-plan.md)); PASS needs exit code 0 and no `inconclusive` scenario (signup confirm = 1 event; recovery on an unconfirmed signup = 0 events; …).
+3. Asset: the emblem is committed (`azerdex-logo.png`) **and embedded** in the function's import graph (`logo-data.ts`, regenerate with `node scripts/embed-azerdex-logo.mjs` after any change to the PNG; the test suite fails if it is stale). Any deploy path works. After the first staging deploy an authorized invocation must answer `state: ok` (or `disabled`), **never** `logo_invalid` (hosted G-7).
+4. Resend: **G-4 PASS** (template + CID proven directly, owner test 2026-10-16, Gmail desktop). Domain `azerdex.com` verified, sending enabled, **open and click tracking OFF** — *owner-attested 2026-10-14 (G-5 PASS, not independently verifiable from this repository; re-check in the dashboard before first send)*. Create a **sending-only** API key restricted to that domain.
 
 ## 2. Configure secrets (never in git, Vercel, web, Companion, addon, chat or logs)
 
@@ -18,7 +18,7 @@ umask 077; openssl rand -base64 48 > /dev/shm/azerdex_worker_secret
 supabase secrets set --project-ref <STAGING_REF> \
   AZERDEX_WORKER_SECRET="$(cat /dev/shm/azerdex_worker_secret)" \
   RESEND_API_KEY="<sending-only key>"
-# AZERDEX_WELCOME_ENABLED is deliberately NOT set (off). AZERDEX_WORKER_DB_KEY is optional; by default the platform-provided server key is used.
+# Recommended: AZERDEX_WELCOME_MODE=template (G-4 proved it directly; see resend-integration.md). AZERDEX_WELCOME_ENABLED is deliberately NOT set (off). AZERDEX_WORKER_DB_KEY is optional; by default the platform-provided server key is used.
 ```
 
 The server key can bypass RLS: it exists only as a Supabase secret read by this one function; the function can call exactly two RPCs (`azerdex_welcome_claim/_finish`) and has no SQL surface. Prefer a dedicated narrower credential if the project offers one.
@@ -29,7 +29,7 @@ The server key can bypass RLS: it exists only as a Supabase secret read by this 
 # Apply the migration with the project's migration role (needs BYPASSRLS, TRIGGER+REFERENCES on auth.users, SELECT on auth.one_time_tokens; the
 # migration's pre-flight checks this). This repository keeps migrations under database/migrations/, so `supabase db push` does NOT pick it up:
 psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -f database/migrations/0015_azerdex_welcome_outbox.sql     # switches stay OFF
-supabase functions deploy azerdex-welcome-worker --project-ref <STAGING_REF>   # supabase/config.toml: verify_jwt = false (own secret check)
+supabase functions deploy azerdex-welcome-worker --project-ref <STAGING_REF>   # supabase/config.toml: verify_jwt = false (own secret check); no static files needed
 ```
 Verify unauthenticated invocation is refused: `curl -i -X POST https://<ref>.supabase.co/functions/v1/azerdex-welcome-worker` → `401 {"error":"unauthorized"}`.
 Verify the migration's own post-conditions passed (it aborts otherwise) and run `database/ops/0015_welcome_monitoring.sql` (all counters 0, both switches false).
@@ -70,6 +70,8 @@ Re-enable only after the cause is understood: `database/rollback/0015_kill_switc
 `ambiguous`/`retry`. Alert text must carry **counts only**: no address, no user id. Function logs contain counts and allowlisted codes only (asserted by tests).
 
 **Provider key / domain problem:** the worker log event `provider_auth_failed` (and `state: provider_auth_failed` in the response) means Resend answered 401/403. No user is parked; jobs are released and retried each minute until you fix the key or domain verification. Alert on this event.
+
+**Changing the sending mode (`AZERDEX_WELCOME_MODE` html ↔ template):** only with an empty retry queue. `select public.azerdex_welcome_stats()` must show **no** `retry` and **no** `leased` rows (or wait 24 h): the idempotency key is the same in both modes, so a changed payload under a reused key is answered 409 by the provider and the event would burn attempts and end in `review_required` (resend-integration.md). Never edit or unpublish the `azerdex-welcome-v1` template while events are in flight; a template-wide mistake parks at most 3 users per run: fix the template, then `operator_requeue` them.
 
 ## 8. Investigating an unknown delivery outcome (`review_required`, `unknown_outcome = true`)
 

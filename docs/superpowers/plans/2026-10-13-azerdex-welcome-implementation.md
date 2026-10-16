@@ -44,3 +44,15 @@
 ## Explicit non-goals / forbidden in this task
 
 Merging #53–#56; applying any migration to the live project; enabling auth or Companion gates; Vercel DNS/auth changes; deploying Edge Functions or Cron; real customer emails; test mails to third parties; hosted staging (owner-run gate).
+
+## Post-G4 round (2026-10-16)
+
+| # | Task | Evidence | Status |
+| --- | --- | --- | --- |
+| 14 | Merge `main` (account chain #53–#56 landed) into the branch; prove `0015` ⟂ `0014` in both orders | welcome suites on `0012→0014→0015`; Account 219/219 + enrollment 88/88 on `0012→0015→0014` | done |
+| 15 | Record G-4 (owner-run real provider test) without personal data; keep deployed-path, Gmail mobile, Outlook as open checks | `acceptance.md`, `resend-integration.md` | done |
+| 16 | Template-mode regression tests (exact request shape, CID byte-identity, 409 on payload change, template-wide failure, UUID id) | `tests/welcome-worker/template-mode.test.mjs` (TM-1…TM-11) | done |
+| 17 | Remove the static-file dependency: embed the emblem (generated module + integrity check), Deno test with no file-read permission | `scripts/embed-azerdex-logo.mjs`, AS-1…AS-6 | done |
+| 18 | Hosted-staging preparation: read-only discovery, staging plan, G-2 harness, staging verification SQL, 0015 ledger-record script | `staging-plan.md`, `scripts/azerdex-welcome-hosted-provenance.mjs`, `database/ops/0015_*` | done (nothing executed on hosted) |
+| 19 | Vercel CTA / protection read-only audit (no change) | `acceptance.md` B-1 | done; B-1 OPEN |
+| 20 | Final independent security + integration reviews on the final head | `security-review.md` Round 3 | see record |

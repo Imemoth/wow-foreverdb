@@ -11,6 +11,7 @@ One transactional welcome message after a person's **first genuine registration 
 | [runbook.md](runbook.md) | Secrets, start/stop, monitoring, unknown outcomes, safe retry, recovery, GDPR, rollback |
 | [acceptance.md](acceptance.md) | Evidence levels, executed test record, release blockers, owner-run acceptance steps |
 | [security-review.md](security-review.md) | Independent security and code-quality review results |
+| [staging-plan.md](staging-plan.md) | Hosted staging plan: discovery facts, options and costs, setup order, G-2/G-3/G-7 validation, teardown (plan only; one owner approval needed) |
 
 ## How the pieces interact
 
@@ -44,7 +45,8 @@ Known, documented edge cases of the rule: *recovery requested before the signup 
 | **Implemented** | code present in this PR | yes |
 | **CI-verified** | the `AzerDex welcome outbox …` workflow green on the final head | see PR checks |
 | **Local integration verified** | disposable PostgreSQL 16 + real GoTrue v2.197.0 + mocked Resend, run by the author | yes ([acceptance.md](acceptance.md)) |
-| **Hosted staging verified** | isolated non-production Supabase + real Resend with an owner-controlled recipient | **no** — owner gate |
+| **Provider integration verified** | direct Resend API, owner-run (G-4: published template + CID, Gmail desktop, 2026-10-16) | **yes, direct path only** — not the deployed worker, Gmail mobile or Outlook |
+| **Hosted staging verified** | isolated non-production Supabase + real Resend with an owner-controlled recipient | **no** — owner gate; no staging project exists yet |
 | **Production approved** | owner approvals for infrastructure rollout and first real recipient | **no** |
 
 ## Safety posture of this PR
