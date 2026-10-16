@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
 import { SENSITIVE_PAGE_REFERRER_POLICY } from "@/lib/security/headers";
+import { AccountNavLinks } from "./_components/AccountNavLinks";
 import { LogoutButton } from "./_components/LogoutButton";
 
 // Every account page is per-request: never statically generated, never shared-cached (see also proxy.ts headers).
@@ -16,13 +16,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
   referrer: SENSITIVE_PAGE_REFERRER_POLICY,
 };
-
-const NAV = [
-  { href: "/account", label: "Account" },
-  { href: "/account/installations", label: "My Installations" },
-  { href: "/account/devices", label: "Devices" },
-  { href: "/account/guildbook", label: "Guildbook" },
-];
 
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const rt = accountRuntime();
@@ -47,10 +40,8 @@ export default async function AccountLayout({ children }: { children: React.Reac
   return (
     <div className="mx-auto w-full max-w-md space-y-6 has-[[data-account-wide]]:max-w-4xl">
       {authed && (
-        <nav aria-label="Account" className="panel flex flex-wrap items-center gap-1 p-2 text-sm">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="account-menu-item">{n.label}</Link>
-          ))}
+        <nav aria-label="Account" className="panel flex flex-wrap items-center gap-2 p-2 text-sm">
+          <AccountNavLinks />
           <div className="ml-auto"><LogoutButton compact /></div>
         </nav>
       )}

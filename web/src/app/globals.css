@@ -204,27 +204,11 @@
     border-color: var(--color-violet-400);
     color: #fff;
   }
-  /* Account menu — native <details>/<summary> disclosure, no client JS required. */
-  .account-menu > summary {
-    list-style: none;
-  }
-  .account-menu > summary::-webkit-details-marker {
-    display: none;
-  }
-  .account-menu[open] > summary {
-    border-color: var(--color-violet-400);
-  }
-  .account-menu-panel {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 0.5rem);
-    z-index: 30;
-    width: 15rem;
-  }
+  /* Account nav cluster item (app/account/layout.tsx's signed-in nav + the compact sign-out action). */
   .account-menu-item {
     display: block;
     border-radius: 0.4rem;
-    padding: 0.5rem 0.6rem;
+    padding: 0.6rem 0.75rem;
     color: var(--color-parchment);
     text-decoration: none;
     font-size: 0.875rem;
@@ -232,6 +216,11 @@
   .account-menu-item:hover {
     background: rgb(108 65 199 / 0.16);
     color: #fff;
+  }
+  .account-menu-item[aria-current="page"] {
+    background: rgb(108 65 199 / 0.22);
+    color: var(--color-gold-300);
+    font-weight: 600;
   }
   .prose-fdb {
     line-height: 1.75;
