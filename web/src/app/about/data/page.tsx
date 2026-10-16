@@ -5,7 +5,7 @@ import { pageContext } from "@/lib/page";
 
 export const metadata = {
   title: "How the data works",
-  description: "How ForeverDB collects, aggregates and publishes observed WoW: Forever loot and gathering data, and how to read observed drop rates.",
+  description: "How AzerDex collects, aggregates and publishes observed WoW: Forever loot and gathering data, and how to read observed drop rates.",
   alternates: { canonical: "/about/data" },
 };
 
@@ -19,14 +19,14 @@ export default async function AboutDataPage() {
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">How the data works</h1>
       <div className="prose-fdb">
         <p>
-          ForeverDB is an <strong>observation database</strong>. Nothing here is datamined or copied from game files: every
+          AzerDex is an <strong>observation database</strong>. Nothing here is datamined or copied from game files: every
           number comes from what players running the ForeverDB addon actually saw while playing World of Warcraft: Forever.
         </p>
 
         <h2 id="pipeline">From your bags to this page</h2>
         <ol>
           <li><strong>Addon.</strong> Records each loot window with its source (creature by exact level, gathering node, fishing zone, fishing pool, chest or disenchanted item), the items and quantities, and an approximate position on a 0.5% map grid. The addon never makes network requests.</li>
-          <li><strong>Companion.</strong> The Windows Companion uploads aggregated counters for your installation to the private ForeverDB backend.</li>
+          <li><strong>Companion.</strong> The Windows Companion uploads aggregated counters for your installation to the private AzerDex backend.</li>
           <li><strong>Publication.</strong> A separate, one-way publication job reads only approved aggregate statistics, validates and sanitizes them, and writes them to an isolated public database that powers this website. Private data — installation identifiers, Guildbook rosters, accounts, tokens — is never copied here.</li>
         </ol>
 

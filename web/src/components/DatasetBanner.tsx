@@ -9,7 +9,7 @@ export function DatasetBanner({ meta }: { meta: DatasetMeta }) {
       <div role="note" className="border-b border-conf-low/40 bg-[#2a1a0e] text-sm text-[#ffd9b8]">
         <p className="mx-auto max-w-7xl px-4 py-2">
           <strong className="font-semibold">Preview with synthetic sample data.</strong> Every database figure on this
-          build is invented test data produced by the publication pipeline — not real ForeverDB observations.{" "}
+          build is invented test data produced by the publication pipeline — not real AzerDex observations.{" "}
           <Link href="/about/data#preview" className="text-[#ffe7c9] underline">Why?</Link>
         </p>
       </div>

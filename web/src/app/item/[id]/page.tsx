@@ -46,12 +46,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const top = d.drops.find((x) => x.confidence !== "insufficient") ?? d.drops[0];
   const description = top
     ? `${d.item.name} (item ${d.item.id}) observed from ${d.item.sourceCount} source${d.item.sourceCount === 1 ? "" : "s"} in WoW: Forever. Top: ${top.source.name}, ${LOOT_KIND_LABEL[top.lootKind]}, ${fmtRate(top.rate, top.confidence)} observed over ${fmtInt(top.observations)} loots.`
-    : `${d.item.name} (item ${d.item.id}) in the ForeverDB observed database.`;
+    : `${d.item.name} (item ${d.item.id}) in the AzerDex observed database.`;
   return {
     title: `${d.item.name} — Item ${d.item.id}`,
     description,
     alternates: { canonical: itemPath(d.item.id) },
-    openGraph: { title: `${d.item.name} · ForeverDB`, description, url: itemPath(d.item.id) },
+    openGraph: { title: `${d.item.name} · AzerDex`, description, url: itemPath(d.item.id) },
     robots: robotsFor(d.item.indexable),
   };
 }
@@ -132,7 +132,7 @@ export default async function ItemPage({ params }: { params: Params }) {
       <div className="grid gap-8 md:grid-cols-2">
         <section aria-labelledby="zones-title">
           <h2 id="zones-title" className="panel-title text-xl">Zones</h2>
-          <p className="mt-1 text-xs text-mist">Inferred: zones where a source of this item was observed. ForeverDB cannot prove the zone of any individual drop, so no zone-specific drop count is shown.</p>
+          <p className="mt-1 text-xs text-mist">Inferred: zones where a source of this item was observed. AzerDex cannot prove the zone of any individual drop, so no zone-specific drop count is shown.</p>
           {d.zones.length === 0 ? <p className="mt-3 text-sm text-mist">No located observations.</p> : (
             <ul className="mt-3 space-y-1.5">
               {d.zones.map((z) => (

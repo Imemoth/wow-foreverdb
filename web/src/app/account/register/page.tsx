@@ -10,7 +10,7 @@ export default function RegisterPage() {
   return (
     <>
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Create your account</h1>
-      <p className="text-mist">An account lets you sign in on ForeverDB. Browsing the database never requires one.</p>
+      <p className="text-mist">An account lets you sign in on AzerDex. Browsing the database never requires one.</p>
       <RegisterForm turnstileSiteKey={siteKey} />
     </>
   );

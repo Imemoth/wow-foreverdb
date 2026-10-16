@@ -14,11 +14,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
   return {
     metadataBase: new URL(env.SITE_URL),
-    title: { default: "ForeverDB — WoW: Forever observed loot & gathering database", template: "%s · ForeverDB" },
+    title: { default: "AzerDex — Know Your World. WoW: Forever observed loot & gathering database", template: "%s · AzerDex" },
     description:
-      "Search community-observed loot, skinning, mining, herbalism and fishing data for World of Warcraft: Forever, with honest sample sizes.",
-    applicationName: "ForeverDB",
-    openGraph: { siteName: "ForeverDB", type: "website", locale: "en_US" },
+      "AzerDex is a community-powered database for World of Warcraft: Forever — observed loot, skinning, mining, herbalism and fishing data, with honest sample sizes.",
+    applicationName: "AzerDex",
+    openGraph: { siteName: "AzerDex", type: "website", locale: "en_US" },
     twitter: { card: "summary" },
     alternates: { types: { "application/rss+xml": "/news/rss.xml" } },
     // Preview/local builds are never indexed.
@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = { themeColor: "#090b10", colorScheme: "dark" };
+export const viewport: Viewport = { themeColor: "#07091c", colorScheme: "dark" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { nonce, db, baseUrl } = await pageContext();
@@ -45,7 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <JsonLd nonce={nonce} data={{
           "@context": "https://schema.org",
           "@type": "WebSite",
-          name: "ForeverDB",
+          name: "AzerDex",
           url: baseUrl,
           potentialAction: {
             "@type": "SearchAction",

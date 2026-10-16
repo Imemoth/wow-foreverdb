@@ -73,9 +73,9 @@ export function RegisterForm({ turnstileSiteKey }: { turnstileSiteKey: string | 
       <FormAlert message={error} alertRef={alertRef} />
       <TextField label="Email address" name="email" type="email" inputMode="email" value={email} onChange={setEmail} autoComplete="email" error={errors.email} />
       <PasswordField label="Password" name="password" value={password} onChange={setPassword} autoComplete="new-password" error={errors.password}
-        hint="At least 12 characters. Use something unique to ForeverDB; a passphrase works well." />
+        hint="At least 12 characters. Use something unique to AzerDex; a passphrase works well." />
       {turnstileSiteKey && <AccountTurnstile siteKey={turnstileSiteKey} onToken={onToken} resetSignal={resetSignal} />}
-      <button type="submit" className="btn-gold w-full" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
+      <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
       <p className="text-sm text-mist">Already registered? <Link href="/account/login">Sign in</Link></p>
     </form>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { postJson } from "@/lib/account/client";
 import { messageFor } from "@/lib/account/messages";
 
-export function LogoutButton() {
+export function LogoutButton({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function logout() {
@@ -23,6 +23,14 @@ export function LogoutButton() {
     }
     setBusy(false);
     setError(messageFor(r.data.error));
+  }
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2">
+        <button type="button" className="account-menu-item" onClick={logout} disabled={busy} aria-busy={busy}>{busy ? "Signing out…" : "Sign out"}</button>
+        {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+      </div>
+    );
   }
   return (
     <div className="space-y-2">

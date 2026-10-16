@@ -29,20 +29,21 @@ export default async function HomePage() {
   return (
     <div className="space-y-14">
       {/* Hero + central search */}
-      <section aria-labelledby="hero-title" className="relative overflow-hidden rounded-2xl border border-ink-700 bg-[radial-gradient(900px_300px_at_50%_0,rgb(201_151_61/0.18),transparent_70%)] px-5 py-12 text-center sm:px-10 sm:py-16">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-bronze-400">World of Warcraft: Forever</p>
+      <section aria-labelledby="hero-title" className="relative overflow-hidden rounded-2xl border border-ink-700 bg-[radial-gradient(900px_320px_at_50%_0,rgb(108_65_199/0.28),transparent_70%)] px-5 py-12 text-center sm:px-10 sm:py-16">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
         <h1 id="hero-title" className="mx-auto mt-3 max-w-3xl font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-5xl">
-          Know where it drops — <span className="text-gold-300">and how sure we are.</span>
+          Know Your World. <span className="text-gold-300">Know where it drops.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-mist">
-          ForeverDB is built from real in-game observations shared by players running the ForeverDB addon. Every rate shows its sample size.
+          AzerDex is a community-powered database and companion for World of Warcraft: Forever, built from real
+          in-game observations shared by players running the ForeverDB addon. Every rate shows its sample size.
         </p>
         <form action="/database" method="get" role="search" className="mx-auto mt-8 flex max-w-2xl flex-col gap-2 sm:flex-row">
           <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
           <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
             placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
             className="field h-12 flex-1 text-base" />
-          <button type="submit" className="btn-gold h-12 px-6 text-base">Search database</button>
+          <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
         </form>
         <div className="rule-ornament mx-auto mt-10 max-w-md" />
         <div className="mx-auto mt-6 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
@@ -106,14 +107,14 @@ export default async function HomePage() {
 
         {/* How it works */}
         <section aria-labelledby="how-title" className="panel p-6">
-          <h2 id="how-title" className="panel-title text-xl">How ForeverDB works</h2>
+          <h2 id="how-title" className="panel-title text-xl">How AzerDex works</h2>
           <ol className="mt-4 space-y-4 text-sm text-mist">
-            <li><strong className="text-parchment">1. The addon observes.</strong> While you play, it records loot, gathering and fishing results with the source, level and an approximate position.</li>
-            <li><strong className="text-parchment">2. The Companion syncs.</strong> The Windows Companion uploads your installation&apos;s counters to the private ForeverDB backend. Private records, such as Guildbook rosters, never reach this website.</li>
+            <li><strong className="text-parchment">1. The addon observes.</strong> While you play, the ForeverDB addon records loot, gathering and fishing results with the source, level and an approximate position.</li>
+            <li><strong className="text-parchment">2. The Companion syncs.</strong> The ForeverDB Companion uploads your installation&apos;s counters to the private AzerDex backend. Private records, such as Guildbook rosters, never reach this website.</li>
             <li><strong className="text-parchment">3. We publish aggregates.</strong> A one-way pipeline validates and publishes only approved, aggregated statistics here.</li>
           </ol>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link href="/download" className="btn-gold">Get the addon</Link>
+            <Link href="/download" className="btn-primary">Get the addon &amp; Companion</Link>
             <Link href="/about/data" className="btn-ghost">Data methodology</Link>
           </div>
         </section>

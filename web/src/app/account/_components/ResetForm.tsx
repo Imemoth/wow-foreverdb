@@ -63,7 +63,7 @@ export function ResetForm() {
         <h2 className="panel-title text-lg">Not fully secured yet</h2>
         <p className="text-sm text-parchment">{messageFor("revocation_incomplete")}</p>
         <FormAlert message={error} alertRef={alertRef} />
-        <button type="button" className="btn-gold" onClick={finish} disabled={busy}>{busy ? "Working…" : "Finish securing my account"}</button>
+        <button type="button" className="btn-primary" onClick={finish} disabled={busy}>{busy ? "Working…" : "Finish securing my account"}</button>
         <p className="text-xs text-mist">If this keeps failing or the page says your link expired, request a new reset link in THIS browser and enter the same password again: that completes the sign-out.</p>
       </div>
     );
@@ -72,7 +72,7 @@ export function ResetForm() {
     return (
       <div className="panel space-y-3 p-6" role="alert">
         <p className="text-danger">{messageFor("recovery_required")}</p>
-        <Link className="btn-gold" href="/account/forgot-password">Request a new link</Link>
+        <Link className="btn-primary" href="/account/forgot-password">Request a new link</Link>
       </div>
     );
   }
@@ -81,7 +81,7 @@ export function ResetForm() {
       <FormAlert message={error} alertRef={alertRef} />
       <PasswordField label="New password" name="password" value={password} onChange={setPassword} autoComplete="new-password" error={passwordError}
         hint="At least 12 characters." />
-      <button type="submit" className="btn-gold w-full" disabled={busy}>{busy ? "Saving…" : "Set new password"}</button>
+      <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Saving…" : "Set new password"}</button>
     </form>
   );
 }

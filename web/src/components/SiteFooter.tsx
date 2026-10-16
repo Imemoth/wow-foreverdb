@@ -5,10 +5,12 @@ export function SiteFooter() {
     <footer className="mt-16 border-t border-ink-700/80 bg-ink-950">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 text-sm text-mist md:grid-cols-3">
         <div>
-          <p className="font-[family-name:var(--font-display)] text-base text-gold-300">ForeverDB</p>
+          <p className="font-[family-name:var(--font-display)] text-base text-gold-300">AzerDex</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-mist">Know Your World.</p>
           <p className="mt-2 leading-relaxed">
-            A community-collected, observation-based database for World of Warcraft: Forever. Percentages are
-            <strong className="text-parchment"> observed sample rates</strong>, not official drop chances.
+            A community-collected, observation-based database for World of Warcraft: Forever, built from the ForeverDB
+            addon and Companion. Percentages are <strong className="text-parchment">observed sample rates</strong>,
+            not official drop chances.
           </p>
         </div>
         <nav aria-label="Footer">
@@ -22,7 +24,7 @@ export function SiteFooter() {
           </ul>
         </nav>
         <p className="leading-relaxed">
-          ForeverDB is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment.
+          AzerDex is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment.
           World of Warcraft and related names are trademarks of Blizzard Entertainment, Inc. No Blizzard artwork is
           redistributed by this site.
         </p>

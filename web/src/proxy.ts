@@ -57,7 +57,7 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
       { status: 429, headers: { ...headers, "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" } },
     );
   }
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slow down - ForeverDB</title><meta name="robots" content="noindex"></head><body style="background:#0e1116;color:#e8e2d4;font:16px system-ui,sans-serif;padding:3rem;max-width:40rem;margin:auto"><h1>Too many requests</h1><p>You are browsing the database faster than our fair-use limit allows. Please wait about ${retryAfter} seconds and try again.</p>${reason === "challenge_required" ? '<p><a style="color:#e0b45b" href="/verify">Verify you are human</a> to continue at a higher rate.</p>' : ""}</body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slow down - AzerDex</title><meta name="robots" content="noindex"></head><body style="background:#07091c;color:#ece6d9;font:16px system-ui,sans-serif;padding:3rem;max-width:40rem;margin:auto"><h1>Too many requests</h1><p>You are browsing the database faster than our fair-use limit allows. Please wait about ${retryAfter} seconds and try again.</p>${reason === "challenge_required" ? '<p><a style="color:#9b74e6" href="/verify">Verify you are human</a> to continue at a higher rate.</p>' : ""}</body></html>`;
   return new NextResponse(html, {
     status: 429,
     headers: {

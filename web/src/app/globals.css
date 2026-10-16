@@ -1,19 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink-950: #090b10;
-  --color-ink-900: #0f1218;
-  --color-ink-850: #141821;
-  --color-ink-800: #1a1f2a;
-  --color-ink-700: #262d3b;
-  --color-ink-600: #364055;
-  --color-parchment: #ece4d3;
-  --color-mist: #a7b0bf;
-  --color-gold-300: #f3d38a;
-  --color-gold-400: #e6b95c;
-  --color-gold-500: #c9973d;
-  --color-bronze-400: #c58a52;
-  --color-bronze-600: #8a5a2e;
+  /* AzerDex "Dark Arcane Fantasy" foundation. Token NAMES are kept stable (ink-*, gold-*, bronze-*)
+     so every existing Tailwind utility class (bg-ink-950, text-gold-300, ...) re-skins from here;
+     only the VALUES change. Void/Abyss/Arcane map onto the ink-950/900/800 ramp. */
+  --color-ink-950: #07091c; /* Void — page background */
+  --color-ink-900: #0d0f33; /* Abyss — header / recessed surfaces */
+  --color-ink-850: #11133b; /* Abyss, slightly raised (sticky table headers, etc.) */
+  --color-ink-800: #191a47; /* Arcane — cards and panels */
+  --color-ink-700: #2c2d66; /* Arcane border */
+  --color-ink-600: #3c3d7d; /* Arcane border, raised (inputs, dividers) */
+  --color-parchment: #ece6d9;
+  --color-mist: #a8a9c8;
+  --color-gold-300: #f0dfae; /* Runic Gold, bright — headings, values */
+  --color-gold-400: #d9b978; /* Runic Gold — brand accent */
+  --color-gold-500: #c29a52;
+  --color-bronze-400: #ad8249;
+  --color-bronze-600: #7a5a30;
+  --color-violet-300: #c3aef2; /* primary-interaction family: links, focus, primary buttons */
+  --color-violet-400: #9b74e6;
+  --color-violet-500: #6c41c7; /* Arcane Violet — primary CTA */
+  --color-violet-600: #55339e;
+  --color-violet-700: #402878;
   --color-conf-high: #74cf92;
   --color-conf-medium: #e6c766;
   --color-conf-low: #eba066;
@@ -47,23 +55,23 @@
     color: var(--color-parchment);
     font-family: var(--font-sans);
     background:
-      radial-gradient(1200px 520px at 50% -180px, rgb(201 151 61 / 0.16), transparent 70%),
-      radial-gradient(800px 400px at 100% 0, rgb(110 69 36 / 0.12), transparent 70%),
+      radial-gradient(1100px 480px at 50% -160px, rgb(108 65 199 / 0.22), transparent 70%),
+      radial-gradient(900px 420px at 100% 0, rgb(201 151 61 / 0.1), transparent 70%),
       var(--color-ink-950);
     font-feature-settings: "cv11", "ss01";
   }
   ::selection {
-    background: rgb(230 185 92 / 0.35);
+    background: rgb(155 116 230 / 0.35);
   }
   a {
-    color: var(--color-gold-300);
+    color: var(--color-violet-300);
     text-underline-offset: 3px;
   }
   a:hover {
-    color: #fff1c9;
+    color: #e3d6fb;
   }
   :focus-visible {
-    outline: 2px solid var(--color-gold-400);
+    outline: 2px solid var(--color-violet-400);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -78,10 +86,10 @@
 
 @layer components {
   .panel {
-    background: linear-gradient(180deg, rgb(26 31 42 / 0.92), rgb(20 24 33 / 0.92));
+    background: linear-gradient(180deg, rgb(25 26 71 / 0.92), rgb(17 19 59 / 0.92));
     border: 1px solid var(--color-ink-700);
     border-radius: 0.75rem;
-    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 30px -18px rgb(0 0 0 / 0.8);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 12px 30px -18px rgb(0 0 0 / 0.8);
   }
   .panel-title {
     font-family: var(--font-display);
@@ -119,7 +127,7 @@
     vertical-align: middle;
   }
   .data-table tbody tr:hover td {
-    background: rgb(230 185 92 / 0.045);
+    background: rgb(108 65 199 / 0.08);
   }
   .data-table .num {
     text-align: right;
@@ -135,9 +143,33 @@
     min-height: 2.5rem;
   }
   .field:focus-visible {
-    outline: 2px solid var(--color-gold-400);
+    outline: 2px solid var(--color-violet-400);
     outline-offset: 0;
   }
+  /* Primary CTA — Arcane Violet. The main interactive action color across the site. */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(180deg, var(--color-violet-400), var(--color-violet-600));
+    border: 1px solid var(--color-violet-300);
+    text-decoration: none;
+  }
+  .btn-primary:hover {
+    color: #fff;
+    filter: brightness(1.08);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    filter: none;
+  }
+  /* Accent — Runic Gold. Reserved for brand/decorative emphasis, not primary actions. */
   .btn-gold {
     display: inline-flex;
     align-items: center;
@@ -165,11 +197,40 @@
     border-radius: 0.5rem;
     border: 1px solid var(--color-ink-600);
     color: var(--color-parchment);
-    background: rgb(15 18 24 / 0.6);
+    background: rgb(13 15 51 / 0.6);
     text-decoration: none;
   }
   .btn-ghost:hover {
-    border-color: var(--color-gold-500);
+    border-color: var(--color-violet-400);
+    color: #fff;
+  }
+  /* Account menu — native <details>/<summary> disclosure, no client JS required. */
+  .account-menu > summary {
+    list-style: none;
+  }
+  .account-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+  .account-menu[open] > summary {
+    border-color: var(--color-violet-400);
+  }
+  .account-menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.5rem);
+    z-index: 30;
+    width: 15rem;
+  }
+  .account-menu-item {
+    display: block;
+    border-radius: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    color: var(--color-parchment);
+    text-decoration: none;
+    font-size: 0.875rem;
+  }
+  .account-menu-item:hover {
+    background: rgb(108 65 199 / 0.16);
     color: #fff;
   }
   .prose-fdb {

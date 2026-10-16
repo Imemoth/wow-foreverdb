@@ -68,7 +68,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         </ul>
         <form method="post" action="/account/api/enrollment/download" className="pt-1">
           <input type="hidden" name={FORM_CSRF_FIELD} value={token} />
-          <button type="submit" className="btn-gold">Download activation file for a new computer</button>
+          <button type="submit" className="btn-primary">Download activation file for a new computer</button>
         </form>
       </section>
 

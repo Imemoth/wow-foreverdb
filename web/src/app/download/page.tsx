@@ -4,7 +4,7 @@ import { pageContext } from "@/lib/page";
 
 export const metadata = {
   title: "Addon & Companion",
-  description: "Get the ForeverDB in-game addon and Windows Companion to collect and sync observations.",
+  description: "Get the ForeverDB addon and Companion to collect and sync observations for AzerDex.",
   alternates: { canonical: "/download" },
 };
 
@@ -17,7 +17,7 @@ export default async function DownloadPage() {
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Addon & Companion" }]} />
       <header>
         <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Addon &amp; Companion</h1>
-        <p className="mt-2 text-mist">ForeverDB grows from players who run the collector. Both tools are in <strong className="text-parchment">alpha</strong>.</p>
+        <p className="mt-2 text-mist">AzerDex grows from players who run the collector. Both tools are in <strong className="text-parchment">alpha</strong>.</p>
       </header>
       <div className="grid gap-5 md:grid-cols-2">
         <section aria-labelledby="addon-title" className="panel p-6">
@@ -27,7 +27,7 @@ export default async function DownloadPage() {
             <li>Interface target: WoW: Forever (16001)</li>
             <li>Commands: <code>/fdb status</code>, <code>/fdb item &lt;id&gt;</code></li>
           </ul>
-          <a className="btn-gold mt-5" href={`${REPO}/tree/main/addon/ForeverDB`} rel="noopener noreferrer">View addon source</a>
+          <a className="btn-primary mt-5" href={`${REPO}/tree/main/addon/ForeverDB`} rel="noopener noreferrer">View addon source</a>
         </section>
         <section aria-labelledby="companion-title" className="panel p-6">
           <h2 id="companion-title" className="panel-title text-xl">Windows Companion</h2>
