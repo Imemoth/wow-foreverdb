@@ -45,8 +45,10 @@ public sealed class AccountRuntime
         TimeSpan? requestTimeout = null)
     {
         var endpoint = gate.AccountsEnabled ? gate.Endpoint! : productionEndpoint;
-        var privatePilot = gate.Environment == AccountEnvironment.PrivatePilot;
-        var directory = productionDirectory ?? SessionVault.DefaultProductionDirectory();
+        var claimPilot = gate.Environment == AccountEnvironment.PrivateClaimPilot;
+        var privatePilot = gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
+        var productionVaultDirectory = productionDirectory ?? SessionVault.DefaultProductionDirectory();
+        var directory = productionVaultDirectory;
         if (gate.AccountsEnabled)
         {
             directory = Path.Combine(directory, gate.CredentialSubdirectory);
@@ -57,14 +59,51 @@ public sealed class AccountRuntime
                 handler ?? new HttpClientHandler { AllowAutoRedirect = false },
                 enforce: gate.AccountsEnabled,
                 privatePilotOrigin: privatePilot ? gate.Endpoint!.BaseUri : null));
-        var vault = new SessionVault(directory, protector ?? CreateDefaultProtector());
+        var credentialProtector = protector ?? CreateDefaultProtector();
+        var vault = new SessionVault(directory, credentialProtector);
+        if (claimPilot)
+        {
+            // Explicit one-installation pilot: copy the original anonymous owner
+            // credential into an isolated legacy slot. Never mutate/repair the
+            // production slot, and NEVER refresh or revoke this copied credential.
+            // A stale imported access token requires re-running normal anonymous
+            // mode; the pilot cannot rotate its shared refresh token.
+            var original = new SessionVault(productionVaultDirectory, credentialProtector).Primary.Read();
+            var existing = vault.LegacyOwner.Read();
+            if (existing.Status is SlotReadStatus.Unreadable or SlotReadStatus.IoError)
+            {
+                throw new InvalidOperationException("Private claim pilot owner credential is unavailable. No changes were made to the original identity.");
+            }
+
+            if (original.Status == SlotReadStatus.Ok &&
+                original.ProvisionalKind == SessionKind.Anonymous &&
+                original.Marker?.Rejected != true &&
+                JwtInspector.TryDecode(original.Session!.AccessToken)?.IsAnonymous == true)
+            {
+                // When the NORMAL anonymous Companion refreshed the original
+                // after an earlier pilot, copy its newer token again. Never
+                // substitute a different user, and never refresh this copy.
+                var sameOwner = existing.Status == SlotReadStatus.Ok &&
+                    existing.Session!.UserId == original.Session!.UserId;
+                if (existing.Status == SlotReadStatus.Missing ||
+                    (sameOwner && original.Session!.ExpiresAt > existing.Session!.ExpiresAt))
+                {
+                    vault.LegacyOwner.Write(original.Session!, SlotMarker.For(SessionKind.Anonymous));
+                }
+            }
+        }
+
         var sessions = new AccountSessionManager(
             vault, new CrossProcessSessionGate(directory), new GoTrueClient(http, endpoint, requestTimeout),
-            gate.AccountsEnabled, clock, allowAnonymousCreation: !privatePilot);
-        var rpc = new OwnershipRpcClient(http, endpoint, clock, requestTimeout, allowWrites: !privatePilot);
+            gate.AccountsEnabled, clock, allowAnonymousCreation: !privatePilot,
+            allowLegacyRefreshOrRevoke: !claimPilot);
+        var rpc = new OwnershipRpcClient(http, endpoint, clock, requestTimeout, allowWrites: !privatePilot,
+            allowClaimStart: claimPilot);
         var router = new OwnershipRouter(sessions, rpc, clock);
         var sync = new InstallationSyncCoordinator(sessions, router, rpc, clock, allowUploads: !privatePilot);
-        var claims = new ClaimService(sessions, rpc, router, sync, clock, allowClaims: !privatePilot);
+        var claims = new ClaimService(sessions, rpc, router, sync, clock,
+            allowClaims: !privatePilot || claimPilot,
+            scopedInstallationId: claimPilot ? gate.ScopedClaimInstallationId : null);
         return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint);
     }
 

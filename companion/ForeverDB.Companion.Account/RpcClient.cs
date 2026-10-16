@@ -70,9 +70,11 @@ public sealed class OwnershipRpcClient
     private readonly TimeProvider _clock;
     private readonly TimeSpan _timeout;
     private readonly bool _allowWrites;
+    private readonly bool _allowClaimStart;
 
-    public OwnershipRpcClient(HttpClient http, AccountEndpoint endpoint, TimeProvider? clock = null, TimeSpan? timeout = null, bool allowWrites = true)
+    public OwnershipRpcClient(HttpClient http, AccountEndpoint endpoint, TimeProvider? clock = null, TimeSpan? timeout = null, bool allowWrites = true, bool allowClaimStart = false)
     {
+        _allowClaimStart = allowClaimStart;
         _http = http;
         _endpoint = endpoint;
         _clock = clock ?? TimeProvider.System;
@@ -125,7 +127,7 @@ public sealed class OwnershipRpcClient
     public async Task<RpcResult<ClaimStartReply>> ClaimStartAsync(string anonymousOwnerAccessToken, string installationId, CancellationToken ct)
     {
         // The private-project pilot is sign-in only. Check BEFORE parsing or network I/O.
-        if (!_allowWrites) return RpcResult<ClaimStartReply>.Fail(RpcFailure.Forbidden);
+        if (!_allowWrites && !_allowClaimStart) return RpcResult<ClaimStartReply>.Fail(RpcFailure.Forbidden);
         if (!InstallationIdPattern.IsMatch(installationId))
         {
             return RpcResult<ClaimStartReply>.Fail(RpcFailure.InvalidRequest);

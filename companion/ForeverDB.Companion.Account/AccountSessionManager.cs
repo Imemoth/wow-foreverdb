@@ -46,6 +46,7 @@ public enum ForgetOutcome
     RevocationFailedKept,
     /// <summary>The user explicitly discarded the credential without server confirmation (residual risk).</summary>
     DiscardedUnrevoked,
+    FeatureDisabled,
     StorageFailure,
     LockTimeout
 }
@@ -106,9 +107,11 @@ public sealed class AccountSessionManager
         bool accountsEnabled,
         TimeProvider? clock = null,
         TimeSpan? lockTimeout = null,
-        bool allowAnonymousCreation = true)
+        bool allowAnonymousCreation = true,
+        bool allowLegacyRefreshOrRevoke = true)
     {
         _allowAnonymousCreation = allowAnonymousCreation;
+        _allowLegacyRefreshOrRevoke = allowLegacyRefreshOrRevoke;
         _vault = vault;
         _gate = gate;
         _auth = auth;
@@ -119,6 +122,7 @@ public sealed class AccountSessionManager
     }
 
     private readonly bool _allowAnonymousCreation;
+    private readonly bool _allowLegacyRefreshOrRevoke;
 
     public bool AccountsEnabled { get; }
 
@@ -328,6 +332,16 @@ public sealed class AccountSessionManager
 
         if (forceRefresh || NeedsRefresh(session))
         {
+            // The claim pilot copied the historical anonymous owner credential into a
+            // separate vault. Its refresh token also exists in the original production
+            // vault: rotating it here would silently invalidate normal anonymous sync.
+            if (role == SlotRole.LegacyOwner && !_allowLegacyRefreshOrRevoke)
+            {
+                // The pilot's legacy credential is only a read-only COPY; rotating
+                // its shared refresh token could break the normal anonymous client.
+                SetFault(role, SessionFault.LegacyOwnerRefreshRequired);
+                return Fail(role, SessionFault.LegacyOwnerRefreshRequired);
+            }
             var refreshed = await RefreshLockedAsync(role, slot, session, kind, marker, ct).ConfigureAwait(false);
             if (refreshed.Fault != SessionFault.None)
             {
@@ -927,6 +941,9 @@ public sealed class AccountSessionManager
     /// </summary>
     public async Task<ForgetOutcome> ForgetLegacyOwnerAsync(bool confirmed, bool discardIfRevocationFails, CancellationToken ct = default)
     {
+        // Never revoke the original anonymous production identity from a claim
+        // experiment. The legacy slot is a copy, not an ownership transfer.
+        if (!_allowLegacyRefreshOrRevoke) return ForgetOutcome.FeatureDisabled;
         if (!confirmed)
         {
             return ForgetOutcome.ConfirmationRequired;

@@ -97,7 +97,7 @@ public sealed class InstallationSyncCoordinator
         // No server call, token acquisition or owner selection during the
         // registered-login-only private-project pilot, regardless of AutoSync.
         if (!_allowUploads)
-            return SyncAttempt.Blocked(BlockReason.FeatureDisabled, InstallationOwnership.Unchecked);
+            return SyncAttempt.Blocked(BlockReason.PilotUploadDisabled, InstallationOwnership.Unchecked);
         var gate = _installationGates.GetOrAdd(installationId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try

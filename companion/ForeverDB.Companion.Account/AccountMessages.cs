@@ -89,6 +89,7 @@ public static class AccountMessages
         BlockReason.ServerUnavailable => "ForeverDB is temporarily unavailable; sync will be retried.",
         BlockReason.NotDeployed => "The ForeverDB service does not support this feature yet.",
         BlockReason.FeatureDisabled => "Account features are not enabled in this build.",
+        BlockReason.PilotUploadDisabled => "Snapshot upload is intentionally disabled in this private pilot. Registered sign-in and installation linking remain available on the Account tab.",
         BlockReason.CredentialUnavailable => "The sign-in could not be used just now; sync will be retried.",
         BlockReason.InvalidRequest => "The server rejected the upload.",
         _ => "Sync is paused."
@@ -145,6 +146,7 @@ public static class AccountMessages
         ForgetOutcome.AlreadyEnded => "The anonymous identity was already ended and was removed from this computer.",
         ForgetOutcome.RevocationFailedKept => "The server could not be reached, so the anonymous identity was kept. Try again when online, or choose to discard it without revoking.",
         ForgetOutcome.DiscardedUnrevoked => "The anonymous identity was removed from this computer, but the server session was not revoked.",
+        ForgetOutcome.FeatureDisabled => "Original anonymous identity cannot be revoked from the private claim pilot.",
         ForgetOutcome.StorageFailure => "The change could not be stored safely. Nothing was removed.",
         ForgetOutcome.LockTimeout => "Another ForeverDB Companion window is using the sign-in. Try again in a moment.",
         _ => "Done."
@@ -180,6 +182,7 @@ public static class AccountMessages
         ClaimStartOutcome.NotDeployed => "The ForeverDB service does not support linking yet.",
         ClaimStartOutcome.OutcomeUnknown => "ForeverDB did not answer. A code may or may not have been created. It is not retried automatically; request a new code (it replaces any earlier one).",
         ClaimStartOutcome.CredentialUnavailable => "The sign-in could not be used just now. Nothing was linked.",
+        ClaimStartOutcome.AnonymousTokenNeedsRefresh => "The preserved anonymous sign-in is too old to issue a link code. Close this pilot, open the normal anonymous Companion, use Sync now once, close it, then restart this pilot and Check status again. Nothing was linked.",
         ClaimStartOutcome.MalformedResponse => "ForeverDB sent an unexpected answer. Nothing was linked.",
         _ => "Linking failed."
     };

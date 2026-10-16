@@ -46,7 +46,7 @@ public static class MapAssetDiagnosticUploader
     {
         var runtime = Runtime;
 
-        if (runtime is null || runtime.Gate.Environment == AccountEnvironment.PrivatePilot)
+        if (runtime is null || runtime.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot)
         {
             // This diagnostic uses its own HttpClient (outside the Account RPC guard).
             // The private owner pilot must not write any production data, including diagnostics.

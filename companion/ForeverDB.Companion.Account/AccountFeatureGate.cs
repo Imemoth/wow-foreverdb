@@ -8,7 +8,8 @@ public enum AccountEnvironment
     ProductionAnonymousOnly,
     Local,
     Staging,
-    PrivatePilot
+    PrivatePilot,
+    PrivateClaimPilot
 }
 
 /// <summary>Where Companion Auth and RPC traffic goes (the same project for both, never mixed).</summary>
@@ -23,7 +24,8 @@ public sealed record AccountGateDecision(
     bool AccountsEnabled,
     AccountEndpoint? Endpoint,
     string CredentialSubdirectory,
-    string Reason);
+    string Reason,
+    string? ScopedClaimInstallationId = null);
 
 /// <summary>
 /// Fail-closed capability gate for Account System V1 (registered login, claims, ownership routing).
@@ -47,9 +49,14 @@ public static class AccountFeatureGate
     /// Pure test seam: which compiled approvals a gate evaluation assumes. The runtime never supplies one (it calls
     /// <see cref="EvaluateFromEnvironment"/>), so ONLY the compiled flags above decide live availability.
     /// </summary>
-    public readonly record struct GateApprovals(bool PrivatePilot);
+    public readonly record struct GateApprovals(bool PrivatePilot, bool ClaimPilot = false);
 
-    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved);
+    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved, PrivateProjectClaimPilotApproved);
+
+    // Owner-authorized one-installation claim experiment. OFF on the release line (reverted before the merge to main,
+    // 2026-10-16), independently of the login pilot flag; re-enabling is a separate owner-approved code change.
+    public static readonly bool PrivateProjectClaimPilotApproved = false;
+    public const string ClaimInstallationVariable = "FOREVERDB_ACCOUNT_CLAIM_INSTALLATION";
 
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
@@ -72,9 +79,9 @@ public static class AccountFeatureGate
             return Off("Account features are disabled (default).");
         }
 
-        if (mode == "private-pilot")
+        if (mode == "private-pilot" || mode == "private-claim-pilot")
         {
-            return EvaluatePrivatePilot(getVariable, approvals);
+            return EvaluatePrivatePilot(getVariable, approvals, claimPilot: mode == "private-claim-pilot");
         }
 
         if (mode == "production")
@@ -162,8 +169,11 @@ public static class AccountFeatureGate
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));
 
-    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals)
+    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals, bool claimPilot)
     {
+        if (claimPilot && !approvals.ClaimPilot)
+            return Off("Private installation claim pilot is not approved in this build.");
+
         if (!approvals.PrivatePilot)
             return Off("Private project pilot is not approved in this build.");
 
@@ -194,11 +204,21 @@ public static class AccountFeatureGate
             return Off("Private pilot requires a modern publishable key; legacy and secret keys are refused.");
         }
 
+        var claimedInstallation = (getVariable(ClaimInstallationVariable) ?? "").Trim();
+        if (claimPilot &&
+            (!Regex.IsMatch(claimedInstallation, "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant) ||
+             claimedInstallation.Length < 16))
+            return Off("Claim pilot requires a single explicitly selected test installation ID.");
+
         return new AccountGateDecision(
-            AccountEnvironment.PrivatePilot, true,
-            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, "private-pilot"),
+            claimPilot ? AccountEnvironment.PrivateClaimPilot : AccountEnvironment.PrivatePilot,
+            true,
+            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), key, claimPilot ? "private-claim-pilot" : "private-pilot"),
             $"account-test{Path.DirectorySeparatorChar}private-pilot-{ProductionProjectRef}",
-            "Private owner pilot: registered sign-in enabled, claims and uploads disabled.");
+            claimPilot
+                ? "One-installation claim pilot: registered login and scoped claim code only. Ingest and owner selection disabled."
+                : "Private owner pilot: registered sign-in enabled, claims and uploads disabled.",
+            claimPilot ? claimedInstallation : null);
     }
 
     private static AccountGateDecision Off(string reason) =>
