@@ -9,7 +9,8 @@ export default function NotFound() {
       <h1 className="text-2xl font-semibold text-parchment">Nothing observed here</h1>
       <p className="text-mist">
         This page does not exist, or no AzerDex player has observed this entry yet. Missing data is common in an
-        observation database — it does not mean the thing does not exist in game.
+        observation database — it does not mean the thing does not exist in game. Looking for your account instead?
+        Sign-in isn&apos;t enabled on every deployment yet; browsing the database never requires one.
       </p>
       <div className="flex justify-center gap-2">
         <Link className="btn-primary" href="/database">Search the database</Link>

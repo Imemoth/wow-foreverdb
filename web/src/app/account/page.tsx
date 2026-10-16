@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
-import { LogoutButton } from "./_components/LogoutButton";
 
 export const metadata = { title: "Overview" };
 
@@ -59,7 +58,6 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
           <li><Link href="/account/guildbook">Private Guildbook</Link></li>
         </ul>
       </section>
-      <LogoutButton />
     </>
   );
 }
