@@ -41,13 +41,21 @@ public static class AccountFeatureGate
     /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
     public const bool ProductionAccountAuthApproved = false;
 
-    // TEMPORARY owner-approved single-project pilot, not a public release flag.
-    // Revert this flag before merging this PR into main/release.
-    public static readonly bool PrivateProjectPilotApproved = true;
+    // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
+    // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.
+    public static readonly bool PrivateProjectPilotApproved = false;
 
-    // TEMPORARY: owner-authorized one-installation claim experiment, draft-only.
-    // Revert to false before any public merge, independently of the login pilot flag.
-    public static readonly bool PrivateProjectClaimPilotApproved = true;
+    /// <summary>
+    /// Pure test seam: which compiled approvals a gate evaluation assumes. The runtime never supplies one (it calls
+    /// <see cref="EvaluateFromEnvironment"/>), so ONLY the compiled flags above decide live availability.
+    /// </summary>
+    public readonly record struct GateApprovals(bool PrivatePilot, bool ClaimPilot = false);
+
+    public static GateApprovals CompiledApprovals => new(PrivateProjectPilotApproved, PrivateProjectClaimPilotApproved);
+
+    // Owner-authorized one-installation claim experiment. OFF on the release line (reverted before the merge to main,
+    // 2026-10-16), independently of the login pilot flag; re-enabling is a separate owner-approved code change.
+    public static readonly bool PrivateProjectClaimPilotApproved = false;
     public const string ClaimInstallationVariable = "FOREVERDB_ACCOUNT_CLAIM_INSTALLATION";
 
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
@@ -59,7 +67,10 @@ public static class AccountFeatureGate
 
     private static readonly Regex ProjectRefPattern = new("^[a-z0-9]{20}$", RegexOptions.Compiled);
 
-    public static AccountGateDecision Evaluate(Func<string, string?> getVariable)
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
+        Evaluate(getVariable, CompiledApprovals);
+
+    public static AccountGateDecision Evaluate(Func<string, string?> getVariable, GateApprovals approvals)
     {
         var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
 
@@ -70,7 +81,7 @@ public static class AccountFeatureGate
 
         if (mode == "private-pilot" || mode == "private-claim-pilot")
         {
-            return EvaluatePrivatePilot(getVariable, claimPilot: mode == "private-claim-pilot");
+            return EvaluatePrivatePilot(getVariable, approvals, claimPilot: mode == "private-claim-pilot");
         }
 
         if (mode == "production")
@@ -158,12 +169,12 @@ public static class AccountFeatureGate
     public static AccountGateDecision EvaluateFromEnvironment() =>
         Evaluate(name => Environment.GetEnvironmentVariable(name));
 
-    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, bool claimPilot)
+    private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals, bool claimPilot)
     {
-        if (claimPilot && !PrivateProjectClaimPilotApproved)
+        if (claimPilot && !approvals.ClaimPilot)
             return Off("Private installation claim pilot is not approved in this build.");
 
-        if (!PrivateProjectPilotApproved)
+        if (!approvals.PrivatePilot)
             return Off("Private project pilot is not approved in this build.");
 
         var url = (getVariable(UrlVariable) ?? "").Trim();

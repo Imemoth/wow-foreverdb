@@ -175,7 +175,9 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
   const releaseCtx: AccountAuthContext = { hosted: true, deployment: "production", platformEnv: "production" };
 
   it("allows only the explicitly source-approved Preview pilot, while production stays code-blocked", () => {
-    expect(issues(pilot, previewCtx)).toBe("");
+    // The compiled pilot approval is OFF on the release line: the environment alone must never open the pilot.
+    expect(issues(pilot, previewCtx)).toMatch(/owner-approved code change/);
+    expect(evaluateAccountAuth(pilot, previewCtx, ownerPilot).issues).toEqual([]);
     expect(issues(production, releaseCtx)).toMatch(/owner-approved code change/);
     // The approval is compiled into this TEMPORARY protected-pilot branch, not controlled by environment flags.
     // A simulation with compiled approval revoked must stay closed for either mode.
