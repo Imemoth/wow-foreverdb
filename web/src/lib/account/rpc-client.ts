@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ACCOUNT_RPCS, isAccountRpc, type AccountRpcName } from "./contracts";
 import { ENROLLMENT_RPCS, isEnrollmentRpc, type EnrollmentRpcName } from "./contracts-enrollment";
 import type { AccountAuthConfig } from "./config";
+import { PAIRING_RPCS, NATIVE_PAIRING_RPCS, ACCOUNT_PAIRING_RPCS, type NativePairingRpcName, type AccountPairingRpcName, type PairingRpcName, type PairingRpcInput, type PairingRpcOutput } from "./contracts-pairing";
 
 /**
  * THE single database RPC client of the website's account boundary (the PostgREST counterpart of auth-client.ts). It is the
@@ -31,8 +32,8 @@ export const WEB_RPCS = [
 export type WebRpcName = (typeof WEB_RPCS)[number];
 
 /**
- * Zero-touch enrollment (0014): exactly the five website functions. The `fdb_device_*` functions belong to the Companion's own
- * anonymous identity and exist in no registry the website can reach, so they cannot be named here at all.
+ * Zero-touch enrollment (0014): exactly the five website functions. The enrollment device functions belong to the Companion's own
+ * anonymous identity and cannot be named here. Pairing has independent actor-specific clients below.
  */
 export const WEB_ENROLLMENT_RPCS = [
   "fdb_account_enrollment_ticket_issue",
@@ -77,7 +78,7 @@ export type RpcFailure =
   | { ok: false; kind: "unknown_outcome" };
 export type RpcResult<N extends CallableRpcName> = { ok: true; data: RpcOutput<N> } | RpcFailure;
 
-async function readBounded(res: Response): Promise<string | null> {
+async function readBounded(res: Response, strict: boolean): Promise<string | null> {
   if (!res.body) return "";
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -102,7 +103,11 @@ async function readBounded(res: Response): Promise<string | null> {
     all.set(c, o);
     o += c.byteLength;
   }
-  return new TextDecoder().decode(all);
+  try {
+    return new TextDecoder("utf-8", { fatal: strict }).decode(all);
+  } catch {
+    return null;
+  }
 }
 
 function retryAfter(res: Response): number {
@@ -119,10 +124,57 @@ export async function callWebRpc<N extends CallableRpcName>(
   // Programming errors, refused loudly before anything is sent.
   const allowed = (WEB_RPCS as readonly string[]).includes(name) ? isAccountRpc(name) : (WEB_ENROLLMENT_RPCS as readonly string[]).includes(name) && isEnrollmentRpc(name);
   if (!allowed) throw new Error("rpc_not_allowed");
+  return postRpc(cfg, name, REGISTRY[name], input, accessToken, MUTATING.has(name)) as Promise<RpcResult<N>>;
+}
+
+export type PairingRpcResult<N extends PairingRpcName> = { ok: true; data: PairingRpcOutput<N> } | RpcFailure;
+
+export async function callNativePairingRpc<N extends NativePairingRpcName>(
+  cfg: AccountAuthConfig, name: N, input: PairingRpcInput<N>, accessToken: string,
+): Promise<PairingRpcResult<N>> {
+  if (!(NATIVE_PAIRING_RPCS as readonly string[]).includes(name)) throw new Error("rpc_not_allowed");
+  return postRpc(cfg, name, PAIRING_RPCS[name], input, accessToken, name !== "fdb_device_pair_poll", true) as Promise<PairingRpcResult<N>>;
+}
+
+export async function callAccountPairingRpc<N extends AccountPairingRpcName>(
+  cfg: AccountAuthConfig, name: N, input: PairingRpcInput<N>, accessToken: string,
+): Promise<PairingRpcResult<N>> {
+  if (!(ACCOUNT_PAIRING_RPCS as readonly string[]).includes(name)) throw new Error("rpc_not_allowed");
+  return postRpc(cfg, name, PAIRING_RPCS[name], input, accessToken, name !== "fdb_account_device_pair_preview", true) as Promise<PairingRpcResult<N>>;
+}
+
+/** JSON.parse validates grammar; a separate token walk preserves duplicate-key detection, including escaped keys. */
+function parsePairingJson(text: string): unknown {
+  const value: unknown = JSON.parse(text);
+  const stack: (Set<string> | null)[] = [];
+  const tokens = /"(?:[^"\\]|\\[\s\S])*"|[{}[\]]/g;
+  for (const match of text.matchAll(tokens)) {
+    const token = match[0];
+    if (token === "{") stack.push(new Set());
+    else if (token === "[") stack.push(null);
+    else if (token === "}" || token === "]") stack.pop();
+    else if (/^\s*:/.test(text.slice(match.index + token.length))) {
+      const keys = stack[stack.length - 1];
+      const key: string = JSON.parse(token);
+      if (keys?.has(key)) throw new Error("duplicate_key");
+      keys?.add(key);
+    }
+  }
+  return value;
+}
+
+/** Private bounded transport: only the closed exported actor clients can select its name and schema. */
+async function postRpc(
+  cfg: AccountAuthConfig,
+  name: CallableRpcName | PairingRpcName,
+  spec: { input: z.ZodTypeAny; output: z.ZodTypeAny },
+  input: unknown,
+  accessToken: string,
+  mutating: boolean,
+  strict = false,
+): Promise<{ ok: true; data: unknown } | RpcFailure> {
   if (typeof accessToken !== "string" || accessToken.length < 20 || accessToken.length > 8192 || /[\s\r\n]/.test(accessToken)) throw new Error("rpc_bad_token");
-  const spec = REGISTRY[name];
   const body = (spec.input as z.ZodTypeAny).parse(input);
-  const mutating = MUTATING.has(name);
   const lost: RpcFailure = mutating ? { ok: false, kind: "unknown_outcome" } : { ok: false, kind: "unavailable" };
 
   let res: Response;
@@ -145,7 +197,7 @@ export async function callWebRpc<N extends CallableRpcName>(
     return lost; // timeout or connection failure: for a one-time call the request may have been processed
   }
 
-  const text = await readBounded(res);
+  const text = await readBounded(res, strict);
   if (res.status === 401) return { ok: false, kind: "unauthenticated" };
   if (res.status === 403) return { ok: false, kind: "forbidden" };
   if (res.status === 429) return { ok: false, kind: "rate_limited", retryAfterSec: retryAfter(res) };
@@ -157,11 +209,11 @@ export async function callWebRpc<N extends CallableRpcName>(
 
   let json: unknown;
   try {
-    json = JSON.parse(text);
+    json = strict ? parsePairingJson(text) : JSON.parse(text);
   } catch {
     return lost;
   }
   const parsed = (spec.output as z.ZodTypeAny).safeParse(json);
   if (!parsed.success) return lost; // an unexpected shape (extra column, wrong type) is never passed on
-  return { ok: true, data: parsed.data as RpcOutput<N> };
+  return { ok: true, data: parsed.data };
 }

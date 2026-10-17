@@ -50,7 +50,7 @@ describe("account boundary (static)", () => {
   it("nothing exposes Auth configuration to the browser (no NEXT_PUBLIC account variables, no client components in the zone read it)", () => {
     expect(files.filter((f) => /NEXT_PUBLIC_(ACCOUNT|SUPABASE)/.test(read(f))).map(rel)).toEqual([]);
     for (const f of files.filter((x) => inZone(rel(x)) && /^\s*["']use client["']/m.test(read(x)))) {
-      expect(read(f), rel(f)).not.toMatch(/accountAuth|serverEnv|ACCOUNT_AUTH|csrfSecret|publishableKey/);
+      expect(read(f), rel(f)).not.toMatch(/accountAuth|serverEnv|ACCOUNT_AUTH|csrfSecret|publishableKey|pollSecret|poll_secret|deviceCredentialHash|device_credential_hash|callNativePairingRpc/);
     }
   });
   it("env.accountAuth is only ever read inside the account zone", () => {

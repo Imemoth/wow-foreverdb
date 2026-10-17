@@ -20,10 +20,17 @@ const NEW_ROUTES = ["devices", "devices/revoke", "enrollment/download", "enrollm
 const NEW_FILES = [...NEW_ROUTES.map((r) => `app/account/api/${r}/route.ts`), "app/account/devices/page.tsx", "app/account/_components/RevokeButton.tsx", "lib/account/contracts-enrollment.ts"];
 
 describe("zero-touch enrollment (static)", () => {
-  it("the website can name exactly the five account functions; no device_* function exists anywhere in the website source", () => {
+  it("enrollment names exactly five account functions; only closed pairing files may name native pairing RPCs", () => {
     const text = code(join(SRC, "lib/account/rpc-client.ts"));
     expect(text).toMatch(/export const WEB_ENROLLMENT_RPCS = \[\s*"fdb_account_enrollment_ticket_issue",\s*"fdb_account_enrollment_tickets",\s*"fdb_account_enrollment_ticket_revoke",\s*"fdb_account_devices",\s*"fdb_account_device_revoke",\s*\] as const satisfies/);
-    expect(all.filter((f) => /fdb_device_/.test(code(f))).map(rel)).toEqual([]);
+    const pairingFiles = new Set(["lib/account/contracts-pairing.ts", "lib/account/rpc-client.ts"]);
+    const pairingNames = new Set(["fdb_device_pair_start", "fdb_device_pair_poll", "fdb_device_pair_cancel"]);
+    for (const f of all) {
+      for (const match of code(f).matchAll(/\bfdb_device_\w+/g)) {
+        expect(pairingFiles.has(rel(f)), rel(f)).toBe(true);
+        expect(pairingNames.has(match[0]), `${rel(f)}: ${match[0]}`).toBe(true);
+      }
+    }
     // the new registry is separate from the 0012-pinned one
     expect(code(join(SRC, "lib/account/contracts.ts"))).not.toMatch(/enrollment|fdb_account_device/);
   });
