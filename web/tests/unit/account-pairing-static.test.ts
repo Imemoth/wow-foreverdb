@@ -13,7 +13,7 @@ const code = (f: string) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g,
 
 describe("pairing static trust boundary", () => {
   it("keeps native RPC names in the closed registry and RPC client", () => {
-    expect(files.filter((f) => /fdb_device_pair_/.test(code(f))).map((f) => relative(SRC, f)).sort()).toEqual(["lib/account/contracts-pairing.ts", "lib/account/rpc-client.ts"]);
+    expect(files.filter((f) => /fdb_device_pair_/.test(code(f))).map((f) => relative(SRC, f)).sort()).toEqual(["lib/account/contracts-pairing.ts", "lib/account/pairing-native.ts", "lib/account/rpc-client.ts"]);
     for (const f of files.filter((f) => relative(SRC, f).startsWith("app/account/"))) expect(code(f), f).not.toMatch(/callNativePairingRpc|fdb_device_pair_/);
     expect(files.filter((f) => /\/rest\/v1\/rpc\//.test(code(f))).map((f) => relative(SRC, f))).toEqual(["lib/account/rpc-client.ts"]);
   });

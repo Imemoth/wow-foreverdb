@@ -27,7 +27,9 @@ const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^
 describe("account web zone (static)", () => {
   it("has the expected shape", () => {
     expect(routes.map(rel).sort()).toEqual([
-      "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts", "app/account/api/devices/revoke/route.ts", "app/account/api/devices/route.ts",
+      "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts",
+      "app/account/api/device-pair/cancel/route.ts", "app/account/api/device-pair/poll/route.ts", "app/account/api/device-pair/start/route.ts",
+      "app/account/api/devices/revoke/route.ts", "app/account/api/devices/route.ts",
       "app/account/api/enrollment/download/route.ts", "app/account/api/enrollment/revoke/route.ts", "app/account/api/forgot-password/route.ts",
       "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",
       "app/account/api/link/route.ts", "app/account/api/login/route.ts",
@@ -38,14 +40,16 @@ describe("account web zone (static)", () => {
     expect(clientFiles.length).toBeGreaterThan(5);
   });
 
-  it("every route handler is dynamic, exports only GET/POST, and every POST goes through the CSRF-enforcing accountApi wrapper", () => {
+  it("every route handler is dynamic, exports only GET/POST, and every POST goes through its required Account or native pairing wrapper", () => {
     for (const f of routes) {
       const text = code(f);
       expect(text, rel(f)).toMatch(/export const dynamic = "force-dynamic"/);
       const methods = [...text.matchAll(/export (?:async function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g)].map((m) => m[1]);
       expect(methods.every((m) => m === "GET" || m === "POST"), `${rel(f)}: ${methods}`).toBe(true);
       expect(methods.length, rel(f)).toBe(1);
-      if (methods[0] === "POST") expect(text, rel(f)).toMatch(/export const POST = accountApi\(\{[^}]*mutating: true/);
+      if (/^app\/account\/api\/device-pair\/(start|poll|cancel)\/route\.ts$/.test(rel(f))) {
+        expect(text, rel(f)).toMatch(/export const POST = nativePairingApi\(/);
+      } else if (methods[0] === "POST") expect(text, rel(f)).toMatch(/export const POST = accountApi\(\{[^}]*mutating: true/);
       expect(text, rel(f)).not.toMatch(/export const (revalidate|runtime|fetchCache)\b/);
     }
   });

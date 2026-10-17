@@ -10,6 +10,7 @@ import {
   checkStrictLimit,
   classifyRequest,
   isAccountApiPath,
+  isNativePairingRequest,
   isAccountPath,
   isStrictRule,
   loadRules,
@@ -102,7 +103,9 @@ export async function proxy(request: NextRequest) {
     const account = ruleName !== "api_challenge";
     if (account || (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET)) {
       // Cross-site POSTs are refused BEFORE counting so a hostile page cannot burn a victim's budget from their browser.
-      const sameOrigin = account
+      const sameOrigin = ruleName === "account_pairing_native"
+        ? isNativePairingRequest(request.headers, env.SITE_URL)
+        : account
         ? request.method !== "POST" || isSameOriginRequest(request.headers, env.SITE_URL)
         : isSameOriginJson(request.headers, env.SITE_URL);
       if (!sameOrigin) {

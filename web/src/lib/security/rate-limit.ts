@@ -14,7 +14,7 @@ import { z } from "zod";
  * website traffic never reaches the production database at all.
  */
 
-export const RULE_NAMES = ["api_search", "api_detail", "page_db", "api_challenge", "account_auth", "account_light"] as const;
+export const RULE_NAMES = ["api_search", "api_detail", "page_db", "api_challenge", "account_auth", "account_light", "account_pairing_native"] as const;
 export type RuleName = (typeof RULE_NAMES)[number];
 
 const Rule = z.object({
@@ -51,6 +51,8 @@ export const DEFAULT_RULES: Record<RuleName, Rule> = {
   account_auth: { windowSec: 300, perIp: 10, perSession: 10, global: 25 },
   /** Cheap account routes: CSRF token, profile, session refresh, logout. Strict two-phase check as well. */
   account_light: { windowSec: 60, perIp: 60, perSession: 60, global: 6_000 },
+  /** Native pairing: IP/global only; 30/min permits scheduled 5-second polling with bounded headroom. */
+  account_pairing_native: { windowSec: 60, perIp: 30, perSession: 30, global: 600 },
 };
 
 export function loadRules(json: string | undefined): Record<RuleName, Rule> {
@@ -89,11 +91,12 @@ export function isAccountApiPath(pathname: string): boolean {
 }
 /** Rules that are enforced with the strict, fail-closed, IP-only two-phase check. */
 export function isStrictRule(rule: RuleName | null): boolean {
-  return rule === "api_challenge" || rule === "account_auth" || rule === "account_light";
+  return rule === "api_challenge" || rule === "account_auth" || rule === "account_light" || rule === "account_pairing_native";
 }
 
 export function classifyRequest(pathname: string, method: string): RuleName | null {
   if (pathname === "/api/v1/challenge") return method === "POST" ? "api_challenge" : null;
+  if (method === "POST" && /^\/account\/api\/device-pair\/(?:start|poll|cancel)$/.test(pathname)) return "account_pairing_native";
   if (isAccountApiPath(pathname)) {
     const route = pathname.slice("/account/api/".length).replace(/\/+$/, "");
     if (method === "POST") return ACCOUNT_STRICT_ROUTES.has(route) ? "account_auth" : "account_light";
@@ -206,4 +209,15 @@ export async function checkStrictLimit(
     return { allowed: false, reason: "rate_limited", retryAfterSec: resetSec, limit: rule.global };
   }
   return { allowed: true, remaining: Math.max(0, rule.perIp - ipCount), limit: rule.perIp, resetSec };
+}
+
+/** Native clients may omit browser headers; supplied browser metadata must describe a same-origin fetch. */
+export function isNativePairingRequest(headers: Headers, siteUrl: string): boolean {
+  const origin = headers.get("origin"), site = headers.get("sec-fetch-site");
+  const mode = headers.get("sec-fetch-mode"), dest = headers.get("sec-fetch-dest");
+  return (origin === null || origin === new URL(siteUrl).origin)
+    && (site === null || site === "same-origin")
+    && (mode === null || mode === "cors" || mode === "same-origin")
+    && (dest === null || dest === "empty")
+    && !headers.has("sec-fetch-user");
 }

@@ -23,7 +23,7 @@ describe("zero-touch enrollment (static)", () => {
   it("enrollment names exactly five account functions; only closed pairing files may name native pairing RPCs", () => {
     const text = code(join(SRC, "lib/account/rpc-client.ts"));
     expect(text).toMatch(/export const WEB_ENROLLMENT_RPCS = \[\s*"fdb_account_enrollment_ticket_issue",\s*"fdb_account_enrollment_tickets",\s*"fdb_account_enrollment_ticket_revoke",\s*"fdb_account_devices",\s*"fdb_account_device_revoke",\s*\] as const satisfies/);
-    const pairingFiles = new Set(["lib/account/contracts-pairing.ts", "lib/account/rpc-client.ts"]);
+    const pairingFiles = new Set(["lib/account/contracts-pairing.ts", "lib/account/pairing-native.ts", "lib/account/rpc-client.ts"]);
     const pairingNames = new Set(["fdb_device_pair_start", "fdb_device_pair_poll", "fdb_device_pair_cancel"]);
     for (const f of all) {
       for (const match of code(f).matchAll(/\bfdb_device_\w+/g)) {
