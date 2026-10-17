@@ -9,10 +9,10 @@ export async function GET() {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
 <channel>
-<title>ForeverDB News</title>
+<title>AzerDex News</title>
 <link>${esc(base)}/news</link>
 <atom:link href="${esc(base)}/news/rss.xml" rel="self" type="application/rss+xml"/>
-<description>WoW: Forever and ForeverDB news</description>
+<description>WoW: Forever and AzerDex news</description>
 <language>en</language>
 ${items.map((a) => `<item>
 <title>${esc(a.sample ? `[Sample] ${a.title}` : a.title)}</title>

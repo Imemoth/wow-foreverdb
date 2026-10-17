@@ -21,7 +21,7 @@ export default async function ResetPasswordPage() {
       ) : (
         <div className="panel space-y-3 p-6">
           <p className="text-mist">This page needs a valid password-reset link. The link may have expired or already been used.</p>
-          <Link className="btn-gold" href="/account/forgot-password">Request a new link</Link>
+          <Link className="btn-primary" href="/account/forgot-password">Request a new link</Link>
         </div>
       )}
     </>

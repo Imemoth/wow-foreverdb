@@ -53,7 +53,7 @@ export function ResultsTable({ rows, zones, caption, observationsLabel = "Observ
                 </td>
                 <td className="num text-mist">
                   {r.observations != null ? fmtInt(r.observations) : (
-                    <span title="Items are linked to this zone through sources observed here. ForeverDB has no zone-specific drop count for them.">
+                    <span title="Items are linked to this zone through sources observed here. AzerDex has no zone-specific drop count for them.">
                       Not measured
                       {"associatedSourceCount" in r && r.associatedSourceCount != null && (
                         <span className="block text-[0.7rem]">inferred via {fmtInt(r.associatedSourceCount)} source{r.associatedSourceCount === 1 ? "" : "s"}</span>

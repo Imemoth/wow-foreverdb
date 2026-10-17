@@ -43,7 +43,7 @@ export async function sourceMetadata(type: SourceType, raw: string): Promise<Met
     title: `${first.name} — ${label}${id ? ` ${id}` : ""}`,
     description,
     alternates: { canonical },
-    openGraph: { title: `${first.name} · ForeverDB`, description, url: canonical },
+    openGraph: { title: `${first.name} · AzerDex`, description, url: canonical },
     robots: robotsFor(s.variants.some((v) => v.indexable)),
   };
 }

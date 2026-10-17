@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
-import { LogoutButton } from "./_components/LogoutButton";
 
 export const metadata = { title: "Overview" };
 
@@ -33,7 +32,7 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Your account</h1>
       {welcome === "1" && (
         <p role="status" className="rounded-lg border border-conf-high/40 bg-conf-high/10 px-3 py-2 text-sm text-conf-high">
-          Your email address is confirmed. Welcome to ForeverDB.
+          Your email address is confirmed. Welcome to AzerDex.
         </p>
       )}
       <section className="panel space-y-3 p-6" aria-labelledby="profile-h">
@@ -59,7 +58,6 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
           <li><Link href="/account/guildbook">Private Guildbook</Link></li>
         </ul>
       </section>
-      <LogoutButton />
     </>
   );
 }

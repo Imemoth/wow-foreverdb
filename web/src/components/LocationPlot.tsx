@@ -27,10 +27,10 @@ export function LocationPlot({ points, zoneName, mapId }: { points: LocationPoin
         role="img" aria-label={`Observed location density in ${zoneName}: ${points.length} cells. A text summary follows.`}>
         <defs>
           <pattern id={gridId} width="10" height="10" patternUnits="userSpaceOnUse">
-            <path d="M10 0H0V10" fill="none" stroke="#262d3b" strokeWidth="0.25" />
+            <path d="M10 0H0V10" fill="none" stroke="#2c2d66" strokeWidth="0.25" />
           </pattern>
         </defs>
-        <rect x="0" y="0" width="100" height="100" fill={`url(#${gridId})`} stroke="#364055" strokeWidth="0.4" />
+        <rect x="0" y="0" width="100" height="100" fill={`url(#${gridId})`} stroke="#3c3d7d" strokeWidth="0.4" />
         {points.map((p, i) => (
           <circle key={i} cx={p.x} cy={p.y} r={0.9 + 2.6 * Math.sqrt(p.observations / max)}
             fill={KIND_FILL[p.lootKind]} fillOpacity="0.55" stroke={KIND_FILL[p.lootKind]} strokeWidth="0.3" />

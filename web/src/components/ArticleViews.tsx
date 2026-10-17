@@ -12,9 +12,9 @@ import { JsonLd } from "./JsonLd";
 import { Markdown } from "./Markdown";
 
 export const SECTION_META: Record<Section, { title: string; intro: string }> = {
-  news: { title: "News", intro: "WoW: Forever updates, new observations and ForeverDB development, written and reviewed by the editors." },
-  guides: { title: "Guides", intro: "Evergreen guides grounded in collected data: professions, gathering, fishing and using ForeverDB." },
-  blog: { title: "Blog", intro: "Behind the scenes: how ForeverDB is built, data quality, and the road ahead." },
+  news: { title: "News", intro: "WoW: Forever updates, new observations and AzerDex development, written and reviewed by the editors." },
+  guides: { title: "Guides", intro: "Evergreen guides grounded in collected data: professions, gathering, fishing and using AzerDex." },
+  blog: { title: "Blog", intro: "Behind the scenes: how AzerDex is built, data quality, and the road ahead." },
 };
 
 function SampleLabel() {
@@ -141,7 +141,7 @@ export async function ArticlePage({ section, slug }: { section: Section; slug: s
         datePublished: a.publishedAt,
         dateModified: a.updatedAt ?? a.publishedAt,
         author: { "@type": "Organization", name: a.author },
-        publisher: { "@type": "Organization", name: "ForeverDB" },
+        publisher: { "@type": "Organization", name: "AzerDex" },
         mainEntityOfPage: new URL(articlePath(a), baseUrl).toString(),
         keywords: a.tags.join(", "),
       }} />

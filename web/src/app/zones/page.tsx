@@ -7,7 +7,7 @@ import { zonePath } from "@/lib/routes";
 
 export const metadata = {
   title: "Zones",
-  description: "Every World of Warcraft: Forever zone with ForeverDB observations: creatures, items, gathering nodes and fishing.",
+  description: "Every World of Warcraft: Forever zone with AzerDex observations: creatures, items, gathering nodes and fishing.",
   alternates: { canonical: "/zones" },
 };
 

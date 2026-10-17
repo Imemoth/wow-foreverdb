@@ -29,12 +29,12 @@ export async function generateMetadata({ params, searchParams }: { params: Param
   const z = await load((await params).id);
   if (!z) return { title: "Zone not found", robots: { index: false } };
   const filtered = Object.keys(await searchParams).length > 0;
-  const description = `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} related items (linked through those sources), from ForeverDB player observations.`;
+  const description = `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} related items (linked through those sources), from AzerDex player observations.`;
   return {
     title: `${z.zoneName} — Zone`,
     description,
     alternates: { canonical: zonePath(z.mapId) },
-    openGraph: { title: `${z.zoneName} · ForeverDB`, description, url: zonePath(z.mapId) },
+    openGraph: { title: `${z.zoneName} · AzerDex`, description, url: zonePath(z.mapId) },
     robots: robotsFor(!filtered),
   };
 }
@@ -103,9 +103,9 @@ export default async function ZonePage({ params, searchParams }: { params: Param
       </nav>
 
       <DataNote>
-        This directory lists only what ForeverDB players have observed in {z.zoneName}. It is not a complete list of
+        This directory lists only what AzerDex players have observed in {z.zoneName}. It is not a complete list of
         everything in the zone. Creatures, objects and fishing pools show how often they were observed here. Items are
-        linked to the zone <strong>by inference</strong> through the sources observed here; ForeverDB cannot tell in
+        linked to the zone <strong>by inference</strong> through the sources observed here; AzerDex cannot tell in
         which zone an individual drop happened, so items have no zone-specific count. Sources are listed first, then items.
       </DataNote>
 
@@ -128,7 +128,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
             {LOOT_KINDS.map((k) => <option key={k} value={k}>{LOOT_KIND_LABEL[k]}</option>)}
           </AutoSubmitSelect>
         </div>
-        <button type="submit" className="btn-gold">Apply</button>
+        <button type="submit" className="btn-primary">Apply</button>
       </form>
 
       <div aria-live="polite" className="space-y-4">

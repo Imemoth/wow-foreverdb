@@ -28,7 +28,7 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
   const q = (params.get("q") ?? "").trim().slice(0, 80);
   return {
     title: q ? `Search: ${q}` : "Database",
-    description: "Search ForeverDB's observed items, creatures, gathering nodes, fishing zones and pools.",
+    description: "Search AzerDex's observed items, creatures, gathering nodes, fishing zones and pools.",
     alternates: { canonical: "/database" },
     // Result pages are useful to people, thin for search engines.
     robots: robotsFor(isEmptySearch(params)),
@@ -114,7 +114,7 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
             <option value="observations">Most observed</option>
           </AutoSubmitSelect>
         </div>
-        <button type="submit" className="btn-gold">Search</button>
+        <button type="submit" className="btn-primary">Search</button>
       </form>
 
       <div aria-live="polite">
@@ -156,7 +156,7 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
             </div>
             {result.rows.length === 0 ? (
               <EmptyState title="No observations match">
-                ForeverDB only lists what players have actually observed. Try a different spelling, an exact game ID, or
+                AzerDex only lists what players have actually observed. Try a different spelling, an exact game ID, or
                 remove a filter. Missing something? <Link href="/download">Run the addon</Link> to help collect it.
               </EmptyState>
             ) : (

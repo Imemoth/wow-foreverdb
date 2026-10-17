@@ -41,7 +41,7 @@ export function RevokeButton({ kind, id, what }: { kind: "device" | "ticket"; id
       ) : (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Confirm revoking ${what}`}>
           <span className="text-sm text-parchment">Revoke this {kind === "device" ? "device" : "activation file"}?</span>
-          <button type="button" className="btn-gold" onClick={revoke} disabled={step === "busy"} aria-busy={step === "busy"}>{step === "busy" ? "Revoking…" : "Yes, revoke"}</button>
+          <button type="button" className="btn-primary" onClick={revoke} disabled={step === "busy"} aria-busy={step === "busy"}>{step === "busy" ? "Revoking…" : "Yes, revoke"}</button>
           <button type="button" className="btn-ghost" onClick={() => setStep("idle")} disabled={step === "busy"}>Cancel</button>
         </div>
       )}
