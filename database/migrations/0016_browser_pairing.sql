@@ -290,7 +290,7 @@ as $$
 declare
     v_uid uuid; v_sid uuid; v_pair private.device_pairings; v_owner uuid; v_prev private.devices;
     v_old private.device_pairings; v_installation_budget boolean := false;
-    v_now timestamptz; v_label text := nullif(p_computer_name,'');
+    v_now timestamptz; v_session_deadline timestamptz; v_label text := nullif(p_computer_name,'');
 begin
     if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
        or p_device_id is null or p_device_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
@@ -319,7 +319,7 @@ begin
     begin
         perform private.fdb_anonymous_caller();
         perform private.fdb_lock_live_session(v_uid,v_sid,true);
-        perform 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+        select s.not_after into v_session_deadline from auth.sessions s where s.id=v_sid and s.user_id=v_uid
           and (s.not_after is null or s.not_after>clock_timestamp()) for share;
         if not found then raise sqlstate 'PT401'; end if;
         -- Pin identity and a live refresh family through commit, not merely at the last read.
@@ -333,6 +333,7 @@ begin
         return jsonb_build_object('ok',false,'error','session_not_accepted');
     end;
     select * into v_pair from private.device_pairings where id=p_pairing_id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     if found then
         if v_pair.initiator_uid is distinct from v_uid or v_pair.initiator_session_id is distinct from v_sid
            or v_pair.installation_id is distinct from p_installation_id or v_pair.proposed_device_id is distinct from p_device_id
@@ -343,6 +344,7 @@ begin
         end if;
         if v_pair.status in ('pending','approved') and v_pair.expires_at<=clock_timestamp() then
             perform private.foreverdb_take_budget('pair_start:installation:'||encode(extensions.digest(p_installation_id,'sha256'),'hex'),300,3);
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             update private.device_pairings set status='expired' where id=v_pair.id;
             insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
             values('pairing_expired',v_pair.audit_ref,p_installation_id,v_pair.approved_account_uid);
@@ -350,14 +352,17 @@ begin
         end if;
         if v_pair.status<>'pending' then return jsonb_build_object('ok',false,'error','pairing_conflict'); end if;
         perform private.foreverdb_take_budget('pair_start:installation:'||encode(extensions.digest(p_installation_id,'sha256'),'hex'),300,3);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
         return jsonb_build_object('ok',true,'state',v_pair.status,'pairingId',v_pair.id,
             'expiresAt',to_char(v_pair.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'intervalSeconds',v_pair.poll_interval_sec);
     end if;
     -- Recover local proof loss only for this exact actor/session and installation. No foreign-row cleanup.
     select * into v_old from private.device_pairings where installation_id=p_installation_id
         and initiator_uid=v_uid and initiator_session_id=v_sid and status in ('pending','approved') for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     if found and v_old.expires_at<=clock_timestamp() then
         perform private.foreverdb_take_budget('pair_start:installation:'||encode(extensions.digest(p_installation_id,'sha256'),'hex'),300,3);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
         v_installation_budget := true;
         update private.device_pairings set status='expired' where id=v_old.id;
         insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
@@ -382,14 +387,19 @@ begin
     end if;
     if not v_installation_budget then
         perform private.foreverdb_take_budget('pair_start:installation:'||encode(extensions.digest(p_installation_id,'sha256'),'hex'),300,3);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     end if;
     -- Only a proved installation binding can spend its bucket. Row locks follow that budget class.
     perform pg_advisory_xact_lock(hashtextextended('fdb-device-identity:'||v_uid::text,0));
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     select owner_user_id into v_owner from public.installations where id=p_installation_id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     perform 1 from private.devices where installation_id=p_installation_id or auth_uid=v_uid order by id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     -- All compliant owner/predecessor writes take the installation lock already held above.
     -- The identity lock also serializes a concurrent enrollment for this UID at another installation.
     v_now := clock_timestamp();
+    if v_session_deadline<=v_now then raise sqlstate 'PT401'; end if;
     insert into private.device_pairings(id,installation_id,initiator_uid,initiator_session_id,poll_secret_hash,
         proposed_device_id,device_credential_hash,computer_label,status,created_at,expires_at,next_poll_at)
     values(p_pairing_id,p_installation_id,v_uid,v_sid,decode(p_poll_secret_hash,'hex'),p_device_id,
@@ -399,6 +409,8 @@ begin
     return jsonb_build_object('ok',true,'state','pending','pairingId',v_pair.id,
         'expiresAt',to_char(v_pair.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'intervalSeconds',5);
 exception
+    -- Late expiry must undo earlier installation budgets or expired-request cleanup, too.
+    when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','session_not_accepted');
     when sqlstate 'PT429' then return jsonb_build_object('ok',false,'error','rate_limited');
     when unique_violation then return jsonb_build_object('ok',false,'error','pairing_conflict');
     when others then return jsonb_build_object('ok',false,'error','temporarily_unavailable');
@@ -412,6 +424,7 @@ as $$
 declare
     v_uid uuid; v_sid uuid; v_installation text; v_pair private.device_pairings; v_prev private.devices;
     v_owner uuid; v_exists boolean; v_reason text; v_limit text; v_now timestamptz; v_interval integer;
+    v_session_deadline timestamptz;
     v_op text := case when p_cancel then 'cancel' else 'poll' end;
 begin
     if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
@@ -434,7 +447,7 @@ begin
     begin
         perform private.fdb_anonymous_caller();
         perform private.fdb_lock_live_session(v_uid,v_sid,true);
-        perform 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+        select s.not_after into v_session_deadline from auth.sessions s where s.id=v_sid and s.user_id=v_uid
           and (s.not_after is null or s.not_after>clock_timestamp()) for share;
         if not found then raise sqlstate 'PT401'; end if;
         -- Same authority boundary as start: normal refresh/upgrade proceeds after commit,
@@ -447,6 +460,8 @@ begin
         return jsonb_build_object('ok',false,'error','pairing_not_available');
     end;
     select * into v_pair from private.device_pairings where id=p_pairing_id for update;
+    -- Row locks prevent Auth updates, not the passage of the locked session's wall-clock deadline.
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     if not found or v_pair.installation_id is distinct from v_installation
        or v_pair.initiator_uid is distinct from v_uid or v_pair.initiator_session_id is distinct from v_sid
        or v_pair.poll_secret_hash is distinct from extensions.digest(p_poll_secret,'sha256') then
@@ -456,6 +471,7 @@ begin
     if v_pair.status='connected' then return jsonb_build_object('ok',true,'state','connected','deviceId',v_pair.connected_device_id); end if;
     if v_pair.status in ('denied','expired','revoked') then return jsonb_build_object('ok',true,'state',v_pair.status); end if;
     if v_pair.expires_at<=clock_timestamp() then
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
         update private.device_pairings set status='expired' where id=v_pair.id;
         insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
         values('pairing_expired',v_pair.audit_ref,v_installation,v_pair.approved_account_uid);
@@ -463,14 +479,17 @@ begin
     end if;
     if p_cancel then
         perform private.foreverdb_take_budget('pair_cancel:pair:'||v_pair.id::text,300,5);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
         v_reason := 'companion_canceled';
     else
         if v_pair.next_poll_at>clock_timestamp() then
             v_interval := least(30,v_pair.poll_interval_sec+5);
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             update private.device_pairings set poll_interval_sec=v_interval,next_poll_at=clock_timestamp()+make_interval(secs=>v_interval) where id=v_pair.id;
             return jsonb_build_object('ok',false,'error','slow_down','intervalSeconds',v_interval);
         end if;
         if v_pair.status='pending' then
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             update private.device_pairings set next_poll_at=clock_timestamp()+make_interval(secs=>v_pair.poll_interval_sec) where id=v_pair.id;
             return jsonb_build_object('ok',true,'state','pending','intervalSeconds',v_pair.poll_interval_sec,
                 'expiresAt',to_char(v_pair.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
@@ -499,10 +518,13 @@ begin
         end if;
         if v_reason is null then
             perform pg_advisory_xact_lock(hashtextextended('fdb-device-identity:'||v_uid::text,0));
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             select owner_user_id into v_owner from public.installations where id=v_installation for update;
             v_exists := found;
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             -- Lock all relevant identities in stable order, including collision and predecessor candidates.
             perform 1 from private.devices where installation_id=v_installation or auth_uid=v_uid or id=v_pair.proposed_device_id order by id for update;
+            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
             begin
                 perform private.fdb_anonymous_caller();
             exception when sqlstate 'PT401' or sqlstate 'PT403' then
@@ -513,6 +535,7 @@ begin
                 return jsonb_build_object('ok',false,'error','pairing_not_available');
             end if;
             if v_pair.expires_at<=clock_timestamp() then
+                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
                 update private.device_pairings set status='expired' where id=v_pair.id;
                 insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
                 values('pairing_expired',v_pair.audit_ref,v_installation,v_pair.approved_account_uid);
@@ -539,20 +562,25 @@ begin
                    and (select count(*) from public.installations where owner_user_id=v_pair.approved_account_uid)>=50 then v_limit := 'account_limit';
                 elsif (select count(*) from private.devices where account_uid=v_pair.approved_account_uid and status<>'revoked')>=10 then v_limit := 'device_limit'; end if;
                 if v_limit is not null then
+                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
                     update private.device_pairings set next_poll_at=clock_timestamp()+make_interval(secs=>v_pair.poll_interval_sec) where id=v_pair.id;
                     insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,reason)
                     values('pairing_retry_deferred',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_limit) on conflict do nothing;
                     return jsonb_build_object('ok',false,'error',v_limit);
                 end if;
                 if not v_exists then
+                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
                     insert into public.installations(id,owner_user_id,schema_version,addon_version,first_seen_at,last_seen_at)
                     values(v_installation,v_pair.approved_account_uid,0,'enrolled',now(),now());
                 elsif v_owner=v_uid then
+                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
                     update public.installations set owner_user_id=v_pair.approved_account_uid where id=v_installation;
                 end if;
                 v_now := clock_timestamp();
+                if v_session_deadline<=v_now then raise sqlstate 'PT401'; end if;
                 insert into private.devices(id,account_uid,installation_id,auth_uid,label,status,pairing_id,credential_hash,credential_issued_at,last_seen_at)
                 values(v_pair.proposed_device_id,v_pair.approved_account_uid,v_installation,v_uid,v_pair.computer_label,'active',v_pair.id,v_pair.device_credential_hash,v_now,v_now);
+                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
                 update private.device_pairings set status='connected',connected_device_id=v_pair.proposed_device_id,connected_at=v_now,
                     previous_owner_uid=case when v_exists and v_owner=v_uid then v_uid else null end where id=v_pair.id;
                 insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,device_id)
@@ -561,12 +589,14 @@ begin
             end if;
         end if;
     end if;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     update private.device_pairings set status='denied',denied_at=clock_timestamp(),denied_reason=v_reason where id=v_pair.id;
     insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,reason)
     values('pairing_denied',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_reason);
     return jsonb_build_object('ok',true,'state','denied');
 exception
     -- The exception block rolls back ALL effects, including owner/provenance and budget/schedule updates.
+    when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','pairing_not_available');
     when sqlstate 'PT429' then return jsonb_build_object('ok',false,'error','rate_limited');
     when others then return jsonb_build_object('ok',false,'error','temporarily_unavailable');
 end;

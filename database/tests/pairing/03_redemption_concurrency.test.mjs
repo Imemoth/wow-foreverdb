@@ -291,3 +291,60 @@ it('pinned real GoTrue refresh, logout and anonymous upgrade serialize with rede
     }
   } finally {await authObserver.end();await auth.close();}
 });
+
+// Natural not_after expiry is independent of explicit Auth writes and remains possible while authority rows are pinned.
+for(const scenario of [
+  {name:'start identity lock',action:'start',lock:'identity'},
+  {name:'start recovery identity lock',action:'start',lock:'identity',existing:'expired',recover:true},
+  {name:'start pairing row',action:'start',lock:'pair',existing:'pending'},
+  {name:'start expired recovery row',action:'start',lock:'pair',existing:'expired',recover:true},
+  {name:'start installation row',action:'start',lock:'installation'},
+  {name:'start predecessor row',action:'start',lock:'device'},
+  {name:'start installation budget',action:'start',lock:'budget',existing:'pending'},
+  {name:'pending poll pairing row',action:'poll',lock:'pair',existing:'pending',due:true},
+  {name:'early poll pairing row',action:'poll',lock:'pair',existing:'pending'},
+  {name:'expiry poll pairing row',action:'poll',lock:'pair',existing:'expired'},
+  {name:'pending cancel pairing row',action:'cancel',lock:'pair',existing:'pending'},
+  {name:'approved cancel pairing row',action:'cancel',lock:'pair',existing:'approved'},
+  {name:'cancel pair budget',action:'cancel',lock:'budget',existing:'pending'},
+]) it(scenario.name+' refuses a session deadline crossed at the later lock without protected mutation',async()=>{
+  let actor=await w.device(),p=pairingInput(),prior,predecessor;
+  if(scenario.lock==='device') {
+    const e=await w.enrolled(await w.account());actor=e.device;p=pairingInput({installationId:e.installationId});predecessor=e.deviceId;
+    await w.admin.query("update private.devices set status='revoked',revoked_at=clock_timestamp(),revoked_reason='owner_revoked' where id=$1",[predecessor]);
+  } else if(scenario.existing==='approved') {
+    p=await approvedPairing(w,{actor});
+  } else if(scenario.existing) {
+    p=await startPairing(w,actor);
+    if(scenario.existing==='expired') await w.admin.query("update private.device_pairings set created_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute' where id=$1",[p.id]);
+    if(scenario.recover) {prior=p;p=pairingInput({installationId:p.installationId});}
+  }
+  if(scenario.due) await due(w,p);
+  if(scenario.lock==='installation') await w.fx.installation(p.installationId,actor.uid);
+  const budget=scenario.action==='start'?'pair_start:installation:'+hash(p.installationId):'pair_cancel:pair:'+p.id;
+  if(scenario.lock==='budget') await w.admin.query("insert into private.foreverdb_api_budgets(bucket,window_started,calls) values($1,to_timestamp(floor(extract(epoch from clock_timestamp())/300)*300),1) on conflict(bucket) do nothing",[budget]);
+  await w.admin.query("update auth.sessions set not_after=clock_timestamp()+interval '1 second' where id=$1",[actor.sid]);
+  const before=await protectedPairing(w,p),priorBefore=prior?await protectedPairing(w,prior):null;
+  const holder=await connect(w.database),caller=await connect(w.database);
+  await holder.query('begin');
+  if(scenario.lock==='identity') await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['fdb-device-identity:'+actor.uid]);
+  if(scenario.lock==='pair') await holder.query('select 1 from private.device_pairings where id=$1 for update',[prior?.id??p.id]);
+  if(scenario.lock==='installation') await holder.query('select 1 from public.installations where id=$1 for update',[p.installationId]);
+  if(scenario.lock==='device') await holder.query('select 1 from private.devices where id=$1 for update',[predecessor]);
+  if(scenario.lock==='budget') await holder.query('select 1 from private.foreverdb_api_budgets where bucket=$1 for update',[budget]);
+  const pending=rpc(caller,actor.claims,'fdb_device_pair_'+scenario.action,scenario.action==='start'?startArgs(p):proofArgs(p));
+  try {
+    await waitUntilBlocked(w.admin,caller);
+    assert.ok((await w.admin.query('select pg_blocking_pids($1) blockers',[caller.processID])).rows[0].blockers.includes(holder.processID));
+    let expired=false;const deadline=Date.now()+3000;
+    while(!expired&&Date.now()<deadline) {
+      expired=(await w.admin.query('select not_after<=clock_timestamp() expired from auth.sessions where id=$1',[actor.sid])).rows[0].expired;
+      if(!expired) await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    assert.equal(expired,true,'release only after the database observes natural session expiry');
+    await holder.query('commit');
+    assert.deepEqual(await pending,{ok:false,error:scenario.action==='start'?'session_not_accepted':'pairing_not_available'});
+    assert.deepEqual(await protectedPairing(w,p),before);
+    if(prior) assert.deepEqual(await protectedPairing(w,prior),priorBefore,'rollback any expired-request cleanup performed before the later wait');
+  } finally {await holder.query('rollback');await pending;await holder.end();await caller.end();}
+});
