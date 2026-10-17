@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
+import { browserPairingWebAvailable } from "@/lib/account/pairing-gate";
+import { failure } from "@/lib/account/http";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
@@ -72,6 +74,17 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   const { pathname } = request.nextUrl;
+  const ruleName = classifyRequest(pathname, request.method);
+  const nativePairing = ruleName === "account_pairing_native";
+  const nativeFailure = (status: number, error: string, headers: Record<string, string> = {}) => failure(status, error, {}, {
+    ...deploymentHeaders(env.FOREVERDB_DEPLOYMENT),
+    ...(env.SITE_URL.startsWith("https://") ? { "Strict-Transport-Security": HSTS } : {}),
+    ...headers,
+  });
+  // Source-off is an ingress refusal: do not read client metadata/cookies or contact the limiter first.
+  if (nativePairing && (!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env }))) {
+    return nativeFailure(404, "not_found");
+  }
   const isAccountApi = isAccountApiPath(pathname);
   const isApi = pathname.startsWith("/api/") || isAccountApi;
   // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
@@ -94,7 +107,6 @@ export async function proxy(request: NextRequest) {
   const ipHash = hashIp(clientIp(request.headers, env.TRUSTED_IP_HEADER), env.RATE_LIMIT_SALT);
   const sessionId = validSessionId(request.cookies.get(sidCookie)?.value);
 
-  const ruleName = classifyRequest(pathname, request.method);
   if (ruleName && isStrictRule(ruleName)) {
     // Endpoints with costly side effects (outbound calls to Cloudflare Siteverify or to Supabase Auth). Nothing below
     // may reach the route handler without first passing the origin pre-check and the strict per-IP + global budget.
@@ -109,6 +121,7 @@ export async function proxy(request: NextRequest) {
         ? request.method !== "POST" || isSameOriginRequest(request.headers, env.SITE_URL)
         : isSameOriginJson(request.headers, env.SITE_URL);
       if (!sameOrigin) {
+        if (nativePairing) return nativeFailure(403, "forbidden");
         return NextResponse.json({ error: "forbidden" }, {
           status: 403,
           headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": account ? "private, no-store" : "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
@@ -119,11 +132,13 @@ export async function proxy(request: NextRequest) {
         const decision = await checkStrictLimit(counterStore(), ruleName, rules[ruleName], ipHash);
         if (!decision.allowed) {
           log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
+          if (nativePairing) return nativeFailure(429, "rate_limited", { "Retry-After": String(Math.min(3600, Math.max(1, decision.retryAfterSec))) });
           return tooMany(true, decision.retryAfterSec, decision.reason, https, kind, accountHeaders);
         }
       } catch (e) {
         // FAIL CLOSED: without a working limiter we must not expose the outbound call. Data routes are unaffected.
         log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
+        if (nativePairing) return nativeFailure(503, "temporarily_unavailable", { "Retry-After": "30" });
         return NextResponse.json({ error: "temporarily_unavailable" }, {
           status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": account ? "private, no-store" : "no-store" },
         });

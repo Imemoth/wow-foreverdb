@@ -109,6 +109,47 @@ describe("native pairing real handler/proxy boundary", () => {
     }
     expect(calls).toHaveLength(0);
   });
+  it.each(operations)("%s source-off proxy refuses before hostile metadata, cookies or an unavailable limiter", async (op) => {
+    const h = await load();
+    const { UpstashStore } = await import("@/lib/security/rate-limit");
+    const { ACCOUNT_RESPONSE_HEADERS } = await import("@/lib/account/http");
+    const limiter = vi.spyOn(UpstashStore.prototype, "incr").mockRejectedValue(new Error("unavailable limiter"));
+    for (const mode of ["staging", "pilot", "production"] as const) {
+      h.env.accountAuth!.mode = mode; h.env.hosted = true; h.env.FOREVERDB_DEPLOYMENT = mode === "production" ? "production" : "preview";
+      h.env.SITE_URL = "https://foreverdb.example"; h.env.RATE_LIMIT_BACKEND = "upstash";
+      for (const headers of [new Headers({ origin: "null", "sec-fetch-site": "cross-site" }), new Headers()]) {
+        const req = request(op, { headers, raw: "invalid JSON", noAuth: true });
+        const res = await hitRequest(req);
+        expect(res.status, mode).toBe(404); expect(await res.json()).toEqual({ ok: false, error: "not_found" });
+        expect(Object.fromEntries(res.headers)).toEqual(Object.fromEntries(new Headers({ ...ACCOUNT_RESPONSE_HEADERS, "X-ForeverDB-Deployment": h.env.FOREVERDB_DEPLOYMENT, "Strict-Transport-Security": "max-age=63072000; includeSubDomains", "Content-Type": "application/json" })));
+      }
+      const unreadable = new Proxy(request(op), { get(target, prop) { if (["headers", "cookies", "body"].includes(String(prop))) throw new Error("metadata inspected before gate"); return Reflect.get(target, prop, target); } });
+      expect((await hitRequest(unreadable)).status).toBe(404);
+    }
+    expect(limiter).not.toHaveBeenCalled(); expect(calls).toHaveLength(0);
+    async function hitRequest(req: NextRequest) {
+      const edge = await h.proxy(req);
+      return edge.headers.get("x-middleware-next") === "1" ? h[op].POST(req) : edge;
+    }
+  });
+  it("native proxy refusals use the complete fixed native envelope and security headers", async () => {
+    const h = await load({ RATE_LIMITS_JSON: JSON.stringify({ account_pairing_native: { perIp: 1, global: 3 } }) });
+    const { ACCOUNT_RESPONSE_HEADERS } = await import("@/lib/account/http");
+    async function refusal(res: Response, status: number, error: string, retryAfter?: string) {
+      expect(res.status).toBe(status); expect(await res.json()).toEqual({ ok: false, error });
+      const expected = new Headers({ ...ACCOUNT_RESPONSE_HEADERS, "X-ForeverDB-Deployment": "local", "Content-Type": "application/json", ...(retryAfter ? { "Retry-After": retryAfter } : {}) });
+      expect(Object.fromEntries(res.headers)).toEqual(Object.fromEntries(expected));
+    }
+    await refusal(await hit(h, "start", { headers: { origin: "null" } }), 403, "forbidden");
+    expect((await hit(h, "start")).status).toBe(200);
+    const limited = await hit(h, "start");
+    const retryAfter = limited.headers.get("retry-after")!;
+    expect(Number(retryAfter)).toBeGreaterThanOrEqual(1); expect(Number(retryAfter)).toBeLessThanOrEqual(60);
+    await refusal(limited, 429, "rate_limited", retryAfter);
+    const { MemoryStore } = await import("@/lib/security/rate-limit");
+    vi.spyOn(MemoryStore.prototype, "incr").mockRejectedValue(new Error("limiter unavailable"));
+    await refusal(await hit(h, "start"), 503, "temporarily_unavailable", "30");
+  });
   it("logs only fixed route/status classes for early refusal as well as RPC outcomes", async () => {
     const h = await load();
     await h.start.POST(request("start", { noAuth: true }));

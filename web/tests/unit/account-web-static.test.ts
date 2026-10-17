@@ -198,10 +198,10 @@ describe("account web zone (static)", () => {
     }
   });
 
-  it("the edge keeps its boundary: proxy.ts imports no account module and mentions no account secret", () => {
+  it("the proxy loads only the native source gate and fixed responses, with no Auth/RPC/session access", () => {
     const proxy = join(SRC, "proxy.ts");
-    expect(importsOf(proxy).filter((i) => /account/.test(i))).toEqual([]);
-    expect(read(proxy)).not.toMatch(/ACCOUNT_|accountAuth|csrfSecret/);
+    expect(importsOf(proxy).filter((i) => /account/.test(i)).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-gate"]);
+    expect(read(proxy).replace("!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env })", "")).not.toMatch(/ACCOUNT_|accountAuth|csrfSecret|authOrigin|publishableKey/);
     const text = code(proxy);
     expect(text).toMatch(/isAccountPath\(pathname\)/);
     expect(text).toMatch(/!isAccount && !sessionId && request\.method === "GET"/); // no anonymous cookie on /account/**

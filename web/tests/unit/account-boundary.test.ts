@@ -36,15 +36,19 @@ describe("account boundary (static)", () => {
     expect(SOURCE_FILE.test("a.cjs") && SOURCE_FILE.test("a.mts") && SOURCE_FILE.test("a.jsx") && SOURCE_FILE.test("a.cts")).toBe(true);
     expect(files.length).toBeGreaterThan(30);
   });
-  it("only env.ts and the account zone may load account modules", () => {
-    const offenders = files.filter((f) => !inZone(rel(f)) && rel(f) !== "lib/env.ts").filter((f) => importsOf(f).some(reachesAccount)).map(rel);
+  it("only env.ts, the native ingress gate/response helpers and the account zone may load account modules", () => {
+    const offenders = files.filter((f) => !inZone(rel(f)) && !["lib/env.ts", "proxy.ts"].includes(rel(f))).filter((f) => importsOf(f).some(reachesAccount)).map(rel);
     expect(offenders).toEqual([]);
+    expect(importsOf(join(SRC, "proxy.ts")).filter(reachesAccount).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-gate"]);
   });
   it("env.ts loads only the pure configuration module from the account zone", () => {
     expect(importsOf(join(SRC, "lib/env.ts")).filter(reachesAccount)).toEqual(["./account/config"]);
   });
-  it("Auth configuration and its secrets are referenced only by env.ts and the account zone", () => {
-    const offenders = files.filter((f) => !inZone(rel(f)) && rel(f) !== "lib/env.ts").filter((f) => /ACCOUNT_AUTH|ACCOUNT_CSRF|accountAuth|csrfSecret/.test(read(f))).map(rel);
+  it("Auth configuration and its secrets stay in the account zone except the exact proxy availability decision", () => {
+    const offenders = files.filter((f) => !inZone(rel(f)) && rel(f) !== "lib/env.ts").filter((f) => {
+      const source = rel(f) === "proxy.ts" ? read(f).replace("!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env })", "") : read(f);
+      return /ACCOUNT_AUTH|ACCOUNT_CSRF|accountAuth|csrfSecret/.test(source);
+    }).map(rel);
     expect(offenders).toEqual([]);
   });
   it("nothing exposes Auth configuration to the browser (no NEXT_PUBLIC account variables, no client components in the zone read it)", () => {
@@ -53,9 +57,9 @@ describe("account boundary (static)", () => {
       expect(read(f), rel(f)).not.toMatch(/accountAuth|serverEnv|ACCOUNT_AUTH|csrfSecret|publishableKey|pollSecret|poll_secret|deviceCredentialHash|device_credential_hash|callNativePairingRpc/);
     }
   });
-  it("env.accountAuth is only ever read inside the account zone", () => {
+  it("env.accountAuth is read only inside the account zone and the exact proxy availability decision", () => {
     const readers = files.filter((f) => /\.accountAuth\b/.test(read(f))).map(rel);
-    expect(readers.filter((r) => !inZone(r) && r !== "lib/env.ts")).toEqual([]);
+    expect(readers.filter((r) => !inZone(r) && r !== "lib/env.ts")).toEqual(["proxy.ts"]);
   });
   it("the public data layer, rate limiter and API helpers never touch account code", () => {
     const publicFiles = files.filter((f) => rel(f).startsWith("lib/data/") || rel(f).startsWith("lib/security/") || rel(f) === "lib/api.ts");
