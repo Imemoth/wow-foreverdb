@@ -5,6 +5,21 @@ import assert from "node:assert/strict";
 import { openUserTx, settle } from "../account/harness.mjs";
 import { instId, makeWorld, snapshot } from "./world.mjs";
 
+const PUBLIC_ENTRY_POINTS = [
+  "public.fdb_account_enrollment_ticket_issue(text)",
+  "public.fdb_account_enrollment_tickets()",
+  "public.fdb_account_enrollment_ticket_revoke(uuid)",
+  "public.fdb_account_devices()",
+  "public.fdb_account_device_revoke(uuid)",
+  "public.fdb_device_enroll(text,text,text)",
+  "public.fdb_device_status(text)",
+  "public.fdb_device_ingest(text,jsonb)",
+  "public.fdb_device_rotate_credential(text)",
+  "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",
+  "public.fdb_device_pair_poll(uuid,text)",
+  "public.fdb_device_pair_cancel(uuid,text)",
+].sort();
+
 let w;
 before(async () => {
   w = await makeWorld();
@@ -135,10 +150,15 @@ describe("interrupted network requests", () => {
 
   it("a statement timeout / lock timeout configuration exists on every entry point (a stuck request cannot hold locks forever)", async () => {
     const rows = (await w.admin.query(
-      `select p.proname, p.proconfig from pg_proc p where p.pronamespace = 'public'::regnamespace
-         and (p.proname like 'fdb_device_%' or p.proname like 'fdb_account_enrollment_%' or p.proname in ('fdb_account_devices','fdb_account_device_revoke'))`)).rows;
-    assert.equal(rows.length, 9);
-    for (const r of rows) assert.ok(r.proconfig.some((c) => c.startsWith("lock_timeout=")), r.proname);
+      `select n.nspname || '.' || p.proname || '(' || replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' sig,
+              p.proconfig
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where p.pronamespace = 'public'::regnamespace
+          and (p.proname like 'fdb_device_%' or p.proname like 'fdb_account_enrollment_%'
+            or p.proname in ('fdb_account_devices','fdb_account_device_revoke'))
+        order by sig`)).rows;
+    assert.deepEqual(rows.map((r) => r.sig), PUBLIC_ENTRY_POINTS);
+    for (const r of rows) assert.ok(r.proconfig.some((c) => c.startsWith("lock_timeout=")), r.sig);
   });
 });
 

@@ -23,6 +23,21 @@ const PRIVATE_FUNCTIONS = [
   "private.fdb_device_authorize(text,uuid)",
   "private.fdb_prune_enrollment()",
 ];
+const PAIRING_PUBLIC_FUNCTIONS = [
+  "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",
+  "public.fdb_device_pair_poll(uuid,text)",
+  "public.fdb_device_pair_cancel(uuid,text)",
+];
+const PAIRING_PRIVATE_FUNCTIONS = [
+  "private.fdb_device_pair_native(uuid,text,boolean)",
+  "private.fdb_pair_poll_global_budget()",
+];
+const EXPECTED_ENROLLMENT_FUNCTIONS = [
+  ...PUBLIC_FUNCTIONS,
+  ...PRIVATE_FUNCTIONS,
+  ...PAIRING_PUBLIC_FUNCTIONS,
+  ...PAIRING_PRIVATE_FUNCTIONS,
+].sort();
 const ROLES = ["public", "anon", "authenticated", "service_role"];
 
 let w;
@@ -62,13 +77,15 @@ describe("function privileges and definer hygiene", () => {
     }
   });
 
-  it("no overloads and exactly the expected new functions", async () => {
+  it("has exactly the approved enrollment and native-pairing function signatures", async () => {
     const rows = (await w.admin.query(
-      `select proname, count(*)::int n from pg_proc where pronamespace in ('public'::regnamespace,'private'::regnamespace)
-         and (proname like 'fdb_device_%' or proname like 'fdb_account_enrollment_%' or proname in ('fdb_account_devices','fdb_account_device_revoke','fdb_account_usable','fdb_lock_live_session','fdb_prune_enrollment'))
-       group by proname order by proname`)).rows;
-    assert.equal(rows.length, 15);
-    for (const r of rows) assert.equal(r.n, 1, `${r.proname} has overloads`);
+      `select n.nspname || '.' || p.proname || '(' || replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' sig
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where p.pronamespace in ('public'::regnamespace,'private'::regnamespace)
+          and (p.proname like 'fdb_device_%' or p.proname like 'fdb_pair_%' or p.proname like 'fdb_account_enrollment_%'
+            or p.proname in ('fdb_account_devices','fdb_account_device_revoke','fdb_account_usable','fdb_lock_live_session','fdb_prune_enrollment'))
+        order by sig`)).rows;
+    assert.deepEqual(rows.map((r) => r.sig), EXPECTED_ENROLLMENT_FUNCTIONS);
   });
 
   it("every function that existed before 0012 is byte-identical (owner, ACL, config, prosrc md5) after 0012 AND 0014", async () => {
