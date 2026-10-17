@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DisplayKindBadge } from "@/components/Badges";
 import { EntityLink } from "@/components/EntityLink";
+import { FeatureCard, type FeatureCardData } from "@/components/FeatureCard";
 import { HeroBackground } from "@/components/hero/HeroBackground";
 import { HeroImageLayer } from "@/components/hero/HeroImageLayer";
 import { StatTile } from "@/components/StatTile";
@@ -18,6 +19,44 @@ const ENTRY_POINTS = [
   { title: "Herbalism", text: "Herb nodes, their zones and observed locations.", href: searchPath({ kind: "herbalism" }), accent: "text-kind-herbalism", glyph: "M16 28V14M16 14c-6 0-9-4-9-9 5 0 9 3 9 9zm0 0c6 0 9-4 9-9-5 0-9 3-9 9z" },
   { title: "Fishing", text: "Per-zone catches and fishing pools, kept separate.", href: searchPath({ kind: "fishing" }), accent: "text-kind-fishing", glyph: "M4 16c4-6 14-6 20 0-6 6-16 6-20 0zm20 0 5-4v8z" },
   { title: "Zones", text: "Everything observed in an area, with filters.", href: "/zones", accent: "text-kind-object", glyph: "M4 8l8-3 8 3 8-3v19l-8 3-8-3-8 3zM12 5v19M20 8v19" },
+];
+
+/**
+ * Product-discovery cards, distinct from ENTRY_POINTS above (those are the six
+ * functional category filters; these four are higher-level "what can AzerDex do for
+ * me" entries) - see docs/azerdex-hero-art/provenance.md for the artwork these use.
+ * Every href points at a page that already exists and does what the card says; no
+ * card claims functionality (e.g. an interactive map) that isn't actually built yet.
+ */
+const FEATURE_CARDS: FeatureCardData[] = [
+  {
+    slug: "community-data",
+    title: "Community Data",
+    description: "Every number on AzerDex comes from a real player running the ForeverDB addon - see how observations become published rates.",
+    href: "/about/data",
+    focal: "18% 42%",
+  },
+  {
+    slug: "interactive-maps",
+    title: "Explore Zones",
+    description: "Browse every observed zone and jump straight to what's been recorded there, source by source.",
+    href: "/zones",
+    focal: "30% 38%",
+  },
+  {
+    slug: "tools-guides",
+    title: "Tools & Guides",
+    description: "Addon setup walkthroughs and practical guides for getting the most out of AzerDex.",
+    href: "/guides",
+    focal: "20% 55%",
+  },
+  {
+    slug: "exploration-discovery",
+    title: "Exploration & Discovery",
+    description: "Search the full item, creature and node database to find exactly where something drops.",
+    href: "/database",
+    focal: "20% 52%",
+  },
 ];
 
 export default async function HomePage() {
@@ -131,6 +170,17 @@ export default async function HomePage() {
           </div>
         </section>
       </div>
+
+      {/* Explore AzerDex: illustrated product-discovery cards (distinct from the six
+          category filters above) */}
+      <section aria-labelledby="explore-title">
+        <h2 id="explore-title" className="panel-title text-2xl">Explore AzerDex</h2>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          {FEATURE_CARDS.map((card) => (
+            <FeatureCard key={card.slug} {...card} />
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-10 lg:grid-cols-2">
         <section aria-labelledby="news-title">
