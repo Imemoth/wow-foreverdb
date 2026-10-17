@@ -50,7 +50,7 @@ export function FeatureCard({ title, description, href, slug, focalClass }: Feat
         loading="lazy"
         className={`absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03] ${focalClass}`}
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-ink-950/90 via-ink-950/25 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink-950/85 from-0% via-ink-950/10 via-45% to-transparent to-80%" />
       {/* eslint-disable-next-line @next/next/no-img-element -- see doc comment above */}
       <img
         src={`/cards/medallions/${slug}.webp`}
@@ -61,9 +61,9 @@ export function FeatureCard({ title, description, href, slug, focalClass }: Feat
         height={72}
         className="absolute left-4 top-4 h-16 w-16 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] sm:h-[4.5rem] sm:w-[4.5rem]"
       />
-      <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-        <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-gold-300 sm:text-xl">{title}</h3>
-        <p className="mt-1 max-w-md text-sm text-parchment/90">{description}</p>
+      <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6">
+        <h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-gold-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] sm:text-xl">{title}</h3>
+        <p className="mt-1.5 max-w-md text-sm leading-snug text-parchment/90">{description}</p>
       </div>
     </Link>
   );

@@ -342,12 +342,16 @@
       radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.4), rgb(7 9 28 / 0.82) 85%);
   }
 
-  /* Phase 1 visual polish: breaks the hero section out of <main>'s max-w-7xl/px-4
-     constraint to span the full viewport width, edge-to-edge - see the `overflow-x:
-     hidden` on html above for why this is safe. The negative margin-top cancels
-     main's own py-8 top padding (2rem) so the hero sits flush under the header with
-     no gap, matching only the hero's own first-child position - it does not affect
-     main's padding for any other page. */
+  /* Phase 1 visual polish: breaks a region out of <main>'s max-w-7xl/px-4 constraint
+     to span the full viewport width, edge-to-edge - see the `overflow-x: hidden` on
+     html above for why this is safe. The negative margin-top cancels main's own py-8
+     top padding (2rem) so the wrapped content sits flush under the header with no
+     gap, matching only its own first-child position - it does not affect main's
+     padding for any other page. Originally just the hero section; the homepage
+     later reused it as the outer wrapper for the whole page (hero plus every section
+     below it), each with its own inner `mx-auto max-w-[...]` content container, so a
+     homepage-only wider max-width doesn't require touching layout.tsx's global
+     max-w-7xl (see src/app/page.tsx). */
   .hero-bleed {
     position: relative;
     left: 50%;

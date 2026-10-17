@@ -67,40 +67,52 @@ const FEATURE_CARDS: FeatureCardData[] = [
 
 export default async function HomePage() {
   const { db, nonce } = await pageContext();
-  const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(8), db.zones()]);
+  const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(5), db.zones()]);
   const articles = visibleArticles();
   const news = articles.filter((a) => a.section === "news").slice(0, 3);
-  const guides = articles.filter((a) => a.section === "guides").sort((a, b) => Number(b.featured) - Number(a.featured)).slice(0, 3);
   const c = meta.counts ?? {};
 
   return (
-    <div className="space-y-14">
-      {/* Hero + central search: full-bleed artwork (.hero-bleed breaks out of
-          <main>'s max-w-7xl), content kept in its own constrained container. */}
-      <div>
-        <section aria-labelledby="hero-title" className="hero-bleed relative overflow-hidden bg-[radial-gradient(900px_320px_at_50%_0,rgb(108_65_199/0.28),transparent_70%)] py-14 text-center sm:flex sm:min-h-[680px] sm:flex-col sm:justify-center sm:py-20">
-          <HeroBackground nonce={nonce} />
-          <HeroImageLayer />
-          <div className="hero-vignette" />
-          <div className="hero-fade-bottom" />
-          <div className="relative z-10 mx-auto w-full max-w-7xl px-5 sm:px-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
-            <h1 id="hero-title" className="mx-auto mt-3 max-w-3xl font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-5xl">
-              Know Your World. <span className="text-gold-300">Know where it drops.</span>
-            </h1>
-            <p className="mx-auto mt-3 max-w-2xl text-sm text-mist sm:mt-4 sm:text-base">
-              A community-powered database for World of Warcraft: Forever, built from real in-game observations.
-            </p>
-            <form action="/database" method="get" role="search" className="mx-auto mt-6 flex max-w-2xl flex-col gap-2 sm:mt-8 sm:flex-row">
-              <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
-              <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
-                placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
-                className="field h-12 flex-1 text-base" />
-              <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
-            </form>
-          </div>
-        </section>
-        <div className="mx-auto mt-8 w-full max-w-3xl px-4">
+    // Breaks the whole homepage out of <main>'s max-w-7xl/px-4 (see the .hero-bleed
+    // comment in globals.css) so it can use a wider, homepage-only max-width below,
+    // without touching the global container every other page shares.
+    <div className="hero-bleed">
+      {/* Hero + central search: full-bleed artwork, content kept in its own
+          constrained container that matches the width of every section below it. */}
+      <section aria-labelledby="hero-title" className="relative overflow-hidden bg-[radial-gradient(900px_320px_at_50%_0,rgb(108_65_199/0.28),transparent_70%)] py-14 text-center sm:flex sm:min-h-[720px] sm:flex-col sm:justify-center sm:py-20">
+        <HeroBackground nonce={nonce} />
+        <HeroImageLayer />
+        <div className="hero-vignette" />
+        <div className="hero-fade-bottom" />
+        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-5 sm:px-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">World of Warcraft: Forever</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- images.unoptimized is set
+              site-wide, so next/image buys nothing here; this is also a server component, so
+              next/image's own inline placeholder style would hit the CSP restriction that
+              broke 665eb6c (see FeatureCard.tsx for the fuller reasoning). Meaningful alt
+              text: this is the only place on the homepage that states the brand name and
+              tagline together - the headline below deliberately doesn't repeat "Know Your
+              World" now that the logo itself carries it. */}
+          <img src="/logo-full.webp" alt="AzerDex — Know Your World." className="mx-auto mt-3 h-auto w-48 sm:w-72 lg:w-[420px]" />
+          <h1 id="hero-title" className="mx-auto mt-3 max-w-3xl font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-5xl">
+            Know Where It Drops.
+          </h1>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-mist sm:mt-4 sm:text-base">
+            A community-powered database for World of Warcraft: Forever, built from real in-game observations.
+          </p>
+          <form action="/database" method="get" role="search" className="mx-auto mt-6 flex max-w-2xl flex-col gap-2 sm:mt-8 sm:flex-row">
+            <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
+            <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
+              placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
+              className="field h-12 flex-1 text-base" />
+            <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
+          </form>
+        </div>
+      </section>
+
+      <div className="mx-auto w-full max-w-[1400px] space-y-14 px-4 pb-8 pt-8 sm:px-6 lg:px-8">
+        {/* Statistics */}
+        <div>
           <div className="rule-ornament mx-auto max-w-md" />
           <div className="mx-auto mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile label="Items" value={fmtInt(c.items ?? 0)} />
@@ -109,37 +121,56 @@ export default async function HomePage() {
             <StatTile label="Last publish" value={fmtDate(meta.publishedAt)} />
           </div>
         </div>
-      </div>
 
-      {/* Entry points */}
-      <section aria-labelledby="browse-title">
-        <h2 id="browse-title" className="panel-title text-2xl">Browse the database</h2>
-        <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ENTRY_POINTS.map((e) => (
-            <li key={e.title}>
-              <Link href={e.href} className="panel group flex h-full items-start gap-4 p-5 no-underline transition hover:border-gold-500/70">
-                <CategoryIcon id={e.icon} />
-                <span>
-                  <span className="block font-semibold text-parchment group-hover:text-gold-300">{e.title}</span>
-                  <span className="mt-1 block text-sm text-mist">{e.text}</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+        {/* Entry points */}
+        <section aria-labelledby="browse-title">
+          <h2 id="browse-title" className="panel-title text-2xl">Browse the database</h2>
+          <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ENTRY_POINTS.map((e) => (
+              <li key={e.title}>
+                <Link href={e.href} className="panel group flex h-full items-start gap-4 p-5 no-underline transition hover:border-gold-500/70">
+                  <CategoryIcon id={e.icon} />
+                  <span>
+                    <span className="block font-semibold text-parchment group-hover:text-gold-300">{e.title}</span>
+                    <span className="mt-1 block text-sm text-mist">{e.text}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-      <div className="grid gap-10 lg:grid-cols-3">
-        {/* Recently observed */}
-        <section aria-labelledby="recent-title" className="lg:col-span-2">
+        {/* Latest news: full-width, ahead of Recently Observed - a step toward AzerDex
+            becoming a hub for community updates and (eventually, separately planned)
+            WoW: Forever Blue Posts. No feed/crawler here - same visibleArticles()
+            content as the existing /news page, just the newest 3. */}
+        <section aria-labelledby="news-title">
+          <div className="flex items-baseline justify-between">
+            <h2 id="news-title" className="panel-title text-2xl">Latest news</h2>
+            <Link href="/news" className="text-sm">All news →</Link>
+          </div>
+          <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {news.map((a) => (
+              <li key={a.slug} className="panel h-full p-4">
+                <Link href={articlePath(a)} className="font-semibold text-parchment no-underline hover:text-gold-300">{a.title}</Link>
+                <p className="mt-1 text-sm text-mist">{a.description}</p>
+                <p className="mt-2 text-xs text-mist">{fmtDate(a.publishedAt)}{a.sample && <span className="ml-2 rounded bg-conf-low/15 px-1.5 py-0.5 text-conf-low">Sample article</span>}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Recently observed: a compact, full-width activity strip - five rows, not a
+            dashboard table. */}
+        <section aria-labelledby="recent-title">
           <h2 id="recent-title" className="panel-title text-2xl">Recently observed</h2>
           <p className="mt-1 text-sm text-mist">Entries with the newest observations in the current publication.</p>
           {recent.length === 0 ? (
-            <p className="mt-4 text-mist">No published observations yet.</p>
+            <p className="panel mt-4 p-4 text-mist">No published observations yet.</p>
           ) : (
             <ul className="panel mt-4 divide-y divide-ink-700/70">
               {recent.map((r) => (
-                <li key={`${r.entityKind}-${r.itemId ?? `${r.sourceType}-${r.sourceId}-${r.sourceLevel}`}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                <li key={`${r.entityKind}-${r.itemId ?? `${r.sourceType}-${r.sourceId}-${r.sourceLevel}`}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
                   <span className="flex items-center gap-2">
                     <DisplayKindBadge kind={r.displayKind} />
                     <EntityLink href={entityPath(r)} tooltip={r.entityKind === "item" ? `/api/v1/tooltip/item/${r.itemId}` : `/api/v1/tooltip/source/${r.sourceType}/${r.sourceId}`}>{r.name}</EntityLink>
@@ -150,7 +181,7 @@ export default async function HomePage() {
               ))}
             </ul>
           )}
-          <h3 className="mt-8 font-semibold text-parchment">Observed zones</h3>
+          <h3 className="mt-6 font-semibold text-parchment">Observed zones</h3>
           <ul className="mt-3 flex flex-wrap gap-2">
             {zones.map((z) => (
               <li key={z.mapId}>
@@ -160,72 +191,31 @@ export default async function HomePage() {
           </ul>
         </section>
 
-        {/* How it works */}
-        <section aria-labelledby="how-title" className="panel p-6">
+        {/* Explore AzerDex: illustrated product-discovery cards (distinct from the six
+            category filters above). The full ornamental wordmark now lives in the
+            hero, so this section keeps only a plain gold-accented heading. */}
+        <section aria-labelledby="explore-title">
+          <h2 id="explore-title" className="panel-title text-center text-2xl">Explore AzerDex</h2>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            {FEATURE_CARDS.map((card) => (
+              <FeatureCard key={card.slug} {...card} />
+            ))}
+          </div>
+        </section>
+
+        {/* How AzerDex works: a compact bottom CTA, not a detailed explanation - the
+            full write-up lives on /about/data. */}
+        <section aria-labelledby="how-title" className="panel p-6 text-center sm:p-8">
           <h2 id="how-title" className="panel-title text-xl">How AzerDex works</h2>
-          <ol className="mt-4 space-y-4 text-sm text-mist">
-            <li><strong className="text-parchment">1. The addon observes.</strong> While you play, the ForeverDB addon records loot, gathering and fishing results with the source, level and an approximate position.</li>
-            <li><strong className="text-parchment">2. The Companion syncs.</strong> The ForeverDB Companion uploads your installation&apos;s counters to the private AzerDex backend. Private records, such as Guildbook rosters, never reach this website.</li>
-            <li><strong className="text-parchment">3. We publish aggregates.</strong> A one-way pipeline validates and publishes only approved, aggregated statistics here.</li>
-          </ol>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link href="/download" className="btn-primary">Get the addon &amp; Companion</Link>
-            <Link href="/about/data" className="btn-ghost">Data methodology</Link>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-mist">
+            While you play, the ForeverDB addon records your observations and the Companion syncs them to the private
+            AzerDex backend. Only approved, aggregated statistics are ever published here — private records, such as
+            Guildbook rosters, never reach this website.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link href="/about/data" className="btn-primary">Data methodology</Link>
+            <Link href="/download" className="btn-ghost">Get the addon &amp; Companion</Link>
           </div>
-        </section>
-      </div>
-
-      {/* Explore AzerDex: illustrated product-discovery cards (distinct from the six
-          category filters above). The full ornamental wordmark gets its brand moment
-          here rather than in the hero: it carries its own "Know Your World" tagline,
-          which would otherwise sit right on top of the hero's near-identical headline -
-          see docs/azerdex-card-art/provenance.md for the hero-placement comparison. */}
-      <section aria-labelledby="explore-title">
-        <div className="flex flex-col items-center text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element -- images.unoptimized is set
-              site-wide, so next/image buys nothing here; see FeatureCard.tsx for the fuller
-              reasoning (this is also a server component, so next/image's own inline
-              placeholder style would hit the CSP restriction that broke 665eb6c). */}
-          <img src="/logo-full.webp" alt="AzerDex" className="h-auto w-56 sm:w-72" />
-          <h2 id="explore-title" className="panel-title mt-4 text-2xl">Explore AzerDex</h2>
-        </div>
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          {FEATURE_CARDS.map((card) => (
-            <FeatureCard key={card.slug} {...card} />
-          ))}
-        </div>
-      </section>
-
-      <div className="grid gap-10 lg:grid-cols-2">
-        <section aria-labelledby="news-title">
-          <div className="flex items-baseline justify-between">
-            <h2 id="news-title" className="panel-title text-2xl">Latest news</h2>
-            <Link href="/news" className="text-sm">All news →</Link>
-          </div>
-          <ul className="mt-4 space-y-3">
-            {news.map((a) => (
-              <li key={a.slug} className="panel p-4">
-                <Link href={articlePath(a)} className="font-semibold text-parchment no-underline hover:text-gold-300">{a.title}</Link>
-                <p className="mt-1 text-sm text-mist">{a.description}</p>
-                <p className="mt-2 text-xs text-mist">{fmtDate(a.publishedAt)}{a.sample && <span className="ml-2 rounded bg-conf-low/15 px-1.5 py-0.5 text-conf-low">Sample article</span>}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section aria-labelledby="guides-title">
-          <div className="flex items-baseline justify-between">
-            <h2 id="guides-title" className="panel-title text-2xl">Featured guides</h2>
-            <Link href="/guides" className="text-sm">All guides →</Link>
-          </div>
-          <ul className="mt-4 space-y-3">
-            {guides.map((a) => (
-              <li key={a.slug} className="panel p-4">
-                <Link href={articlePath(a)} className="font-semibold text-parchment no-underline hover:text-gold-300">{a.title}</Link>
-                <p className="mt-1 text-sm text-mist">{a.description}</p>
-                <p className="mt-2 text-xs text-mist">{a.readingMinutes} min read · {a.category}{a.sample && <span className="ml-2 rounded bg-conf-low/15 px-1.5 py-0.5 text-conf-low">Sample article</span>}</p>
-              </li>
-            ))}
-          </ul>
         </section>
       </div>
     </div>
