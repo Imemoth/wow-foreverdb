@@ -49,6 +49,10 @@
   html {
     background: var(--color-ink-950);
     -webkit-text-size-adjust: 100%;
+    /* Required by .hero-bleed's full-viewport-width technique below: 100vw can be a few
+       pixels wider than the visible viewport when a vertical scrollbar is present, which
+       would otherwise introduce horizontal scroll site-wide. */
+    overflow-x: hidden;
   }
   body {
     min-height: 100vh;
@@ -336,5 +340,32 @@
     background:
       radial-gradient(42% 50% at 78% 20%, rgb(7 9 28 / 0.6), transparent 72%),
       radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.4), rgb(7 9 28 / 0.82) 85%);
+  }
+
+  /* Phase 1 visual polish: breaks the hero section out of <main>'s max-w-7xl/px-4
+     constraint to span the full viewport width, edge-to-edge - see the `overflow-x:
+     hidden` on html above for why this is safe. The negative margin-top cancels
+     main's own py-8 top padding (2rem) so the hero sits flush under the header with
+     no gap, matching only the hero's own first-child position - it does not affect
+     main's padding for any other page. */
+  .hero-bleed {
+    position: relative;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    margin-top: -2rem;
+  }
+  /* Gradual fade from the hero artwork into the standard page background, so the
+     section below starts on solid --color-ink-950 with no visible rectangular image
+     edge. Sits above the photo/vignette layers (z-index 1, same as .hero-vignette)
+     and below the centered content (z-index 10). */
+  .hero-fade-bottom {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 1;
+    height: 10rem;
+    background: linear-gradient(to bottom, transparent, var(--color-ink-950));
+    pointer-events: none;
   }
 }
