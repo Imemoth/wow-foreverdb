@@ -97,6 +97,12 @@ write = rf"\b(?:create\s+table|insert\s+into|update|delete\s+from|merge\s+into|a
 tables, seeds = [], []
 unsupported = bool(re.search(r"\bexecute\s+(?!on\b)", sql))
 for statement in sql.split(";"):
+    # UPDATE/DELETE permit ONLY (relation) as well as ONLY relation. These writes
+    # are never approved, so recognize their target before the closed statement
+    # matcher: an unsupported relation suffix must not make a gate write disappear.
+    if re.search(rf"\b(?:update|delete\s+from)\s+(?:only\s+)?(?:\(\s*)*{write_target}", statement):
+        unsupported = True
+        continue
     match = re.search(write, statement)
     if not match:
         # Multi-table TRUNCATE/DROP can name the gate after another target.
