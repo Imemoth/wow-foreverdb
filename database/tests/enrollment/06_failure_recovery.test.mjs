@@ -2,7 +2,7 @@
 // Faults are injected with disposable triggers on the private tables (created and dropped by the migration role in this test database).
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { connect, openUserTx, settle } from "../account/harness.mjs";
+import { openUserTx, settle } from "../account/harness.mjs";
 import { instId, makeWorld, snapshot } from "./world.mjs";
 
 let w;
@@ -21,6 +21,40 @@ async function injectFailure(table, trigger, when) {
   await w.admin.query(`create trigger ${trigger} ${when} on ${table} for each row execute function private.fdb_it_fail()`);
 }
 const removeFailure = async (table, trigger) => w.admin.query(`drop trigger if exists ${trigger} on ${table}`);
+
+/** Observe only the backend this case deliberately kills, including both pg idle-client errors. */
+async function terminateBeforeCommit(tx) {
+  const errors = [];
+  const observe = (error) => errors.push(error);
+  tx.on("error", observe);
+  let timer;
+  const closed = Promise.race([
+    new Promise((resolve) => tx.once("end", resolve)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("terminated test client did not close")), 8000);
+    }),
+  ]);
+  // Attach a rejection observer immediately, even if the admin query itself stalls.
+  const closure = settle(closed);
+  try {
+    const result = await w.admin.query("select pg_terminate_backend($1) as terminated", [tx.processID]);
+    assert.equal(result.rows[0].terminated, true);
+    // Force the previously racy idle-client ordering: no COMMIT is submitted until end.
+    const ended = await closure;
+    assert.ok(ended.ok, ended.error?.message);
+    const commit = await settle(tx.query("commit"));
+    assert.equal(commit.ok, false, "a terminated connection cannot commit");
+    assert.match(commit.error.message, /connection error.*not queryable/);
+    assert.deepEqual(errors.map((error) => error.code ?? error.message), ["57P01", "Connection terminated unexpectedly"], "all and only the deliberately injected disconnect errors were observed");
+  } finally {
+    // Keep the observer installed until the socket and all its notifications have settled.
+    await tx.end();
+    const ended = await closure;
+    clearTimeout(timer);
+    tx.removeListener("error", observe);
+    assert.ok(ended.ok, ended.error?.message);
+  }
+}
 
 describe("failed enrollment rolls back completely and can be retried", () => {
   it("a failure while inserting the device leaves the ticket pending, the installation unreserved and no audit of success; the retry then succeeds", async () => {
@@ -68,12 +102,13 @@ describe("interrupted network requests", () => {
     const d = await w.device();
     await w.fx.resetBudgets();
     const tx = await openUserTx(d.claims);
-    const out = (await tx.query("select public.fdb_device_enroll($1,$2,$3) as r", [t.ticket, inst, "PC"])).rows[0].r;
-    assert.equal(out.ok, true, "the server-side work completed inside the transaction");
-    const pid = tx.processID;
-    await w.admin.query("select pg_terminate_backend($1)", [pid]); // the link drops before COMMIT
-    await settle(tx.query("commit"));
-    await settle(tx.end());
+    try {
+      const out = (await tx.query("select public.fdb_device_enroll($1,$2,$3) as r", [t.ticket, inst, "PC"])).rows[0].r;
+      assert.equal(out.ok, true, "the server-side work completed inside the transaction");
+      await terminateBeforeCommit(tx);
+    } finally {
+      await tx.end();
+    }
     assert.equal((await w.ticket_row(t.ticket_id)).status, "pending");
     assert.equal((await w.row("select count(*)::int n from public.installations where id = $1", [inst]))[0].n, 0);
     assert.equal((await w.row("select count(*)::int n from private.devices where ticket_id = $1", [t.ticket_id]))[0].n, 0);
@@ -137,11 +172,13 @@ describe("ingest failure atomicity", () => {
     const before = await w.history(e.installationId);
     await w.fx.resetBudgets();
     const tx = await openUserTx(e.device.claims);
-    const r = (await tx.query("select public.fdb_device_ingest($1,$2) as r", [e.secret, snapshot(e.installationId, { updatedAt: 6000, sources: 3 })])).rows[0].r;
-    assert.equal(r.ok, true);
-    await w.admin.query("select pg_terminate_backend($1)", [tx.processID]);
-    await settle(tx.query("commit"));
-    await settle(tx.end());
+    try {
+      const r = (await tx.query("select public.fdb_device_ingest($1,$2) as r", [e.secret, snapshot(e.installationId, { updatedAt: 6000, sources: 3 })])).rows[0].r;
+      assert.equal(r.ok, true);
+      await terminateBeforeCommit(tx);
+    } finally {
+      await tx.end();
+    }
     assert.deepEqual(await w.history(e.installationId), before);
   });
 });

@@ -41,6 +41,59 @@ async function assertInvariant(accountUids) {
   assert.deepEqual(dupId, [], "one identity is the live device of two installations");
 }
 
+/** Keep the same strict outcomes in ordinary and controlled enrollment-first schedules. */
+async function ticketRevocationRace(acct, { enrollmentFirst = false } = {}) {
+  await w.admin.query("update private.enrollment_tickets set created_at = now() - interval '2 hours', expires_at = now() + interval '166 hours' where account_uid = $1", [acct.uid]);
+  const t = await w.ticket(acct);
+  const d = await w.device();
+  await w.fx.resetBudgets();
+  let e;
+  let r;
+  if (enrollmentFirst) {
+    const tx = await openUserTx(d.claims);
+    const revokeTx = await openUserTx(acct.claims);
+    let revocation;
+    try {
+      e = await settle(tx.query("select public.fdb_device_enroll($1,$2,$3) as r", [t.ticket, instId(), "x"]));
+      if (e.ok) e.value = e.value.rows[0].r;
+      revocation = settle(revokeTx.query("select public.fdb_account_enrollment_ticket_revoke($1) as r", [t.ticket_id]));
+      await waitUntilBlocked(w.admin, revokeTx);
+      await tx.query("commit");
+      r = await revocation;
+      if (r.ok) r.value = r.value.rows[0].r;
+      await revokeTx.query("commit");
+    } finally {
+      await tx.end();
+      await revocation;
+      await revokeTx.end();
+    }
+  } else {
+    [e, r] = await Promise.all([settle(on(0, d, "fdb_device_enroll", [t.ticket, instId(), "x"])), settle(on(1, acct, "fdb_account_enrollment_ticket_revoke", [t.ticket_id]))]);
+  }
+  try {
+    assert.ok(e.ok && r.ok, `no exception (deadlock/timeout) expected: ${e.error?.message ?? ""} ${r.error?.message ?? ""}`);
+    const row = await w.ticket_row(t.ticket_id);
+    if (e.value.ok) {
+      assert.equal(row.status, "consumed");
+      assert.deepEqual(r.value, { ok: false, error: "not_available" });
+    } else {
+      assert.equal(e.value.error, "ticket_revoked");
+      assert.equal(row.status, "revoked");
+      assert.deepEqual(r.value, { ok: true });
+    }
+    assert.equal((await w.row("select count(*)::int n from private.devices where ticket_id = $1", [t.ticket_id]))[0].n, e.value.ok ? 1 : 0);
+  } finally {
+    // A winning device must not consume the account's 10-device quota in later rounds.
+    // Revoke through the supported account RPC, after checking the race's original outcomes.
+    if (e.ok && e.value.ok) {
+      await w.fx.resetBudgets();
+      assert.deepEqual(await acct.call("fdb_account_device_revoke", [e.value.device_id]), { ok: true });
+    }
+  }
+  assert.equal((await w.row("select count(*)::int n from private.devices where account_uid = $1 and status <> 'revoked'", [acct.uid]))[0].n, 0, "each race round leaves no active fixture devices");
+  return e.value;
+}
+
 describe("concurrent redemption of one ticket", () => {
   it("8 identities, 8 different installations, ONE ticket: exactly one winner, one device, one reserved installation", async () => {
     const acct = await w.account();
@@ -118,29 +171,15 @@ describe("races between different tickets", () => {
 
   it("ticket revocation racing redemption: always exactly one of {enrolled, revoked}, never both, never neither (30 rounds)", async () => {
     const acct = await w.account();
-    let enrolled = 0;
-    let revoked = 0;
+    for (let round = 0; round < 30; round += 1) await ticketRevocationRace(acct);
+  });
+
+  it("enrollment-first ticket races remain isolated after 10 wins (30 controlled rounds)", async () => {
+    const acct = await w.account();
     for (let round = 0; round < 30; round += 1) {
-      await w.admin.query("update private.enrollment_tickets set created_at = now() - interval '2 hours', expires_at = now() + interval '166 hours' where account_uid = $1", [acct.uid]);
-      const t = await w.ticket(acct);
-      const d = await w.device();
-      await w.fx.resetBudgets();
-      const [e, r] = await Promise.all([settle(on(0, d, "fdb_device_enroll", [t.ticket, instId(), "x"])), settle(on(1, acct, "fdb_account_enrollment_ticket_revoke", [t.ticket_id]))]);
-      assert.ok(e.ok && r.ok, `no exception (deadlock/timeout) expected: ${e.error?.message ?? ""} ${r.error?.message ?? ""}`);
-      const row = await w.ticket_row(t.ticket_id);
-      if (e.value.ok) {
-        enrolled += 1;
-        assert.equal(row.status, "consumed");
-        assert.deepEqual(r.value, { ok: false, error: "not_available" });
-      } else {
-        revoked += 1;
-        assert.equal(e.value.error, "ticket_revoked");
-        assert.equal(row.status, "revoked");
-        assert.deepEqual(r.value, { ok: true });
-      }
-      assert.equal((await w.row("select count(*)::int n from private.devices where ticket_id = $1", [t.ticket_id]))[0].n, e.value.ok ? 1 : 0);
+      const result = await ticketRevocationRace(acct, { enrollmentFirst: true });
+      assert.equal(result.ok, true, `controlled enrollment must win round ${round + 1}`);
     }
-    assert.equal(enrolled + revoked, 30);
   });
 });
 
