@@ -293,6 +293,7 @@
     z-index: 0;
     overflow: hidden;
     border-radius: inherit;
+    pointer-events: none;
   }
   .hero-theme-layer {
     position: absolute;
@@ -317,6 +318,7 @@
   .hero-photo-layer {
     z-index: 0;
     object-fit: cover;
+    pointer-events: none;
   }
   .hero-vignette {
     position: absolute;
@@ -324,5 +326,15 @@
     z-index: 1;
     background: radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.32), rgb(7 9 28 / 0.78) 85%);
     pointer-events: none;
+  }
+  /* violet-moon's moon sits bright and large in the upper-right (see HERO_IMAGE_FOCAL),
+     close enough to the text-safe zone that the base vignette alone left it reducing
+     headline contrast there. An extra patch centered on the moon's actual position
+     (not just a uniformly stronger vignette, which would needlessly darken the rest of
+     this theme's art) fixes it without touching the other two themes. */
+  .hero-bg[data-hero-theme="violet-moon"] ~ .hero-vignette {
+    background:
+      radial-gradient(42% 50% at 78% 20%, rgb(7 9 28 / 0.6), transparent 72%),
+      radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.4), rgb(7 9 28 / 0.82) 85%);
   }
 }
