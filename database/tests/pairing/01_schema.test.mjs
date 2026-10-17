@@ -173,12 +173,13 @@ it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/
   });
   } finally { w=await makeWorld(); }
 });
-it("Task 1 creates exactly zero public pairing RPCs", async () => {
-  const { rows } = await w.admin.query(`select n.nspname schema, p.proname name
-    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname like 'fdb_%pair%'`);
-  assert.deepEqual(rows, []);
-  assertNoPublicPairingFunctions(await functions(w.admin));
+it("Task 2 creates exactly the three native public pairing signatures", async () => {
+  const rows = await functions(w.admin);
+  assert.deepEqual(rows.filter(fn => fn.schema === "public" && /^fdb_.*pair/.test(fn.name)).map(fn => fn.sig).sort(), [
+    "public.fdb_device_pair_cancel(uuid,text)",
+    "public.fdb_device_pair_poll(uuid,text)",
+    "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",
+  ]);
 });
 it("the qualified registry detects a visible public RPC fixture rather than passing vacuously", async () => {
   await rollback(w.admin, async () => {

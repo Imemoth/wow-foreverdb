@@ -420,6 +420,9 @@ describe("account migration conformance linter", () => {
       // 0014 (zero-touch enrollment) is deliberately outside this tripwire: it has its own function set and guards (registered AND
       // anonymous device callers) that are pinned by the SQL integration suite database/tests/enrollment, not by the 0012 registry.
       .filter((f) => !f.startsWith("0014_"))
+      // 0016 has its own exact function registry, session, ACL and concurrency tests under database/tests/pairing,
+      // plus the web closed-contract tests; its two-actor pairing surface is separate from the 0012 Account registry.
+      .filter((f) => !f.startsWith("0016_"))
       .filter((f) => mentions.test(readFileSync(resolve(dir, f), "utf8")));
     if (files.length === 0) {
       expect(existsSync(dir)).toBe(true); // no account migration yet (PR A is specification only)

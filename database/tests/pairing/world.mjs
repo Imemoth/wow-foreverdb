@@ -13,6 +13,11 @@ export const migration = path.join(repoRoot, "database/migrations/0016_browser_p
 export const makeWorld = enrollmentWorld;
 export const roles = ["public", "anon", "authenticated", "service_role"];
 export const events = ["pairing_started", "pairing_approved", "pairing_denied", "pairing_expired", "pairing_connected", "pairing_revoked", "pairing_retry_deferred"];
+// Exact Task 2 private additions; Task 4 lifecycle cleanup/restore must include both.
+export const nativePairingHelperSignatures = [
+  "private.fdb_device_pair_native(uuid,text,boolean)",
+  "private.fdb_pair_poll_global_budget()",
+];
 
 // Build an independent prerequisite database from repository migrations exactly once per suite.
 // Never derive the baseline from a database that has already executed 0016.
@@ -135,4 +140,81 @@ export async function pending(admin, overrides = {}) {
 export async function rollback(admin, fn) {
   await admin.query("begin");
   try { return await fn(); } finally { await admin.query("rollback"); }
+}
+
+// Task 2 worlds always build the current migration on an independent pristine predecessor.
+// Enabling the gate is explicit and confined to the disposable clone.
+export async function makePairingWorld() {
+  const source = await prerequisiteTemplate();
+  const database = `fdb_pairing_rpc_${randomBytes(6).toString("hex")}`;
+  await cloneDatabase(source.database, database);
+  const result = psqlFile(database, migration);
+  assert.equal(result.status, 0, result.out);
+  const w = await enrollmentWorld({database});
+  await w.admin.query("update private.device_pairing_config set enabled=true");
+  const close = w.close;
+  w.database = database;
+  w.close = async () => { await close(); await dropDatabase(database); await closeBefore16Template(); };
+  return w;
+}
+
+import { createHash } from "node:crypto";
+import { rpc } from "../account/harness.mjs";
+export const hash = value => createHash("sha256").update(value).digest("hex");
+export function pairingInput(overrides = {}) {
+  const secret = `fdbp1_${randomBytes(32).toString("base64url")}`;
+  const id = randomUUID(), deviceId = randomUUID();
+  const credential = `fdbd1_${deviceId.replaceAll("-", "")}_${randomBytes(32).toString("base64url")}`;
+  return {id, deviceId, secret, credential, installationId:randomBytes(16).toString("hex"), label:"Test PC", ...overrides};
+}
+export const startArgs = p => [p.id, hash(p.secret), p.deviceId, hash(p.credential), p.installationId, p.label];
+export const proofArgs = p => [p.id, p.secret];
+export async function startPairing(w, actor, p = pairingInput()) {
+  const out = await actor.call("fdb_device_pair_start", startArgs(p));
+  assert.equal(out.ok, true, JSON.stringify(out));
+  return {...p, actor, out};
+}
+export async function due(w, p) {
+  await w.admin.query("update private.device_pairings set next_poll_at=clock_timestamp()-interval '1 second' where id=$1", [p.id]);
+}
+export async function pairRow(w, p) {
+  return (await w.admin.query("select *,xmin::text version from private.device_pairings where id=$1", [p.id])).rows[0];
+}
+export async function approveFixture(w, p, account) {
+  const c = w.admin;
+  await c.query("begin");
+  try {
+    await c.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [p.installationId]);
+    await c.query("select private.fdb_lock_live_session($1,$2,true)", [p.actor.uid,p.actor.sid]);
+    const row = (await c.query("select * from private.device_pairings where id=$1 for update", [p.id])).rows[0];
+    assert.equal(row.status,"pending"); assert.equal(row.initiator_uid,p.actor.uid); assert.equal(row.initiator_session_id,p.actor.sid);
+    assert.ok(row.expires_at > new Date());
+    await c.query("select private.fdb_lock_live_session($1,$2,false)", [account.uid,account.sid]);
+    assert.equal((await c.query("select private.fdb_account_usable($1) ok",[account.uid])).rows[0].ok,true);
+    await c.query("update private.device_pairings set status='approved',approved_account_uid=$2,approved_session_id=$3,approved_at=clock_timestamp(),next_poll_at=clock_timestamp()-interval '1 second' where id=$1",[p.id,account.uid,account.sid]);
+    await c.query("insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid) values('pairing_approved',$1,$2,$3)",[row.audit_ref,p.installationId,account.uid]);
+    await c.query("commit");
+  } catch(e) { await c.query("rollback"); throw e; }
+  return {...p, account};
+}
+export async function approvedPairing(w, {actor, account, ...input} = {}) {
+  const d=actor??await w.device(), a=account??await w.account();
+  const p=await startPairing(w,d,pairingInput(input));
+  return approveFixture(w,p,a);
+}
+export async function isolatedCall(w, actor, name, args) {
+  const c=await connect(w.database);
+  try { return await rpc(c,actor.claims,name,args); } finally { await c.end(); }
+}
+export async function protectedPairing(w,p) {
+  const state={};
+  for(const [key,sql,args] of [
+    ["pairing","select to_jsonb(t)||jsonb_build_object('version',xmin::text) row from private.device_pairings t where id=$1",[p.id]],
+    ["budgets","select to_jsonb(t) row from private.foreverdb_api_budgets t where bucket like 'pair_%:pair:'||$1 or bucket='pair_start:installation:'||$2 order by bucket",[p.id,hash(p.installationId)]],
+    ["installation","select to_jsonb(t)||jsonb_build_object('version',xmin::text) row from public.installations t where id=$1",[p.installationId]],
+    ["devices","select to_jsonb(t)||jsonb_build_object('version',xmin::text) row from private.devices t where installation_id=$1 order by id",[p.installationId]],
+    ["audit","select to_jsonb(t) row from private.device_pairing_audit t where installation_id=$1 order by id",[p.installationId]],
+    ["claims","select to_jsonb(t) row from private.account_installations t where installation_id=$1",[p.installationId]],
+  ]) state[key]=(await w.admin.query(sql,args)).rows;
+  return state;
 }
