@@ -43,19 +43,53 @@ describe("pairing static trust boundary", () => {
       const off = "create table private.device_pairing_config (singleton boolean primary key default true, enabled boolean not null default false);\ninsert into private.device_pairing_config (singleton, enabled) values (true, false);\n";
       writeFileSync(migration, off);
       const scan = () => spawnSync("python3", [join(temp, "scripts/check-pilot-flags.py"), "--require-off"], { encoding: "utf8" });
-      expect(scan().status).toBe(0);
+      expect.soft(scan().status).toBe(0);
       rmSync(migration);
-      expect(scan().status).toBe(1);
+      expect.soft(scan().status).toBe(1);
       writeFileSync(migration, off);
       const gate = join(temp, "web/src/lib/account/pairing-gate.ts");
       const original = readFileSync(gate, "utf8");
       writeFileSync(gate, original.replace("BROWSER_PAIRING_WEB_APPROVED = false", "BROWSER_PAIRING_WEB_APPROVED = true"));
-      expect(scan().status).toBe(1);
+      expect.soft(scan().status).toBe(1);
+      for (const initializer of ["false || true", "false ? false : true", "false as boolean"]) {
+        writeFileSync(gate, original.replace("BROWSER_PAIRING_WEB_APPROVED = false", `BROWSER_PAIRING_WEB_APPROVED = ${initializer}`));
+        expect.soft(scan().status, initializer).toBe(1);
+      }
+      for (const decoy of ["// export const BROWSER_PAIRING_WEB_APPROVED = false;\n", "/* export const BROWSER_PAIRING_WEB_APPROVED = false; */\n"]) {
+        writeFileSync(gate, decoy + original.replace("BROWSER_PAIRING_WEB_APPROVED = false", "BROWSER_PAIRING_WEB_APPROVED = true"));
+        expect.soft(scan().status, decoy).toBe(1);
+      }
+      writeFileSync(gate, original + "\nexport const BROWSER_PAIRING_WEB_APPROVED = false;\n");
+      expect.soft(scan().status).toBe(1);
       writeFileSync(gate, original);
       writeFileSync(migration, off.replace("enabled boolean not null default false", "enabled boolean not null default true"));
-      expect(scan().status).toBe(1);
+      expect.soft(scan().status).toBe(1);
       writeFileSync(migration, off.replace("values (true, false)", "values (true, true)"));
-      expect(scan().status).toBe(1);
+      expect.soft(scan().status).toBe(1);
+      for (const statement of [
+        "ALTER TABLE private.device_pairing_config ALTER COLUMN enabled SET DEFAULT true;",
+        "ALTER TABLE IF EXISTS private.device_pairing_config ALTER COLUMN enabled SET DEFAULT true;",
+        "UPDATE device_pairing_config SET enabled = true;",
+        "DROP TABLE IF EXISTS private.device_pairing_config;",
+        "TRUNCATE TABLE other_table, private.device_pairing_config;",
+        "UPDATE private.device_pairing_config SET enabled = true;",
+        'UPDATE "private"."device_pairing_config" SET enabled = true;',
+        "DO $$ BEGIN UPDATE private.device_pairing_config SET enabled = true; END $$;",
+        "DO $$ BEGIN EXECUTE 'UPDATE private.device_pairing_config SET enabled = true'; END $$;",
+        "UPDATE private.device_pairing_config SET enabled = false;",
+        "INSERT INTO private.device_pairing_config (singleton, enabled) VALUES (true, true);",
+        "INSERT INTO private.device_pairing_config (singleton, enabled) VALUES (true, false) ON CONFLICT (singleton) DO UPDATE SET enabled = true;",
+        "DELETE FROM private.device_pairing_config;",
+        "TRUNCATE private.device_pairing_config;",
+        "COPY private.device_pairing_config FROM '/tmp/gate';",
+      ]) {
+        writeFileSync(migration, off + statement);
+        expect.soft(scan().status, statement).toBe(1);
+      }
+      writeFileSync(migration, off.replace("values (true, false);", "values (true, false) ON CONFLICT (singleton) DO UPDATE SET enabled = true;"));
+      expect.soft(scan().status).toBe(1);
+      writeFileSync(migration, off + "-- UPDATE private.device_pairing_config SET enabled = true;\nALTER TABLE private.device_pairing_config ENABLE ROW LEVEL SECURITY;\nALTER TABLE private.device_pairing_config FORCE ROW LEVEL SECURITY;\n");
+      expect.soft(scan().status).toBe(0);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   });
 });

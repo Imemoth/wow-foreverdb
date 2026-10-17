@@ -140,9 +140,9 @@ describe("closed pairing RPC clients", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
-  it("fails closed on lost, redirected, oversized, malformed, secret-bearing and invalid-UTF8 responses without logging", async () => {
+  it("fails closed on lost, redirected, malformed, secret-bearing and duplicate-key responses without logging", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((name) => vi.spyOn(console, name).mockImplementation(() => undefined));
-    const replies = [() => { throw new Error(TOKEN); }, () => json({}, 500), () => new Response(null, { status: 307, headers: { location: "https://evil.invalid/" } }), () => new Response("x".repeat(600 * 1024)), () => new Response("{broken"), () => json({ ...preview, pollSecret: SECRET }), () => new Response(new Uint8Array([0xff])), () => new Response('{"ok":true,"state":"approved","state":"approved"}')];
+    const replies = [() => { throw new Error(TOKEN); }, () => json({}, 500), () => new Response(null, { status: 307, headers: { location: "https://evil.invalid/" } }), () => new Response("{broken"), () => json({ ...preview, pollSecret: SECRET }), () => new Response('{"ok":true,"state":"approved","state":"approved"}')];
     for (const reply of replies) {
       const fetcher = vi.fn(async () => reply()); vi.stubGlobal("fetch", fetcher);
       expect(await callAccountPairingRpc(cfg, "fdb_account_device_pair_approve", { p_pairing_id: ID }, TOKEN)).toEqual({ ok: false, kind: "unknown_outcome" });
@@ -150,6 +150,29 @@ describe("closed pairing RPC clients", () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
     }
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized valid success JSON while accepting the bounded control", async () => {
+    const success = { ok: true, state: "approved" };
+    for (const padding of [0, 600 * 1024]) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(" ".repeat(padding) + JSON.stringify(success))));
+      expect(await callAccountPairingRpc(cfg, "fdb_account_device_pair_approve", { p_pairing_id: ID }, TOKEN)).toEqual(
+        padding ? { ok: false, kind: "unknown_outcome" } : { ok: true, data: success },
+      );
+    }
+  });
+
+  it("rejects invalid UTF-8 within a valid preview label while accepting the UTF-8 control", async () => {
+    const replacementPreview = { ...preview, computerName: "PC�" };
+    const bytes = new TextEncoder().encode(JSON.stringify(replacementPreview));
+    const invalid = new Uint8Array([...bytes.slice(0, bytes.indexOf(0xef)), 0xff, ...bytes.slice(bytes.indexOf(0xef) + 3)]);
+    for (const [body, expected] of [
+      [bytes, { ok: true, data: replacementPreview }],
+      [invalid, { ok: false, kind: "unavailable" }],
+    ] as const) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+      expect(await callAccountPairingRpc(cfg, "fdb_account_device_pair_preview", { p_pairing_id: ID }, TOKEN)).toEqual(expected);
+    }
   });
 
   it("returns only fixed transport failures and preserves native slow_down data", async () => {
