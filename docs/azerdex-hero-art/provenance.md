@@ -39,11 +39,25 @@ exactly what this session received, unmodified; if the owner holds the original 
 output directly from ChatGPT, that is a more faithful record and can replace these if
 wanted.
 
-## Retained source records
+## Source records — private, not in the publicly served tree (Phase 1 Task C)
 
-The as-received files are kept, byte-for-byte unmodified, under
-`web/public/hero/source/<theme>.source.webp` (not referenced by any application code —
-audit copies only). SHA-256 of each, computed at the time they were added:
+**Status as of Phase 1 Task C: removed from the public tree.** The as-received,
+unwatermarked files were originally kept byte-for-byte unmodified under
+`web/public/hero/source/<theme>.source.webp` as an audit copy. That path is wrong for
+that purpose: anything under `web/public/` is served as a static file by Next.js, so
+those unwatermarked originals were (unintentionally) publicly downloadable — directly
+contradicting the requirement that unwatermarked master artwork stay private. They have
+been deleted from this tree in a follow-up commit (see "Residual git-history exposure"
+below — deleting them here does **not** erase them from git history).
+
+**Before deletion, the owner confirmed holding an independent copy of the original
+artwork outside this repository** — this was a direct precondition checked before
+removing these files, since they were the only copies of the unwatermarked originals
+tracked anywhere in this repo.
+
+SHA-256 of each (computed when they were added; this is now the only record of their
+content kept in this repository's public tree — the audit trail, not a way to
+reconstruct the files):
 
 | File | SHA-256 |
 | --- | --- |
@@ -51,19 +65,69 @@ audit copies only). SHA-256 of each, computed at the time they were added:
 | `source/violet-moon.source.webp` | `85c7f81ed8f1bc93746fc8800e2be28acf93b8bb2fcc1abd16e9d45a69ef59c3` |
 | `source/arcane-ruins.source.webp` | `001a1b4efcd2bbcee245e5773fefe418e7c19b1031c35631376722273f64f7a9` |
 
-Original (as-received) dimensions: 1672×941 for all three. The optimized derivatives
-actually served (`web/public/hero/<theme>.webp`, re-encoded WebP, quality 80, same
-1672×941 — no upscaling or downscaling applied, no demonstrated benefit to either):
+Original (as-received) dimensions: 1672×941 for all three.
 
-| Theme | As-received | Optimized (served) | Reduction |
+## Published derivatives (public, watermarked)
+
+The only files this repository serves publicly are the optimized, watermarked
+derivatives at `web/public/hero/<theme>.webp` — re-encoded WebP, quality 80, same
+1672×941 (no upscaling or downscaling applied, no demonstrated benefit to either), now
+also carrying the embedded AzerDex watermark (see "Embedded AzerDex watermark" below).
+Size history:
+
+| Theme | As-received (private, not served) | Optimized, pre-watermark | Optimized + watermark (currently served) |
 | --- | --- | --- | --- |
-| `floating-city` | 438,514 B | 250,002 B | 43.0% |
-| `violet-moon` | 414,136 B | 239,310 B | 42.2% |
-| `arcane-ruins` | 438,264 B | 258,382 B | 41.0% |
+| `floating-city` | 438,514 B | 250,002 B | 241,542 B |
+| `violet-moon` | 414,136 B | 239,310 B | 229,926 B |
+| `arcane-ruins` | 438,264 B | 258,382 B | 248,804 B |
 
-Metadata was minimized in the optimized derivatives (re-encoded through Pillow, which
-does not copy EXIF/XMP by default) per the owner's instruction; the unmodified source
-copies above are the provenance record and were not altered.
+Metadata was minimized in the served derivatives (re-encoded through Pillow, which does
+not copy EXIF/XMP by default) per the owner's instruction.
+
+## Residual git-history exposure (Phase 1 Task C — read before assuming these are gone)
+
+**Deleting `web/public/hero/source/*.webp` from the working tree does not remove them
+from this repository's git history, and this record does not claim otherwise.** Precise
+facts, not a general disclaimer:
+
+- The three files were added in a single commit
+  (`feat(web): integrate owner-approved Phase 1 hero artwork`, 2026-10-17). That commit
+  was already pushed to `origin/web/azerdex-brand-v1` — the branch backing Draft PR #61
+  — before this cleanup, and Vercel built and deployed it successfully (deployment
+  `dpl_BEPeKo79MSCi8Noxc6ZS93QdNW4h`, state `READY`). That means the unwatermarked
+  originals were live and publicly fetchable at `/hero/source/<theme>.source.webp` on
+  that Preview deployment for the period between that deploy and the deploy that
+  removed them.
+- This GitHub repository is **public** (confirmed via the repository API:
+  `"private": false`), with at least one existing fork. Anyone — not just people with
+  write access — can browse, clone, or fork the full commit history, including the
+  commit above, indefinitely. `git show <that commit>:web/public/hero/source/<file>`,
+  GitHub's commit/blob view, and `raw.githubusercontent.com` all remain valid ways to
+  retrieve these exact bytes from that commit for as long as it stays reachable from
+  any ref (and, separately, from anything already cloned/forked, regardless of what
+  happens to this repository's refs afterward).
+- Checked whether any other branch forks from at or after that commit (would matter if
+  a history rewrite were ever considered): none of this repository's other branches
+  share that commit as an ancestor point reached after it — but **no history rewrite
+  was performed or is proposed here**, so this is informational only, not something
+  acted on.
+- Vercel does not delete a prior Preview deployment just because a newer one supersedes
+  it on the branch alias; the deployment-specific URL for the build above may remain
+  independently reachable after this cleanup's new deployment goes live.
+- Any crawler, cache, or person who already fetched the live URL during the window
+  above may hold an independent copy that no action inside this repository can reach or
+  revoke.
+
+**What this cleanup does accomplish:** stops the unwatermarked originals from being
+served by the current and future deployments, and from appearing in a normal browse of
+the repository's current `HEAD`. **What it does not accomplish:** erase them from this
+repository's history, from the public GitHub view of the commit that added them, or
+from anyone who already has a copy. Actually removing them from history would require a
+rewrite (e.g. `git filter-repo`) and a force-push, coordinated with the known fork and
+anyone else who has cloned this repository — that is a separate, more disruptive
+action, explicitly **not performed or authorized by this round of work**, and would
+need its own explicit owner sign-off given the public-repo, already-forked, already-
+deployed state documented above.
 
 ## Focused visual review for Blizzard-specific protected elements
 

@@ -20,17 +20,29 @@ cleared them.
    `images.unoptimized: true` site-wide (`next.config.ts`, out of scope to change for
    this feature), so there is no automatic per-device resizing — size/compress the file
    itself before committing it, the way `provenance.md` records for the current three.
-2. Save it under `web/public/hero/<theme>.<ext>`, and keep an unmodified copy of
-   whatever you received under `web/public/hero/source/<theme>.source.<ext>` as the
-   audit/provenance record (never overwrite or delete an existing source record).
-3. In `themes.ts`, set that theme's `HERO_ASSET_SRC` entry to `/hero/<theme>.<ext>` and
+2. Embed a discreet AzerDex watermark into the file before it goes anywhere near
+   `web/public/` — see "Embedded AzerDex watermark" in `provenance.md` for the
+   existing three themes' tint/opacity/placement approach and why placement has to be
+   checked against both the desktop crop (cropped top/bottom by that theme's
+   `HERO_IMAGE_FOCAL`) and the mobile crop (cropped left/right, full height) before
+   it's considered final. Save the watermarked result under
+   `web/public/hero/<theme>.<ext>`.
+3. **Do not** save an unmodified/unwatermarked copy anywhere under `web/public/` (or
+   any other path this app serves) — anything under `public/` is served as a static
+   file, so an "audit copy" placed there is a public download, which is exactly the
+   mistake Phase 1 Task C corrected (see `provenance.md`'s "Residual git-history
+   exposure" section for what that cost). Keep the unwatermarked original only in
+   storage the owner controls outside this repository, and record its SHA-256 (not
+   the file itself) in `provenance.md`.
+4. In `themes.ts`, set that theme's `HERO_ASSET_SRC` entry to `/hero/<theme>.<ext>` and
    give it a `HERO_IMAGE_FOCAL` entry (a CSS `object-position` string) pointing at the
    image's actual focal point, not a blind `"50% 50%"` — see the existing three entries
    for the reasoning per theme.
-4. Add the new provenance details (source, generation method/date if applicable, owner
-   approval, and a focused visual review for anything identifiably Blizzard-sourced —
-   logos, trademarks, named characters, exact reproductions of a specific real
-   location) to `docs/azerdex-hero-art/provenance.md`.
+5. Add the new provenance details (source, generation method/date if applicable, owner
+   approval, SHA-256 of the private original, watermark placement, and a focused visual
+   review for anything identifiably Blizzard-sourced — logos, trademarks, named
+   characters, exact reproductions of a specific real location) to
+   `docs/azerdex-hero-art/provenance.md`.
 
 Nothing else changes. `HeroImageLayer` picks it up automatically and requests only the
 session's resolved theme's image (never all three) — verified with a Playwright network

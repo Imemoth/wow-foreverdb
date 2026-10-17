@@ -33,13 +33,18 @@ describe("hero Phase 1 approved artwork integration", () => {
     }
   });
 
-  it("every theme's retained source record exists, byte-identical to what this session received", () => {
-    // docs/azerdex-hero-art/provenance.md pins the exact SHA-256 of each; this just
-    // confirms the files that record refers to are actually present and non-empty.
+  it("no unwatermarked source record is exposed under the publicly served public/hero tree", () => {
+    // Phase 1 Task C: the as-received, unwatermarked originals used to be kept at
+    // public/hero/source/<theme>.source.webp for provenance - but that path is
+    // served as a static file by Next.js like everything else under public/, so it
+    // was publicly downloadable. The SHA-256 of each original is pinned in
+    // docs/azerdex-hero-art/provenance.md and the owner holds an independent copy;
+    // this guards against ever re-adding an unwatermarked original back into the
+    // publicly served tree (see provenance.md's "Residual git-history exposure"
+    // section for what removing them here does and doesn't change).
     for (const theme of HERO_THEMES) {
       const sourcePath = join(PUBLIC_DIR, "hero/source", `${theme}.source.webp`);
-      expect(existsSync(sourcePath), `missing source record for ${theme}`).toBe(true);
-      expect(readFileSync(sourcePath).length).toBeGreaterThan(0);
+      expect(existsSync(sourcePath), `${sourcePath} must not exist in the public tree`).toBe(false);
     }
   });
 
