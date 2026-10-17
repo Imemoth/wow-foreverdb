@@ -83,7 +83,9 @@ begin
        or not has_table_privilege(current_user,'auth.sessions','SELECT')
        or not has_table_privilege(current_user,'auth.sessions','UPDATE')
        or not has_table_privilege(current_user,'auth.users','SELECT')
+       or not has_table_privilege(current_user,'auth.users','UPDATE')
        or not has_table_privilege(current_user,'auth.refresh_tokens','SELECT')
+       or not has_table_privilege(current_user,'auth.refresh_tokens','UPDATE')
        or not pg_has_role(current_user,(select relowner from pg_class where oid='private.devices'::regclass),'USAGE') then
         raise exception '0016 pre-flight: migration role lacks ownership, BYPASSRLS, or Auth read/lock privileges';
     end if;
@@ -320,6 +322,13 @@ begin
         perform 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
           and (s.not_after is null or s.not_after>clock_timestamp()) for share;
         if not found then raise sqlstate 'PT401'; end if;
+        -- Pin identity and a live refresh family through commit, not merely at the last read.
+        -- GoTrue can lock token/user rows before sessions. NOWAIT avoids reversing its lock order:
+        -- a concurrent Auth writer wins and the outer exception handler rolls this attempt back.
+        perform 1 from auth.users where id=v_uid for share nowait;
+        perform 1 from auth.refresh_tokens where session_id=v_sid and not revoked order by id for share nowait;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform private.fdb_anonymous_caller();
     exception when sqlstate 'PT401' or sqlstate 'PT403' then
         return jsonb_build_object('ok',false,'error','session_not_accepted');
     end;
@@ -428,6 +437,12 @@ begin
         perform 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
           and (s.not_after is null or s.not_after>clock_timestamp()) for share;
         if not found then raise sqlstate 'PT401'; end if;
+        -- Same authority boundary as start: normal refresh/upgrade proceeds after commit,
+        -- or an Auth writer already holding these rows makes this attempt retryable.
+        perform 1 from auth.users where id=v_uid for share nowait;
+        perform 1 from auth.refresh_tokens where session_id=v_sid and not revoked order by id for share nowait;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform private.fdb_anonymous_caller();
     exception when sqlstate 'PT401' or sqlstate 'PT403' then
         return jsonb_build_object('ok',false,'error','pairing_not_available');
     end;
@@ -466,8 +481,10 @@ begin
           and exists(select 1 from auth.refresh_tokens r where r.session_id=s.id and not r.revoked) for share;
         if not found then v_reason := 'approval_session_revoked';
         else
+            perform 1 from auth.refresh_tokens where session_id=v_pair.approved_session_id and not revoked order by id for share nowait;
+            if not found then v_reason := 'approval_session_revoked'; end if;
             perform pg_advisory_xact_lock(hashtextextended('fdb-account:'||v_pair.approved_account_uid::text,0));
-            perform 1 from auth.users u where u.id=v_pair.approved_account_uid for share;
+            perform 1 from auth.users u where u.id=v_pair.approved_account_uid for share nowait;
             if not private.fdb_account_usable(v_pair.approved_account_uid) then v_reason := 'account_unavailable'; end if;
         end if;
         -- Even a locked session has a wall-clock deadline; account/identity waits must not extend it.

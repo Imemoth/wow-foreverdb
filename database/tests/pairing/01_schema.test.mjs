@@ -162,6 +162,7 @@ it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/
     "drop table private.account_installations cascade", "drop function private.fdb_anonymous_caller() cascade", "drop table private.devices cascade",
     "alter table private.devices drop column ticket_id cascade", "alter table auth.sessions drop column not_after cascade",
     "alter function extensions.digest(text,text) rename to task1_removed_digest", "revoke update on auth.sessions from fdb_migrator",
+    "revoke update on auth.users from fdb_migrator", "revoke update on auth.refresh_tokens from fdb_migrator",
     "create table private.device_pairings(id integer)",
     ...["browser_pairing","rollback_browser_pairing","browser_pairing_restore"].map(name=>`insert into supabase_migrations.schema_migrations(version,name) values('0016','${name}')`),
   ]) await before16(async({admin,database})=> {

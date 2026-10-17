@@ -1,7 +1,7 @@
 import {before,after,beforeEach,it} from 'node:test';
 import assert from 'node:assert/strict';
-import {makePairingWorld,approvedPairing,approveFixture,startPairing,pairingInput,proofArgs,startArgs,protectedPairing,pairRow,due,hash,isolatedCall,connect} from './world.mjs';
-import {waitUntilBlocked,claimsFor} from '../account/harness.mjs';
+import {makePairingWorld,approvedPairing,approveFixture,startPairing,pairingInput,proofArgs,startArgs,protectedPairing,pairRow,due,hash,isolatedCall,connect,startPairingAuth} from './world.mjs';
+import {waitUntilBlocked,claimsFor,verifyJwt,rpc} from '../account/harness.mjs';
 let w;
 before(async()=>{w=await makePairingWorld();});after(async()=>{await w?.close();});beforeEach(async()=>w.fx.resetBudgets());
 it('start retries after approval or terminal transition stay inside the fixed Task 5 start error contract',async()=>{
@@ -60,19 +60,26 @@ it('account and device limits remain approved, defer audit once, and succeed whe
     await due(w,p);await connected(p);
   }
 });
-it('controlled reenrollment inserts a fresh device and refuses wrong predecessor identity/reason/latest or active binding',async()=>{
-  for(const kind of ['valid','wrong-identity','reason','latest','active']) {
+it('public start and redemption enforce every controlled reenrollment predecessor predicate',async()=>{
+  for(const kind of ['owner_revoked','credential_reuse','replaced','missing','wrong-identity','wrong-account','wrong-installation','reason','latest','active']) {
     await w.fx.resetBudgets();const account=await w.account(),e=await w.enrolled(account);
-    if(kind!=='active') await w.admin.query("update private.devices set status='revoked',revoked_at=clock_timestamp(),revoked_reason='owner_revoked' where id=$1",[e.deviceId]);
-    const p=await startPairing(w,e.device);
-    // The start above uses a fresh installation; bind it to the registered installation under its lock for redemption revalidation.
-    await w.admin.query('update private.device_pairings set installation_id=$2 where id=$1',[p.id,e.installationId]);p.installationId=e.installationId;
+    const allowed=['owner_revoked','credential_reuse','replaced'].includes(kind);
+    if(kind!=='active') await w.admin.query("update private.devices set status='revoked',revoked_at=clock_timestamp(),revoked_reason=$2 where id=$1",[e.deviceId,allowed?kind:'owner_revoked']);
+    if(kind==='missing') await w.admin.query('delete from private.devices where id=$1',[e.deviceId]);
     if(kind==='wrong-identity') await w.admin.query('update private.devices set auth_uid=$2 where id=$1',[e.deviceId,(await w.device()).uid]);
+    if(kind==='wrong-account') await w.admin.query('update private.devices set account_uid=$2 where id=$1',[e.deviceId,(await w.account()).uid]);
+    if(kind==='wrong-installation') {const other=pairingInput();await w.fx.installation(other.installationId,account.uid);await w.admin.query('update private.devices set installation_id=$2 where id=$1',[e.deviceId,other.installationId]);}
     if(kind==='reason') await w.admin.query("update private.devices set revoked_reason='account_unavailable' where id=$1",[e.deviceId]);
     if(kind==='latest') {const another=await w.enrolled(account);await w.admin.query("update private.devices set installation_id=$2,status='revoked',revoked_at=clock_timestamp(),revoked_reason='owner_revoked',created_at=clock_timestamp()+interval '1 second' where id=$1",[another.deviceId,e.installationId]);}
-    await approveFixture(w,p,account);
-    if(kind==='valid') {const row=await connected({...p,account});assert.equal(row.previous_owner_uid,null);assert.equal((await w.device_row(e.deviceId)).status,'revoked');}
-    else {assert.deepEqual(await p.actor.call('fdb_device_pair_poll',proofArgs(p)),{ok:true,state:'denied'});assert.equal((await pairRow(w,p)).denied_reason,'reenrollment_conflict');}
+    const input=pairingInput({installationId:e.installationId}),before=await protectedPairing(w,input);
+    const out=await e.device.call('fdb_device_pair_start',startArgs(input));
+    if(allowed) {
+      assert.equal(out.ok,true,kind);const p=await approveFixture(w,{...input,actor:e.device},account);
+      const row=await connected(p);assert.equal(row.previous_owner_uid,null);assert.equal((await w.device_row(e.deviceId)).status,'revoked');
+    } else {
+      assert.deepEqual(out,{ok:false,error:kind==='active'?'device_bound':'installation_conflict'},kind);
+      assert.deepEqual(await protectedPairing(w,input),before,kind);
+    }
   }
 });
 it('injected constraint failure rolls back owner, provenance, device, pairing and audit together',async()=>{
@@ -161,18 +168,126 @@ it('start takes its proven installation budget before locking installation/devic
     await assert.rejects(w.admin.query('select 1 from private.foreverdb_api_budgets where bucket=$1 for update nowait',[bucket]),e=>e.code==='55P03');
   } finally {await holder.query('rollback');await pending;await holder.end();await caller.end();}
 });
-it('anonymous upgrade or refresh-family revocation during a later account-lock wait leaves the pairing untouched',async()=>{
+// A test-only table trigger pauses AFTER the last authority checks, immediately before the first owner write.
+// The RPC runs unchanged, through the public surface; no production function is replaced or instrumented.
+async function pauseBeforeOwnerWrite(p, check) {
+  const holder=await connect(w.database),caller=await connect(w.database),contender=await connect(w.database);
   const {rpc}=await import('../account/harness.mjs');
-  for(const change of ['upgrade','refresh']) {
-    await w.fx.resetBudgets();const p=await approvedPairing(w),holder=await connect(w.database),caller=await connect(w.database);
-    await holder.query('begin');await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['fdb-account:'+p.account.uid]);
-    const before=await protectedPairing(w,p),pending=rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p));
-    try {
-      await waitUntilBlocked(w.admin,caller);
-      await w.admin.query(change==='upgrade'?'update auth.users set is_anonymous=false where id=$1':'update auth.refresh_tokens set revoked=true where session_id=$1',[change==='upgrade'?p.actor.uid:p.actor.sid]);
-      await holder.query('commit');
-      assert.deepEqual(await pending,{ok:false,error:'pairing_not_available'});
-      assert.deepEqual(await protectedPairing(w,p),before);
-    } finally {await holder.query('rollback');await holder.end();await caller.end();}
+  await w.admin.query(`create function private.task2_pause_owner_write() returns trigger language plpgsql as $$
+    begin perform pg_advisory_xact_lock(702001); return new; end $$`);
+  await w.admin.query(`create trigger task2_pause_owner_write before insert or update of owner_user_id on public.installations
+    for each row execute function private.task2_pause_owner_write()`);
+  await holder.query('begin');await holder.query('select pg_advisory_xact_lock(702001)');
+  const pending=rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p));
+  try {
+    await waitUntilBlocked(w.admin,caller);
+    await check(contender,holder,pending);
+  } finally {
+    await holder.query('rollback');await pending;
+    await w.admin.query('drop trigger task2_pause_owner_write on public.installations');
+    await w.admin.query('drop function private.task2_pause_owner_write()');
+    await Promise.all([holder.end(),caller.end(),contender.end()]);
   }
+}
+const authorityChange = (kind,p) => kind==='upgrade'
+  ? ['update auth.users set is_anonymous=false where id=$1',[p.actor.uid]]
+  : ['update auth.refresh_tokens set revoked=true where session_id=$1',[kind==='initiator-family'?p.actor.sid:p.account.sid]];
+
+for(const kind of ['initiator-family','approver-family','upgrade']) {
+it('redemption pins '+kind+' authority after the final check through commit',async()=>{
+    await w.fx.resetBudgets();const p=await approvedPairing(w);
+    await pauseBeforeOwnerWrite(p,async(contender,holder,pending)=>{
+      await contender.query("set lock_timeout='150ms'");
+      const [sql,args]=authorityChange(kind,p);
+      await assert.rejects(contender.query(sql,args),e=>e.code==='55P03',kind+' cannot commit before redemption');
+      assert.equal(await w.fx.owner(p.installationId),null);
+      assert.equal((await pairRow(w,p)).status,'approved');
+      await holder.query('commit');
+      assert.deepEqual(await pending,{ok:true,state:'connected',deviceId:p.deviceId});
+      await contender.query(sql,args); // inverse actor now proceeds only AFTER redemption committed.
+      assert.equal(await w.fx.owner(p.installationId),p.account.uid);
+      assert.equal((await w.admin.query('select count(*)::int n from private.devices where pairing_id=$1',[p.id])).rows[0].n,1);
+    });
+});
+it(kind+' authority changes that lock first defer redemption without writes, then win after commit',async()=>{
+  const {rpc}=await import('../account/harness.mjs');
+    await w.fx.resetBudgets();const p=await approvedPairing(w),changer=await connect(w.database),caller=await connect(w.database);
+    await changer.query('begin');const [sql,args]=authorityChange(kind,p);await changer.query(sql,args);
+    const before=await protectedPairing(w,p);
+    try {
+      assert.deepEqual(await rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p)),{ok:false,error:'temporarily_unavailable'},kind);
+      assert.deepEqual(await protectedPairing(w,p),before,kind);
+      await changer.query('commit');
+      assert.deepEqual(await rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p)),kind==='approver-family'?{ok:true,state:'denied'}:{ok:false,error:'pairing_not_available'});
+      assert.equal(await w.fx.owner(p.installationId),null);
+      assert.equal((await w.admin.query('select count(*)::int n from private.devices where pairing_id=$1',[p.id])).rows[0].n,0);
+    } finally {await changer.query('rollback');await changer.end();await caller.end();}
+});
+}
+it('simultaneous identical starts and changed-verifier starts create one immutable row and one start audit',async()=>{
+  const {rpc}=await import('../account/harness.mjs');
+  for(let n=0;n<20;n++) {
+    await w.fx.resetBudgets();const actor=await w.device(),p=pairingInput(),other=n%4===1?{...p,secret:pairingInput().secret}:n%4===3?{...p,credential:pairingInput().credential}:p;
+    const holder=await connect(w.database),one=await connect(w.database),two=await connect(w.database);
+    await holder.query('begin');await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[p.installationId]);
+    const first=rpc(one,actor.claims,'fdb_device_pair_start',startArgs(p)),second=rpc(two,actor.claims,'fdb_device_pair_start',startArgs(other));
+    try {
+      await waitUntilBlocked(w.admin,one);await waitUntilBlocked(w.admin,two);await holder.query('commit');
+      const results=await Promise.all([first,second]),rows=(await w.admin.query('select * from private.device_pairings where id=$1',[p.id])).rows;
+      assert.equal(rows.length,1);assert.equal(rows[0].status,'pending');
+      if(n%2) {
+        assert.equal(results.filter(r=>r.ok).length,1);
+        assert.deepEqual(results.find(r=>!r.ok),{ok:false,error:'pairing_conflict'});
+        const winner=results[0].ok?p:other;assert.equal(rows[0].poll_secret_hash.toString('hex'),hash(winner.secret));
+        assert.equal(rows[0].device_credential_hash.toString('hex'),hash(winner.credential));
+      } else {assert.deepEqual(results[0],results[1]);assert.equal(results[0].ok,true);}
+      assert.equal((await w.admin.query("select count(*)::int n from private.device_pairing_audit where pairing_audit_ref=$1 and event='pairing_started'",[rows[0].audit_ref])).rows[0].n,1);
+    } finally {await holder.query('rollback');await Promise.all([first,second]);await Promise.all([holder.end(),one.end(),two.end()]);}
+  }
+});
+it('pinned real GoTrue refresh, logout and anonymous upgrade serialize with redemption without deadlocks', {timeout:30000}, async()=>{
+  const auth=await startPairingAuth(w);
+  // pg_stat_activity hides another role's wait fields from fdb_migrator; observe GoTrue as its own disposable Auth role.
+  const authObserver=await connect(w.database,{user:'supabase_auth_admin',password:'local-test-password'});
+  const realActor=async(body)=>{
+    const result=await auth.call('/signup',{body});assert.equal(result.status,200,JSON.stringify(result.json));
+    const claims=verifyJwt(result.json.access_token);
+    return {uid:claims.sub,sid:claims.session_id,claims,token:result.json.access_token,refresh:result.json.refresh_token,
+      call:(name,args)=>rpc(w.client,claims,name,args)};
+  };
+  try {
+    for(const kind of ['initiator-refresh','approver-refresh','initiator-logout','approver-logout','upgrade']) {
+      await w.fx.resetBudgets();
+      const actor=await realActor({}),account=await realActor({email:`pair-${pairingInput().id}@example.invalid`,password:'Pairing-test-passphrase-1'});
+      const p=await approvedPairing(w,{actor,account}),target=kind.startsWith('approver')?account:actor;
+      await pauseBeforeOwnerWrite(p,async(_contender,holder,pending)=>{
+        let settled=false;
+        const action=kind.endsWith('refresh')?auth.call('/token?grant_type=refresh_token',{body:{refresh_token:target.refresh}})
+          :kind.endsWith('logout')?auth.call('/logout?scope=local',{token:target.token})
+          :auth.call('/user',{method:'PUT',token:actor.token,body:{email:`upgrade-${p.id}@example.invalid`,password:'Pairing-test-passphrase-1'}});
+        const observed=action.then(r=>{settled=true;return r;});
+        try {
+          if(!kind.endsWith('refresh')) {
+            let blocked=false;
+            for(let i=0;i<100&&!blocked;i++) {
+              blocked=(await authObserver.query("select exists(select 1 from pg_stat_activity where datname=$1 and usename='supabase_auth_admin' and wait_event_type='Lock') blocked",[w.database])).rows[0].blocked;
+              if(!blocked) {assert.equal(settled,false,kind+' completed before redemption');await new Promise(resolve=>setTimeout(resolve,10));}
+            }
+            assert.equal(blocked,true,kind+' must reach the authority row lock');
+          } else {
+            // GoTrue uses FOR UPDATE SKIP LOCKED and bounded retry for refresh, so it does not report a DB lock wait.
+            await new Promise(resolve=>setTimeout(resolve,120));assert.equal(settled,false,kind+' cannot rotate a pinned family');
+          }
+          await holder.query('commit');assert.deepEqual(await pending,{ok:true,state:'connected',deviceId:p.deviceId});
+          const result=await observed;assert.equal(result.status,kind.endsWith('logout')?204:200,kind+': '+JSON.stringify(result.json));
+          if(kind.endsWith('refresh')) {
+            assert.equal(verifyJwt(result.json.access_token).session_id,target.sid);
+            assert.equal((await w.admin.query('select count(*)::int n from auth.refresh_tokens where session_id=$1 and not revoked',[target.sid])).rows[0].n,1);
+          }
+          if(kind==='upgrade') assert.equal((await w.admin.query('select is_anonymous from auth.users where id=$1',[actor.uid])).rows[0].is_anonymous,false);
+          assert.equal(await w.fx.owner(p.installationId),account.uid);
+        } finally {await holder.query('rollback');await observed;}
+      });
+    }
+  } finally {await authObserver.end();await auth.close();}
 });

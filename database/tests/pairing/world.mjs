@@ -5,9 +5,9 @@ import fs from "node:fs";
 import os from "node:os";
 import net from "node:net";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { makeWorld as enrollmentWorld } from "../enrollment/world.mjs";
-import { repoRoot, connect, cloneDatabase, dropDatabase, psqlFile } from "../account/harness.mjs";
+import { repoRoot, connect, cloneDatabase, dropDatabase, psqlFile, HOST, PORT, JWT_SECRET } from "../account/harness.mjs";
 export { connect, dropDatabase, psqlFile, randomUUID };
 export const migration = path.join(repoRoot, "database/migrations/0016_browser_pairing.sql");
 export const makeWorld = enrollmentWorld;
@@ -217,4 +217,43 @@ export async function protectedPairing(w,p) {
     ["claims","select to_jsonb(t) row from private.account_installations t where installation_id=$1",[p.installationId]],
   ]) state[key]=(await w.admin.query(sql,args)).rows;
   return state;
+}
+
+// A real pinned GoTrue process on the pairing world's disposable DB, independent of other suites' lifecycle fixtures.
+export async function startPairingAuth(w) {
+  const port=await new Promise((resolve,reject)=>{
+    const server=net.createServer();server.on('error',reject);server.listen(0,'127.0.0.1',()=>{
+      const {port}=server.address();server.close(error=>error?reject(error):resolve(port));
+    });
+  });
+  const run=fs.mkdtempSync(path.join(os.tmpdir(),'fdb-pairing-auth-')),url=`http://127.0.0.1:${port}`;
+  const child=spawn(process.env.GOTRUE_BIN??path.join(repoRoot,'database/tests/account/.run/gotrue'),[],{
+    env:{PATH:process.env.PATH,HOME:run,GOTRUE_DB_DRIVER:'postgres',
+      DATABASE_URL:`postgres://supabase_auth_admin:local-test-password@${HOST}:${PORT}/${w.database}?search_path=auth`,
+      GOTRUE_DB_AUTOMIGRATE:'false',GOTRUE_API_HOST:'127.0.0.1',GOTRUE_API_PORT:String(port),PORT:String(port),
+      API_EXTERNAL_URL:url,GOTRUE_SITE_URL:'http://127.0.0.1:3000',GOTRUE_JWT_SECRET:JWT_SECRET,
+      GOTRUE_JWT_EXP:'3600',GOTRUE_JWT_AUD:'authenticated',GOTRUE_JWT_DEFAULT_GROUP_NAME:'authenticated',
+      GOTRUE_DISABLE_SIGNUP:'false',GOTRUE_EXTERNAL_EMAIL_ENABLED:'true',GOTRUE_MAILER_AUTOCONFIRM:'true',
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED:'true',GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED:'true',
+      GOTRUE_RATE_LIMIT_ANONYMOUS_USERS:'1000',GOTRUE_RATE_LIMIT_EMAIL_SENT:'1000',GOTRUE_RATE_LIMIT_TOKEN_REFRESH:'1000',LOG_LEVEL:'error'},
+    stdio:['ignore','ignore','pipe'],
+  });
+  let log='',spawnError;child.stderr.on('data',b=>{log=(log+b).slice(-4000);});child.on('error',e=>{spawnError=e;});
+  const close=async()=>{
+    if(child.pid&&child.exitCode===null&&!child.killed) await new Promise(resolve=>{child.once('exit',resolve);child.kill('SIGTERM');});
+    fs.rmSync(run,{recursive:true,force:true});
+  };
+  try {
+    let ready=false;
+    for(let n=0;n<100;n++) {
+      if(spawnError||child.exitCode!==null) throw new Error(`pairing GoTrue startup failed: ${spawnError??log}`);
+      try {ready=(await fetch(url+'/health',{signal:AbortSignal.timeout(300)})).ok;} catch {}
+      if(ready) break;await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    assert.ok(ready,`pairing GoTrue health: ${log}`);
+    return {close,async call(route,{body,token,method='POST'}={}) {
+      const response=await fetch(url+route,{method,headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+      const raw=await response.text();return {status:response.status,json:raw?JSON.parse(raw):null};
+    }};
+  } catch(e) {await close();throw e;}
 }
