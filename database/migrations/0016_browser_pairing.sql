@@ -424,7 +424,7 @@ as $$
 declare
     v_uid uuid; v_sid uuid; v_installation text; v_pair private.device_pairings; v_prev private.devices;
     v_owner uuid; v_exists boolean; v_reason text; v_limit text; v_now timestamptz; v_interval integer;
-    v_session_deadline timestamptz;
+    v_session_deadline timestamptz; v_approval_deadline timestamptz;
     v_op text := case when p_cancel then 'cancel' else 'poll' end;
 begin
     if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
@@ -494,37 +494,26 @@ begin
             return jsonb_build_object('ok',true,'state','pending','intervalSeconds',v_pair.poll_interval_sec,
                 'expiresAt',to_char(v_pair.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
         end if;
-        -- Session -> account -> device identity -> installation and device rows. Never reorder.
-        perform 1 from auth.sessions s where s.id=v_pair.approved_session_id and s.user_id=v_pair.approved_account_uid
-          and (s.not_after is null or s.not_after>clock_timestamp())
-          and exists(select 1 from auth.refresh_tokens r where r.session_id=s.id and not r.revoked) for share;
-        if not found then v_reason := 'approval_session_revoked';
-        else
-            perform 1 from auth.refresh_tokens where session_id=v_pair.approved_session_id and not revoked order by id for share nowait;
-            if not found then v_reason := 'approval_session_revoked'; end if;
-            perform pg_advisory_xact_lock(hashtextextended('fdb-account:'||v_pair.approved_account_uid::text,0));
-            perform 1 from auth.users u where u.id=v_pair.approved_account_uid for share nowait;
-            if not private.fdb_account_usable(v_pair.approved_account_uid) then v_reason := 'account_unavailable'; end if;
-        end if;
-        -- Even a locked session has a wall-clock deadline; account/identity waits must not extend it.
+        -- Keep the pairing proof lock outside this rollback scope. A late approval deadline can undo
+        -- redemption writes before the common fixed denial transition; caller expiry still aborts the whole RPC.
         begin
-            perform private.fdb_anonymous_caller();
-        exception when sqlstate 'PT401' or sqlstate 'PT403' then
-            return jsonb_build_object('ok',false,'error','pairing_not_available');
-        end;
-        if not exists(select 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
-            and (s.not_after is null or s.not_after>clock_timestamp())) then
-            return jsonb_build_object('ok',false,'error','pairing_not_available');
-        end if;
-        if v_reason is null then
-            perform pg_advisory_xact_lock(hashtextextended('fdb-device-identity:'||v_uid::text,0));
+            -- Session -> account -> device identity -> installation and device rows. Never reorder.
+            select s.not_after into v_approval_deadline from auth.sessions s where s.id=v_pair.approved_session_id and s.user_id=v_pair.approved_account_uid
+              and (s.not_after is null or s.not_after>clock_timestamp())
+              and exists(select 1 from auth.refresh_tokens r where r.session_id=s.id and not r.revoked) for share;
             if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-            select owner_user_id into v_owner from public.installations where id=v_installation for update;
-            v_exists := found;
-            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-            -- Lock all relevant identities in stable order, including collision and predecessor candidates.
-            perform 1 from private.devices where installation_id=v_installation or auth_uid=v_uid or id=v_pair.proposed_device_id order by id for update;
-            if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+            if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+            if not found then v_reason := 'approval_session_revoked';
+            else
+                perform 1 from auth.refresh_tokens where session_id=v_pair.approved_session_id and not revoked order by id for share nowait;
+                if not found then v_reason := 'approval_session_revoked'; end if;
+                perform pg_advisory_xact_lock(hashtextextended('fdb-account:'||v_pair.approved_account_uid::text,0));
+                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                perform 1 from auth.users u where u.id=v_pair.approved_account_uid for share nowait;
+                if not private.fdb_account_usable(v_pair.approved_account_uid) then v_reason := 'account_unavailable'; end if;
+            end if;
+            -- Even a locked session has a wall-clock deadline; account/identity waits must not extend it.
             begin
                 perform private.fdb_anonymous_caller();
             exception when sqlstate 'PT401' or sqlstate 'PT403' then
@@ -534,60 +523,95 @@ begin
                 and (s.not_after is null or s.not_after>clock_timestamp())) then
                 return jsonb_build_object('ok',false,'error','pairing_not_available');
             end if;
-            if v_pair.expires_at<=clock_timestamp() then
+            if v_reason is null then
+                perform pg_advisory_xact_lock(hashtextextended('fdb-device-identity:'||v_uid::text,0));
                 if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-                update private.device_pairings set status='expired' where id=v_pair.id;
-                insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
-                values('pairing_expired',v_pair.audit_ref,v_installation,v_pair.approved_account_uid);
-                return jsonb_build_object('ok',true,'state','expired');
-            end if;
-            if not exists(select 1 from auth.sessions s where s.id=v_pair.approved_session_id and s.user_id=v_pair.approved_account_uid
-                and (s.not_after is null or s.not_after>clock_timestamp())
-                and exists(select 1 from auth.refresh_tokens r where r.session_id=s.id and not r.revoked)) then v_reason := 'approval_session_revoked';
-            elsif exists(select 1 from private.devices where id=v_pair.proposed_device_id) then v_reason := 'device_id_conflict';
-            elsif v_exists and v_owner is distinct from v_uid and v_owner is distinct from v_pair.approved_account_uid then v_reason := 'ownership_conflict';
-            elsif v_exists and v_owner=v_pair.approved_account_uid then
-                select * into v_prev from private.devices where installation_id=v_installation order by created_at desc,id desc limit 1;
-                if v_prev.id is null or v_prev.auth_uid is distinct from v_uid or v_prev.account_uid is distinct from v_owner
-                   or v_prev.status<>'revoked' or v_prev.revoked_reason not in ('owner_revoked','credential_reuse','replaced')
-                   or exists(select 1 from private.devices where installation_id=v_installation and status<>'revoked') then
+                if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                select owner_user_id into v_owner from public.installations where id=v_installation for update;
+                v_exists := found;
+                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                -- Lock all relevant identities in stable order, including collision and predecessor candidates.
+                perform 1 from private.devices where installation_id=v_installation or auth_uid=v_uid or id=v_pair.proposed_device_id order by id for update;
+                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                begin
+                    perform private.fdb_anonymous_caller();
+                exception when sqlstate 'PT401' or sqlstate 'PT403' then
+                    return jsonb_build_object('ok',false,'error','pairing_not_available');
+                end;
+                if not exists(select 1 from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+                    and (s.not_after is null or s.not_after>clock_timestamp())) then
+                    return jsonb_build_object('ok',false,'error','pairing_not_available');
+                end if;
+                if v_pair.expires_at<=clock_timestamp() then
+                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                    if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                    update private.device_pairings set status='expired' where id=v_pair.id;
+                    insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
+                    values('pairing_expired',v_pair.audit_ref,v_installation,v_pair.approved_account_uid);
+                    return jsonb_build_object('ok',true,'state','expired');
+                end if;
+                if not exists(select 1 from auth.sessions s where s.id=v_pair.approved_session_id and s.user_id=v_pair.approved_account_uid
+                    and (s.not_after is null or s.not_after>clock_timestamp())
+                    and exists(select 1 from auth.refresh_tokens r where r.session_id=s.id and not r.revoked)) then v_reason := 'approval_session_revoked';
+                elsif exists(select 1 from private.devices where id=v_pair.proposed_device_id) then v_reason := 'device_id_conflict';
+                elsif v_exists and v_owner is distinct from v_uid and v_owner is distinct from v_pair.approved_account_uid then v_reason := 'ownership_conflict';
+                elsif v_exists and v_owner=v_pair.approved_account_uid then
+                    select * into v_prev from private.devices where installation_id=v_installation order by created_at desc,id desc limit 1;
+                    if v_prev.id is null or v_prev.auth_uid is distinct from v_uid or v_prev.account_uid is distinct from v_owner
+                       or v_prev.status<>'revoked' or v_prev.revoked_reason not in ('owner_revoked','credential_reuse','replaced')
+                       or exists(select 1 from private.devices where installation_id=v_installation and status<>'revoked') then
+                        v_reason := 'reenrollment_conflict';
+                    end if;
+                end if;
+                if v_reason is null and exists(select 1 from private.devices where (installation_id=v_installation or auth_uid=v_uid) and status<>'revoked') then
                     v_reason := 'reenrollment_conflict';
                 end if;
-            end if;
-            if v_reason is null and exists(select 1 from private.devices where (installation_id=v_installation or auth_uid=v_uid) and status<>'revoked') then
-                v_reason := 'reenrollment_conflict';
-            end if;
-            if v_reason is null then
-                if (not v_exists or v_owner is distinct from v_pair.approved_account_uid)
-                   and (select count(*) from public.installations where owner_user_id=v_pair.approved_account_uid)>=50 then v_limit := 'account_limit';
-                elsif (select count(*) from private.devices where account_uid=v_pair.approved_account_uid and status<>'revoked')>=10 then v_limit := 'device_limit'; end if;
-                if v_limit is not null then
+                if v_reason is null then
+                    if (not v_exists or v_owner is distinct from v_pair.approved_account_uid)
+                       and (select count(*) from public.installations where owner_user_id=v_pair.approved_account_uid)>=50 then v_limit := 'account_limit';
+                    elsif (select count(*) from private.devices where account_uid=v_pair.approved_account_uid and status<>'revoked')>=10 then v_limit := 'device_limit'; end if;
+                    if v_limit is not null then
+                        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                        if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                        update private.device_pairings set next_poll_at=clock_timestamp()+make_interval(secs=>v_pair.poll_interval_sec) where id=v_pair.id;
+                        insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,reason)
+                        values('pairing_retry_deferred',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_limit) on conflict do nothing;
+                        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                        if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                        return jsonb_build_object('ok',false,'error',v_limit);
+                    end if;
+                    if not v_exists then
+                        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                        if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                        insert into public.installations(id,owner_user_id,schema_version,addon_version,first_seen_at,last_seen_at)
+                        values(v_installation,v_pair.approved_account_uid,0,'enrolled',now(),now());
+                    elsif v_owner=v_uid then
+                        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                        if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                        update public.installations set owner_user_id=v_pair.approved_account_uid where id=v_installation;
+                    end if;
+                    v_now := clock_timestamp();
+                    if v_session_deadline<=v_now then raise sqlstate 'PT401'; end if;
+                    if v_approval_deadline<=v_now then raise sqlstate 'PT410'; end if;
+                    insert into private.devices(id,account_uid,installation_id,auth_uid,label,status,pairing_id,credential_hash,credential_issued_at,last_seen_at)
+                    values(v_pair.proposed_device_id,v_pair.approved_account_uid,v_installation,v_uid,v_pair.computer_label,'active',v_pair.id,v_pair.device_credential_hash,v_now,v_now);
                     if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-                    update private.device_pairings set next_poll_at=clock_timestamp()+make_interval(secs=>v_pair.poll_interval_sec) where id=v_pair.id;
-                    insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,reason)
-                    values('pairing_retry_deferred',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_limit) on conflict do nothing;
-                    return jsonb_build_object('ok',false,'error',v_limit);
+                    if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                    update private.device_pairings set status='connected',connected_device_id=v_pair.proposed_device_id,connected_at=v_now,
+                        previous_owner_uid=case when v_exists and v_owner=v_uid then v_uid else null end where id=v_pair.id;
+                    insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,device_id)
+                    values('pairing_connected',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_pair.proposed_device_id);
+                    -- A write can itself wait (for a constraint, trigger or relation lock). Recheck before success.
+                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+                    if v_approval_deadline<=clock_timestamp() then raise sqlstate 'PT410'; end if;
+                    return jsonb_build_object('ok',true,'state','connected','deviceId',v_pair.proposed_device_id);
                 end if;
-                if not v_exists then
-                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-                    insert into public.installations(id,owner_user_id,schema_version,addon_version,first_seen_at,last_seen_at)
-                    values(v_installation,v_pair.approved_account_uid,0,'enrolled',now(),now());
-                elsif v_owner=v_uid then
-                    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-                    update public.installations set owner_user_id=v_pair.approved_account_uid where id=v_installation;
-                end if;
-                v_now := clock_timestamp();
-                if v_session_deadline<=v_now then raise sqlstate 'PT401'; end if;
-                insert into private.devices(id,account_uid,installation_id,auth_uid,label,status,pairing_id,credential_hash,credential_issued_at,last_seen_at)
-                values(v_pair.proposed_device_id,v_pair.approved_account_uid,v_installation,v_uid,v_pair.computer_label,'active',v_pair.id,v_pair.device_credential_hash,v_now,v_now);
-                if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
-                update private.device_pairings set status='connected',connected_device_id=v_pair.proposed_device_id,connected_at=v_now,
-                    previous_owner_uid=case when v_exists and v_owner=v_uid then v_uid else null end where id=v_pair.id;
-                insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,device_id)
-                values('pairing_connected',v_pair.audit_ref,v_installation,v_pair.approved_account_uid,v_pair.proposed_device_id);
-                return jsonb_build_object('ok',true,'state','connected','deviceId',v_pair.proposed_device_id);
             end if;
-        end if;
+        exception when sqlstate 'PT410' then
+            v_reason := 'approval_session_revoked';
+        end;
     end if;
     if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
     update private.device_pairings set status='denied',denied_at=clock_timestamp(),denied_reason=v_reason where id=v_pair.id;

@@ -348,3 +348,99 @@ for(const scenario of [
     if(prior) assert.deepEqual(await protectedPairing(w,prior),priorBefore,'rollback any expired-request cleanup performed before the later wait');
   } finally {await holder.query('rollback');await pending;await holder.end();await caller.end();}
 });
+
+async function waitForNaturalDeadline(sid) {
+  let expired=false;const deadline=Date.now()+3000;
+  while(!expired&&Date.now()<deadline) {
+    expired=(await w.admin.query('select not_after<=clock_timestamp() expired from auth.sessions where id=$1',[sid])).rows[0].expired;
+    if(!expired) await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(expired,true,'the exact session deadline must pass on the DB clock before releasing the wait');
+}
+async function redemptionDeadlinePair(lock) {
+  if(lock==='device') {
+    const account=await w.account(),e=await w.enrolled(account);
+    await w.admin.query("update private.devices set status='revoked',revoked_at=clock_timestamp(),revoked_reason='owner_revoked' where id=$1",[e.deviceId]);
+    const p=await startPairing(w,e.device,pairingInput({installationId:e.installationId}));
+    return {...await approveFixture(w,p,account),predecessor:e.deviceId};
+  }
+  const actor=await w.device(),account=await w.account(),input=pairingInput();
+  await w.fx.installation(input.installationId,actor.uid);
+  return approveFixture(w,await startPairing(w,actor,input),account);
+}
+async function assertRedemptionDeadlineResult(p,whose,before,result) {
+  const after=await protectedPairing(w,p);
+  if(whose==='initiator') {
+    assert.deepEqual(result,{ok:false,error:'pairing_not_available'});
+    assert.deepEqual(after,before,'expired caller rolls the complete attempt back');
+    return;
+  }
+  assert.deepEqual(result,{ok:true,state:'denied'});
+  const row=after.pairing[0].row,old=before.pairing[0].row;
+  assert.equal(row.status,'denied');assert.equal(row.denied_reason,'approval_session_revoked');assert.ok(row.denied_at);
+  for(const key of ['installation','devices','claims','budgets']) assert.deepEqual(after[key],before[key],key+' is unchanged');
+  const unchanged=({...value})=>{for(const key of ['version','status','denied_at','denied_reason']) delete value[key];return value;};
+  assert.deepEqual(unchanged(row),unchanged(old),'no ownership provenance/connected fields/schedule change survives');
+  assert.deepEqual(after.audit.slice(0,-1),before.audit);
+  assert.equal(after.audit.at(-1).row.event,'pairing_denied');assert.equal(after.audit.at(-1).row.reason,'approval_session_revoked');
+  assert.equal((await w.admin.query("select count(*)::int n from private.device_pairing_audit where installation_id=$1 and event='pairing_connected'",[p.installationId])).rows[0].n,0);
+  assert.deepEqual(await p.actor.call('fdb_device_pair_poll',proofArgs(p)),{ok:true,state:'denied'});
+  assert.deepEqual(await protectedPairing(w,p),after,'terminal denial replay is protected-write free');
+}
+for(const whose of ['initiator','approver']) for(const lock of ['approver-session','account','identity','installation','device']) {
+  it('approved redemption '+whose+' deadline across '+lock+' wait preserves the fixed refusal and ownership',async()=>{
+    const p=await redemptionDeadlinePair(lock),sid=whose==='initiator'?p.actor.sid:p.account.sid;
+    await w.admin.query("update auth.sessions set not_after=clock_timestamp()+interval '1 second' where id=$1",[sid]);
+    const before=await protectedPairing(w,p),holder=await connect(w.database),caller=await connect(w.database);
+    await holder.query('begin');
+    if(lock==='approver-session') await holder.query('select 1 from auth.sessions where id=$1 for update',[p.account.sid]);
+    if(lock==='account') await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['fdb-account:'+p.account.uid]);
+    if(lock==='identity') await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['fdb-device-identity:'+p.actor.uid]);
+    if(lock==='installation') await holder.query('select 1 from public.installations where id=$1 for update',[p.installationId]);
+    if(lock==='device') await holder.query('select 1 from private.devices where id=$1 for update',[p.predecessor]);
+    const pending=rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p));
+    try {
+      await waitUntilBlocked(w.admin,caller);
+      assert.ok((await w.admin.query('select pg_blocking_pids($1) blockers',[caller.processID])).rows[0].blockers.includes(holder.processID));
+      await waitForNaturalDeadline(sid);await holder.query('commit');
+      await assertRedemptionDeadlineResult(p,whose,before,await pending);
+    } finally {await holder.query('rollback');await pending;await holder.end();await caller.end();}
+  });
+}
+
+// Test-only statement checkpoints also expose deadline passage inside writes AFTER the ordinary row-lock classes.
+async function pauseRedemptionWrite(p,target,check) {
+  const table=target==='device'?'private.devices':'private.device_pairing_audit';
+  const holder=await connect(w.database),caller=await connect(w.database);
+  await w.admin.query(`create function private.task2_pause_redemption_write() returns trigger language plpgsql as $$
+    begin
+      if TG_TABLE_NAME='device_pairing_audit' then
+        if new.event<>TG_ARGV[0] then return new; end if;
+      end if;
+      perform pg_advisory_xact_lock(702003);return new;
+    end $$`);
+  const event=target==='deferred-audit'?'pairing_retry_deferred':'pairing_connected';
+  await w.admin.query(`create trigger task2_pause_redemption_write before insert on ${table} for each row execute function private.task2_pause_redemption_write('${event}')`);
+  await holder.query('begin');await holder.query('select pg_advisory_xact_lock(702003)');
+  const pending=rpc(caller,p.actor.claims,'fdb_device_pair_poll',proofArgs(p));
+  try {await waitUntilBlocked(w.admin,caller);await check(holder,pending);}
+  finally {
+    await holder.query('rollback');await pending;
+    await w.admin.query(`drop trigger task2_pause_redemption_write on ${table}`);await w.admin.query('drop function private.task2_pause_redemption_write()');
+    await holder.end();await caller.end();
+  }
+}
+for(const whose of ['initiator','approver']) for(const target of ['owner','device','success-audit','deferred-audit']) {
+  it('approved redemption '+whose+' deadline during '+target+' write rolls back owner/device effects before refusal',async()=>{
+    const p=await redemptionDeadlinePair('identity'),sid=whose==='initiator'?p.actor.sid:p.account.sid;
+    if(target==='deferred-audit') await w.admin.query("insert into public.installations(id,owner_user_id,schema_version,addon_version) select 'limit-install-'||$1::text||'-'||n,$1::uuid,0,'fixture' from generate_series(1,50) n",[p.account.uid]);
+    await w.admin.query("update auth.sessions set not_after=clock_timestamp()+interval '1 second' where id=$1",[sid]);
+    const before=await protectedPairing(w,p);
+    const check=async(holder,pending)=>{
+      await waitForNaturalDeadline(sid);await holder.query('commit');
+      await assertRedemptionDeadlineResult(p,whose,before,await pending);
+    };
+    if(target==='owner') await pauseBeforeOwnerWrite(p,async(_contender,holder,pending)=>check(holder,pending));
+    else await pauseRedemptionWrite(p,target,check);
+  });
+}
