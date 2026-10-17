@@ -444,3 +444,100 @@ for(const whose of ['initiator','approver']) for(const target of ['owner','devic
     else await pauseRedemptionWrite(p,target,check);
   });
 }
+
+async function allBudgetRows() {
+  return (await w.admin.query("select to_jsonb(t)||jsonb_build_object('version',xmin::text) row from private.foreverdb_api_budgets t order by bucket")).rows;
+}
+async function blockedBy(caller,holder) {
+  const deadline=Date.now()+8000;
+  while(Date.now()<deadline) {
+    if((await w.admin.query('select pg_blocking_pids($1) blockers',[caller.processID])).rows[0].blockers.includes(holder.processID)) return;
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.fail('the public RPC must block at the intended statement checkpoint');
+}
+for(const scenario of [
+  {name:'start pairing insert',action:'start',target:'start-row'},
+  {name:'start started audit',action:'start',target:'pairing_started'},
+  {name:'start recovered started audit',action:'start',target:'pairing_started',recover:true},
+  {name:'identical-start expiry update',action:'start',target:'expiry-row',expired:true},
+  {name:'identical-start expiry audit',action:'start',target:'pairing_expired',expired:true},
+  {name:'recovery expiry update before owner conflict',action:'start',target:'expiry-row',recover:true,foreignOwner:true},
+  {name:'recovery expiry audit before owner conflict',action:'start',target:'pairing_expired',recover:true,foreignOwner:true},
+  {name:'poll expiry update',action:'poll',target:'expiry-row',expired:true},
+  {name:'poll expiry audit',action:'poll',target:'pairing_expired',expired:true},
+  {name:'approved cancel expiry update',action:'cancel',target:'expiry-row',approved:true,expired:true},
+  {name:'approved cancel expiry audit',action:'cancel',target:'pairing_expired',approved:true,expired:true},
+  {name:'pending schedule update',action:'poll',target:'pending-schedule',due:true},
+  {name:'slow schedule update',action:'poll',target:'slow-schedule'},
+  {name:'pending cancel denial update',action:'cancel',target:'denial-row'},
+  {name:'pending cancel denial audit',action:'cancel',target:'pairing_denied'},
+  {name:'approved cancel denial audit',action:'cancel',target:'pairing_denied',approved:true},
+  {name:'revoked-approval terminal denial update',action:'poll',target:'denial-row',approved:true,revokedApproval:true},
+  {name:'revoked-approval terminal denial audit',action:'poll',target:'pairing_denied',approved:true,revokedApproval:true},
+  {name:'late-approval rollback terminal denial audit',action:'poll',target:'pairing_denied',approved:true,lateApproval:true},
+  {name:'redemption expiry audit',action:'poll',target:'pairing_expired',approved:true,redemptionExpiry:true},
+  {name:'redemption expiry audit approving deadline',action:'poll',target:'pairing_expired',approved:true,redemptionExpiry:true,whose:'approver'},
+]) it(scenario.name+' post-write deadline boundary rolls back the complete authorized mutation',async()=>{
+  const actor=await w.device();let p=pairingInput(),prior;
+  if(scenario.approved) p=await approvedPairing(w,{actor});
+  else if(scenario.action!=='start'||scenario.expired||scenario.recover) p=await startPairing(w,actor,p);
+  if(scenario.expired||scenario.recover) await w.admin.query("update private.device_pairings set created_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute' where id=$1",[p.id]);
+  if(scenario.recover) {prior=p;p=pairingInput({installationId:p.installationId});}
+  if(scenario.foreignOwner) await w.fx.installation(p.installationId,(await w.account()).uid);
+  if(scenario.revokedApproval) await w.admin.query('delete from auth.sessions where id=$1',[p.account.sid]);
+  if(scenario.due) await due(w,p);
+  const holder=await connect(w.database),caller=await connect(w.database),earlier=await connect(w.database);
+  const sid=scenario.whose==='approver'?p.account.sid:actor.sid;
+  await w.admin.query("update auth.sessions set not_after=clock_timestamp()+($2::int*interval '1 second') where id=$1",[sid,scenario.lateApproval||scenario.redemptionExpiry?2:1]);
+  if(scenario.lateApproval) await w.admin.query("update auth.sessions set not_after=clock_timestamp()+interval '400 milliseconds' where id=$1",[p.account.sid]);
+  if(scenario.redemptionExpiry) await w.admin.query("update private.device_pairings set expires_at=clock_timestamp()+interval '500 milliseconds' where id=$1",[p.id]);
+  const before=await protectedPairing(w,p),priorBefore=prior?await protectedPairing(w,prior):null,budgetsBefore=await allBudgetRows();
+  const audit=scenario.target.startsWith('pairing_'),table=audit?'private.device_pairing_audit':'private.device_pairings';
+  const operation=audit||scenario.target==='start-row'?'insert':'update';
+  await w.admin.query(`create function private.task2_pause_native_write() returns trigger language plpgsql as $$
+    begin
+      if TG_TABLE_NAME='device_pairing_audit' then
+        if new.event<>TG_ARGV[0] then return new; end if;
+      elsif TG_OP='UPDATE' then
+        if TG_ARGV[0]='expiry-row' and new.status<>'expired' then return new; end if;
+        if TG_ARGV[0]='denial-row' and new.status<>'denied' then return new; end if;
+        if TG_ARGV[0]='pending-schedule' and (new.status<>'pending' or new.poll_interval_sec<>old.poll_interval_sec or new.next_poll_at=old.next_poll_at) then return new; end if;
+        if TG_ARGV[0]='slow-schedule' and new.poll_interval_sec<=old.poll_interval_sec then return new; end if;
+      end if;
+      perform pg_advisory_xact_lock(702004);return new;
+    end $$`);
+  await w.admin.query(`create trigger task2_pause_native_write before ${operation} on ${table} for each row execute function private.task2_pause_native_write('${scenario.target}')`);
+  await holder.query('begin');await holder.query('select pg_advisory_xact_lock(702004)');
+  const stage=scenario.lateApproval||scenario.redemptionExpiry;
+  if(stage) {await earlier.query('begin');await earlier.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['fdb-account:'+p.account.uid]);}
+  const pending=rpc(caller,actor.claims,'fdb_device_pair_'+scenario.action,scenario.action==='start'?startArgs(p):proofArgs(p));
+  try {
+    if(stage) {
+      await blockedBy(caller,earlier);
+      if(scenario.lateApproval) await waitForNaturalDeadline(p.account.sid);
+      else {
+        let expired=false;const end=Date.now()+3000;
+        while(!expired&&Date.now()<end) {
+          expired=(await w.admin.query('select expires_at<=clock_timestamp() expired from private.device_pairings where id=$1',[p.id])).rows[0].expired;
+          if(!expired) await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        assert.equal(expired,true,'force expiry inside approved redemption, after its first request-deadline check');
+      }
+      await earlier.query('commit');
+    }
+    await blockedBy(caller,holder);await waitForNaturalDeadline(sid);await holder.query('commit');
+    const result=await pending;
+    if(scenario.whose==='approver') await assertRedemptionDeadlineResult(p,'approver',before,result);
+    else {
+      assert.deepEqual(result,{ok:false,error:scenario.action==='start'?'session_not_accepted':'pairing_not_available'});
+      assert.deepEqual(await protectedPairing(w,p),before);
+      if(prior) assert.deepEqual(await protectedPairing(w,prior),priorBefore);
+      assert.deepEqual(await allBudgetRows(),budgetsBefore,'principal/global/installation/pair budget rows and xmin all roll back');
+    }
+  } finally {
+    await earlier.query('rollback');await holder.query('rollback');await pending;
+    await w.admin.query(`drop trigger task2_pause_native_write on ${table}`);await w.admin.query('drop function private.task2_pause_native_write()');
+    await Promise.all([holder.end(),caller.end(),earlier.end()]);
+  }
+});
