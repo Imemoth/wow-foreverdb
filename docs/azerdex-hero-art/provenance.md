@@ -97,6 +97,68 @@ isolation. No concrete, nameable instance of logo, trademark, character, or
 exact-location reproduction was identified. This review found no blocking concern under
 the criteria the owner specified.
 
+## Embedded AzerDex watermark (Phase 1 Task B)
+
+Per owner instruction, the three served derivatives
+(`web/public/hero/<theme>.webp`) now carry a discreet AzerDex watermark
+embedded directly into the raster pixels (not a CSS/HTML overlay) — a visitor
+who downloads the image file gets a watermarked copy, not a clean one.
+
+**Mark:** the existing AzerDex compass/rune emblem from `web/public/icon.svg`
+(the one used as the site favicon and in `Logo`), recolored to a single flat
+tint (no change to the approved scene artwork itself beyond this addition).
+
+**Tint and opacity:** each theme's placement area was sampled for local
+brightness; all three landed on the warmer, gold tint (`#e8cf8f`) against
+their dark night-sky placement areas, at 17% opacity — within the requested
+12–18% range, biased toward the top of it because the mark is small (see
+below).
+
+**Placement:** a single universal position per theme, chosen empirically
+against both the desktop crop (full width, cropped top/bottom per
+`HERO_IMAGE_FOCAL`) and the mobile crop (full height, cropped left/right).
+The two crops impose independent, theme-specific constraints — the mark must
+clear each theme's own desktop top-crop line *and* sit above the headline's
+eyebrow text on mobile — which left very little shared margin for
+`arcane-ruins` and `floating-city` in particular, so the mark was kept small
+(~3.2% of image width, 53px at the served 1672px width) specifically to fit
+both:
+
+| Theme | Anchor (% of image) | Tint | Verified against |
+| --- | --- | --- | --- |
+| `arcane-ruins` | 30%, 10.5% | gold | desktop (no header clip) + mobile (clears headline) |
+| `violet-moon` | 55%, 7% | gold | desktop (no header clip) + mobile (clears headline) |
+| `floating-city` | 35%, 8.5% | gold | desktop (no header clip) + mobile (clears headline) |
+
+All three were moved off their first-attempt positions after screenshot
+review: the original anchors either clipped under the sticky header on
+desktop, sat on top of visually busy detail (violet-moon's own moon surface,
+which swallowed the mark), or touched the headline text on mobile. Final
+placement was verified with Playwright screenshots at both breakpoints for
+all three themes (no clipping, no text overlap, mark visible but subtle).
+
+**File size impact** (re-encoded WebP, quality 80, method 6, same 1672×941 —
+compositing requires a re-encode, so these numbers supersede the "Optimized
+(served)" column above as the current on-disk state):
+
+| Theme | Pre-watermark (served) | Post-watermark (served) | Change |
+| --- | --- | --- | --- |
+| `floating-city` | 250,002 B | 241,542 B | −3.4% |
+| `violet-moon` | 239,310 B | 229,926 B | −3.9% |
+| `arcane-ruins` | 258,382 B | 248,804 B | −3.7% |
+
+(The re-encode happens to shrink the files slightly; the watermark itself is
+a sparse, low-opacity addition and doesn't meaningfully add entropy.)
+
+**Framing, per the owner's own instruction:** this watermark is brand
+identification and a deterrent, not a technical copy-protection measure and
+not a copyright claim — copyright in the underlying images (to the extent it
+exists; see "What this record does and doesn't establish" above) isn't
+created or strengthened by adding a mark.
+
+No ® or © symbol is used anywhere (no trademark/copyright registration has
+been asserted).
+
 ## Related
 
 - `web/src/components/hero/README.md` — the asset drop-in procedure these files follow.
