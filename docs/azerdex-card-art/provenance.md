@@ -9,8 +9,9 @@ record follows in structure and intent.
 Four illustrated background images and four matching circular medallions, used by the
 homepage's "Explore AzerDex" section (`FEATURE_CARDS` in `web/src/app/page.tsx`,
 rendered by `web/src/components/FeatureCard.tsx`). Distinct from the hero backgrounds
-(separate provenance record) and from the homepage's six `ENTRY_POINTS` category cards
-(still using the original line-icon glyphs — see "Deferred assets" below).
+(separate provenance record). This record also covers the full AzerDex wordmark logo
+and the eight illustrated category icons added in a later round — see "Full AzerDex
+wordmark logo and 8-icon category sheet" below.
 
 ## Source and approval
 
@@ -137,22 +138,114 @@ backgrounds and these card backgrounds are; they're closer to UI iconography. Fr
 in Phase 1 still applies: this is brand identification and a deterrent on the published
 artwork, not a copyright claim or a technical copy-protection guarantee.
 
-## Deferred assets
+## Full AzerDex wordmark logo and 8-icon category sheet (Phase 2 completion)
 
-Not yet integrated — no files received yet (or not receivable as processable files
-this round):
+The logo and icon sheet that were missing when the section above was first written
+arrived via a ZIP upload (`AzerDex_missing_assets_for_Claude.zip`) plus one separately
+attached copy of the logo. Private source records (SHA-256 only — files kept outside
+this repository, per policy):
 
-- **Full AzerDex wordmark logo** (for homepage hero/brand-signature integration,
-  brief section 3). The image was shown in conversation but never landed as a file
-  this session's tools could open; needs to be re-sent as a proper file attachment
-  rather than inline/pasted.
-- **8-icon category sheet** (Items/Creatures/Quests/Zones/Mining/Herbalism/Fishing/
-  Professions, brief section 4). Same blocker as the logo.
+| File | Role | Dimensions | SHA-256 |
+| --- | --- | --- | --- |
+| `full_azerdex_wordmark.png` | logo (ZIP copy) | 2172×724 | `c04bd4854c6dd29143eb69a736cbc54d1c28c4f3d8d393f33e5ca47d953c68e2` |
+| (separately attached) | logo (chat copy) | 2000×667 | `f53b885b9eba5266a511be5cb251869780a76bff4319f5766abde202e71660a7` |
+| `category_icon_sheet_8.png` | 8-icon sheet (2×4 grid) | 1774×887 | `f3e3ab4b255b543cabf3f340dcd597ae6df5272f337cd52b7dd89dfa6b136fcd` |
+| `AzerDex_missing_assets_for_Claude.zip` | the ZIP itself | — | `cf2862cc04e4ff3a0e82573ef8ffea7a7d894504b1c0be2cc10c91034a926f5b` |
 
-Until these arrive, the homepage's six `ENTRY_POINTS` category cards keep their
-existing line-icon glyphs unchanged, and no hero/navbar logo change has been made —
-per the owner's own instruction not to fabricate or substitute placeholder art for a
-missing approved asset.
+The ZIP also included `medallion_interactive_maps.png`, `medallion_exploration_discovery.png`
+and `medallion_tools_guides.png` — checked pixel-for-pixel (via `ImageChops.difference`,
+zero-pixel diff) against the medallions already shipped earlier in Phase 2, confirmed
+identical, and **not re-imported**.
+
+**Logo source discrepancy (reported, not silently resolved):** the separately attached
+logo and the ZIP's copy are the same artwork, not different versions — but the
+separately attached one came through the chat attachment pipeline at a lower fidelity
+(2000×667, re-encoded through lossy WebP) than the ZIP's original (2172×724, lossless
+PNG; resizing the chat copy up to the ZIP's dimensions and diffing gives a mean
+per-pixel difference of 2.5/255, consistent with recompression artifacts, not different
+content). The ZIP's higher-fidelity original was used as the integration source, since
+the task's own requirements ("preserve visual fidelity," "avoid unnecessary upscaling")
+favor the less-lossy file when both are confirmed to be the same artwork.
+
+**Logo QA (all passed):** spelling reads "AzerDex" correctly; tagline reads "KNOW YOUR
+WORLD." correctly; no malformed letters or artifacts on close inspection of the
+wordmark and tagline at full resolution; the compass/world emblem above the wordmark is
+complete and symmetrical; genuine alpha transparency (51.8% fully transparent, 0%
+fully opaque, corners fully transparent — no accidental white/black background box);
+no cropping (max alpha touching any canvas edge is 13/255, from the outer glow only,
+not a cut-off letter or ornament).
+
+**Icon sheet extraction:** the 2×4 grid's gutters were located programmatically (alpha
+column/row sums, not a blind even-grid slice) at x-ranges `[34–443, 465–875, 898–1307,
+1329–1740]` and y-ranges `[26–427, 446–848]`. Each of the 8 icons' actual content
+bounding box was then measured within its cell and found to already fill that cell
+almost exactly (410–412 × 402–403 px across all 8 — the source art itself is evenly
+centered and scaled per icon), so each icon was cropped as a 420×420 square centered on
+its own content midpoint (a uniform 6–9px margin beyond its content bbox on every side)
+and downscaled to 240×240. All 8 were visually re-assembled into a check sheet and
+inspected: complete circular/diamond frames, no clipped ornaments, consistent apparent
+scale, correct subject per category, genuine transparency (verified corner alpha is
+fully transparent on every exported icon).
+
+Published derivatives:
+
+| File | Published path | Size | SHA-256 |
+| --- | --- | --- | --- |
+| Logo (1200×400, downscaled from the 2172×724 original) | `logo-full.webp` | 148,130 B | `27ad130943b1eabe41eb492ddb8706e8d78058b48db0d0f37544d85a2753949b` |
+| Items icon (240×240) | `icons/items.webp` | 26,998 B | `23da24d4115e29949e4fdc95de00f26a94b6db20781300c4e549ad23e47e3398` |
+| Creatures icon | `icons/creatures.webp` | 26,226 B | `f11adc808a54be19200d39f7d59f4c3bb461437e11d2540c01d51695872992b1` |
+| Quests icon (unused — see below) | `icons/quests.webp` | 23,460 B | `13af872b540ffa88a3cdb4943410c70e8840b630b6214898ad19c276882dfb28` |
+| Zones icon | `icons/zones.webp` | 27,626 B | `6f4bed00a06dc0c41c9d0433ddbb460b4590bfabbdc10b4da9f58984745a8791` |
+| Mining icon | `icons/mining.webp` | 27,916 B | `eb8117cd24d4a8345c524ce1ce019c08dc3c50438d4cd7a777ea443a167ecf15` |
+| Herbalism icon | `icons/herbalism.webp` | 26,910 B | `8f3ebe59cc3168939ee9ef7571563dee389092a5500a3a1ebc7711889cbc4a33` |
+| Fishing icon | `icons/fishing.webp` | 26,010 B | `a6aadd1b4714c2a495bf2b540d6e388a8f50704d399b0c526a4070de610ee826` |
+| Professions icon (unused — see below) | `icons/professions.webp` | 28,162 B | `4796fce2168d3bc40f4893b231f112856979bbde33aa340cb68b827ca44329a4` |
+
+No watermark on the logo or the 8 icons: these are UI/brand elements (the logo is the
+brand mark itself; the icons are small functional navigation glyphs), not illustrated
+scenes — the same reasoning already applied to the card medallions in the section
+above.
+
+### Category icon integration
+
+`web/src/components/CategoryIcon.tsx` renders `public/icons/<id>.webp` for a typed
+`CategoryIconId`. Wired into the homepage's six `ENTRY_POINTS` cards (`Browse the
+database`), replacing the original minimal line-icon SVGs one-for-one, same card order,
+descriptions and destinations:
+
+| Category card | Icon |
+| --- | --- |
+| Items | Treasure chest |
+| Creatures | Fantasy helmet |
+| Mining | Pickaxe |
+| Herbalism | Magical plant |
+| Fishing | Fishing hook |
+| Zones | Map scroll |
+
+`quests` and `professions` icons are extracted, optimized, committed, and documented
+here, but **not referenced by any component** — there is no working Quests or
+Professions route yet, and the brief is explicit that an icon's existence isn't
+authorization to add navigation without a verified destination.
+
+### Logo placement: hero vs. dedicated brand position
+
+The brief asked for a comparison if the full logo didn't fit naturally into the
+existing hero. It doesn't: the logo already carries its own "KNOW YOUR WORLD" tagline,
+and the hero's existing headline is "Know Your World. Know where it drops." — placing
+the logo above the headline (tried, screenshotted, not kept) put the same phrase on
+screen twice within three lines, and on mobile pushed the search field further down the
+page than Phase 1 established as acceptable. Full comparison screenshots (both
+candidates, desktop and mobile) accompany the final report.
+
+**Decision:** the logo instead introduces the "Explore AzerDex" section —
+`web/src/app/page.tsx`, directly above the `<h2 id="explore-title">` heading, before the
+four illustrated feature cards. It gets its own uncontested space, doesn't compete with
+the headline or search, and reads naturally as a brand moment ahead of the feature
+showcase. The compact header wordmark (`LogoMark` in `web/src/components/Logo.tsx`) is
+unchanged — the brief only asked for a header-logo change if the new asset offered a
+"demonstrably better compact variant," and a 2172×724 wide-format wordmark isn't a
+compact mark; using a crop of it for the header icon would be a different design
+decision than what was approved.
 
 ## Related
 

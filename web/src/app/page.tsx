@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DisplayKindBadge } from "@/components/Badges";
 import { EntityLink } from "@/components/EntityLink";
+import { CategoryIcon, type CategoryIconId } from "@/components/CategoryIcon";
 import { FeatureCard, type FeatureCardData } from "@/components/FeatureCard";
 import { HeroBackground } from "@/components/hero/HeroBackground";
 import { HeroImageLayer } from "@/components/hero/HeroImageLayer";
@@ -12,13 +13,13 @@ import { entityPath, searchPath, zonePath } from "@/lib/routes";
 
 export const metadata = { alternates: { canonical: "/" } };
 
-const ENTRY_POINTS = [
-  { title: "Items", text: "What drops it, from where, and how often it was seen.", href: "/database?category=item", accent: "text-gold-300", glyph: "M8 6h16l4 6-12 16L4 12z" },
-  { title: "Creatures", text: "Loot and skinning, split by exact creature level.", href: searchPath({ category: "creature", kind: "mob" }), accent: "text-kind-mob", glyph: "M6 24c2-8 6-14 10-14s8 6 10 14M11 13l-3-5M21 13l3-5" },
-  { title: "Mining", text: "Veins and the ore, stone and gems they yielded.", href: searchPath({ kind: "mining" }), accent: "text-kind-mining", glyph: "M6 26 20 12M17 6l9 9-4 1-6-6z" },
-  { title: "Herbalism", text: "Herb nodes, their zones and observed locations.", href: searchPath({ kind: "herbalism" }), accent: "text-kind-herbalism", glyph: "M16 28V14M16 14c-6 0-9-4-9-9 5 0 9 3 9 9zm0 0c6 0 9-4 9-9-5 0-9 3-9 9z" },
-  { title: "Fishing", text: "Per-zone catches and fishing pools, kept separate.", href: searchPath({ kind: "fishing" }), accent: "text-kind-fishing", glyph: "M4 16c4-6 14-6 20 0-6 6-16 6-20 0zm20 0 5-4v8z" },
-  { title: "Zones", text: "Everything observed in an area, with filters.", href: "/zones", accent: "text-kind-object", glyph: "M4 8l8-3 8 3 8-3v19l-8 3-8-3-8 3zM12 5v19M20 8v19" },
+const ENTRY_POINTS: { title: string; text: string; href: string; icon: CategoryIconId }[] = [
+  { title: "Items", text: "What drops it, from where, and how often it was seen.", href: "/database?category=item", icon: "items" },
+  { title: "Creatures", text: "Loot and skinning, split by exact creature level.", href: searchPath({ category: "creature", kind: "mob" }), icon: "creatures" },
+  { title: "Mining", text: "Veins and the ore, stone and gems they yielded.", href: searchPath({ kind: "mining" }), icon: "mining" },
+  { title: "Herbalism", text: "Herb nodes, their zones and observed locations.", href: searchPath({ kind: "herbalism" }), icon: "herbalism" },
+  { title: "Fishing", text: "Per-zone catches and fishing pools, kept separate.", href: searchPath({ kind: "fishing" }), icon: "fishing" },
+  { title: "Zones", text: "Everything observed in an area, with filters.", href: "/zones", icon: "zones" },
 ];
 
 /**
@@ -37,7 +38,7 @@ const FEATURE_CARDS: FeatureCardData[] = [
   {
     slug: "community-data",
     title: "Community Data",
-    description: "Every number on AzerDex comes from a real player running the ForeverDB addon - see how observations become published rates.",
+    description: "See how real player observations from the ForeverDB addon become AzerDex's published rates.",
     href: "/about/data",
     focalClass: "object-[18%_42%]",
   },
@@ -117,9 +118,7 @@ export default async function HomePage() {
           {ENTRY_POINTS.map((e) => (
             <li key={e.title}>
               <Link href={e.href} className="panel group flex h-full items-start gap-4 p-5 no-underline transition hover:border-gold-500/70">
-                <svg viewBox="0 0 32 32" className={`h-9 w-9 shrink-0 ${e.accent}`} aria-hidden="true">
-                  <path d={e.glyph} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <CategoryIcon id={e.icon} />
                 <span>
                   <span className="block font-semibold text-parchment group-hover:text-gold-300">{e.title}</span>
                   <span className="mt-1 block text-sm text-mist">{e.text}</span>
@@ -177,9 +176,19 @@ export default async function HomePage() {
       </div>
 
       {/* Explore AzerDex: illustrated product-discovery cards (distinct from the six
-          category filters above) */}
+          category filters above). The full ornamental wordmark gets its brand moment
+          here rather than in the hero: it carries its own "Know Your World" tagline,
+          which would otherwise sit right on top of the hero's near-identical headline -
+          see docs/azerdex-card-art/provenance.md for the hero-placement comparison. */}
       <section aria-labelledby="explore-title">
-        <h2 id="explore-title" className="panel-title text-2xl">Explore AzerDex</h2>
+        <div className="flex flex-col items-center text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- images.unoptimized is set
+              site-wide, so next/image buys nothing here; see FeatureCard.tsx for the fuller
+              reasoning (this is also a server component, so next/image's own inline
+              placeholder style would hit the CSP restriction that broke 665eb6c). */}
+          <img src="/logo-full.webp" alt="AzerDex" className="h-auto w-56 sm:w-72" />
+          <h2 id="explore-title" className="panel-title mt-4 text-2xl">Explore AzerDex</h2>
+        </div>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           {FEATURE_CARDS.map((card) => (
             <FeatureCard key={card.slug} {...card} />
