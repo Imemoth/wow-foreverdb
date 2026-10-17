@@ -24,9 +24,14 @@ const ENTRY_POINTS = [
 /**
  * Product-discovery cards, distinct from ENTRY_POINTS above (those are the six
  * functional category filters; these four are higher-level "what can AzerDex do for
- * me" entries) - see docs/azerdex-hero-art/provenance.md for the artwork these use.
+ * me" entries) - see docs/azerdex-card-art/provenance.md for the artwork these use.
  * Every href points at a page that already exists and does what the card says; no
  * card claims functionality (e.g. an interactive map) that isn't actually built yet.
+ *
+ * focalClass must be a literal Tailwind class (see FeatureCardData's doc comment in
+ * FeatureCard.tsx for why) - Tailwind's build-time scanner needs the exact string
+ * "object-[..._...]" to appear somewhere in source, so these can't be assembled from
+ * a separate "18% 42%"-style value at render time.
  */
 const FEATURE_CARDS: FeatureCardData[] = [
   {
@@ -34,28 +39,28 @@ const FEATURE_CARDS: FeatureCardData[] = [
     title: "Community Data",
     description: "Every number on AzerDex comes from a real player running the ForeverDB addon - see how observations become published rates.",
     href: "/about/data",
-    focal: "18% 42%",
+    focalClass: "object-[18%_42%]",
   },
   {
     slug: "interactive-maps",
     title: "Explore Zones",
     description: "Browse every observed zone and jump straight to what's been recorded there, source by source.",
     href: "/zones",
-    focal: "30% 38%",
+    focalClass: "object-[30%_38%]",
   },
   {
     slug: "tools-guides",
     title: "Tools & Guides",
     description: "Addon setup walkthroughs and practical guides for getting the most out of AzerDex.",
     href: "/guides",
-    focal: "20% 55%",
+    focalClass: "object-[20%_55%]",
   },
   {
     slug: "exploration-discovery",
     title: "Exploration & Discovery",
     description: "Search the full item, creature and node database to find exactly where something drops.",
     href: "/database",
-    focal: "20% 52%",
+    focalClass: "object-[20%_52%]",
   },
 ];
 
