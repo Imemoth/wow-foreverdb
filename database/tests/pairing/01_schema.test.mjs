@@ -4,10 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "../account/harness.mjs";
-import { makeWorld, before16, protectedState, functions, migration, psqlFile, pending, rollback, roles, events, randomUUID } from "./world.mjs";
+import { makeWorld, before16, protectedState, functions, closeBefore16Template, assertPreserved, assertNoPublicPairingFunctions, migration, psqlFile, pending, rollback, roles, events, randomUUID } from "./world.mjs";
 let w;
 before(async () => { w = await makeWorld(); });
-after(async () => { await w?.close(); });
+after(async () => { await w?.close(); await closeBefore16Template(); });
 const cols = async (table) => (await w.admin.query(`select attname name, format_type(atttypid,atttypmod) type, attnotnull required
  from pg_attribute where attrelid=$1::regclass and attnum>0 and not attisdropped order by attnum`, [table])).rows;
 const column = (name, type, required=true) => ({name,type,required});
@@ -120,27 +120,28 @@ it("device provenance permits exactly one ticket or pairing and at most one devi
   assert.ok((await w.admin.query("select indexdef from pg_indexes where schemaname='private' and tablename='devices'")).rows.some(x=>x.indexdef.includes("UNIQUE INDEX")&&x.indexdef.includes("(pairing_id) WHERE (pairing_id IS NOT NULL)")));
 });
 it("0016 preserves protected schemas, all old function definition/ACL hashes and populated historical rows", async()=> {
-  // Seed genuine ticket/device/observation history before cloning, so preservation is not an empty-table proof.
-  const account=await w.account(); const e=await w.enrolled(account); const {snapshot}=await import("../enrollment/world.mjs");
-  assert.equal((await w.ingest(e.device,e.secret,snapshot(e.installationId))).ok,true);
-  const anonymous = await w.device();
-  const legacyId = randomUUID().replaceAll("-", "");
-  await w.fx.resetBudgets();
-  assert.equal((await anonymous.call("ingest_foreverdb_snapshot_auth", [snapshot(legacyId)])).ok, true);
-  const claim = await anonymous.call("fdb_account_claim_start", [legacyId]);
-  assert.equal((await account.call("fdb_account_claim_redeem", [claim.code])).ok, true);
-  await w.close(); w=null;
-  try {
+  // Seed and fingerprint a pristine predecessor clone BEFORE its first and only 0016 application.
   await before16(async({admin,database})=> {
-    const before=await protectedState(admin); assert.ok(before["private.devices:rows"][0].n>0); assert.ok(before["public.installation_item_stats:rows"][0].n>0); assert.ok(before["private.account_installations:rows"][0].n>0); assert.ok(before["private.account_audit:rows"][0].n>0);
+    const seed=await makeWorld({database});
+    try {
+      const account=await seed.account(); const e=await seed.enrolled(account);
+      const {snapshot}=await import("../enrollment/world.mjs");
+      assert.equal((await seed.ingest(e.device,e.secret,snapshot(e.installationId))).ok,true);
+      const anonymous=await seed.device(); const legacyId=randomUUID().replaceAll("-", "");
+      await seed.fx.resetBudgets();
+      assert.equal((await anonymous.call("ingest_foreverdb_snapshot_auth",[snapshot(legacyId)])).ok,true);
+      const claim=await anonymous.call("fdb_account_claim_start",[legacyId]);
+      assert.equal((await account.call("fdb_account_claim_redeem",[claim.code])).ok,true);
+    } finally { await seed.close(); }
+    const before=await protectedState(admin);
+    for(const table of ["private.devices","public.installation_item_stats","private.account_installations","private.account_audit"])
+      assert.ok(before[`${table}:rows`][0].n>0,`${table} has genuine historical rows`);
     const r=psqlFile(database,migration); assert.equal(r.status,0,r.out);
-    const after=await protectedState(admin); const oldFunctions=before.functions; delete before.functions; const nowFunctions=after.functions; delete after.functions;
-    assert.deepEqual(after,before);
-    for(const fn of oldFunctions) assert.deepEqual(nowFunctions.find(x=>x.sig===fn.sig),fn);
+    assertPreserved(before,await protectedState(admin));
     assert.equal((await admin.query("select enabled from private.device_pairing_config")).rows[0].enabled,false);
   });
-  } finally { w=await makeWorld(); }
 });
+
 it("apply16 succeeds without any 0015 object and with azerdex_welcome_outbox recorded, without recording itself", async()=> {
   await w.close(); w=null;
   try {
@@ -172,13 +173,129 @@ it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/
   });
   } finally { w=await makeWorld(); }
 });
-it("public pairing functions are limited to the six reserved signatures", async()=> {
-  // Task 1 has none. Tasks 2/3 add only these approved signatures to the same migration.
-  const approved = new Set([
-    "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",
-    "public.fdb_device_pair_poll(uuid,text)", "public.fdb_device_pair_cancel(uuid,text)",
-    "public.fdb_account_device_pair_preview(uuid)", "public.fdb_account_device_pair_approve(uuid)", "public.fdb_account_device_pair_deny(uuid)",
-  ]);
-  const rows = await functions(w.admin);
-  for (const fn of rows.filter(x => /^public\.fdb_.*pair/.test(x.sig))) assert.ok(approved.has(fn.sig), fn.sig);
+it("Task 1 creates exactly zero public pairing RPCs", async () => {
+  const { rows } = await w.admin.query(`select n.nspname schema, p.proname name
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname like 'fdb_%pair%'`);
+  assert.deepEqual(rows, []);
+  assertNoPublicPairingFunctions(await functions(w.admin));
+});
+it("the qualified registry detects a visible public RPC fixture rather than passing vacuously", async () => {
+  await rollback(w.admin, async () => {
+    await w.admin.query("create function public.fdb_device_pair_forbidden() returns boolean language sql as 'select false'");
+    const raw = (await w.admin.query("select 'public.fdb_device_pair_forbidden()'::regprocedure::text sig")).rows[0].sig;
+    assert.equal(raw, "fdb_device_pair_forbidden()", "fixture reproduces regprocedure's omitted visible namespace");
+    const rows = await functions(w.admin);
+    const rpc = rows.find(fn => fn.schema === "public" && fn.name === "fdb_device_pair_forbidden");
+    assert.ok(rpc, "namespace metadata must identify the injected public pairing RPC");
+    assert.equal(rpc.sig, "public.fdb_device_pair_forbidden()");
+    const { assertNoPublicPairingFunctions, canonicalSignature } = await import("./world.mjs");
+    assert.equal(canonicalSignature(rpc), rpc.sig);
+    assert.throws(() => assertNoPublicPairingFunctions(rows), /public pairing RPCs/);
+  });
+});
+it("the pre-0016 baseline is independent of a predecessor ACL changed in the post-0016 source", async () => {
+  await w.admin.query("revoke execute on function public.fdb_account_devices() from authenticated");
+  await w.close(); w=null;
+  try {
+    await before16(async ({admin}) => {
+      assert.equal((await admin.query("select has_function_privilege('authenticated','public.fdb_account_devices()','execute') p")).rows[0].p, true,
+        "a pristine 0014 predecessor must not inherit a post-0016 replacement");
+      assert.equal((await admin.query("select to_regclass('private.device_pairings')::text t")).rows[0].t, null);
+    });
+  } finally {
+    w=await makeWorld();
+    await w.admin.query("grant execute on function public.fdb_account_devices() to authenticated");
+  }
+});
+it("the external preservation proof rejects an ACL mutation before the migration's own snapshot", async () => {
+  await w.close(); w=null;
+  try {
+    await before16(async ({admin,database}) => {
+      const before = await protectedState(admin);
+      const os = await import("node:os");
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fdb-pairing-mutant-"));
+      try {
+        const mutant = path.join(dir, "0016_acl_mutant.sql");
+        fs.writeFileSync(mutant, "revoke execute on function public.fdb_account_devices() from authenticated;\n" + fs.readFileSync(migration, "utf8"));
+        const r = psqlFile(database, mutant);
+        assert.equal(r.status, 0, r.out);
+        const { assertPreserved } = await import("./world.mjs");
+        assert.equal(typeof assertPreserved, "function");
+        const after = await protectedState(admin);
+        assert.throws(() => assertPreserved(before, after), /public.fdb_account_devices/);
+      } finally { fs.rmSync(dir, {recursive:true,force:true}); }
+    });
+  } finally { w=await makeWorld(); }
+});
+it("preflight rejects live-device indexes with altered ownership, uniqueness, columns, predicate or validity", async () => {
+  await w.close(); w=null;
+  try {
+    for (const [name,col] of [["devices_one_live_per_installation","installation_id"],["devices_one_live_per_identity","auth_uid"]]) {
+      const alterations = [
+        `drop index private.${name}; create index ${name} on private.devices (${col}) where status <> 'revoked'`,
+        `drop index private.${name}; create unique index ${name} on private.devices (id) where status <> 'revoked'`,
+        `drop index private.${name}; create unique index ${name} on private.devices (${col}) where status = 'active'`,
+        `drop index private.${name}; create unique index ${name} on private.enrollment_tickets(id)`,
+        `update pg_index set indisvalid=false where indexrelid='private.${name}'::regclass`,
+      ];
+      for (const damage of alterations) await before16(async ({admin,database}) => {
+        const {connectSuper}=await import("../account/harness.mjs");
+        const su=await connectSuper(database);
+        try { await su.query(damage); } finally { await su.end(); }
+        const r=psqlFile(database,migration);
+        assert.notEqual(r.status,0,damage);
+        assert.match(r.out,/0016 pre-flight.*live-device index/,r.out);
+        assert.equal((await admin.query("select to_regclass('private.device_pairing_config')::text t")).rows[0].t,null);
+      });
+    }
+  } finally { w=await makeWorld(); }
+});
+it("complete connected/revoked states and all approval-nullability combinations obey the schema", async () => {
+  const account=await w.account(); const linked=await w.enrolled(account);
+  const approval={approved_account_uid:account.uid,approved_session_id:account.sid,approved_at:new Date()};
+  for (const status of ["pending","approved","connected","expired","denied","revoked"]) {
+    for(let mask=0;mask<8;mask++) {
+      const deviceId=["connected","revoked"].includes(status)?linked.deviceId:randomUUID();
+      const state={status,proposed_device_id:deviceId};
+      if(status==="connected"||status==="revoked") Object.assign(state,{connected_device_id:deviceId,connected_at:new Date(),previous_owner_uid:randomUUID()});
+      if(status==="denied") Object.assign(state,{denied_at:new Date(),denied_reason:"browser_denied"});
+      if(status==="revoked") state.revoked_at=new Date();
+      Object.keys(approval).forEach((key,i)=> {if(mask&(1<<i)) state[key]=approval[key];});
+      const valid=(mask===0 && ["pending","expired","denied"].includes(status)) || (mask===7 && status!=="pending");
+      await rollback(w.admin,async()=> {
+        if(valid) {
+          const pairing=await pending(w.admin,state);
+          assert.equal(pairing.status,status);
+          if(status==="connected"||status==="revoked") {
+            await w.admin.query("update private.devices set ticket_id=null,pairing_id=$1,status=$2,revoked_at=$3 where id=$4",
+              [pairing.id,status==="revoked"?"revoked":"active",state.revoked_at??null,linked.deviceId]);
+            assert.equal((await w.device_row(linked.deviceId)).pairing_id,pairing.id);
+          }
+        }
+        else await assert.rejects(pending(w.admin,state),e=>e.code==="23514");
+      });
+    }
+  }
+});
+it("pairing and audit FKs block real parent deletion without cascading history", async () => {
+  await rollback(w.admin,async()=> {
+    const p=await pending(w.admin);
+    await w.admin.query("insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id) values('pairing_started',$1,$2)",[p.audit_ref,p.installation_id]);
+    await w.admin.query("savepoint delete_parent");
+    await assert.rejects(w.admin.query("delete from private.device_pairings where id=$1",[p.id]),e=>e.code==="23503");
+    await w.admin.query("rollback to savepoint delete_parent");
+    assert.equal((await w.admin.query("select count(*)::int n from private.device_pairing_audit where pairing_audit_ref=$1",[p.audit_ref])).rows[0].n,1);
+    assert.equal((await w.admin.query("select count(*)::int n from private.device_pairings where id=$1",[p.id])).rows[0].n,1);
+  });
+  const account=await w.account(); const enrolled=await w.enrolled(account);
+  await rollback(w.admin,async()=> {
+    const p=await pending(w.admin);
+    await w.admin.query("update private.devices set ticket_id=null,pairing_id=$1 where id=$2",[p.id,enrolled.deviceId]);
+    await w.admin.query("savepoint delete_parent");
+    await assert.rejects(w.admin.query("delete from private.device_pairings where id=$1",[p.id]),e=>e.code==="23503");
+    await w.admin.query("rollback to savepoint delete_parent");
+    assert.equal((await w.device_row(enrolled.deviceId)).pairing_id,p.id);
+    assert.equal((await w.admin.query("select count(*)::int n from private.device_pairings where id=$1",[p.id])).rows[0].n,1);
+  });
 });

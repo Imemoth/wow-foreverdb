@@ -12,6 +12,7 @@ declare
     v_name text;
     v_table text;
     v_col text;
+    v_index text;
 begin
     foreach v_name in array array['private', 'auth', 'extensions'] loop
         if to_regnamespace(v_name) is null then
@@ -55,11 +56,29 @@ begin
        or not exists (select 1 from pg_constraint where conrelid='private.devices'::regclass and conname='devices_ticket_id_fkey'
                       and contype='f' and confrelid='private.enrollment_tickets'::regclass and convalidated)
        or (select count(*) from pg_constraint where conrelid='private.account_installations'::regclass and contype='f' and convalidated) <> 2
-       or not exists (select 1 from pg_constraint where conrelid='private.account_audit'::regclass and conname='account_audit_event_check' and convalidated)
-       or to_regclass('private.devices_one_live_per_installation') is null
-       or to_regclass('private.devices_one_live_per_identity') is null then
+       or not exists (select 1 from pg_constraint where conrelid='private.account_audit'::regclass and conname='account_audit_event_check' and convalidated) then
         raise exception '0016 pre-flight: 0012/0014 provenance or live-device constraints missing';
     end if;
+    -- A matching name cannot stand in for the 0014 uniqueness/serialization invariant.
+    for v_index, v_col in select * from (values
+        ('devices_one_live_per_installation','installation_id'),
+        ('devices_one_live_per_identity','auth_uid')
+    ) as expected(index_name,column_name) loop
+        if not exists (
+            select 1 from pg_index i
+            join pg_class idx on idx.oid=i.indexrelid
+            join pg_namespace ns on ns.oid=idx.relnamespace
+            join pg_attribute a on a.attrelid=i.indrelid and a.attname=v_col and not a.attisdropped
+            where ns.nspname='private' and idx.relname=v_index and idx.relkind='i'
+              and i.indrelid='private.devices'::regclass
+              and i.indisunique and i.indisvalid and i.indisready and i.indislive
+              and i.indnkeyatts=1 and i.indnatts=1 and i.indkey[0]=a.attnum
+              and i.indexprs is null
+              and pg_get_expr(i.indpred,i.indrelid)='(status <> ''revoked''::text)'
+        ) then
+            raise exception '0016 pre-flight: live-device index % has an unexpected definition',v_index;
+        end if;
+    end loop;
     if not exists (select 1 from pg_roles where rolname=current_user and (rolbypassrls or rolsuper))
        or not has_table_privilege(current_user,'auth.sessions','SELECT')
        or not has_table_privilege(current_user,'auth.sessions','UPDATE')
