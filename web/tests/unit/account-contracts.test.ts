@@ -4,6 +4,7 @@ import vm from "node:vm";
 import { buildSync } from "esbuild";
 import { describe, expect, it, vi } from "vitest";
 import {
+  ACCOUNT_REDIRECT_ALLOWLIST,
   ACCOUNT_RPCS,
   AUTH_BODIES,
   AUTH_ENDPOINTS,
@@ -274,6 +275,15 @@ describe("redirect allowlist", () => {
     expect(safeNext("/account/link?x=1#y")).toBe("/account/link");
     expect(safeNext("/account/guildbook/")).toBe("/account/guildbook");
     expect(safeNext("/account")).toBe("/account");
+    expect(ACCOUNT_REDIRECT_ALLOWLIST).toContain("/account/device-pair");
+    expect(safeNext("/account/device-pair")).toBe("/account/device-pair");
+  });
+  it("admits only the exact clean pairing continuation", () => {
+    for (const bad of [
+      "/account/device-pair?request=secret", "/account/device-pair#fragment", "/account/device-pair/",
+      "/account/device-pair/child", "/account%2Fdevice-pair", "/account/device%2Dpair", "/account%252Fdevice-pair",
+      "//account/device-pair", "https://foreverdb.example/account/device-pair",
+    ]) expect(safeNext(bad), bad).toBe("/account");
   });
   it("falls back to /account for open-redirect attempts and encodings of them", () => {
     for (const bad of [
@@ -281,6 +291,7 @@ describe("redirect allowlist", () => {
       "/\\evil.example", "\\\\evil.example", "/%5Cevil.example", "/%2F%2Fevil.example", "/%252F%252Fevil.example", "%2F%2Fevil.example",
       "/account\r\nSet-Cookie: x=1", "/account%0d%0aX: y", "javascript:alert(1)", "/account/../admin", "/account/%2e%2e/admin", "/other", "/", "/api/v1/meta",
       "/account/unknown", "/accounts", "/account%00", "/" + "a".repeat(300),
+      "/account/device-pair/child", "/account/device-pair%2Fchild", "//account/device-pair", "https://foreverdb.example/account/device-pair",
     ]) {
       expect(safeNext(bad), String(bad)).toBe("/account");
     }

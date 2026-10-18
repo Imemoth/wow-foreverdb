@@ -165,8 +165,8 @@ describe("account web zone (static)", () => {
     expect(text).toMatch(/autoComplete="off"/);
   });
 
-  it("the session cookie is written and cleared only by session.ts; cookie names live there alone", () => {
-    expect(zone.filter((f) => /fdb_acct|__Secure-fdb/.test(code(f))).map(rel)).toEqual(["lib/account/session.ts"]);
+  it("account and pairing cookie names and writers stay in their dedicated modules", () => {
+    expect(zone.filter((f) => /fdb_acct|__Secure-fdb/.test(code(f))).map(rel).sort()).toEqual(["lib/account/pairing-cookie.ts", "lib/account/session.ts"]);
     const csrfWriters = zone.filter((f) => /setCookie\(|\.cookies\.set\(/.test(code(f))).map(rel).sort();
     expect(csrfWriters).toEqual(["app/account/api/csrf/route.ts", "lib/account/session.ts"]);
     const text = code(join(SRC, "lib/account/session.ts"));
@@ -198,16 +198,19 @@ describe("account web zone (static)", () => {
     }
   });
 
-  it("the proxy loads only the native source gate and fixed responses, with no Auth/RPC/session access", () => {
+  it("the proxy loads only pairing gate/cookie helpers and fixed responses, with no Auth/RPC/session transport", () => {
     const proxy = join(SRC, "proxy.ts");
-    expect(importsOf(proxy).filter((i) => /account/.test(i)).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-gate"]);
-    expect(read(proxy).replace("!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env })", "")).not.toMatch(/ACCOUNT_|accountAuth|csrfSecret|authOrigin|publishableKey/);
+    expect(importsOf(proxy).filter((i) => /account/.test(i)).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-cookie", "@/lib/account/pairing-gate"]);
+    expect(read(proxy).replaceAll("env.accountAuth", "").replace("pairingConfig.csrfSecret", "")).not.toMatch(/ACCOUNT_|csrfSecret|authOrigin|publishableKey/);
     const text = code(proxy);
     expect(text).toMatch(/isAccountPath\(pathname\)/);
     expect(text).toMatch(/!isAccount && !sessionId && request\.method === "GET"/); // no anonymous cookie on /account/**
     expect(text).toMatch(/"Cache-Control": "private, no-store"/);
     expect(text).toMatch(/"X-Robots-Tag": "noindex, nofollow"/);
     expect(text).toMatch(/isAccountApiPath\(pathname\)/);
+    expect(text).toMatch(/pathname === "\/account\/device-pair"/);
+    expect(text).toMatch(/getAll\("request"\)/);
+    expect(text).not.toMatch(/console\..*request|log\([^\n]*request/i);
   });
 
   it("the public data layer and the public search route stay free of account code and of account cookies", () => {

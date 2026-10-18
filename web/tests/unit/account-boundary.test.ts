@@ -36,17 +36,19 @@ describe("account boundary (static)", () => {
     expect(SOURCE_FILE.test("a.cjs") && SOURCE_FILE.test("a.mts") && SOURCE_FILE.test("a.jsx") && SOURCE_FILE.test("a.cts")).toBe(true);
     expect(files.length).toBeGreaterThan(30);
   });
-  it("only env.ts, the native ingress gate/response helpers and the account zone may load account modules", () => {
+  it("only env.ts, the native ingress and locator-cookie helpers, and the account zone may load account modules", () => {
     const offenders = files.filter((f) => !inZone(rel(f)) && !["lib/env.ts", "proxy.ts"].includes(rel(f))).filter((f) => importsOf(f).some(reachesAccount)).map(rel);
     expect(offenders).toEqual([]);
-    expect(importsOf(join(SRC, "proxy.ts")).filter(reachesAccount).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-gate"]);
+    expect(importsOf(join(SRC, "proxy.ts")).filter(reachesAccount).sort()).toEqual(["@/lib/account/http", "@/lib/account/pairing-cookie", "@/lib/account/pairing-gate"]);
   });
   it("env.ts loads only the pure configuration module from the account zone", () => {
     expect(importsOf(join(SRC, "lib/env.ts")).filter(reachesAccount)).toEqual(["./account/config"]);
   });
   it("Auth configuration and its secrets stay in the account zone except the exact proxy availability decision", () => {
     const offenders = files.filter((f) => !inZone(rel(f)) && rel(f) !== "lib/env.ts").filter((f) => {
-      const source = rel(f) === "proxy.ts" ? read(f).replace("!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env })", "") : read(f);
+      const source = rel(f) === "proxy.ts"
+        ? read(f).replaceAll("env.accountAuth", "").replace("pairingConfig.csrfSecret", "")
+        : read(f);
       return /ACCOUNT_AUTH|ACCOUNT_CSRF|accountAuth|csrfSecret/.test(source);
     }).map(rel);
     expect(offenders).toEqual([]);

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
 import { browserPairingWebAvailable } from "@/lib/account/pairing-gate";
+import { PAIRING_COOKIE_TTL_SEC, clearPairingCookie, isCanonicalPairingId, mintPairingCookie, setPairingCookie } from "@/lib/account/pairing-cookie";
 import { failure } from "@/lib/account/http";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
@@ -84,6 +85,28 @@ export async function proxy(request: NextRequest) {
   // Source-off is an ingress refusal: do not read client metadata/cookies or contact the limiter first.
   if (nativePairing && (!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env }))) {
     return nativeFailure(404, "not_found");
+  }
+  const pairingIntake = request.method === "GET" && pathname === "/account/device-pair" && request.nextUrl.searchParams.has("request");
+  const pairingConfig = env.accountAuth;
+  if (pairingIntake && pairingConfig && browserPairingWebAvailable({ cfg: pairingConfig, env })) {
+    const https = env.SITE_URL.startsWith("https://");
+    const headers = {
+      ...BASE_SECURITY_HEADERS,
+      ...deploymentHeaders(env.FOREVERDB_DEPLOYMENT),
+      "Cache-Control": "private, no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex, nofollow",
+      Vary: "Cookie",
+      ...(https ? { "Strict-Transport-Security": HSTS } : {}),
+    };
+    const response = NextResponse.redirect(new URL("/account/device-pair", env.SITE_URL), { status: 303, headers });
+    const locators = request.nextUrl.searchParams.getAll("request");
+    if (locators.length === 1 && isCanonicalPairingId(locators[0]!)) {
+      setPairingCookie(response.headers, https, await mintPairingCookie(pairingConfig.csrfSecret, locators[0]!), PAIRING_COOKIE_TTL_SEC);
+    } else {
+      clearPairingCookie(response.headers, https);
+    }
+    return response;
   }
   const isAccountApi = isAccountApiPath(pathname);
   const isApi = pathname.startsWith("/api/") || isAccountApi;

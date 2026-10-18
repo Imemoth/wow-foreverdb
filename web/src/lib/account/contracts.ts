@@ -281,6 +281,7 @@ export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
   "/account/link",
   "/account/installations",
   "/account/devices",
+  "/account/device-pair",
   "/account/guildbook",
   "/account/security",
 ];
@@ -293,6 +294,7 @@ export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
 export function safeNext(next: unknown, allowlist: readonly string[] = ACCOUNT_REDIRECT_ALLOWLIST): string {
   if (typeof next !== "string" || next.length === 0 || next.length > 200) return DEFAULT_ACCOUNT_REDIRECT;
   let candidate = next;
+  let decodedInput = false;
   for (let i = 0; i < 4; i += 1) {
     if (/[\u0000-\u001f\u007f\\]/.test(candidate)) return DEFAULT_ACCOUNT_REDIRECT;
     if (!candidate.startsWith("/") || candidate.startsWith("//")) return DEFAULT_ACCOUNT_REDIRECT;
@@ -303,9 +305,14 @@ export function safeNext(next: unknown, allowlist: readonly string[] = ACCOUNT_R
       return DEFAULT_ACCOUNT_REDIRECT;
     }
     if (decoded === candidate) break;
+    decodedInput = true;
     candidate = decoded;
   }
   const pathname = (candidate.split(/[?#]/, 1)[0] ?? "").replace(/\/+$/, "") || "/";
+  // The pairing continuation is a capability-bearing flow. Only its literal clean pathname is valid;
+  // accepting a query, fragment, trailing slash, or encoded spelling could reintroduce a locator after
+  // the proxy has deliberately removed it from browser-visible navigation.
+  if (pathname === "/account/device-pair" && (candidate !== pathname || decodedInput)) return DEFAULT_ACCOUNT_REDIRECT;
   return allowlist.includes(pathname) ? pathname : DEFAULT_ACCOUNT_REDIRECT;
 }
 
