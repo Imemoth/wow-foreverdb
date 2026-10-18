@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { CartographyBanner } from "@/components/cartography/CartographyBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
 import { ResultsTable } from "@/components/ResultsTable";
@@ -78,10 +79,10 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
   return (
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database" }]} />
-      <header>
-        <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-parchment">Database</h1>
-        <p className="mt-1 text-mist">Search by name or exact game ID, or browse a zone or acquisition type.</p>
-      </header>
+      <CartographyBanner compact>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-parchment sm:text-3xl">Database</h1>
+        <p className="mt-1 text-sm text-mist sm:text-base">Search by name or exact game ID, or browse a zone or acquisition type.</p>
+      </CartographyBanner>
 
       <form action="/database" method="get" role="search" aria-label="Database search and filters" autoComplete="off"
         className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-end">

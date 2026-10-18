@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { CartographyBanner } from "@/components/cartography/CartographyBanner";
 import { DataNote } from "@/components/DataNote";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
@@ -81,26 +82,45 @@ export default async function ZonePage({ params, searchParams }: { params: Param
   return (
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Zones", href: "/zones" }, { name: z.zoneName }]} />
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">Zone · uiMapID {z.mapId}</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{z.zoneName}</h1>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
-          <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
-          <StatTile label="Located obs." value={fmtInt(z.observations)} />
-        </div>
-      </header>
 
-      <nav aria-label="Quick filters" className="flex flex-wrap gap-2 text-sm">
-        <Link className="btn-ghost" href={href({ type: "creature", kind: "", page: 1 })}>Creatures <span className="text-mist">{fmtInt(z.displayKinds.creature ?? 0)}</span></Link>
-        <Link className="btn-ghost" href={href({ type: "item", kind: "", page: 1 })}>Items <span className="text-mist">{fmtInt(z.displayKinds.item ?? 0)}</span></Link>
-        <Link className="btn-ghost" href={href({ type: "", kind: "mining", page: 1 })}>Mining <span className="text-mist">{fmtInt(lk.mining ?? 0)}</span></Link>
-        <Link className="btn-ghost" href={href({ type: "", kind: "herbalism", page: 1 })}>Herbalism <span className="text-mist">{fmtInt(lk.herbalism ?? 0)}</span></Link>
-        <Link className="btn-ghost" href={href({ type: "", kind: "fishing_pool", page: 1 })}>Fishing pools <span className="text-mist">{fmtInt(lk.fishing_pool ?? 0)}</span></Link>
-        <Link className="btn-ghost" href={href({ type: "", kind: "chest", page: 1 })}>Chests <span className="text-mist">{fmtInt(lk.chest ?? 0)}</span></Link>
-      </nav>
+      {/* 1. Zone identity and summary */}
+      <CartographyBanner>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Zone · uiMapID {z.mapId}</p>
+        <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-parchment sm:text-4xl">{z.zoneName}</h1>
+      </CartographyBanner>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
+        <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
+        <StatTile label="Located obs." value={fmtInt(z.observations)} />
+      </div>
+
+      {/* 2. Geographic observations - deliberately a pointer, not a new map: a zone-wide aggregated
+          plot would need a new cross-source location aggregation this round does not add. Each
+          source already listed below (Observed entities) carries its own observation map when it
+          has located data - see e.g. its Object/Creature/Fishing detail page. */}
+      {z.observations > 0 && (
+        <section aria-labelledby="geo-title" className="panel p-4 sm:p-5">
+          <h2 id="geo-title" className="panel-title text-lg">Geographic observations</h2>
+          <p className="mt-1 text-sm text-mist">
+            {fmtInt(z.observations)} observations in {z.zoneName} have a recorded location. Positions are aggregated to an
+            approximate 1% map grid for privacy, shown on each individual source&apos;s own page below - open any creature,
+            object or fishing entry under &ldquo;Observed entities&rdquo; to see its observation map and legend.
+          </p>
+        </section>
+      )}
+
+      {/* 3. Available entity categories */}
+      <section aria-labelledby="categories-title" className="space-y-2">
+        <h2 id="categories-title" className="panel-title text-lg">Entity categories</h2>
+        <nav aria-label="Quick filters" className="flex flex-wrap gap-2 text-sm">
+          <Link className="btn-ghost" href={href({ type: "creature", kind: "", page: 1 })}>Creatures <span className="text-mist">{fmtInt(z.displayKinds.creature ?? 0)}</span></Link>
+          <Link className="btn-ghost" href={href({ type: "item", kind: "", page: 1 })}>Items <span className="text-mist">{fmtInt(z.displayKinds.item ?? 0)}</span></Link>
+          <Link className="btn-ghost" href={href({ type: "", kind: "mining", page: 1 })}>Mining <span className="text-mist">{fmtInt(lk.mining ?? 0)}</span></Link>
+          <Link className="btn-ghost" href={href({ type: "", kind: "herbalism", page: 1 })}>Herbalism <span className="text-mist">{fmtInt(lk.herbalism ?? 0)}</span></Link>
+          <Link className="btn-ghost" href={href({ type: "", kind: "fishing_pool", page: 1 })}>Fishing pools <span className="text-mist">{fmtInt(lk.fishing_pool ?? 0)}</span></Link>
+          <Link className="btn-ghost" href={href({ type: "", kind: "chest", page: 1 })}>Chests <span className="text-mist">{fmtInt(lk.chest ?? 0)}</span></Link>
+        </nav>
+      </section>
 
       <DataNote>
         This directory lists only what AzerDex players have observed in {z.zoneName}. It is not a complete list of
@@ -109,28 +129,33 @@ export default async function ZonePage({ params, searchParams }: { params: Param
         which zone an individual drop happened, so items have no zone-specific count. Sources are listed first, then items.
       </DataNote>
 
-      <form method="get" action={zonePath(z.mapId)} autoComplete="off" aria-label={`Filter ${z.zoneName}`} className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="z-q" className="text-xs font-semibold uppercase tracking-wide text-mist">Name</label>
-          <input id="z-q" name="q" type="search" defaultValue={v.q} maxLength={80} className="field" placeholder={`Filter ${z.zoneName}`} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="z-type" className="text-xs font-semibold uppercase tracking-wide text-mist">Type</label>
-          <AutoSubmitSelect id="z-type" name="type" defaultValue={v.type} className="field">
-            <option value="">All types</option>
-            {DISPLAY_KINDS.map((k) => <option key={k} value={k}>{DISPLAY_KIND_PLURAL[k]}</option>)}
-          </AutoSubmitSelect>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="z-kind" className="text-xs font-semibold uppercase tracking-wide text-mist">Acquisition</label>
-          <AutoSubmitSelect id="z-kind" name="kind" defaultValue={v.kind} className="field">
-            <option value="">Any method</option>
-            {LOOT_KINDS.map((k) => <option key={k} value={k}>{LOOT_KIND_LABEL[k]}</option>)}
-          </AutoSubmitSelect>
-        </div>
-        <button type="submit" className="btn-primary">Apply</button>
-      </form>
+      {/* 4. Search/filter interface */}
+      <section aria-labelledby="filter-title" className="space-y-2">
+        <h2 id="filter-title" className="panel-title text-lg">Search this zone</h2>
+        <form method="get" action={zonePath(z.mapId)} autoComplete="off" aria-label={`Filter ${z.zoneName}`} className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="z-q" className="text-xs font-semibold uppercase tracking-wide text-mist">Name</label>
+            <input id="z-q" name="q" type="search" defaultValue={v.q} maxLength={80} className="field" placeholder={`Filter ${z.zoneName}`} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="z-type" className="text-xs font-semibold uppercase tracking-wide text-mist">Type</label>
+            <AutoSubmitSelect id="z-type" name="type" defaultValue={v.type} className="field">
+              <option value="">All types</option>
+              {DISPLAY_KINDS.map((k) => <option key={k} value={k}>{DISPLAY_KIND_PLURAL[k]}</option>)}
+            </AutoSubmitSelect>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="z-kind" className="text-xs font-semibold uppercase tracking-wide text-mist">Acquisition</label>
+            <AutoSubmitSelect id="z-kind" name="kind" defaultValue={v.kind} className="field">
+              <option value="">Any method</option>
+              {LOOT_KINDS.map((k) => <option key={k} value={k}>{LOOT_KIND_LABEL[k]}</option>)}
+            </AutoSubmitSelect>
+          </div>
+          <button type="submit" className="btn-primary">Apply</button>
+        </form>
+      </section>
 
+      {/* 5. Observed entities and associated items */}
       <div aria-live="polite" className="space-y-4">
         {error && <div role="alert" className="panel p-4 text-sm text-danger">{error}</div>}
         {result && q && (
