@@ -47,7 +47,7 @@ test.describe("mobile-only UI", () => {
     const opened = page.getByRole("button", { name: "Close menu" });
     await expect(opened).toHaveAttribute("aria-expanded", "true");
     const nav = page.getByRole("navigation", { name: "Primary" }).last();
-    for (const name of ["Database", "Zones", "Guides", "News", "Blog", "Download", "Account"]) {
+    for (const name of ["Database", "Zones", "Guides", "News", "Blog", "Download"]) {
       await expect(nav.getByRole("link", { name })).toBeVisible();
     }
 
@@ -183,5 +183,82 @@ test.describe("database desktop filters (regression: must never collapse on desk
     await expect(page.getByRole("list", { name: "Search results" })).toBeHidden(); // mobile cards stay off at this width
     await table.getByRole("link", { name: "Copper Ore" }).click();
     await expect(page).toHaveURL(/\/item\/2770/);
+  });
+});
+
+// P1-A regression: the toolbar's fixed-fr single-row grid (`xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]`)
+// only takes over at 1280px; below that, tablet widths get an explicit wrapping layout
+// (md:grid-cols-2, lg:grid-cols-4) so the Search button and every field stay fully visible and
+// in-viewport at every width an owner might actually use, not just the "desktop" project's 1366px.
+test.describe("database tablet toolbar (regression: Search button must never clip)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "pins exact viewport widths directly; project default is irrelevant");
+  });
+
+  for (const width of [320, 375, 390, 440, 768, 820, 1024, 1032, 1280, 1440, 1920]) {
+    test(`every field and the Search button are fully visible, in-viewport, with no page overflow @ ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/database");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+
+      const btn = page.getByRole("button", { name: "Search" });
+      await expect(btn).toBeVisible();
+      const box = (await btn.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+
+      if (width >= 768) {
+        // At md+ the fields are never behind the mobile "Advanced filters" disclosure.
+        for (const label of ["Name or ID", "Type", "Zone", "Acquisition", "Sort"]) {
+          await expect(page.getByLabel(label)).toBeVisible();
+        }
+      }
+    });
+  }
+
+  test("filtering still works correctly at the previously-broken tablet width (1032px)", async ({ page }) => {
+    await page.setViewportSize({ width: 1032, height: 800 });
+    await page.goto("/database?q=copper");
+    await page.getByLabel("Acquisition").selectOption({ label: "Mining" });
+    await expect(page).toHaveURL(/kind=mining/);
+    await expect(page.getByRole("button", { name: "Search" })).toBeVisible();
+  });
+
+  test("the original single-row desktop layout is unchanged at 1280px and up (xl breakpoint)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/database?q=copper");
+    const form = page.getByRole("search", { name: "Database search and filters" });
+    const nameBox = (await form.locator("#db-q").boundingBox())!;
+    const btnBox = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+    // Single row: Name/ID and Search sit side by side at the same vertical position, not stacked.
+    expect(Math.abs(nameBox.y - btnBox.y)).toBeLessThan(20);
+  });
+});
+
+// P1-B regression: the public-beta scope has Account Auth disabled, so a global nav link that
+// always 404s is misleading - removed from both the desktop header and the mobile hamburger menu
+// without SiteHeader/MobileNav ever importing or checking account state (ADR-015 stays intact;
+// see account-boundary.test.ts). The real /account app and its own authenticated nav are untouched.
+test.describe("global nav has no Account entry point (public-beta scope)", () => {
+  test("desktop header carries no Account link", async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop", "desktop header only renders at sm+");
+    await page.goto("/");
+    await expect(page.getByRole("banner").getByRole("link", { name: "Account" })).toHaveCount(0);
+  });
+
+  test("mobile hamburger menu carries no Account link", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile", "exercises the mobile-only hamburger menu");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open menu" }).click();
+    const nav = page.getByRole("navigation", { name: "Primary" }).last();
+    await expect(nav.getByRole("link", { name: "Account" })).toHaveCount(0);
+  });
+
+  test("/account and its sub-routes still fail closed with 404 (unchanged)", async ({ page }) => {
+    for (const path of ["/account", "/account/login", "/account/register"]) {
+      const res = await page.goto(path);
+      expect(res!.status()).toBe(404);
+    }
   });
 });
