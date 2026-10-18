@@ -103,7 +103,7 @@ export default async function HomePage() {
           <form action="/database" method="get" role="search" className="mx-auto mt-6 flex max-w-2xl flex-col gap-2 sm:mt-8 sm:flex-row">
             <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
             <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"
-              placeholder="Try “Copper Ore”, “Darkhound” or an ID like 2770"
+              placeholder="Search items, creatures or IDs"
               className="field h-12 flex-1 text-base" />
             <button type="submit" className="btn-primary h-12 px-6 text-base">Search database</button>
           </form>
@@ -149,7 +149,9 @@ export default async function HomePage() {
             <h2 id="news-title" className="panel-title text-2xl">Latest news</h2>
             <Link href="/news" className="text-sm">All news →</Link>
           </div>
-          <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Single column through tablet widths, then straight to 3 - three items split across
+              sm:grid-cols-2 would leave a lone card stranded in column 1 of its own row. */}
+          <ul className="mt-5 grid gap-4 md:grid-cols-3">
             {news.map((a) => (
               <li key={a.slug} className="panel h-full p-4">
                 <Link href={articlePath(a)} className="font-semibold text-parchment no-underline hover:text-gold-300">{a.title}</Link>
@@ -170,12 +172,15 @@ export default async function HomePage() {
           ) : (
             <ul className="panel mt-4 divide-y divide-ink-700/70">
               {recent.map((r) => (
-                <li key={`${r.entityKind}-${r.itemId ?? `${r.sourceType}-${r.sourceId}-${r.sourceLevel}`}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
-                  <span className="flex items-center gap-2">
+                <li key={`${r.entityKind}-${r.itemId ?? `${r.sourceType}-${r.sourceId}-${r.sourceLevel}`}`}
+                  className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-1 sm:py-2">
+                  <span className="flex min-w-0 flex-wrap items-center gap-2">
                     <DisplayKindBadge kind={r.displayKind} />
                     <EntityLink href={entityPath(r)} tooltip={r.entityKind === "item" ? `/api/v1/tooltip/item/${r.itemId}` : `/api/v1/tooltip/source/${r.sourceType}/${r.sourceId}`}>{r.name}</EntityLink>
                     {r.sourceType === "creature" && r.sourceLevel != null && <span className="text-xs text-mist">{r.sourceLevel > 0 ? `Lvl ${r.sourceLevel}` : "Lvl ?"}</span>}
                   </span>
+                  {/* Always its own line on narrow screens (instead of wrapping only when the name happens to be long), so
+                      the timestamp lands in a predictable place rather than jumping around row to row. */}
                   <span className="text-xs text-mist">{fmtDateTime(r.lastObservedAt)}</span>
                 </li>
               ))}

@@ -70,6 +70,10 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
     kind: params.get("kind") ?? "",
     sort: params.get("sort") ?? "relevance",
   };
+  // Drives the mobile "Advanced filters" disclosure: any secondary filter already set means it
+  // auto-opens instead of hiding an active filter behind a collapsed toggle.
+  const hasAdvanced = v.category !== "" || v.zone !== "" || v.kind !== "" || v.sort !== "relevance";
+  const advancedCount = [v.category, v.zone, v.kind, v.sort !== "relevance" ? v.sort : ""].filter(Boolean).length;
 
   return (
     <div className="space-y-6">
@@ -85,36 +89,64 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
           <label htmlFor="db-q" className="text-xs font-semibold uppercase tracking-wide text-mist">Name or ID</label>
           <input id="db-q" name="q" type="search" defaultValue={v.q} maxLength={80} autoComplete="off" className="field" placeholder="e.g. Light Leather or 2318" />
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="db-category" className="text-xs font-semibold uppercase tracking-wide text-mist">Type</label>
-          <AutoSubmitSelect id="db-category" name="category" defaultValue={v.category} className="field">
-            <option value="">All types</option>
-            {DISPLAY_KINDS.map((k) => <option key={k} value={k}>{DISPLAY_KIND_PLURAL[k]}</option>)}
-          </AutoSubmitSelect>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="db-zone" className="text-xs font-semibold uppercase tracking-wide text-mist">Zone</label>
-          <AutoSubmitSelect id="db-zone" name="zone" defaultValue={v.zone} className="field">
-            <option value="">All zones</option>
-            {zones.map((z) => <option key={z.mapId} value={z.mapId}>{z.zoneName}</option>)}
-          </AutoSubmitSelect>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="db-kind" className="text-xs font-semibold uppercase tracking-wide text-mist">Acquisition</label>
-          <AutoSubmitSelect id="db-kind" name="kind" defaultValue={v.kind} className="field">
-            <option value="">Any method</option>
-            {LOOT_KINDS.map((k) => <option key={k} value={k}>{LOOT_KIND_LABEL[k]}</option>)}
-          </AutoSubmitSelect>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="db-sort" className="text-xs font-semibold uppercase tracking-wide text-mist">Sort</label>
-          <AutoSubmitSelect id="db-sort" name="sort" defaultValue={v.sort} className="field">
-            <option value="relevance">Relevance</option>
-            <option value="name">Name</option>
-            <option value="observations">Most observed</option>
-          </AutoSubmitSelect>
-        </div>
-        <button type="submit" className="btn-primary">Search</button>
+
+        {/*
+          Mobile: a native <details> disclosure keeps Type/Zone/Acquisition/Sort out of the way until
+          asked for - no JS required, Enter/Space toggle it natively, and screen readers announce the
+          expanded/collapsed state on <summary> for free. Desktop: `md:contents` on both the <details>
+          and its body dissolves them out of the box tree entirely, so their field children become
+          direct children of the form's own grid again - the exact same desktop layout as before, with
+          zero duplicated fields (and so no risk of a field's name being submitted twice).
+        */}
+        <details className="md:contents" open={hasAdvanced}>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-ink-600 bg-ink-900/60 px-3 py-2 text-sm font-semibold text-parchment marker:content-none [&::-webkit-details-marker]:hidden md:hidden">
+            <span className="flex items-center gap-1.5">
+              Advanced filters
+              {advancedCount > 0 && <span className="rounded-full bg-violet-500/30 px-1.5 py-0.5 text-xs font-semibold text-violet-300">{advancedCount} active</span>}
+            </span>
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-mist" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+          <div className="mt-3 grid gap-3 md:contents md:mt-0">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="db-category" className="text-xs font-semibold uppercase tracking-wide text-mist">Type</label>
+              <AutoSubmitSelect id="db-category" name="category" defaultValue={v.category} className="field">
+                <option value="">All types</option>
+                {DISPLAY_KINDS.map((k) => <option key={k} value={k}>{DISPLAY_KIND_PLURAL[k]}</option>)}
+              </AutoSubmitSelect>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="db-zone" className="text-xs font-semibold uppercase tracking-wide text-mist">Zone</label>
+              <AutoSubmitSelect id="db-zone" name="zone" defaultValue={v.zone} className="field">
+                <option value="">All zones</option>
+                {zones.map((z) => <option key={z.mapId} value={z.mapId}>{z.zoneName}</option>)}
+              </AutoSubmitSelect>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="db-kind" className="text-xs font-semibold uppercase tracking-wide text-mist">Acquisition</label>
+              <AutoSubmitSelect id="db-kind" name="kind" defaultValue={v.kind} className="field">
+                <option value="">Any method</option>
+                {LOOT_KINDS.map((k) => <option key={k} value={k}>{LOOT_KIND_LABEL[k]}</option>)}
+              </AutoSubmitSelect>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="db-sort" className="text-xs font-semibold uppercase tracking-wide text-mist">Sort</label>
+              <AutoSubmitSelect id="db-sort" name="sort" defaultValue={v.sort} className="field">
+                <option value="relevance">Relevance</option>
+                <option value="name">Name</option>
+                <option value="observations">Most observed</option>
+              </AutoSubmitSelect>
+            </div>
+            {advancedCount > 0 && (
+              <Link href={searchPath({ q: v.q })} className="text-sm font-medium text-violet-300 underline-offset-2 hover:underline md:hidden">
+                Reset filters
+              </Link>
+            )}
+          </div>
+        </details>
+
+        <button type="submit" className="btn-primary md:self-end">Search</button>
       </form>
 
       <div aria-live="polite">
