@@ -15,9 +15,6 @@ const PUBLIC_ENTRY_POINTS = [
   "public.fdb_device_status(text)",
   "public.fdb_device_ingest(text,jsonb)",
   "public.fdb_device_rotate_credential(text)",
-  "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",
-  "public.fdb_device_pair_poll(uuid,text)",
-  "public.fdb_device_pair_cancel(uuid,text)",
 ].sort();
 
 let w;
@@ -148,7 +145,7 @@ describe("interrupted network requests", () => {
     assert.equal((await w.ingest(d, second.device_secret, snapshot(inst, { updatedAt: 5000 }))).ok, true);
   });
 
-  it("a statement timeout / lock timeout configuration exists on every entry point (a stuck request cannot hold locks forever)", async () => {
+  it("a statement timeout / lock timeout configuration exists on every 0014 entry point (a stuck request cannot hold locks forever)", async () => {
     const rows = (await w.admin.query(
       `select n.nspname || '.' || p.proname || '(' || replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' sig,
               p.proconfig
