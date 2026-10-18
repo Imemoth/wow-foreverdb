@@ -174,9 +174,12 @@ it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/
   });
   } finally { w=await makeWorld(); }
 });
-it("Task 2 creates exactly the three native public pairing signatures", async () => {
+it("Task 3 exposes exactly the six approved public pairing signatures", async () => {
   const rows = await functions(w.admin);
   assert.deepEqual(rows.filter(fn => fn.schema === "public" && /^fdb_.*pair/.test(fn.name)).map(fn => fn.sig).sort(), [
+    "public.fdb_account_device_pair_approve(uuid)",
+    "public.fdb_account_device_pair_deny(uuid)",
+    "public.fdb_account_device_pair_preview(uuid)",
     "public.fdb_device_pair_cancel(uuid,text)",
     "public.fdb_device_pair_poll(uuid,text)",
     "public.fdb_device_pair_start(uuid,text,uuid,text,text,text)",

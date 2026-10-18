@@ -660,10 +660,233 @@ create function public.fdb_device_pair_cancel(p_pairing_id uuid,p_poll_secret te
 returns jsonb language sql security definer set search_path = ''
 set lock_timeout = '5s' set statement_timeout = '15s'
 as $$ select private.fdb_device_pair_native(p_pairing_id,p_poll_secret,true); $$;
+
+-- Registered-browser RPCs. Browser identity is derived only from the verified JWT.
+-- Their lock order is installation -> global budget -> exact session -> pairing row.
+create function public.fdb_account_device_pair_preview(p_pairing_id uuid)
+returns jsonb language plpgsql security definer set search_path = ''
+set lock_timeout = '5s' set statement_timeout = '15s'
+as $$
+declare
+    v_uid uuid; v_sid uuid; v_installation text; v_pair private.device_pairings; v_owner uuid;
+    v_session_deadline timestamptz; v_compatible boolean := true;
+begin
+    if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        return jsonb_build_object('ok',false,'error','pairing_not_available');
+    end if;
+    if not exists(select 1 from private.device_pairing_config where singleton and enabled) then
+        return jsonb_build_object('ok',false,'error','feature_disabled');
+    end if;
+    begin v_uid:=private.fdb_registered_caller(); v_sid:=(auth.jwt()->>'session_id')::uuid;
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    perform private.foreverdb_take_budget('pair_preview:uid:'||v_uid::text,300,30);
+    select installation_id into v_installation from private.device_pairings where id=p_pairing_id;
+    if found then perform pg_advisory_xact_lock(hashtextextended(v_installation,0)); end if;
+    perform private.foreverdb_take_budget('pair_preview:global',300,600);
+    begin
+        perform private.fdb_registered_caller();
+        perform private.fdb_lock_live_session(v_uid,v_sid,false);
+        select s.not_after into v_session_deadline from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+            and (s.not_after is null or s.not_after>clock_timestamp()) for share;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform 1 from auth.users where id=v_uid for share nowait;
+        perform 1 from auth.refresh_tokens where session_id=v_sid and not revoked order by id for share nowait;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform private.fdb_registered_caller();
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    select * into v_pair from private.device_pairings where id=p_pairing_id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if not found or v_pair.installation_id is distinct from v_installation then
+        return jsonb_build_object('ok',false,'error','pairing_not_available');
+    end if;
+    perform private.foreverdb_take_budget('pair_preview:pair:'||v_pair.id::text,300,60);
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if v_pair.status in ('pending','approved') and v_pair.expires_at<=clock_timestamp() then
+        update private.device_pairings set status='expired' where id=v_pair.id;
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
+        values('pairing_expired',v_pair.audit_ref,v_pair.installation_id,v_pair.approved_account_uid);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        return jsonb_build_object('state','expired');
+    end if;
+    if v_pair.status in ('connected','expired','denied','revoked') then return jsonb_build_object('state',v_pair.status); end if;
+    if v_pair.status not in ('pending','approved') then return jsonb_build_object('ok',false,'error','pairing_not_available'); end if;
+    if v_pair.status='approved' and v_pair.approved_account_uid is distinct from v_uid then
+        return jsonb_build_object('ok',false,'error','cannot_connect_to_this_account');
+    end if;
+    select owner_user_id into v_owner from public.installations where id=v_pair.installation_id;
+    if found and v_owner is distinct from v_pair.initiator_uid and v_owner is distinct from v_uid then v_compatible:=false; end if;
+    if not v_compatible then return jsonb_build_object('ok',false,'error','cannot_connect_to_this_account'); end if;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    return jsonb_build_object('state',v_pair.status,'computerName',v_pair.computer_label,
+        'installationSuffix','…'||right(v_pair.installation_id,6),
+        'requestedAt',to_char(v_pair.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'expiresAt',to_char(v_pair.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'canApprove',v_pair.status='pending');
+exception
+    when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+    when sqlstate 'PT429' then return jsonb_build_object('ok',false,'error','rate_limited');
+    when others then return jsonb_build_object('ok',false,'error','temporarily_unavailable');
+end;
+$$;
+
+create function public.fdb_account_device_pair_approve(p_pairing_id uuid)
+returns jsonb language plpgsql security definer set search_path = ''
+set lock_timeout = '5s' set statement_timeout = '15s'
+as $$
+declare
+    v_uid uuid; v_sid uuid; v_installation text; v_pair private.device_pairings; v_owner uuid;
+    v_session_deadline timestamptz;
+begin
+    if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        return jsonb_build_object('ok',false,'error','already_decided');
+    end if;
+    if not exists(select 1 from private.device_pairing_config where singleton and enabled) then
+        return jsonb_build_object('ok',false,'error','feature_disabled');
+    end if;
+    begin v_uid:=private.fdb_registered_caller(); v_sid:=(auth.jwt()->>'session_id')::uuid;
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    perform private.foreverdb_take_budget('pair_decide:uid:'||v_uid::text,300,10);
+    select installation_id into v_installation from private.device_pairings where id=p_pairing_id;
+    if found then perform pg_advisory_xact_lock(hashtextextended(v_installation,0)); end if;
+    perform private.foreverdb_take_budget('pair_decide:global',300,120);
+    begin
+        perform private.fdb_registered_caller(); perform private.fdb_lock_live_session(v_uid,v_sid,false);
+        select s.not_after into v_session_deadline from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+            and (s.not_after is null or s.not_after>clock_timestamp()) for share;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform 1 from auth.users where id=v_uid for share nowait;
+        perform 1 from auth.refresh_tokens where session_id=v_sid and not revoked order by id for share nowait;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform private.fdb_registered_caller();
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    select * into v_pair from private.device_pairings where id=p_pairing_id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if not found or v_pair.installation_id is distinct from v_installation then return jsonb_build_object('ok',false,'error','already_decided'); end if;
+    perform private.foreverdb_take_budget('pair_decide:pair:'||v_pair.id::text,300,5);
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if v_pair.status in ('pending','approved') and v_pair.expires_at<=clock_timestamp() then
+        update private.device_pairings set status='expired' where id=v_pair.id;
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
+        values('pairing_expired',v_pair.audit_ref,v_pair.installation_id,v_pair.approved_account_uid);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        return jsonb_build_object('ok',false,'error','expired');
+    end if;
+    if v_pair.status<>'pending' then return jsonb_build_object('ok',false,'error','already_decided'); end if;
+    select owner_user_id into v_owner from public.installations where id=v_pair.installation_id;
+    if found and v_owner is distinct from v_pair.initiator_uid and v_owner is distinct from v_uid then
+        return jsonb_build_object('ok',false,'error','cannot_connect_to_this_account');
+    end if;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    update private.device_pairings set status='approved',approved_account_uid=v_uid,approved_session_id=v_sid,
+        approved_at=clock_timestamp() where id=v_pair.id;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
+    values('pairing_approved',v_pair.audit_ref,v_pair.installation_id,v_uid);
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    return jsonb_build_object('ok',true,'state','approved');
+exception
+    when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+    when sqlstate 'PT429' then return jsonb_build_object('ok',false,'error','rate_limited');
+    when others then return jsonb_build_object('ok',false,'error','temporarily_unavailable');
+end;
+$$;
+
+create function public.fdb_account_device_pair_deny(p_pairing_id uuid)
+returns jsonb language plpgsql security definer set search_path = ''
+set lock_timeout = '5s' set statement_timeout = '15s'
+as $$
+declare
+    v_uid uuid; v_sid uuid; v_installation text; v_pair private.device_pairings;
+    v_session_deadline timestamptz;
+begin
+    if p_pairing_id is null or p_pairing_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        return jsonb_build_object('ok',false,'error','already_decided');
+    end if;
+    if not exists(select 1 from private.device_pairing_config where singleton and enabled) then
+        return jsonb_build_object('ok',false,'error','feature_disabled');
+    end if;
+    begin v_uid:=private.fdb_registered_caller(); v_sid:=(auth.jwt()->>'session_id')::uuid;
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    perform private.foreverdb_take_budget('pair_decide:uid:'||v_uid::text,300,10);
+    select installation_id into v_installation from private.device_pairings where id=p_pairing_id;
+    if found then perform pg_advisory_xact_lock(hashtextextended(v_installation,0)); end if;
+    perform private.foreverdb_take_budget('pair_decide:global',300,120);
+    begin
+        perform private.fdb_registered_caller(); perform private.fdb_lock_live_session(v_uid,v_sid,false);
+        select s.not_after into v_session_deadline from auth.sessions s where s.id=v_sid and s.user_id=v_uid
+            and (s.not_after is null or s.not_after>clock_timestamp()) for share;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform 1 from auth.users where id=v_uid for share nowait;
+        perform 1 from auth.refresh_tokens where session_id=v_sid and not revoked order by id for share nowait;
+        if not found then raise sqlstate 'PT401'; end if;
+        perform private.fdb_registered_caller();
+    exception when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+              when sqlstate 'PT403' then return jsonb_build_object('ok',false,'error','forbidden'); end;
+    select * into v_pair from private.device_pairings where id=p_pairing_id for update;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if not found or v_pair.installation_id is distinct from v_installation then return jsonb_build_object('ok',false,'error','already_decided'); end if;
+    perform private.foreverdb_take_budget('pair_decide:pair:'||v_pair.id::text,300,5);
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    if v_pair.status in ('pending','approved') and v_pair.expires_at<=clock_timestamp() then
+        update private.device_pairings set status='expired' where id=v_pair.id;
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid)
+        values('pairing_expired',v_pair.audit_ref,v_pair.installation_id,v_pair.approved_account_uid);
+        if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+        return jsonb_build_object('ok',false,'error','expired');
+    end if;
+    if v_pair.status='approved' and v_pair.approved_account_uid is distinct from v_uid then
+        return jsonb_build_object('ok',false,'error','already_decided');
+    end if;
+    if v_pair.status not in ('pending','approved') then return jsonb_build_object('ok',false,'error','already_decided'); end if;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    update private.device_pairings set status='denied',denied_at=clock_timestamp(),denied_reason='browser_denied' where id=v_pair.id;
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,reason)
+    values('pairing_denied',v_pair.audit_ref,v_pair.installation_id,v_uid,'browser_denied');
+    if v_session_deadline<=clock_timestamp() then raise sqlstate 'PT401'; end if;
+    return jsonb_build_object('ok',true,'state','denied');
+exception
+    when sqlstate 'PT401' then return jsonb_build_object('ok',false,'error','unauthenticated');
+    when sqlstate 'PT429' then return jsonb_build_object('ok',false,'error','rate_limited');
+    when others then return jsonb_build_object('ok',false,'error','temporarily_unavailable');
+end;
+$$;
+
+create function private.device_pairing_revocation_trigger()
+returns trigger language plpgsql security definer set search_path = ''
+set lock_timeout = '5s' set statement_timeout = '15s'
+as $$
+declare v_pair private.device_pairings;
+begin
+    if new.pairing_id is null or new.status<>'revoked' or old.status='revoked' then return new; end if;
+    update private.device_pairings set status='revoked',revoked_at=new.revoked_at
+      where id=new.pairing_id and status='connected' returning * into v_pair;
+    if found then
+        insert into private.device_pairing_audit(event,pairing_audit_ref,installation_id,account_uid,device_id,reason)
+        values('pairing_revoked',v_pair.audit_ref,v_pair.installation_id,new.account_uid,new.id,new.revoked_reason);
+    end if;
+    return new;
+end;
+$$;
+create trigger devices_propagate_pairing_revocation after update of status on private.devices
+for each row when (old.status is distinct from new.status and new.status='revoked')
+execute function private.device_pairing_revocation_trigger();
+
 revoke all on function private.fdb_pair_poll_global_budget(),private.fdb_device_pair_native(uuid,text,boolean),
-    public.fdb_device_pair_start(uuid,text,uuid,text,text,text),public.fdb_device_pair_poll(uuid,text),public.fdb_device_pair_cancel(uuid,text)
+    private.device_pairing_revocation_trigger(),
+    public.fdb_device_pair_start(uuid,text,uuid,text,text,text),public.fdb_device_pair_poll(uuid,text),public.fdb_device_pair_cancel(uuid,text),
+    public.fdb_account_device_pair_preview(uuid),public.fdb_account_device_pair_approve(uuid),public.fdb_account_device_pair_deny(uuid)
     from public,anon,authenticated,service_role;
-grant execute on function public.fdb_device_pair_start(uuid,text,uuid,text,text,text),public.fdb_device_pair_poll(uuid,text),public.fdb_device_pair_cancel(uuid,text) to authenticated;
+grant execute on function public.fdb_device_pair_start(uuid,text,uuid,text,text,text),public.fdb_device_pair_poll(uuid,text),public.fdb_device_pair_cancel(uuid,text),
+    public.fdb_account_device_pair_preview(uuid),public.fdb_account_device_pair_approve(uuid),public.fdb_account_device_pair_deny(uuid) to authenticated;
 
 -- Static SQL keeps preservation checks visible to the existing account migration conformance tripwire.
 create temporary table _fdb0016_after_rows on commit drop as
