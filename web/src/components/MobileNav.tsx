@@ -6,8 +6,10 @@ import { createPortal } from "react-dom";
 
 /**
  * Mobile hamburger disclosure. ADR-015: like SiteHeader.tsx, this file must never import
- * account modules or inspect session/feature-flag state - the Account entry below is the
- * same static route link the desktop header renders, not a re-implementation of its gating.
+ * account modules or inspect session/feature-flag state. No Account entry here, matching the
+ * desktop header: for the current public-beta scope (Account Auth disabled) a global,
+ * state-agnostic /account link is misleading, and this file cannot safely make it conditional
+ * without crossing the boundary - the real /account app and its own nav are unaffected.
  */
 const MENU_LINKS = [
   { href: "/database", label: "Database" },
@@ -16,7 +18,6 @@ const MENU_LINKS = [
   { href: "/news", label: "News" },
   { href: "/blog", label: "Blog" },
   { href: "/download", label: "Download" },
-  { href: "/account", label: "Account" },
 ];
 
 export function MobileNav() {

@@ -84,8 +84,18 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
       </header>
 
       <form action="/database" method="get" role="search" aria-label="Database search and filters" autoComplete="off"
-        className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-end">
-        <div className="flex flex-col gap-1">
+        className="panel grid gap-3 p-4 md:grid-cols-2 md:items-end lg:grid-cols-4 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
+        {/*
+          Tablet (md/lg, 768-1279px): the fixed-fr single-row grid below `xl` has no room to wrap,
+          so at intermediate widths (e.g. ~1024-1032px) the five fields + Search button overflow
+          and the button clips at the container edge - a real regression an owner caught visually,
+          never a viewport our Playwright "desktop" project (1366px) or "mobile" project (~412px)
+          exercises. Name/ID and the Search button get their own full-width row at md/lg so neither
+          is ever squeezed by the filter fields; at `xl` (1280px+) col-span resets to 1 and this
+          becomes the same single `2fr_1fr_1fr_1fr_1fr_auto` row as before - the original desktop
+          design is pixel-identical from 1280px up.
+        */}
+        <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-4 xl:col-span-1">
           <label htmlFor="db-q" className="text-xs font-semibold uppercase tracking-wide text-mist">Name or ID</label>
           <input id="db-q" name="q" type="search" defaultValue={v.q} maxLength={80} autoComplete="off" className="field" placeholder="e.g. Light Leather or 2318" />
         </div>
@@ -153,7 +163,7 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
           )}
         </div>
 
-        <button type="submit" className="btn-primary md:self-end">Search</button>
+        <button type="submit" className="btn-primary md:col-span-2 md:self-end lg:col-span-4 xl:col-span-1">Search</button>
       </form>
 
       <div aria-live="polite">

@@ -13,10 +13,12 @@ const NAV = [
 
 export function SiteHeader() {
   // ADR-015 (account boundary): this file stays outside the account zone and never references
-  // its configuration or session state — enforced by a static test, not just a convention. So the
-  // header cannot know whether sign-in is enabled or whether the visitor is signed in; it only
-  // ever links to the real /account route. When the feature is off, that route's own gate decides
-  // (app/account/layout.tsx answers "not found") — the disabled state is enforced there, not hidden here.
+  // its configuration or session state — enforced by a static test, not just a convention. For
+  // the current public-beta scope, Account Auth is disabled, which made a global, state-agnostic
+  // "/account" link here misleading (it always rendered, 404'd when visited). Since this file
+  // cannot safely check whether sign-in is enabled without crossing the boundary, the fix is to
+  // remove the entry point here rather than make it conditional - the real /account app, its own
+  // authenticated nav (AccountNavLinks.tsx) and its fail-closed 404 gate are all untouched.
   return (
     <header className="border-b border-ink-700/80 bg-ink-900/80 backdrop-blur supports-[backdrop-filter]:bg-ink-900/60">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-2.5 sm:py-3">
@@ -43,7 +45,6 @@ export function SiteHeader() {
             <input id="header-q" name="q" type="search" maxLength={80} minLength={2} autoComplete="off"
               placeholder="Search items, creatures, nodes…" className="field w-full text-sm" />
           </form>
-          <Link href="/account" className="btn-ghost text-sm">Account</Link>
         </div>
         {/* Mobile-only compact row: full nav/search collapse into a search shortcut and the hamburger menu. */}
         <div className="ml-auto flex items-center gap-1 sm:hidden">
