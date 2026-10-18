@@ -98,6 +98,8 @@ describe("pairing static trust boundary", () => {
       expect.soft(scan().status).toBe(1);
       writeFileSync(migration, off + "-- UPDATE private.device_pairing_config SET enabled = true;\nALTER TABLE private.device_pairing_config ENABLE ROW LEVEL SECURITY;\nALTER TABLE private.device_pairing_config FORCE ROW LEVEL SECURITY;\n");
       expect.soft(scan().status).toBe(0);
+      writeFileSync(migration, off + "CREATE TRIGGER fixed AFTER UPDATE ON private.devices FOR EACH ROW EXECUTE FUNCTION private.fixed_trigger();\n");
+      expect.soft(scan().status).toBe(0);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   });
 });

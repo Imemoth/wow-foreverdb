@@ -28,7 +28,8 @@ describe("account web zone (static)", () => {
   it("has the expected shape", () => {
     expect(routes.map(rel).sort()).toEqual([
       "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts",
-      "app/account/api/device-pair/cancel/route.ts", "app/account/api/device-pair/poll/route.ts", "app/account/api/device-pair/start/route.ts",
+      "app/account/api/device-pair/approve/route.ts", "app/account/api/device-pair/cancel/route.ts", "app/account/api/device-pair/deny/route.ts",
+      "app/account/api/device-pair/poll/route.ts", "app/account/api/device-pair/start/route.ts",
       "app/account/api/devices/revoke/route.ts", "app/account/api/devices/route.ts",
       "app/account/api/enrollment/download/route.ts", "app/account/api/enrollment/revoke/route.ts", "app/account/api/forgot-password/route.ts",
       "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",

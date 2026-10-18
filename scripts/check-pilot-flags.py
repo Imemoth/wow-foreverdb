@@ -95,7 +95,10 @@ write = rf"\b(?:create\s+table|insert\s+into|update|delete\s+from|merge\s+into|a
 # Dynamic EXECUTE targets cannot be proven safe statically. GRANT/REVOKE EXECUTE ON
 # names a function privilege, not an executable SQL statement.
 tables, seeds = [], []
-unsupported = bool(re.search(r"\bexecute\s+(?!on\b)", sql))
+# SQL trigger clauses use the fixed grammar `EXECUTE FUNCTION <name>` (or the
+# legacy `EXECUTE PROCEDURE`) and do not execute caller-built SQL. PL/pgSQL's
+# standalone `EXECUTE <expression>` remains unprovable and fails closed.
+unsupported = bool(re.search(r"\bexecute\s+(?!on\b|function\b|procedure\b)", sql))
 for statement in sql.split(";"):
     # UPDATE/DELETE permit ONLY (relation) as well as ONLY relation. These writes
     # are never approved, so recognize their target before the closed statement

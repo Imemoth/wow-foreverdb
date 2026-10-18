@@ -45,6 +45,25 @@ export function linkMessageFor(code: unknown): string {
   return (typeof code === "string" && LINK_MESSAGES[code]) || "Something went wrong. Please try again.";
 }
 
+export const PAIRING_MESSAGES: Record<string, string> = {
+  expired: "This pairing request has expired. Start a new pairing request in the Companion.",
+  already_decided: "This pairing request was already approved or denied. Reload to see its current state.",
+  cannot_connect_to_this_account: "This computer cannot be connected to the account shown on this page.",
+  pairing_not_available: "This pairing request is no longer available. Start a new request in the Companion.",
+  account_changed: "Your session changed while this page was open. Reload the page and check which account is shown.",
+  csrf: "Your session changed while this page was open. Reload the page and check which account is shown.",
+  unauthenticated: "Your session has ended. Sign in again, then restart pairing from the Companion.",
+  forbidden: "This request was refused. Reload the page before trying again.",
+  rate_limited: "Too many pairing attempts. Wait a minute before trying again.",
+  temporarily_unavailable: "Pairing is temporarily unavailable. Reload in a moment.",
+  outcome_unknown: "We could not confirm the result. Do not repeat the action; reload this page to check the pairing state.",
+  network: "We could not confirm the result. Check your connection, then reload this page before taking another action.",
+};
+
+export function pairingMessageFor(code: unknown): string {
+  return (typeof code === "string" && PAIRING_MESSAGES[code]) || "The pairing request could not be completed. Reload the page and try again.";
+}
+
 export function messageFor(code: unknown): string {
   return (typeof code === "string" && ERROR_MESSAGES[code]) || "Something went wrong. Please try again.";
 }
