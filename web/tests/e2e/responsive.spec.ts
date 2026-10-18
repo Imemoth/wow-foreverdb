@@ -100,4 +100,88 @@ test.describe("mobile-only UI", () => {
     await page.getByRole("link", { name: "Reset filters" }).click();
     await expect(page).toHaveURL(/\/database\?q=copper$/);
   });
+
+  test("database mobile: an active filter is still discoverable after a hard reload", async ({ page }) => {
+    await page.goto("/database?q=copper&zone=1420&sort=name");
+    const details = page.locator("details");
+    await expect(details).toHaveJSProperty("open", true);
+    await expect(page.getByText("2 active")).toBeVisible();
+    await expect(page.getByLabel("Zone")).toBeVisible();
+    await page.reload();
+    await expect(details).toHaveJSProperty("open", true);
+    await expect(page.getByText("2 active")).toBeVisible();
+    await expect(page.getByLabel("Zone")).toHaveValue("1420");
+    await expect(page.getByLabel("Sort")).toHaveValue("name");
+  });
+});
+
+// The regression this guards against: an earlier implementation tried to override a closed native
+// <details>'s own content-hiding behavior with `md:contents` on its children, which is not reliable
+// across browser engines and silently dropped Type/Zone/Acquisition/Sort from the desktop form
+// entirely. Pinned to 1440px (not just the "desktop" project's 1366px default) because that is the
+// exact width the regression was reported at.
+test.describe("database desktop filters (regression: must never collapse on desktop)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop-only regression check");
+  });
+
+  test("no active filters: every filter field is visible and the mobile toggle is not", async ({ page }) => {
+    await page.goto("/database?q=copper");
+    await expect(page.getByLabel("Name or ID")).toBeVisible();
+    await expect(page.getByLabel("Type")).toBeVisible();
+    await expect(page.getByLabel("Zone")).toBeVisible();
+    await expect(page.getByLabel("Acquisition")).toBeVisible();
+    await expect(page.getByLabel("Sort")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Search" })).toBeVisible();
+    await expect(page.getByText("Advanced filters", { exact: false })).toBeHidden();
+  });
+
+  test("with a query and an active filter, every filter field remains visible", async ({ page }) => {
+    await page.goto("/database?q=copper&kind=mining&sort=observations");
+    await expect(page.getByLabel("Type")).toBeVisible();
+    await expect(page.getByLabel("Zone")).toBeVisible();
+    await expect(page.getByLabel("Acquisition")).toBeVisible();
+    await expect(page.getByLabel("Acquisition")).toHaveValue("mining");
+    await expect(page.getByLabel("Sort")).toBeVisible();
+    await expect(page.getByLabel("Sort")).toHaveValue("observations");
+    // Collapsed-by-default styling never applies at this width even though the disclosure is "open".
+    await expect(page.getByText("Advanced filters", { exact: false })).toBeHidden();
+  });
+
+  test("filtering and sorting operate correctly from the visible desktop controls", async ({ page }) => {
+    await page.goto("/database?q=copper");
+    await page.getByLabel("Acquisition").selectOption({ label: "Mining" });
+    await expect(page).toHaveURL(/kind=mining/);
+    await page.getByLabel("Sort").selectOption({ label: "Most observed" });
+    await expect(page).toHaveURL(/sort=observations/);
+    await expect(page.getByLabel("Acquisition")).toHaveValue("mining");
+    await expect(page.getByLabel("Sort")).toHaveValue("observations");
+  });
+
+  test("no duplicate fields and no duplicate query parameters are submitted", async ({ page }) => {
+    await page.goto("/database?q=copper");
+    // Scoped to the database search form itself: the header elsewhere on the page has its own,
+    // separate `name="q"` search input, which is not a duplicate of this form's field.
+    const form = page.getByRole("search", { name: "Database search and filters" });
+    for (const name of ["q", "category", "zone", "kind", "sort"]) {
+      await expect(form.locator(`[name="${name}"]`)).toHaveCount(1);
+    }
+    await page.getByLabel("Type").selectOption({ label: "Items" });
+    const url = new URL(page.url());
+    for (const name of ["q", "category", "zone", "kind", "sort"]) {
+      expect(url.searchParams.getAll(name).length).toBeLessThanOrEqual(1);
+    }
+    await expect(page.getByRole("alert")).toHaveCount(0); // no "duplicate_parameter" validation error
+  });
+
+  test("search results table remains fully functional alongside the restored filters", async ({ page }) => {
+    await page.goto("/database?q=copper");
+    const table = page.locator("table");
+    await expect(table).toBeVisible();
+    await expect(table.getByRole("link", { name: "Copper Ore" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Search results" })).toBeHidden(); // mobile cards stay off at this width
+    await table.getByRole("link", { name: "Copper Ore" }).click();
+    await expect(page).toHaveURL(/\/item\/2770/);
+  });
 });

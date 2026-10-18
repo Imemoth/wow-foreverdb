@@ -372,4 +372,37 @@
     background: linear-gradient(to bottom, transparent, var(--color-ink-950));
     pointer-events: none;
   }
+
+  /*
+   * Database "Advanced filters" disclosure (see database/page.tsx). The toggle is a native
+   * <details>/<summary> for free keyboard/AT support, but its controlled fields are rendered as
+   * an ADJACENT SIBLING div, not as children of <details> - deliberately, after a real regression:
+   * browsers hide a closed <details>'s children through their own UA mechanism (historically
+   * `display: none`, but some engines instead use `content-visibility: hidden` or an internal
+   * shadow-tree slot), and author CSS overriding one of those (e.g. `display: contents`) does
+   * nothing against the others. A sibling is never subject to any of that, so these two rules -
+   * entirely our own, with no UA mechanism to out-fight - are the only thing governing visibility.
+   */
+  .db-filters-body {
+    display: none;
+  }
+  .db-filters-toggle[open] + .db-filters-body {
+    display: grid;
+  }
+  @media (min-width: 768px) {
+    .db-filters-toggle {
+      display: none;
+    }
+    /*
+     * !important, deliberately: `.db-filters-toggle[open] + .db-filters-body` above is MORE
+     * specific (two classes + an attribute selector) than a plain `.db-filters-body` rule would
+     * be, so without this, a search that already has a filter applied (details rendered `open`)
+     * would win the specificity fight at desktop widths too and paint the fields as a nested grid
+     * instead of dissolving them into the form's own columns. This must always win outright,
+     * regardless of the toggle's open/closed state, so !important beats the mental arithmetic.
+     */
+    .db-filters-body {
+      display: contents !important;
+    }
+  }
 }
