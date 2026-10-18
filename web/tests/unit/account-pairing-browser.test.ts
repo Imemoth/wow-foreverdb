@@ -152,4 +152,12 @@ describe("browser pairing page", () => {
     const html = await render();
     expect(html).toContain("cannot be connected"); expect(html).not.toContain(OTHER_UID); expect(rpcCalls).toHaveLength(1);
   });
+
+  it("lets the same displayed account deny an approved request before redemption", async () => {
+    rpcReply = () => json({ state: "approved", computerName: "Gaming PC", installationSuffix: "…ABC123", requestedAt: "2026-10-16T12:00:00Z", expiresAt: "2026-10-16T12:05:00Z", canApprove: false });
+    const html = await render();
+    expect(html).toContain("Approved. Return to the Companion");
+    expect(html).toContain("Deny this approved request");
+    expect(html).not.toContain("Approve this computer");
+  });
 });

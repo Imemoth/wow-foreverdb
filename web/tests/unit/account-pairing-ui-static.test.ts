@@ -43,6 +43,7 @@ describe("browser pairing approval UI (static)", () => {
     expect(ui).toMatch(/tabIndex=\{-1\}/);
     expect(ui).toMatch(/Approve/);
     expect(ui).toMatch(/Deny/);
+    expect(ui).toMatch(/state === "approved"[\s\S]*Deny this approved request/);
     expect(read("lib/account/messages.ts")).toMatch(/Your session changed while this page was open/);
     expect(ui).not.toMatch(/localStorage|sessionStorage|document\.cookie|console\./);
   });
