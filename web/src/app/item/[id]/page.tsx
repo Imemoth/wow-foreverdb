@@ -69,7 +69,7 @@ export default async function ItemPage({ params }: { params: Params }) {
         <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database", href: "/database" }, { name: "Items", href: "/database?category=item" }, { name: v.name }]} />
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">Item · disenchanting input</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{v.name}</h1>
+          <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{v.name}</h1>
           <p className="mt-1 font-[family-name:var(--font-mono)] text-sm text-mist">Item ID {de.id} · {fmtInt(v.totalObservations)} observed disenchants</p>
         </header>
         <ObservedRateNote />
@@ -94,12 +94,12 @@ export default async function ItemPage({ params }: { params: Params }) {
     <article className="space-y-8">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database", href: "/database" }, { name: "Items", href: "/database?category=item" }, { name: d.item.name }]} />
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">Item</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{d.item.name}</h1>
+          <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{d.item.name}</h1>
           <p className="mt-1 font-[family-name:var(--font-mono)] text-sm text-mist">Item ID {d.item.id}</p>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Sources" value={fmtInt(d.item.sourceCount)} />
           <StatTile label="Times seen" value={fmtInt(d.item.totalDrops)} />
           <StatTile label="Last observed" value={fmtDate(d.item.lastObservedAt)} />

@@ -66,15 +66,15 @@ export async function SourcePage({ type, rawId }: { type: SourceType; rawId: str
     <article className="space-y-8">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database", href: "/database" }, { name: CATEGORY[type].label, href: CATEGORY[type].href }, { name: first.name }]} />
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">{label}</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{first.name}</h1>
+          <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{first.name}</h1>
           <p className="mt-1 font-[family-name:var(--font-mono)] text-sm text-mist">
             {id ? `${label} ID ${id}` : "Fishing pool (identified by name and zone; no stable game ID)"}
             {type === "creature" && ` · ${s.variants.length} observed level${s.variants.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Observations" value={fmtInt(total)} />
           <StatTile label="Zones" value={fmtInt(s.zones.length)} />
           <StatTile label="Last observed" value={fmtDate(last)} />
@@ -101,7 +101,7 @@ export async function SourcePage({ type, rawId }: { type: SourceType; rawId: str
           </h2>
           <ul className="flex flex-wrap gap-3">
             {v.buckets.map((b) => (
-              <li key={b.lootKind} className="panel flex items-center gap-3 px-3 py-2 text-sm">
+              <li key={b.lootKind} className="panel flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
                 <LootKindBadge kind={b.lootKind} />
                 <span className="text-parchment">{fmtInt(b.observations)} observed</span>
                 <ConfidenceBadge confidence={b.confidence} />
