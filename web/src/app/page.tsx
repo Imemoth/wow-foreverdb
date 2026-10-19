@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { DisplayKindBadge } from "@/components/Badges";
 import { EntityLink } from "@/components/EntityLink";
@@ -7,11 +8,33 @@ import { HeroBackground } from "@/components/hero/HeroBackground";
 import { HeroImageLayer } from "@/components/hero/HeroImageLayer";
 import { StatTile } from "@/components/StatTile";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
+import { serverEnv } from "@/lib/env";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { entityPath, searchPath, zonePath } from "@/lib/routes";
+import { BETA_SEO_HOSTNAME, isPublicBetaHomepage, requestHostname } from "@/lib/seo";
 
-export const metadata = { alternates: { canonical: "/" } };
+/**
+ * Narrowly-scoped public-beta exception: ONLY on beta.azerdex.com, in preview mode, serving
+ * fixture data, with this exact branch explicitly authorized, is "/" indexable - see
+ * isPublicBetaHomepage in lib/seo.ts. Every other hostname (including generated *.vercel.app
+ * Preview aliases) and every other branch keeps the static noindex fallback below.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const env = serverEnv();
+  const hostname = await requestHostname();
+  if (!isPublicBetaHomepage(env, hostname, "/")) return { alternates: { canonical: "/" } };
+  const url = `https://${BETA_SEO_HOSTNAME}/`;
+  const description =
+    "AzerDex public beta: a live preview of our WoW: Forever loot, gathering and zone database, running on synthetic demo data while the real player-observation pipeline is finished.";
+  return {
+    title: "AzerDex Public Beta — Preview the WoW: Forever loot & gathering database",
+    description,
+    alternates: { canonical: url },
+    openGraph: { title: "AzerDex — Public Beta", description, url, type: "website" },
+    robots: { index: true, follow: true },
+  };
+}
 
 const ENTRY_POINTS: { title: string; text: string; href: string; icon: CategoryIconId }[] = [
   { title: "Items", text: "What drops it, from where, and how often it was seen.", href: "/database?category=item", icon: "items" },
@@ -66,7 +89,8 @@ const FEATURE_CARDS: FeatureCardData[] = [
 ];
 
 export default async function HomePage() {
-  const { db, nonce } = await pageContext();
+  const { db, nonce, env } = await pageContext();
+  const betaHomepage = isPublicBetaHomepage(env, await requestHostname(), "/");
   const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(5), db.zones()]);
   const articles = visibleArticles();
   const news = articles.filter((a) => a.section === "news").slice(0, 3);
@@ -98,8 +122,15 @@ export default async function HomePage() {
             Know Where It Drops.
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-mist sm:mt-4 sm:text-base">
-            A community-powered database for World of Warcraft: Forever, built from real in-game observations.
+            {betaHomepage
+              ? "A community-powered database for World of Warcraft: Forever — this public beta runs on synthetic demo data while the real observation pipeline is finished."
+              : "A community-powered database for World of Warcraft: Forever, built from real in-game observations."}
           </p>
+          {betaHomepage && (
+            <p role="note" className="mx-auto mt-2 max-w-2xl text-xs font-semibold text-[#ffd9b8]">
+              Public beta — every figure below is synthetic demo data, not a real player observation.
+            </p>
+          )}
           <form action="/database" method="get" role="search" className="mx-auto mt-6 flex max-w-2xl flex-col gap-2 sm:mt-8 sm:flex-row">
             <label htmlFor="hero-q" className="sr-only">Search items, creatures, nodes or a game ID</label>
             <input id="hero-q" name="q" type="search" required minLength={2} maxLength={80} autoComplete="off"

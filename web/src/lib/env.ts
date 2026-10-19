@@ -60,6 +60,10 @@ const Base = z.object({
   TURNSTILE_SECRET_KEY: z.string().min(10).optional(),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(10).optional(),
   CHALLENGE_COOKIE_SECRET: z.string().min(32).optional(),
+  // Public-beta homepage SEO exception (see isPublicBetaHomepage in lib/seo.ts). Its value must
+  // equal VERCEL_GIT_COMMIT_REF for the branch actually serving THIS deployment - a value copied to
+  // another branch's environment by mistake stays inert there, since the names will not match.
+  BETA_SEO_AUTHORIZED_BRANCH: z.string().min(1).optional(),
 });
 
 export interface ServerEnv {
@@ -85,6 +89,12 @@ export interface ServerEnv {
   hosted: boolean;
   /** Vercel's own environment (production | preview), when hosted on Vercel. */
   platformEnv?: "production" | "preview";
+  /**
+   * True only when BETA_SEO_AUTHORIZED_BRANCH is set AND equals the git branch actually serving
+   * this deployment. By itself this indexes nothing - see isPublicBetaHomepage in lib/seo.ts,
+   * which also requires the exact beta.azerdex.com hostname, preview mode, fixture data and "/".
+   */
+  betaSeoBranchAuthorized: boolean;
 }
 
 export function detectHosting(raw: RawEnv): { onVercel: boolean; hosted: boolean; vercelEnv?: "production" | "preview" | "development" } {
@@ -318,6 +328,19 @@ export function evaluateEnv(
     fail("Turnstile requires NEXT_PUBLIC_TURNSTILE_SITE_KEY and CHALLENGE_COOKIE_SECRET");
   }
 
+  // 7. Public-beta homepage SEO exception --------------------------------------
+  // Meaningful only in preview; carrying it into local or production is always a mistake, so it
+  // fails closed rather than silently doing nothing.
+  if (b.BETA_SEO_AUTHORIZED_BRANCH && deployment !== "preview") {
+    fail("BETA_SEO_AUTHORIZED_BRANCH is only meaningful in preview; refusing to carry it into this deployment mode");
+  }
+  const betaSeoBranchAuthorized = Boolean(
+    b.BETA_SEO_AUTHORIZED_BRANCH &&
+      deployment === "preview" &&
+      raw.VERCEL_GIT_COMMIT_REF &&
+      b.BETA_SEO_AUTHORIZED_BRANCH === raw.VERCEL_GIT_COMMIT_REF,
+  );
+
   if (issues.length) return { ok: false, issues };
   return {
     ok: true,
@@ -330,6 +353,7 @@ export function evaluateEnv(
       SITE_URL: siteUrl,
       hosted: host.hosted,
       platformEnv: host.vercelEnv === "production" || host.vercelEnv === "preview" ? host.vercelEnv : undefined,
+      betaSeoBranchAuthorized,
     },
   };
 }
