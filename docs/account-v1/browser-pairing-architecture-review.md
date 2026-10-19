@@ -39,12 +39,29 @@ The following residual risks are accepted design constraints and require verific
 These constraints do not introduce a second ownership authority or permit silent transfer. Stage B may proceed after the Stage A
 written specification is reviewed, while all source and database gates remain off.
 
-## Stage B implementation security checkpoint — 2026-10-18
+## Stage B implementation review checkpoint — 2026-10-19
 
-The ownership model remains unchanged in the implementation through `330565d`: `public.installations.owner_user_id` is still the sole
-authority, approval records the exact registered account and GoTrue session, and redemption performs the ownership transfer and device
-registration in one database transaction. The final Task 4 rollback/restore work, Task 9 full-stack evidence and independent final-diff
-reviews are still pending, so this checkpoint is not final Stage B approval.
+The implementation through code head `2537ec4` preserves the architecture. `public.installations.owner_user_id` remains the sole
+ownership authority; approval stores the exact registered account and GoTrue session; proof-bearing redemption transfers ownership,
+records provenance and registers exactly one device in one transaction. Account V1 claims, `.fdbact` enrollment, anonymous ingest,
+registered manual ingest and Guildbook history remain compatible.
+
+Migration 0016 now has a closed OFF-by-default schema, six fixed RPCs, kill switch, enable/disable procedures, empty/nonempty rollback,
+explicit restore, append-only ledger checks and predecessor rollback guards. The exact PR #58 head
+`9af1ab0af2c94bc78990b5c8098f9fa08247cba2` was rehearsed in the production order 0012 -> 0014 -> 0015 -> 0016 -> rollback ->
+restore. Its 0015 definitions, ACLs and rows retained snapshot hash `438aab9e0147ae5d969c18424076f881`; pairing, welcome enqueue and
+welcome dispatch all ended disabled.
+
+Local mandatory evidence passes: Account 219/219, enrollment 99/99, pairing database 146/146, mutation 16/16, web 474/474, real browser
+stack 66/66, TypeScript, ESLint, normal and disposable E2E production builds, 48-file bundle scans and the complete OFF-gate scan. The
+real-GoTrue evidence covers live-session validity, normal refresh rotation, refresh-family reuse revocation, logout, same-UID session
+substitution and concurrent revocation in both lock acquisition orders.
+
+The earlier independent web security review found no Critical, High or Medium issue. Its rendered-session proof and terminal-control
+Low findings were fixed and documented. One accepted Low remains: a terminal Server Component GET cannot immediately delete the
+bounded five-minute HttpOnly locator cookie; the rendered terminal state is inert and a confirmed terminal mutation clears it. Fresh
+whole-branch architecture/security review was dispatched after the final test-harness changes, but both agents failed before review
+because the shared agent workspace had no remaining credits. No final-diff approval is claimed; that mandatory review remains open.
 
 One security gate remains unresolved. Native `start`, `poll` and `cancel` require exactly one raw `Authorization` field line. Local
 Next.js cannot prove that property after the runtime has normalized headers, so the approved Option 2 depends on Vercel public ingress
@@ -63,3 +80,8 @@ behavior. The 9/9 observation therefore cannot serve as a durable provider guara
 **Decision:** keep the exact-one-raw-header release gate open and keep Browser Pairing OFF. Do not treat normalization as rejection,
 weaken the endpoint contract, or add a reverse proxy without a separate owner decision. Closing this gate requires a written Vercel
 guarantee covering the invariant or another owner-approved architecture that rejects ambiguous requests before authorization.
+
+No unresolved ownership-authority decision was found during implementation. The remaining blockers are evidence/operations gates:
+authoritative Vercel ingress assurance, exact-head CI on the final documentation commit, and fresh independent final-diff architecture
+and security review. Stage C still owns Companion DPAPI pending proof, browser launch, poll/backoff/state UI, equal-device-ID preflight,
+manual-sync integration and the invariant that AutoSync remains OFF.

@@ -70,6 +70,14 @@ Stage B adds two mandatory workflow steps without changing the live ruleset:
   PostgREST logs, and lock-wait evidence are uploaded even on failure. The other pairing browser tests run in the integrated acceptance
   step.
 
+The E2E job builds its disposable pairing artifact with `web/tests/e2e-stack/build-pairing.sh`. That helper requires the reviewed
+literal-false source gate, changes it only for the local `.next` build, restores the source on success or failure, and reruns the
+repository OFF scanner. The checked-in gate therefore remains false while the browser tests can exercise the implemented routes.
+
+Local evidence at code head `2537ec4` is green: Account 219/219, enrollment 99/99, pairing 146/146, mutation 16/16, web 474/474 and
+real-stack browser acceptance 66/66, all with zero skips; both production builds and 48-file bundle scans pass. This is development
+evidence only. The final documentation commit still needs the same required GitHub checks on one exact SHA before Stage B can exit.
+
 One exact final Git commit must report success for Web code quality, Web E2E, Account ownership SQL + real GoTrue, Browser pairing
 mutation coverage, Account end-to-end including the named lifecycle step, Companion account auth, CodeQL, bundle-secret scan, the full
 OFF-gate scan and `git diff --check`. Failed, cancelled, missing or skipped required evidence is a Stage B failure. Component results
