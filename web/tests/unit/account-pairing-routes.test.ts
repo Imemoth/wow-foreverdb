@@ -67,6 +67,22 @@ describe("native pairing real handler/proxy boundary", () => {
     expect([...res.headers.keys()].filter((k) => k.startsWith("access-control-"))).toEqual([]);
     expect(Object.keys(h[op]).filter((key) => /^[A-Z]+$/.test(key))).toEqual(["POST"]);
   });
+  it("start sends an explicit null RPC argument when the optional computer name is absent", async () => {
+    const h = await load();
+    const withoutComputerName: Partial<typeof START> = { ...START };
+    delete withoutComputerName.computerName;
+    const res = await hit(h, "start", { body: withoutComputerName });
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
+      p_pairing_id: ID,
+      p_poll_secret_hash: START.pollSecretHash,
+      p_device_id: DEVICE,
+      p_device_credential_hash: START.deviceCredentialHash,
+      p_installation_id: START.installationId,
+      p_computer_name: null,
+    });
+  });
   it.each(operations)("%s rejects absent/duplicate/malformed authorization; Account cookies are never identity", async (op) => {
     const h = await load();
     for (const authorization of ["", "Basic abc", "Bearer short", `Bearer ${TOKEN}, Bearer ${TOKEN}`, `Bearer  ${TOKEN}`, `Bearer ${TOKEN} extra`, `Bearer ${"a".repeat(8193)}`, "Bearer refresh_token=secret"]) {

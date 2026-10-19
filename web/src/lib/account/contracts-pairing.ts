@@ -30,7 +30,7 @@ const actionErrors = ["feature_disabled", "expired", "already_decided", "cannot_
 
 export const PAIRING_RPCS = {
   fdb_device_pair_start: {
-    input: z.object({ p_pairing_id: uuid, p_poll_secret_hash: hash, p_device_id: uuid, p_device_credential_hash: hash, p_installation_id: installation, p_computer_name: label.optional() }).strict(),
+    input: z.object({ p_pairing_id: uuid, p_poll_secret_hash: hash, p_device_id: uuid, p_device_credential_hash: hash, p_installation_id: installation, p_computer_name: label.nullable() }).strict(),
     // The native route adds verificationUri from the configured origin; SQL never supplies a URL.
     output: z.union([
       z.object({ ok: z.literal(true), state: z.literal("pending"), pairingId: uuid, expiresAt: timestamp, intervalSeconds }).strict(),

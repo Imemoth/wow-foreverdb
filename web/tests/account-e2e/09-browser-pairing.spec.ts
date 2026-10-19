@@ -41,6 +41,26 @@ test("new anonymous installation transfers once and registers exactly one pairin
     .toEqual([{ event: "pairing_approved", n: 1 }, { event: "pairing_connected", n: 1 }, { event: "pairing_started", n: 1 }]);
 });
 
+test("optional computer name reaches the six-argument RPC as SQL null", async ({ playwright }) => {
+  const native = await newClient(playwright);
+  const initiator = await anonymous();
+  const p = pairingMaterial();
+  const start = await native.post("/account/api/device-pair/start", {
+    headers: { authorization: `Bearer ${initiator.token}`, "content-type": "application/json" },
+    data: JSON.stringify({
+      pairingId: p.pairingId,
+      pollSecretHash: p.pollSecretHash,
+      deviceId: p.deviceId,
+      deviceCredentialHash: p.deviceCredentialHash,
+      installationId: p.installationId,
+    }),
+  });
+  expect(start.status()).toBe(200);
+  expect(await json(start)).toMatchObject({ ok: true, state: "pending", pairingId: p.pairingId });
+  expect((await db.query("select computer_label from private.device_pairings where id=$1", [p.pairingId])).rows)
+    .toEqual([{ computer_label: null }]);
+});
+
 test("anonymous-owned Guildbook/history survives ownership transfer and manual ingest remains usable before redemption", async ({ playwright }) => {
   const native = await newClient(playwright);
   const p = pairingMaterial();

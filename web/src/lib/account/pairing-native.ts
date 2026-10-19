@@ -111,7 +111,7 @@ export async function startPairing(c: NativePairingContext, body: z.infer<typeof
   return pairingResponse(await callNativePairingRpc(c.ac.cfg, "fdb_device_pair_start", {
     p_pairing_id: body.pairingId, p_poll_secret_hash: body.pollSecretHash, p_device_id: body.deviceId,
     p_device_credential_hash: body.deviceCredentialHash, p_installation_id: body.installationId,
-    ...(body.computerName === undefined ? {} : { p_computer_name: body.computerName }),
+    p_computer_name: body.computerName ?? null,
   }, c.accessToken), c.ac.siteOrigin);
 }
 export async function pollPairing(c: NativePairingContext, body: z.infer<typeof PAIRING_INPUTS.poll>) {

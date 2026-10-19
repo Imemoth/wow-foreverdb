@@ -47,7 +47,8 @@ describe("browser pairing strict contracts", () => {
     const input = PAIRING_RPCS.fdb_device_pair_start.input;
     expect(input.safeParse({ ...start, p_computer_name: "😀".repeat(60) }).success).toBe(true);
     const withoutLabel = Object.fromEntries(Object.entries(start).filter(([key]) => key !== "p_computer_name"));
-    expect(input.safeParse(withoutLabel).success).toBe(true);
+    expect(input.safeParse(withoutLabel).success).toBe(false);
+    expect(input.safeParse({ ...withoutLabel, p_computer_name: null }).success).toBe(true);
     for (const bad of ["😀".repeat(61), "x".repeat(61), " PC ", "PC\n", "PC\u007f", "\ud800"]) expect(input.safeParse({ ...start, p_computer_name: bad }).success, JSON.stringify(bad)).toBe(false);
   });
 
