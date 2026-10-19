@@ -18,17 +18,17 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [state, setState] = useState<"pending" | "approved" | "denied">(props.initialState);
   const [error, setError] = useState<string | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   const alertRef = useRef<HTMLDivElement | null>(null);
   const expiry = new Date(props.expiresAt);
   const expiryText = Number.isNaN(expiry.getTime()) ? "soon" : `${expiry.toISOString().replace("T", " ").slice(0, 19)} UTC`;
 
   async function decide(action: "approve" | "deny") {
-    if (busy || state === "denied" || (action === "approve" && (state !== "pending" || !props.canApprove))) return;
+    if (busy || uncertain || state === "denied" || (action === "approve" && (state !== "pending" || !props.canApprove))) return;
     setBusy(action);
     setError(null);
     const reply = await postJson(`/account/api/device-pair/${action}`, {
       pairingId: props.pairingId,
-      accountEmail: props.accountEmail,
     }, { retryCsrf: false });
     setBusy(null);
     if (reply.data.ok && (reply.data.state === "approved" || reply.data.state === "denied")) {
@@ -36,6 +36,7 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
       return;
     }
     const code = typeof reply.data.error === "string" ? reply.data.error : reply.status === 0 ? "network" : "unknown";
+    if (code === "outcome_unknown" || code === "network") setUncertain(true);
     setError(pairingMessageFor(code));
     alertRef.current?.focus();
   }
@@ -55,13 +56,13 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
       {state === "denied" && <p role="status" tabIndex={-1} className="text-sm text-mist">Denied. The Companion cannot use this request.</p>}
       {state === "pending" && props.canApprove && (
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button type="button" className="btn-gold flex-1" disabled={busy !== null} onClick={() => decide("approve")}>{busy === "approve" ? "Approving…" : "Approve this computer"}</button>
-          <button type="button" className="btn-secondary flex-1" disabled={busy !== null} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny request"}</button>
+          <button type="button" className="btn-gold flex-1" disabled={busy !== null || uncertain} onClick={() => decide("approve")}>{busy === "approve" ? "Approving…" : "Approve this computer"}</button>
+          <button type="button" className="btn-secondary flex-1" disabled={busy !== null || uncertain} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny request"}</button>
         </div>
       )}
       {state === "pending" && !props.canApprove && <p role="status" tabIndex={-1} className="text-sm text-mist">This request cannot be approved by the account shown above.</p>}
       {state === "approved" && (
-        <button type="button" className="btn-secondary w-full" disabled={busy !== null} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny this approved request"}</button>
+        <button type="button" className="btn-secondary w-full" disabled={busy !== null || uncertain} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny this approved request"}</button>
       )}
     </section>
   );

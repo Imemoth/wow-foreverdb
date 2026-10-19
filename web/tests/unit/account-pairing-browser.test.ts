@@ -66,14 +66,14 @@ async function cookieParts(session = stored(), pairingId = ID) {
   return { session, pair, payload, sessionCookie: sessionHeaders.map((h) => h.split(";")[0]).join("; ") };
 }
 
-async function post(action: "approve" | "deny", over: { session?: StoredSession; pairingId?: string; bodyId?: string; accountEmail?: string; pair?: string | null; origin?: string; fetchSite?: string; csrf?: "ok" | "bad" } = {}) {
+async function post(action: "approve" | "deny", over: { session?: StoredSession; pairingId?: string; bodyId?: string; pair?: string | null; origin?: string; fetchSite?: string; csrf?: "ok" | "bad"; csrfSession?: StoredSession } = {}) {
   const c = await cookieParts(over.session, over.pairingId);
-  const token = await mintCsrf(SECRET, csrfBinding(c.session));
+  const token = await mintCsrf(SECRET, csrfBinding(over.csrfSession ?? c.session));
   const cookies = [c.sessionCookie, `fdb_csrf=${over.csrf === "bad" ? "x".repeat(20) : token}`, over.pair === null ? null : `${pairingCookieName(false)}=${over.pair ?? c.pair}`].filter(Boolean).join("; ");
   const req = new NextRequest(`${ORIGIN}/account/api/device-pair/${action}`, { method: "POST", headers: {
     origin: over.origin ?? ORIGIN, "sec-fetch-site": over.fetchSite ?? "same-origin", "content-type": "application/json",
     "x-fdb-csrf": token, cookie: cookies,
-  }, body: JSON.stringify({ pairingId: over.bodyId ?? over.pairingId ?? ID, accountEmail: over.accountEmail ?? (c.session.uid === UID ? "owner@example.test" : "other@example.test") }) });
+  }, body: JSON.stringify({ pairingId: over.bodyId ?? over.pairingId ?? ID }) });
   const mod = action === "approve" ? await import("@/app/account/api/device-pair/approve/route") : await import("@/app/account/api/device-pair/deny/route");
   return { response: await mod.POST(req), ...c };
 }
@@ -88,7 +88,6 @@ describe("browser pairing decision routes", () => {
   });
 
   it("rejects cross-site/CSRF, missing/replaced locator, body mismatch and account switch before any RPC", async () => {
-    const switched = stored(OTHER_UID, "sess-2");
     const cases = [
       () => post("approve", { origin: "https://evil.example" }),
       () => post("approve", { fetchSite: "cross-site" }),
@@ -96,9 +95,25 @@ describe("browser pairing decision routes", () => {
       () => post("approve", { pair: null }),
       () => post("approve", { pairingId: OTHER_ID, bodyId: ID }),
       () => post("approve", { bodyId: OTHER_ID }),
-      () => post("approve", { session: switched, accountEmail: "owner@example.test" }),
     ];
     for (const run of cases) expect((await run()).response.status).toBeGreaterThanOrEqual(400);
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  it("rejects a live switch to another account through the old page's session-bound CSRF", async () => {
+    const oldSession = stored();
+    authUser = user(OTHER_UID);
+    const { response } = await post("approve", { session: stored(OTHER_UID, "sess-2"), csrfSession: oldSession });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ ok: false, error: "csrf" });
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  it("a stale tab mismatch cannot clear the newer tab's signed locator", async () => {
+    const { response } = await post("approve", { pairingId: OTHER_ID, bodyId: ID });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ ok: false, error: "pairing_not_available" });
+    expect(response.headers.get("set-cookie") ?? "").not.toContain("fdb_pair=");
     expect(rpcCalls).toHaveLength(0);
   });
 
@@ -114,7 +129,7 @@ describe("browser pairing decision routes", () => {
   it("strictly validates the body before authentication or RPC", async () => {
     const c = await cookieParts();
     const token = await mintCsrf(SECRET, csrfBinding(c.session));
-    const req = new NextRequest(`${ORIGIN}/account/api/device-pair/approve`, { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json", "x-fdb-csrf": token, cookie: `${c.sessionCookie}; fdb_csrf=${token}; fdb_pair=${c.pair}` }, body: JSON.stringify({ pairingId: ID, accountEmail: "owner@example.test", extra: true }) });
+    const req = new NextRequest(`${ORIGIN}/account/api/device-pair/approve`, { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json", "x-fdb-csrf": token, cookie: `${c.sessionCookie}; fdb_csrf=${token}; fdb_pair=${c.pair}` }, body: JSON.stringify({ pairingId: ID, extra: true }) });
     const { POST } = await import("@/app/account/api/device-pair/approve/route");
     const res = await POST(req);
     expect(res.status).toBe(400); expect(rpcCalls).toHaveLength(0);

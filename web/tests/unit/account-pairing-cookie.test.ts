@@ -147,11 +147,16 @@ describe("pairing locator intake", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("does not intercept or set a cookie while the Account source gate is disabled", async () => {
+  it("returns 404 at ingress without touching cookies or outbound services while the source gate is disabled", async () => {
     const { proxy } = await load(false);
     const res = await proxy(request(`?request=${ID}`, ""));
-    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(res.status).toBe(404);
     expect(res.headers.get("set-cookie")).toBeNull();
+    for (const path of ["/account/api/device-pair/approve", "/account/api/device-pair/deny"]) {
+      const decision = await proxy(new NextRequest(`${SITE}${path}`, { method: "POST", headers: { "content-type": "text/plain", origin: "null", cookie: "fdb_acct=hostile" }, body: "unreadable" }));
+      expect(decision.status).toBe(404);
+      expect(await decision.json()).toEqual({ ok: false, error: "not_found" });
+    }
     expect(fetch).not.toHaveBeenCalled();
   });
 });

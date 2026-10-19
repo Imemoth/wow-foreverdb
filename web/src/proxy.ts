@@ -77,14 +77,18 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const ruleName = classifyRequest(pathname, request.method);
   const nativePairing = ruleName === "account_pairing_native";
+  const pairingPage = request.method === "GET" && pathname === "/account/device-pair";
+  const pairingDecision = request.method === "POST" && (pathname === "/account/api/device-pair/approve" || pathname === "/account/api/device-pair/deny");
   const nativeFailure = (status: number, error: string, headers: Record<string, string> = {}) => failure(status, error, {}, {
     ...deploymentHeaders(env.FOREVERDB_DEPLOYMENT),
     ...(env.SITE_URL.startsWith("https://") ? { "Strict-Transport-Security": HSTS } : {}),
     ...headers,
   });
   // Source-off is an ingress refusal: do not read client metadata/cookies or contact the limiter first.
-  if (nativePairing && (!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env }))) {
-    return nativeFailure(404, "not_found");
+  if ((nativePairing || pairingPage || pairingDecision) && (!env.accountAuth || !browserPairingWebAvailable({ cfg: env.accountAuth, env }))) {
+    return pairingPage
+      ? new NextResponse(null, { status: 404, headers: { ...BASE_SECURITY_HEADERS, ...deploymentHeaders(env.FOREVERDB_DEPLOYMENT), "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } })
+      : nativeFailure(404, "not_found");
   }
   const pairingIntake = request.method === "GET" && pathname === "/account/device-pair" && request.nextUrl.searchParams.has("request");
   const pairingConfig = env.accountAuth;

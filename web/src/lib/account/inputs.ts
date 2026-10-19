@@ -23,7 +23,7 @@ export const INPUTS = {
   enrollmentDownload: z.object({}).strict(),
   deviceRevoke: z.object({ deviceId: uuidSchema }).strict(),
   enrollmentRevoke: z.object({ ticketId: uuidSchema }).strict(),
-  pairingDecision: z.object({ ...PAIRING_INPUTS.approve.shape, accountEmail: AUTH_BODIES.password_grant.shape.email }).strict(),
+  pairingDecision: PAIRING_INPUTS.approve,
   /** Installation linking: the pasted code (normalised server-side), a fresh password and the explicit final confirmation. */
   link: z
     .object({ code: z.string().min(1).max(80), password: AUTH_BODIES.password_grant.shape.password, confirm: z.literal(true), accountId: z.string().regex(/^[0-9a-f-]{36}$/i) })

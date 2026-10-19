@@ -25,12 +25,9 @@ export async function decidePairing(c: RouteContext, body: DecisionBody, decisio
     };
     const raw = c.jar.get(pairingCookieName(c.ac.https));
     const locator = raw ? await readPairingCookie(c.ac.cfg.csrfSecret, raw) : null;
-    if (!locator || locator.id !== body.pairingId) return done(failure(409, "pairing_not_available"), true);
-    // The page names the account the person saw. Session-bound CSRF rejects a changed session cookie; this explicit
-    // comparison also covers a first click after another account signed in and minted a fresh CSRF token in another tab.
-    if (body.accountEmail.toLowerCase() !== a.auth.user.email.toLowerCase()) {
-      return done(failure(409, "account_changed"));
-    }
+    if (!locator) return done(failure(409, "pairing_not_available"), true);
+    // A stale tab must not delete the newer tab's valid selector. The mismatch is inert and the currently signed cookie survives.
+    if (locator.id !== body.pairingId) return done(failure(409, "pairing_not_available"));
 
     const rpc = decision === "approve" ? "fdb_account_device_pair_approve" : "fdb_account_device_pair_deny";
     const result = await callAccountPairingRpc(c.ac.cfg, rpc, { p_pairing_id: locator.id }, a.auth.session.at);

@@ -28,7 +28,7 @@ describe("browser pairing approval UI (static)", () => {
     }
     const boundary = read("lib/account/pairing-browser.ts");
     expect(boundary).toMatch(/readPairingCookie/);
-    expect(boundary).toMatch(/body\.accountEmail\.toLowerCase\(\) !== a\.auth\.user\.email\.toLowerCase\(\)/);
+    expect(boundary).toMatch(/locator\.id !== body\.pairingId/);
     expect(boundary).toMatch(/fdb_account_device_pair_approve/);
     expect(boundary).toMatch(/fdb_account_device_pair_deny/);
   });
@@ -44,6 +44,8 @@ describe("browser pairing approval UI (static)", () => {
     expect(ui).toMatch(/Approve/);
     expect(ui).toMatch(/Deny/);
     expect(ui).toMatch(/state === "approved"[\s\S]*Deny this approved request/);
+    expect(ui).toMatch(/outcome_unknown[\s\S]*setUncertain\(true\)/);
+    expect(ui).toMatch(/disabled=\{busy !== null \|\| uncertain\}/);
     expect(read("lib/account/messages.ts")).toMatch(/Your session changed while this page was open/);
     expect(ui).not.toMatch(/localStorage|sessionStorage|document\.cookie|console\./);
   });
