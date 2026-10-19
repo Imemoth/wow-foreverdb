@@ -18,10 +18,12 @@ test.describe("News landing page", () => {
     await page.goto("/news");
     await expect(page.getByRole("heading", { level: 1, name: "News" })).toBeVisible();
     await expect(page.getByRole("search", { name: "Search News" })).toBeVisible();
+    // The one article with content-specific art (lib/content/article-media.ts's
+    // SLUG_FEATURED_IMAGE) renders above the grid via ArticleSpotlight, not as a <li> - see
+    // ArticleHub.tsx's topFeatured/gridResults split.
+    await expect(page.getByRole("heading", { level: 2, name: "Introducing the ForeverDB website (preview)" })).toBeVisible();
     const cards = page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 2 }) });
-    await expect(cards).toHaveCount(3);
-    const titles = await cards.getByRole("heading", { level: 2 }).allTextContents();
-    expect(titles[0]).toBe("Introducing the ForeverDB website (preview)");
+    await expect(cards).toHaveCount(2);
     await expect(page.getByText("Featured", { exact: true })).toHaveCount(1);
     // Scoped to the hero: the site footer carries its own "RSS feed" link on every page.
     await expect(page.getByRole("heading", { level: 1, name: "News" }).locator("..").getByRole("link", { name: "RSS feed" })).toHaveAttribute("href", "/news/rss.xml");
@@ -54,8 +56,9 @@ test.describe("News landing page", () => {
     await expect(page.getByText("0 articles found")).toBeVisible();
     await page.getByRole("link", { name: "Clear filters" }).first().click();
     await expect(page).toHaveURL(/\/news$/);
+    await expect(page.getByRole("heading", { level: 2, name: "Introducing the ForeverDB website (preview)" })).toBeVisible();
     const cards = page.getByRole("listitem").filter({ has: page.getByRole("heading", { level: 2 }) });
-    await expect(cards).toHaveCount(3);
+    await expect(cards).toHaveCount(2);
   });
 
   test("filters are shareable: a direct link to a filtered URL reproduces the same results", async ({ page, context }) => {

@@ -4,9 +4,20 @@ import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { EmptyState } from "@/components/EmptyState";
 import { ArticleCard } from "@/components/content/ArticleCard";
+import { ArticleSpotlight } from "@/components/content/ArticleSpotlight";
 import { articleCategories, articleTags, filterArticles, isEmptyArticleQuery, parseArticleQuery, sortArticles, type ArticleQuery } from "@/lib/content/article-query";
+import { HUB_HERO_PHOTO, SECTION_SPOTLIGHT_IMAGE, SLUG_FEATURED_IMAGE } from "@/lib/content/article-media";
 import { visibleArticles, type Section } from "@/lib/content/loader";
 import { pageContext } from "@/lib/page";
+
+/** News' hero skews cooler/left (the armillary sphere sits left-of-center); Blog's skews warm and
+    slightly low (the candle/quill/inkwell cluster sits bottom-left). Two fixed literal classes,
+    not a template-interpolated arbitrary value, since Tailwind's JIT scanner needs static source
+    text to pick up an arbitrary `object-[...]` value. */
+const HERO_PHOTO_POSITION: Record<"news" | "blog", string> = {
+  news: "object-[38%_30%]",
+  blog: "object-[25%_60%]",
+};
 
 export type SP = Promise<Record<string, string | string[] | undefined>>;
 
@@ -52,6 +63,20 @@ export async function ArticleHub({
   const categories = articleCategories(all);
   const tags = articleTags(all);
   const results = sortArticles(filterArticles(all, query));
+  const heroPhoto = section === "news" || section === "blog" ? HUB_HERO_PHOTO[section] : undefined;
+  // Editorial spotlight (P2-C visual polish): a single unfiltered result gets a large side-by-side
+  // treatment instead of the grid - see ArticleSpotlight.tsx. Only sections with a spotlight image
+  // configured can use it (today: Blog only; News always has 3 sample dispatches so this never
+  // fires for News, by content, not by a section check).
+  const spotlightImage = empty && results.length === 1 ? SECTION_SPOTLIGHT_IMAGE[section] : undefined;
+  // News' one content-specific featured article (unfiltered view only - an active search/filter
+  // means the visitor is hunting for something specific, not browsing the landing page, so it
+  // rejoins the ordinary compact grid there like everything else). Pulled out and rendered above
+  // the grid via ArticleSpotlight rather than widened inside it: CSS grid rows stretch every cell
+  // to the row's tallest item by default, so an oversized illustrated cell would otherwise drag
+  // its plain text-only neighbor's height up with it.
+  const topFeatured = !spotlightImage && empty ? results.find((a) => SLUG_FEATURED_IMAGE[a.slug]) : undefined;
+  const gridResults = topFeatured ? results.filter((a) => a.slug !== topFeatured.slug) : results;
 
   return (
     <div className="space-y-6">
@@ -63,7 +88,21 @@ export async function ArticleHub({
           className="relative flex min-h-[320px] flex-col justify-center overflow-hidden bg-ink-950 py-10 sm:min-h-[460px] sm:py-14 lg:min-h-[540px] lg:py-16"
         >
           <Banner />
+          {heroPhoto && (
+            <picture>
+              <source media="(max-width: 639px)" srcSet={heroPhoto.mobileSrc} />
+              <img
+                src={heroPhoto.desktopSrc}
+                alt=""
+                aria-hidden="true"
+                className={`absolute inset-0 h-full w-full object-cover ${HERO_PHOTO_POSITION[section as "news" | "blog"]}`}
+              />
+            </picture>
+          )}
           <div className="hero-vignette" />
+          {/* Extra darkening scrim for the title/intro zone once a busy photo sits behind it -
+              same technique as GuidesLibrary.tsx's hero, which needs it for the same reason. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-ink-950/85 via-ink-950/35 to-ink-950/15" />
           <div className="hero-fade-bottom" />
           <div className="relative z-10 mx-auto w-full max-w-7xl px-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">
@@ -127,10 +166,17 @@ export async function ArticleHub({
           <EmptyState title={`No ${title.toLowerCase()} match those filters`}>
             Try a different search term, or <Link href={`/${section}`}>clear filters</Link> to browse everything published.
           </EmptyState>
+        ) : spotlightImage && results[0] ? (
+          <ArticleSpotlight article={results[0]} image={spotlightImage} />
         ) : (
-          <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {results.map((a) => <ArticleCard key={a.slug} article={a} section={section} />)}
-          </ul>
+          <div className="space-y-4">
+            {topFeatured && <ArticleSpotlight article={topFeatured} image={SLUG_FEATURED_IMAGE[topFeatured.slug]!} />}
+            {gridResults.length > 0 && (
+              <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {gridResults.map((a) => <ArticleCard key={a.slug} article={a} section={section} />)}
+              </ul>
+            )}
+          </div>
         )}
       </div>
     </div>

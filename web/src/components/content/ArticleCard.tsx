@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Article, Section } from "@/lib/content/loader";
 import { articlePath } from "@/lib/content/loader";
 import { CategoryBadge } from "@/components/library/CategoryBadge";
+import { CATEGORY_MEDALLION } from "@/lib/content/article-media";
 import { fmtDate } from "@/lib/format";
 
 /**
@@ -11,8 +12,14 @@ import { fmtDate } from "@/lib/format";
  * fix. CategoryBadge is imported directly from the Guides implementation: it is already
  * section-agnostic (works off any free-form category string), so reusing it is not a Guides
  * rewrite, just reuse.
+ *
+ * Always compact and text-only - the one News article with content-specific art
+ * (lib/content/article-media.ts's SLUG_FEATURED_IMAGE) is pulled out of the grid and rendered via
+ * ArticleSpotlight.tsx instead, so a tall illustrated cell never stretches its plain neighbors to
+ * match its height (CSS grid rows stretch by default).
  */
 export function ArticleCard({ article, section }: { article: Article; section: Section }) {
+  const medallion = CATEGORY_MEDALLION[article.category];
   return (
     <li className="panel group relative flex h-full flex-col p-5">
       {article.featured && (
@@ -21,7 +28,13 @@ export function ArticleCard({ article, section }: { article: Article; section: S
         </span>
       )}
       <div className="flex items-center justify-between gap-2">
-        <CategoryBadge category={article.category} />
+        <span className="flex items-center gap-1.5">
+          {medallion && (
+            // eslint-disable-next-line @next/next/no-img-element -- static repository asset
+            <img src={medallion} alt="" aria-hidden="true" className="h-5 w-5" />
+          )}
+          <CategoryBadge category={article.category} />
+        </span>
         <span className="text-xs text-mist">{article.readingMinutes} min read</span>
       </div>
       <h2 className="mt-2.5 text-lg font-semibold">
