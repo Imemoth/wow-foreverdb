@@ -39,15 +39,42 @@ export async function GuideArticle({ slug }: { slug: string }) {
         { name: a.title },
       ]} />
 
-      <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10">
-        {/* DOM-first (not just visually sidebar) so mobile readers see "Jump to a section" right
-            away instead of having to scroll past the whole article first; lg:order-2 moves it to
-            the right-hand column at desktop without reordering anything for keyboard/AT users. */}
+      {/*
+        One continuous <article> landmark (header, TOC and content all belong to the same guide),
+        laid out as a CSS grid with EXPLICIT row/column placement rather than relying on `order` +
+        auto-flow: `order` alone cannot put the header above the content in column 1 while the nav
+        occupies column 2 spanning both rows - auto-placement would need the nav physically between
+        header and content in the DOM to land it correctly, which would then make it first on
+        mobile too. Explicit placement lets DOM order match the mobile reading order (header, then
+        TOC, then content) while desktop reflows the SAME three pieces into header-above-content on
+        the left and a sticky TOC sidebar on the right, with no effect on keyboard/AT tab order
+        (that still follows DOM order at every breakpoint: header, TOC links, content).
+      */}
+      <article className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10">
+        <header className="min-w-0 max-w-3xl space-y-3 lg:col-start-1 lg:row-start-1">
+          <CategoryBadge category={a.category} />
+          <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-gold-300 sm:text-4xl">{a.title}</h1>
+          <p className="text-lg text-mist">{a.description}</p>
+          <p className="flex flex-wrap items-center gap-2 text-sm text-mist">
+            By {a.author} · <time dateTime={a.publishedAt}>{fmtDate(a.publishedAt)}</time>
+            {a.updatedAt && <> · updated <time dateTime={a.updatedAt}>{fmtDate(a.updatedAt)}</time></>}
+            · {a.readingMinutes} min read
+          </p>
+          {a.sample && (
+            <div role="note" className="rounded-lg border border-conf-low/40 bg-conf-low/5 p-3 text-sm text-[#f5d2b4]">
+              <strong>Editorial sample.</strong> This article demonstrates the publishing system and has not been through final editorial
+              review. Figures it mentions refer to the synthetic preview dataset.
+            </div>
+          )}
+        </header>
+
         {toc.length >= 2 && (
-          <nav aria-label="Guide sections" className="mb-6 lg:sticky lg:top-6 lg:order-2 lg:mb-0">
+          <nav aria-label="Guide sections" className="mt-6 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:mt-0 lg:sticky lg:top-6">
             <details className="panel p-4" open>
               <summary className="cursor-pointer text-sm font-semibold text-parchment marker:content-none [&::-webkit-details-marker]:hidden">
                 <span className="inline-flex items-center gap-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+                  <img src="/library/medallions/compendium.webp" alt="" aria-hidden="true" className="h-4 w-4" />
                   In this guide
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-mist" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="m6 9 6 6 6-6" />
@@ -64,23 +91,8 @@ export async function GuideArticle({ slug }: { slug: string }) {
             </details>
           </nav>
         )}
-        <article className="min-w-0 max-w-3xl space-y-6">
-          <header className="space-y-3">
-            <CategoryBadge category={a.category} />
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-gold-300 sm:text-4xl">{a.title}</h1>
-            <p className="text-lg text-mist">{a.description}</p>
-            <p className="flex flex-wrap items-center gap-2 text-sm text-mist">
-              By {a.author} · <time dateTime={a.publishedAt}>{fmtDate(a.publishedAt)}</time>
-              {a.updatedAt && <> · updated <time dateTime={a.updatedAt}>{fmtDate(a.updatedAt)}</time></>}
-              · {a.readingMinutes} min read
-            </p>
-            {a.sample && (
-              <div role="note" className="rounded-lg border border-conf-low/40 bg-conf-low/5 p-3 text-sm text-[#f5d2b4]">
-                <strong>Editorial sample.</strong> This article demonstrates the publishing system and has not been through final editorial
-                review. Figures it mentions refer to the synthetic preview dataset.
-              </div>
-            )}
-          </header>
+
+        <div className="mt-6 min-w-0 max-w-3xl space-y-6 lg:col-start-1 lg:row-start-2 lg:mt-0">
           <div className="rule-ornament" />
           <Markdown source={a.body} />
 
@@ -115,8 +127,8 @@ export async function GuideArticle({ slug }: { slug: string }) {
             mainEntityOfPage: new URL(articlePath(a), baseUrl).toString(),
             keywords: a.tags.join(", "),
           }} />
-        </article>
-      </div>
+        </div>
+      </article>
     </div>
   );
 }
