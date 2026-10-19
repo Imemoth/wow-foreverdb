@@ -1,4 +1,5 @@
-import { ArticlePage, articleMetadata } from "@/components/ArticleViews";
+import { articleMetadata } from "@/components/ArticleViews";
+import { GuideArticle } from "@/components/library/GuideArticle";
 
 type Params = Promise<{ slug: string }>;
 
@@ -7,5 +8,5 @@ export async function generateMetadata({ params }: { params: Params }) {
 }
 
 export default async function Page({ params }: { params: Params }) {
-  return <ArticlePage section="guides" slug={(await params).slug} />;
+  return <GuideArticle slug={(await params).slug} />;
 }
