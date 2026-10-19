@@ -59,3 +59,23 @@ Promotion additionally requires the owner evidence OA-1..OA-10 in
 [the pairing acceptance plan](../account-v1/browser-pairing-test-and-acceptance.md), two independent final-diff reviews and a separate
 production go/no-go. Applying migration 0016, enabling its private config row, changing either source approval flag, merging the Draft
 PR and publishing the installer are distinct owner-controlled actions. None is implied by CI success.
+
+Stage B adds two mandatory workflow steps without changing the live ruleset:
+
+- `Account ownership SQL + real GoTrue` applies 0016 only after the 0012 and 0014 regression suites, then runs the step
+  `Browser pairing SQL + real GoTrue`, the mandatory `Browser pairing mutation check`, and
+  `scripts/check-pilot-flags.py --require-off` on every pull-request/push run.
+- `Account end-to-end (GoTrue + PostgREST)` runs `10-browser-pairing-sessions.spec.ts` alone in the step
+  `Browser pairing GoTrue session lifecycle`. A zero-test, skipped or failed result fails the step. The JSON report, GoTrue and
+  PostgREST logs, and lock-wait evidence are uploaded even on failure. The other pairing browser tests run in the integrated acceptance
+  step.
+
+One exact final Git commit must report success for Web code quality, Web E2E, Account ownership SQL + real GoTrue, Browser pairing
+mutation coverage, Account end-to-end including the named lifecycle step, Companion account auth, CodeQL, bundle-secret scan, the full
+OFF-gate scan and `git diff --check`. Failed, cancelled, missing or skipped required evidence is a Stage B failure. Component results
+from different commits may guide development but cannot be combined into a release result.
+
+The native endpoint ingress gate also remains open. A raw HTTP Preview check at `12447a5` observed Vercel reject all 9/9 tested
+duplicate/case-variant `Authorization` requests with an edge HTTP 400, while single-header controls reached the application. Vercel's
+official documentation does not guarantee that behavior before Functions/Routing Middleware. Browser Pairing must remain OFF until the
+provider gives that guarantee or the owner approves another architecture.

@@ -49,6 +49,62 @@ project. Owner tests use a separately approved staging environment and universal
 | BP-40 | stolen anonymous bearer | bearer cannot redeem another pairing; attacker-started pairing still needs visible browser approval and expires/revokes safely |
 | BP-41 | pairing audit contract | exact event allowlist/columns/ACLs; one row per transition, one deferred row per limit reason, no row for invalid/early/gate/rate/infrastructure failures; locator/session/secrets absent |
 
+## Stage B component evidence checkpoint
+
+This checkpoint is intentionally not a Stage B exit result. Database Tasks 1–3 passed 127/127 tests at `4bf8e88`; Task 4 changes to
+rollback, restore and mutation coverage still require a complete rerun. The web implementation through Task 8 passed 473/473 Vitest
+tests, typecheck, lint, production build, a 48-file bundle scan, the OFF-gate scan and `git diff --check` at `330565d`. Those are
+different commits and therefore do not satisfy the final exact-head gate. Task 9 real-stack tests, Task 10 exact-head CI, PR #58 order
+rehearsal and both final-diff reviews remain mandatory.
+
+`DB component pass` below refers to `database/tests/pairing/01`–`07` at `4bf8e88`. `Web component pass` refers to the pairing unit and
+static suites included in the 473-test web run at `330565d`. A component pass proves only that layer; the last column names the work
+that still blocks the acceptance row.
+
+| ID | Stage B evidence at this checkpoint | Still required |
+| --- | --- | --- |
+| BP-01 | DB component pass: redemption and new-installation ownership (`03`, `05`) | Task 9 real PostgREST/browser flow; final exact-head rerun |
+| BP-02 | DB component pass: anonymous owner transfer and preservation (`01`, `03`, `05`) | Task 9 historical-data flow; final exact-head rerun |
+| BP-03 | Web component pass: signed handoff, login return, preview and named-account UI | Task 9 rendered login-to-approval flow |
+| BP-04 | DB component pass: expiry under lock and safe fresh start (`02`, `03`) | Task 9 real stack; Stage C Companion recovery UI |
+| BP-05 | DB + Web component pass: denial transition and decision route (`02`, `04`) | Stage C pending-secret cleanup and state UI |
+| BP-06 | DB component pass: cancel and connected no-op semantics (`02`) | Stage C Companion cancellation behavior |
+| BP-07 | DB + Web component pass: terminal replay and signed locator handling (`02`–`04`, cookie/browser suites) | Task 9 real browser/PostgREST replay |
+| BP-08 | DB + Web component pass: exact initiator/session/proof checks and bearer boundary (`02`, `03`, route suite) | Named Task 9 GoTrue lifecycle gate |
+| BP-09 | DB component pass: pinned real-GoTrue refresh/session behavior (`03`) | Named Task 9 refresh-rotation lifecycle gate |
+| BP-10 | DB component pass: two-account approval race (`04`) | Task 9 real-stack two-account flow |
+| BP-11 | DB component pass: approval/deny/expiry races (`03`, `04`) | Task 9 real-stack flow; final exact-head rerun |
+| BP-12 | DB component pass: 100 double-redemption races and atomic effects (`03`) | Task 9 PostgREST concurrency proof |
+| BP-13 | DB component pass: idempotent start/conflicting verifier (`02`, `03`) | Stage C lost-start recovery |
+| BP-14 | DB component pass: connected replay is read-only (`03`) | Stage C credential promotion/recovery |
+| BP-15 | DB component pass: foreign registered owner is immutable (`02`, `03`) | Task 9 real-stack owner-conflict flow |
+| BP-16 | DB + Web component pass: exact session/account/body binding and stale action refusal (`04`, browser/UI suites) | Task 9 two-tab/account-switch browser flow |
+| BP-17 | DB + Web component pass: locator/cookie fixation and GET non-mutation (`04`, cookie/browser/route suites) | Task 9 raw/browser flow; final ingress decision |
+| BP-18 | Web component pass: Origin, Fetch Metadata, JSON and CSRF rejection before RPC | Task 9 real stack; durable duplicate-Authorization ingress guarantee |
+| BP-19 | DB + Web component pass: budgets, poll backoff and strict route limiter (`02`, `04`, route suite) | Task 9 real-stack rate behavior |
+| BP-20 | DB component pass: every device-revocation cause propagates and re-enrollment is controlled (`05`, `06`) | Task 9 real stack; Stage C recovery UI |
+| BP-21 | DB component pass: account/device limits and distinct device rows (`03`, `05`) | Task 9 multi-installation account flow |
+| BP-22 | DB + Web component pass: immutable start bindings and strict schemas (`01`, `02`, `05`, contract suite) | Task 9 transport substitution cases |
+| BP-23 | DB component pass: unavailable account/session denies with rollback (`03`) | Named Task 9 GoTrue lifecycle gate |
+| BP-24 | DB component pass: initiator session revocation blocks poll/cancel/redemption (`02`, `03`) | Named Task 9 GoTrue lifecycle gate |
+| BP-25 | DB component pass: active device blocks pairing (`02`) | Task 9 real-stack regression |
+| BP-26 | Pre-0016 enrollment regression evidence: 99/99 at `56d4a0a` | Final post-Task-4 exact-head enrollment rerun |
+| BP-27 | DB component pass: existing rows, definitions, ACLs and history preserved (`01`, `03`) | Task 4 rollback/restore and final exact-head rerun |
+| BP-28 | DB component pass: migration preserves anonymous owners and data (`01`) | Task 9 anonymous-use regression |
+| BP-29 | DB + Web component pass: database gate and compiled source gate remain OFF (`01`, `02`, static suite) | Final exact-head OFF scan and CI result |
+| BP-30 | Web component pass: secret/log/client-boundary checks and 48-file bundle scan | Task 9 artifact/log scan and final exact-head bundle scan |
+| BP-31 | No completed Stage B evidence yet | Task 4 kill switch, rollback/restore, ledger and PR #58 order tests |
+| BP-32 | DB component pass: 100-iteration claim/ticket/ingest/revoke mixed races (`03`, `07`) | Final exact-head rerun with Task 4 changes |
+| BP-33 | Web component pass: explicit labels, one-shot controls and accessibility structure | Task 9 rendered accessibility/responsive checks |
+| BP-34 | No Stage B component implements this Companion behavior | Stage C WPF state implementation and Windows tests |
+| BP-35 | DB component pass: manual ingest serializes with redemption (`07`); source OFF scan passes | Stage C Companion AutoSync/manual-sync guards |
+| BP-36 | DB component pass: every predecessor predicate and one-field mutant (`03`, `05`) | Final mutation and exact-head rerun |
+| BP-37 | DB component pass: real-GoTrue logout/refresh/revoke races serialize (`03`) | Named Task 9 lifecycle gate, including concurrent revocation |
+| BP-38 | DB component pass: retryable limits, terminal conflicts and rollback (`03`) | Task 9 fixed-error transport proof |
+| BP-39 | DB + Web component pass: server-side canonical UUID/hash contract (`01`, `02`, contract suite) | Stage C Companion equal-ID preflight check |
+| BP-40 | DB component pass: actor/proof isolation and safe expiry/revocation (`02`, `03`) | Task 9 stolen-bearer real-stack case |
+| BP-41 | DB component pass: exact audit schema, ACLs, uniqueness and write classes (`01`, `06`) | Task 4 audit mutations and final exact-head rerun |
+
 ## Test layers
 
 ### Database

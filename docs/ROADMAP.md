@@ -17,7 +17,18 @@ polish and distribution work.
 - [x] Independent Stage A architecture and security review: no Critical finding; restore dependencies, exact re-enrollment,
   approval-session liveness, revocation propagation and lock ordering resolved in the
   [review report](account-v1/browser-pairing-architecture-review.md).
-- [ ] Stage B: migration 0016, fixed pairing APIs and Account approval page; database/web/production gates remain OFF.
+- [ ] Stage B in progress: migration 0016, six fixed pairing APIs, native Next.js endpoints and the Account approval page are
+  implemented through the Task 8 checkpoint; database/web/production gates remain OFF.
+  - [x] Tasks 1–3 database state machine/RPC component evidence: 127/127 at `4bf8e88` (must be rerun after Task 4).
+  - [x] Tasks 5–8 web component evidence: 473/473 plus typecheck, lint, production build, 48-file bundle scan, OFF scan and
+    `git diff --check` at `330565d`.
+  - [ ] Task 4 kill switch, rollback/restore, ledger, compatibility and mutation gates; final PR #58 order rehearsal.
+  - [ ] Task 9 real GoTrue + PostgREST browser E2E, including refresh rotation, logout, reuse-family revocation and concurrent
+    session revocation with zero skips.
+  - [ ] Task 10 final exact-head CI and independent architecture/security reviews; component evidence from different commits is
+    not a release result.
+  - [ ] Security decision: Vercel Preview rejected 9/9 raw duplicate-`Authorization` probes at `12447a5`, but no documented provider
+    guarantee was found. Keep the endpoint and all Browser Pairing gates OFF pending a written guarantee or owner-approved architecture.
 - [ ] Stage C: Companion Connect Account, DPAPI pending proof, system-browser handoff, polling/backoff and state UI; AutoSync remains OFF.
 - [ ] Stage D: disposable full-stack, concurrency, CSRF/Origin, account isolation, WPF/DPAPI, compatibility and security checks.
 - [ ] Stage E: identical universal-installer checklist, Windows 10/11 owner acceptance, independent reviews and production go/no-go.

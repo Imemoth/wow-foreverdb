@@ -38,3 +38,28 @@ The following residual risks are accepted design constraints and require verific
 
 These constraints do not introduce a second ownership authority or permit silent transfer. Stage B may proceed after the Stage A
 written specification is reviewed, while all source and database gates remain off.
+
+## Stage B implementation security checkpoint — 2026-10-18
+
+The ownership model remains unchanged in the implementation through `330565d`: `public.installations.owner_user_id` is still the sole
+authority, approval records the exact registered account and GoTrue session, and redemption performs the ownership transfer and device
+registration in one database transaction. The final Task 4 rollback/restore work, Task 9 full-stack evidence and independent final-diff
+reviews are still pending, so this checkpoint is not final Stage B approval.
+
+One security gate remains unresolved. Native `start`, `poll` and `cancel` require exactly one raw `Authorization` field line. Local
+Next.js cannot prove that property after the runtime has normalized headers, so the approved Option 2 depends on Vercel public ingress
+rejecting ambiguous requests before application code or an authorized RPC operation.
+
+Raw HTTP/1.1 Preview tests against deployment `dpl_4Rj6D1TumGuTW9H7EGZBKTKXoo7X` at Git `12447a5` sent same-case and case-variant
+duplicate field lines to all three native routes. Vercel returned its edge-generated HTTP 400 response for 9/9 duplicate cases. All
+three single-header controls reached the deployment's fail-closed application response. This demonstrates rejection, rather than
+normalization, for the tested deployment and shows that those ambiguous requests did not reach an authorized RPC operation.
+
+The provider-evidence search did not find an official Vercel contract for raw header multiplicity, case-variant duplicate
+`Authorization` handling, or rejection before Functions/Routing Middleware. Official material exposes incoming headers through the
+Fetch `Headers`/`NextRequest` map and documents header-presence firewall rules and header transforms, but does not promise this 400
+behavior. The 9/9 observation therefore cannot serve as a durable provider guarantee.
+
+**Decision:** keep the exact-one-raw-header release gate open and keep Browser Pairing OFF. Do not treat normalization as rejection,
+weaken the endpoint contract, or add a reverse proxy without a separate owner decision. Closing this gate requires a written Vercel
+guarantee covering the invariant or another owner-approved architecture that rejects ambiguous requests before authorization.

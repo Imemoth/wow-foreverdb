@@ -4,7 +4,8 @@ name: ForeverDB account ownership backend (SQL + real GoTrue)
 # Supabase project. See database/tests/account/README.md. No production migration is applied or authorised by this workflow.
 # Designed to be a REQUIRED status check (check name: "Account ownership SQL + real GoTrue"): like web-ci.yml and
 # account-web-auth.yml there is deliberately NO `paths:` filter, so it reports on every pull request and every push to main and can
-# never leave a required check pending. The slow mutation suite stays manual (workflow_dispatch); the core SQL acceptance is mandatory.
+# never leave a required check pending. Browser Pairing's SQL and mutation suites are mandatory on every run; the older 0012/0014
+# mutation suites remain an optional workflow_dispatch diagnostic.
 on:
   pull_request:
   push:
@@ -84,6 +85,18 @@ jobs:
       - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
         run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
 
+      # Browser Pairing V1 (migration 0016). This is applied only after the complete 0014 regression suite because the earlier suites
+      # intentionally assert their own historical callable-surface registries. Pairing tests build additional disposable clones for
+      # rollback, concurrency and session-lifecycle cases; FDB_REQUIRE_GOTRUE=1 above makes an unavailable real Auth server a failure.
+      - name: Apply 0016 (browser pairing; closed by default)
+        run: database/tests/account/stack.sh apply16
+
+      - name: Browser pairing SQL + real GoTrue
+        run: node --test --test-concurrency=1 database/tests/pairing/*.test.mjs
+
+      - name: Browser pairing mutation check
+        run: node database/tests/pairing/mutation_check.mjs
+
       - name: Mutation check 0014 (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/enrollment/mutation_check.mjs
@@ -91,6 +104,10 @@ jobs:
       - name: Mutation check (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/account/mutation_check.mjs
+
+      - name: Every pilot, production, pairing and AutoSync gate is OFF
+        if: always()
+        run: python3 scripts/check-pilot-flags.py --require-off
 
       - name: GoTrue log (on failure)
         if: failure()

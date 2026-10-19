@@ -1,8 +1,9 @@
 name: Account end-to-end integration (GoTrue + PostgREST)
 
 # Account System V1, PR E acceptance: the website's linking flow, private Guildbook and the Companion-style anonymous/registered clients
-# against a REAL, EPHEMERAL stack:  PostgreSQL 16  +  real GoTrue (pinned supabase/auth tag AND commit)  +  real PostgREST (pinned release,
-# checksum-verified)  +  Mailpit (captured mail), with the repository migrations 0001-0006, 0008, 0009, 0011 and 0012 applied (0007 is skipped exactly as in the SQL suite; 0010 and 0013 are never applied) exactly as the SQL suite does.
+# against a REAL, EPHEMERAL stack: PostgreSQL 16 + real GoTrue (pinned supabase/auth tag AND commit) + real PostgREST (pinned release,
+# checksum-verified) + Mailpit (captured mail), with the repository baseline through 0012 plus Account 0014 and Browser Pairing 0016.
+# The intentional gaps match the SQL suite: 0007, 0010 and 0013 are absent; 0015 remains PR #58's separate welcome-outbox migration.
 # PostgREST and GoTrue are the real programs (the SQL suite emulates PostgREST; this one does not); only the API gateway (Kong) is a small pass-through shim. Nothing real is touched: no Supabase project, no production
 # credential, no Vercel. If any component cannot start the job FAILS (integrated acceptance BLOCKED); it never falls back to stubs.
 #
@@ -84,7 +85,7 @@ jobs:
       - name: Typecheck and lint
         run: npx tsc --noEmit && npx eslint .
 
-      - name: Start the end-to-end stack (real GoTrue + real PostgREST + migrations 0001-0012 + Mailpit); the PostgREST schema-cache reload after 0012 is observed
+      - name: Start the end-to-end stack (real GoTrue + real PostgREST + migrations 0012, 0014 and 0016 + Mailpit); the PostgREST schema-cache reload after 0016 is observed
         env:
           GOTRUE_BIN: ${{ env.STACK_BIN }}/gotrue
           POSTGREST_BIN: ${{ env.STACK_BIN }}/postgrest
@@ -115,10 +116,66 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Integrated acceptance (redemption with fresh password, pre-hijack, two accounts + anonymous owner, private Guildbook, real PostgREST semantics, replay/concurrency/preservation, fault injection, CSRF/XSS/redirects, browser UI + accessibility)
+      - name: Browser pairing GoTrue session lifecycle
         env:
           E2E_STACK_ENV_FILE: ${{ github.workspace }}/.stack/env
-        run: npx playwright test -c playwright.account-e2e.config.ts
+        run: |
+          rm -f test-results/account-e2e-results.json test-results/browser-pairing-session-lifecycle.json
+          status=0
+          npx playwright test -c playwright.account-e2e.config.ts tests/account-e2e/10-browser-pairing-sessions.spec.ts || status=$?
+          if test -f test-results/account-e2e-results.json; then
+            cp test-results/account-e2e-results.json test-results/browser-pairing-session-lifecycle.json
+          fi
+          test "$status" -eq 0 || exit "$status"
+          node <<'NODE'
+          const report = JSON.parse(require("fs").readFileSync("test-results/account-e2e-results.json", "utf8"));
+          const counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+          (function visit(suite) {
+            for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
+              counts.total += 1;
+              const status = test.results.at(-1)?.status;
+              if (status === "passed") counts.passed += 1;
+              else if (status === "skipped") counts.skipped += 1;
+              else counts.failed += 1;
+            }
+            for (const child of suite.suites ?? []) visit(child);
+          })({ suites: report.suites });
+          console.log(`Browser pairing session lifecycle: ${JSON.stringify(counts)}`);
+          if (counts.total === 0 || counts.skipped !== 0 || counts.failed !== 0 || counts.passed !== counts.total) process.exit(1);
+          NODE
+
+      - name: Integrated acceptance (Account regressions + browser pairing flow/security/UI)
+        env:
+          E2E_STACK_ENV_FILE: ${{ github.workspace }}/.stack/env
+        run: |
+          npx playwright test -c playwright.account-e2e.config.ts \
+            tests/account-e2e/01-link-redemption.spec.ts \
+            tests/account-e2e/02-isolation-guildbook.spec.ts \
+            tests/account-e2e/03-postgrest.spec.ts \
+            tests/account-e2e/04-ui.spec.ts \
+            tests/account-e2e/05-resilience.spec.ts \
+            tests/account-e2e/06-security.spec.ts \
+            tests/account-e2e/07-guards-postgrest.spec.ts \
+            tests/account-e2e/08-reset-revokes-sessions.spec.ts \
+            tests/account-e2e/09-browser-pairing.spec.ts \
+            tests/account-e2e/11-browser-pairing-security.spec.ts \
+            tests/account-e2e/12-browser-pairing-ui.spec.ts
+          node <<'NODE'
+          const report = JSON.parse(require("fs").readFileSync("test-results/account-e2e-results.json", "utf8"));
+          const counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+          (function visit(suite) {
+            for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
+              counts.total += 1;
+              const status = test.results.at(-1)?.status;
+              if (status === "passed") counts.passed += 1;
+              else if (status === "skipped") counts.skipped += 1;
+              else counts.failed += 1;
+            }
+            for (const child of suite.suites ?? []) visit(child);
+          })({ suites: report.suites });
+          console.log(`Integrated acceptance: ${JSON.stringify(counts)}`);
+          if (counts.total === 0 || counts.skipped !== 0 || counts.failed !== 0 || counts.passed !== counts.total) process.exit(1);
+          NODE
       - name: Summarise
         if: always()
         run: |
@@ -138,6 +195,7 @@ jobs:
             .stack/*.log
             .stack/*.json
             .stack/run/gotrue.log
+            .stack/lock-waits/**
           if-no-files-found: ignore
           retention-days: 14
       - name: Stop the stack
