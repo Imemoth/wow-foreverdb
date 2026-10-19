@@ -21,12 +21,13 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
   const [error, setError] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const [decidedHere, setDecidedHere] = useState(false);
+  const [closed, setClosed] = useState(false);
   const alertRef = useRef<HTMLDivElement | null>(null);
   const expiry = new Date(props.expiresAt);
   const expiryText = Number.isNaN(expiry.getTime()) ? "soon" : `${expiry.toISOString().replace("T", " ").slice(0, 19)} UTC`;
 
   async function decide(action: "approve" | "deny") {
-    if (busy || uncertain || state === "denied" || (action === "approve" && (state !== "pending" || !props.canApprove))) return;
+    if (busy || uncertain || closed || state === "denied" || (action === "approve" && (state !== "pending" || !props.canApprove))) return;
     setBusy(action);
     setError(null);
     const reply = await postPairingDecision(action, props.pairingId, props.pageBinding);
@@ -38,6 +39,7 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
     }
     const code = typeof reply.data.error === "string" ? reply.data.error : reply.status === 0 ? "network" : "unknown";
     if (code === "outcome_unknown" || code === "network") setUncertain(true);
+    if (code === "expired" || code === "already_decided" || code === "cannot_connect_to_this_account") setClosed(true);
     setError(pairingMessageFor(code));
     alertRef.current?.focus();
   }
@@ -55,14 +57,14 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
       {error && <div ref={alertRef} role="alert" tabIndex={-1} className="rounded-lg border border-danger/50 p-3 text-sm text-danger">{error}</div>}
       {state === "approved" && <p role="status" tabIndex={-1} className="text-sm text-conf-high">Approved. Return to the Companion to finish connecting.</p>}
       {state === "denied" && <p role="status" tabIndex={-1} className="text-sm text-mist">Denied. The Companion cannot use this request.</p>}
-      {state === "pending" && props.canApprove && (
+      {state === "pending" && props.canApprove && !closed && (
         <div className="flex flex-col gap-3 sm:flex-row">
           <button type="button" className="btn-gold flex-1" disabled={busy !== null || uncertain} onClick={() => decide("approve")}>{busy === "approve" ? "Approving…" : "Approve this computer"}</button>
           <button type="button" className="btn-secondary flex-1" disabled={busy !== null || uncertain} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny request"}</button>
         </div>
       )}
-      {state === "pending" && !props.canApprove && <p role="status" tabIndex={-1} className="text-sm text-mist">This request cannot be approved by the account shown above.</p>}
-      {state === "approved" && !decidedHere && (
+      {state === "pending" && !props.canApprove && !closed && <p role="status" tabIndex={-1} className="text-sm text-mist">This request cannot be approved by the account shown above.</p>}
+      {state === "approved" && !decidedHere && !closed && (
         <button type="button" className="btn-secondary w-full" disabled={busy !== null || uncertain} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny this approved request"}</button>
       )}
     </section>

@@ -144,7 +144,11 @@ device ID, full installation ID, hashes, secrets or the account which won a conc
 ## `POST /account/api/device-pair/approve`
 
 Requires the existing live registered session, exact Origin/`Sec-Fetch-Site`, JSON content type, session-bound CSRF header/cookie,
-signed pairing cookie and a body of exactly `{ "pairingId": "<uuid>" }`. It calls
+signed pairing cookie, and an opaque `x-fdb-pairing-page` proof minted into the rendered page. That HMAC binds the signed locator
+payload (including its nonce and expiry), the verified Account UID and the exact GoTrue session ID. It contains no identifier and is
+not an authenticator by itself; the live session, signed locator and CSRF proof remain mandatory. A first click after another tab
+switches accounts therefore fails before any RPC, even if that click obtains a fresh CSRF token for the new account. The request body
+remains exactly `{ "pairingId": "<uuid>" }`. It calls
 `public.fdb_account_device_pair_approve(uuid)`. The current `auth.uid()` and JWT `session_id` are the only approval identities; the
 database stores both and redemption requires that exact registered session to remain live.
 

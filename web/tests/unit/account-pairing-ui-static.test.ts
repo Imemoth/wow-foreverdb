@@ -49,6 +49,8 @@ describe("browser pairing approval UI (static)", () => {
     expect(ui).toMatch(/state === "approved" && !decidedHere/);
     expect(ui).toMatch(/outcome_unknown[\s\S]*setUncertain\(true\)/);
     expect(ui).toMatch(/disabled=\{busy !== null \|\| uncertain\}/);
+    expect(ui).toMatch(/expired[\s\S]*already_decided[\s\S]*cannot_connect_to_this_account[\s\S]*setClosed\(true\)/);
+    expect(ui).toMatch(/props\.canApprove && !closed/);
     expect(read("lib/account/messages.ts")).toMatch(/Your session changed while this page was open/);
     expect(ui).not.toMatch(/localStorage|sessionStorage|document\.cookie|console\./);
   });
