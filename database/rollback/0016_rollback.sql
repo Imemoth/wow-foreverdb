@@ -100,6 +100,12 @@ begin
   select count(*) into v_audit from private.device_pairing_audit;
   select count(*) into v_devices from private.devices where pairing_id is not null;
   if v_pairings=0 and v_audit=0 and v_devices=0 then
+    -- The predecessor row shape has no pairing_id column. Normalize the saved fingerprint before the intentional schema removal;
+    -- retained-history rollback keeps the column and therefore keeps the original full-row fingerprint.
+    update _fdb0016_rb_before set hash=(
+      select md5(coalesce(string_agg((to_jsonb(t)-'pairing_id')::text,'|' order by (to_jsonb(t)-'pairing_id')::text),''))
+      from private.devices t
+    ) where table_name='private.devices';
     drop trigger devices_propagate_pairing_revocation on private.devices;
     drop function private.device_pairing_revocation_trigger();
     drop index private.devices_one_per_pairing;

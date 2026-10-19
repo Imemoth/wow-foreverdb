@@ -94,10 +94,16 @@ describe("cookies", () => {
   });
   it("https session cookie: __Secure- name, HttpOnly, Secure, SameSite=Lax, Path=/account, sliding 14 days; value is opaque", async () => {
     const sink = new Sink();
-    await writeSession(SECRET, sink, jar({}), true, stored());
+    const session = stored();
+    await writeSession(SECRET, sink, jar({}), true, session);
     expect(sink.headers).toHaveLength(1);
     expect(sink.headers[0]).toMatch(/^__Secure-fdb_acct=[A-Za-z0-9_.-]+; Path=\/account; Max-Age=1209600; HttpOnly; Secure; SameSite=Lax$/);
-    expect(sink.headers[0]).not.toMatch(/eyJ|refresh-token/);
+    const value = sink.cookies()["__Secure-fdb_acct"]!;
+    expect(value.split(".")).toHaveLength(2);
+    expect(value).not.toBe(session.at);
+    expect(value).not.toBe(session.rt);
+    expect(unverifiedJwtPayload(value)).toBeNull();
+    expect(await readSession(SECRET, jar(sink.cookies()), true)).toEqual({ present: true, session });
   });
   it("a recovery session is short-lived", async () => {
     const sink = new Sink();

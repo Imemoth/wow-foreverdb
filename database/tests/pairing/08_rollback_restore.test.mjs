@@ -98,6 +98,41 @@ describe("0016 operational lifecycle", { concurrency: 1 }, () => {
     assert.equal((await admin.query("select md5(coalesce(string_agg(id||':'||coalesce(owner_user_id::text,''),'|' order by id),'')) h from public.installations")).rows[0].h, ownersBefore);
   }));
 
+  it("empty rollback preserves a legacy 0014 ticket device byte-for-byte", async () => before16(async ({database, admin}) => {
+    const w = await makeWorld({database});
+    try {
+      const account = await w.account(), device = await w.device();
+      const ticket = await w.ticket(account, "Legacy ticket PC");
+      const enrolled = await w.enroll(device, ticket.ticket, "legacy-ticket-installation", "Legacy ticket PC");
+      assert.equal(enrolled.ok, true);
+      const before = (await admin.query(`select
+        (select jsonb_agg(to_jsonb(t) order by id) from private.devices t) devices,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.enrollment_tickets t) tickets,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.device_audit t) audit`)).rows[0];
+      apply16(database);
+      await admin.query(`insert into supabase_migrations.schema_migrations(version,name,statements) values
+        ('20261012000000','account_ownership_claims',array['fixture']),
+        ('20261014000000','zero_touch_enrollment',array['fixture']) on conflict do nothing`);
+      assert.equal(record(database, "browser_pairing").status, 0);
+      const rolledBack = run(database, ROLLBACK);
+      assert.equal(rolledBack.status, 0, rolledBack.out);
+      assert.equal((await admin.query("select exists(select 1 from pg_attribute where attrelid='private.devices'::regclass and attname='pairing_id' and not attisdropped) value")).rows[0].value, false);
+      assert.deepEqual((await admin.query(`select
+        (select jsonb_agg(to_jsonb(t) order by id) from private.devices t) devices,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.enrollment_tickets t) tickets,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.device_audit t) audit`)).rows[0], before);
+      assert.equal(record(database, "rollback_browser_pairing").status, 0);
+      const restored = run(database, RESTORE);
+      assert.equal(restored.status, 0, restored.out);
+      assert.equal(await enabled(admin), false);
+      assert.deepEqual((await admin.query(`select
+        (select jsonb_agg(to_jsonb(t)-'pairing_id' order by id) from private.devices t) devices,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.enrollment_tickets t) tickets,
+        (select jsonb_agg(to_jsonb(t) order by id) from private.device_audit t) audit`)).rows[0], before);
+      assert.equal((await admin.query("select count(*)::int n from private.devices where pairing_id is not null")).rows[0].n, 0);
+    } finally { await w.close(); }
+  }));
+
   it("nonempty rollback retains the closed schema and trigger, then restore recreates only the API surface", async () => with16(async ({database, admin}) => {
     assert.equal(record(database, "browser_pairing").status, 0);
     const id = randomUUID(), auditRef = randomUUID(), initiator = randomUUID();
