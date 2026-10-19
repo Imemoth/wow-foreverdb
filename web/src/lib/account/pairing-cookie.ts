@@ -14,6 +14,27 @@ export interface PairingCookiePayload {
   exp: number;
 }
 
+const PAGE_BINDING_PREFIX = "fdbpg1_";
+
+/**
+ * Opaque, non-authorizing proof that the rendered page belonged to this locator and exact verified web session.
+ * It contains no identifier; the session, signed locator cookie and CSRF proof remain independently mandatory.
+ */
+export async function mintPairingPageBinding(secret: string, payload: PairingCookiePayload, userId: string, sessionId: string): Promise<string> {
+  const mac = await hmacB64(secret, "pairing-page-mac", pairingPageMessage(payload, userId, sessionId));
+  return `${PAGE_BINDING_PREFIX}${mac}`;
+}
+
+export async function verifyPairingPageBinding(secret: string, payload: PairingCookiePayload, userId: string, sessionId: string, value: string | null): Promise<boolean> {
+  if (!value || !/^fdbpg1_[A-Za-z0-9_-]{43}$/.test(value)) return false;
+  return timingSafeEqualStr(value, await mintPairingPageBinding(secret, payload, userId, sessionId));
+}
+
+function pairingPageMessage(payload: PairingCookiePayload, userId: string, sessionId: string): string {
+  if (!/^[0-9a-f-]{36}$/i.test(userId) || sessionId.length < 1 || sessionId.length > 64) throw new Error("invalid_pairing_page_binding");
+  return `fdb-pairing-page-v1|${canonicalPayload(payload)}|${userId.toLowerCase()}|${sessionId}`;
+}
+
 export function isCanonicalPairingId(value: string): boolean {
   return UUID_V4.test(value);
 }

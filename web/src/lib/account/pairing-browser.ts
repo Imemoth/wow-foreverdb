@@ -4,7 +4,7 @@ import type { z } from "zod";
 import { INPUTS } from "./inputs";
 import type { RouteContext } from "./handler";
 import { accountLog, failure, jsonResponse } from "./http";
-import { clearPairingCookie, pairingCookieName, readPairingCookie } from "./pairing-cookie";
+import { clearPairingCookie, pairingCookieName, readPairingCookie, verifyPairingPageBinding } from "./pairing-cookie";
 import { browserPairingWebAvailable } from "./pairing-gate";
 import { authenticate, guarded, mutationFailure, withSession } from "./private";
 import { callAccountPairingRpc } from "./rpc-client";
@@ -28,6 +28,9 @@ export async function decidePairing(c: RouteContext, body: DecisionBody, decisio
     if (!locator) return done(failure(409, "pairing_not_available"), true);
     // A stale tab must not delete the newer tab's valid selector. The mismatch is inert and the currently signed cookie survives.
     if (locator.id !== body.pairingId) return done(failure(409, "pairing_not_available"));
+    if (!(await verifyPairingPageBinding(c.ac.cfg.csrfSecret, locator, a.auth.user.id, a.auth.session.sid, c.req.headers.get("x-fdb-pairing-page")))) {
+      return done(failure(409, "account_changed"));
+    }
 
     const rpc = decision === "approve" ? "fdb_account_device_pair_approve" : "fdb_account_device_pair_deny";
     const result = await callAccountPairingRpc(c.ac.cfg, rpc, { p_pairing_id: locator.id }, a.auth.session.at);

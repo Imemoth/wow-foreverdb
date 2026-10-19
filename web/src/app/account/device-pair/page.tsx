@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { requirePageUser } from "@/lib/account/page-session";
-import { pairingCookieName, readPairingCookie } from "@/lib/account/pairing-cookie";
+import { mintPairingPageBinding, pairingCookieName, readPairingCookie } from "@/lib/account/pairing-cookie";
 import { browserPairingWebAvailable } from "@/lib/account/pairing-gate";
 import { callAccountPairingRpc } from "@/lib/account/rpc-client";
 import { Unavailable } from "../_ui/Unavailable";
@@ -36,10 +36,12 @@ export default async function DevicePairPage() {
     return <><h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Pair a computer</h1><Notice><p className="text-parchment">{text}</p><p className="text-sm text-mist">Signed in as <strong>{p.user.email}</strong>.</p></Notice></>;
   }
 
+  const pageBinding = await mintPairingPageBinding(p.ac.cfg.csrfSecret, locator, p.user.id, p.session.sid);
+
   return (
     <>
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Pair a computer</h1>
-      <DevicePairApproval accountEmail={p.user.email} pairingId={locator.id}
+      <DevicePairApproval accountEmail={p.user.email} pairingId={locator.id} pageBinding={pageBinding}
         computerName={data.computerName} installationSuffix={data.installationSuffix}
         expiresAt={data.expiresAt} canApprove={data.canApprove} initialState={data.state} />
     </>

@@ -38,7 +38,7 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export type KeyPurpose = "csrf-mac" | "pairing-cookie-mac" | "session-seal" | "throttle-hash";
+export type KeyPurpose = "csrf-mac" | "pairing-cookie-mac" | "pairing-page-mac" | "session-seal" | "throttle-hash";
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
 
@@ -59,7 +59,7 @@ function derive(secret: string, purpose: KeyPurpose): Promise<CryptoKey> {
   return k;
 }
 
-export async function hmacB64(secret: string, purpose: "csrf-mac" | "pairing-cookie-mac" | "throttle-hash", data: string): Promise<string> {
+export async function hmacB64(secret: string, purpose: "csrf-mac" | "pairing-cookie-mac" | "pairing-page-mac" | "throttle-hash", data: string): Promise<string> {
   const key = await derive(secret, purpose);
   return b64urlEncode(new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data))));
 }

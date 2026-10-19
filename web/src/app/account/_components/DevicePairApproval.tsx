@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { postJson } from "@/lib/account/client";
+import { postPairingDecision } from "@/lib/account/client";
 import { pairingMessageFor } from "@/lib/account/messages";
 
 export interface DevicePairApprovalProps {
   accountEmail: string;
   pairingId: string;
+  pageBinding: string;
   computerName: string | null;
   installationSuffix: string;
   expiresAt: string;
@@ -19,6 +20,7 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
   const [state, setState] = useState<"pending" | "approved" | "denied">(props.initialState);
   const [error, setError] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState(false);
+  const [decidedHere, setDecidedHere] = useState(false);
   const alertRef = useRef<HTMLDivElement | null>(null);
   const expiry = new Date(props.expiresAt);
   const expiryText = Number.isNaN(expiry.getTime()) ? "soon" : `${expiry.toISOString().replace("T", " ").slice(0, 19)} UTC`;
@@ -27,12 +29,11 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
     if (busy || uncertain || state === "denied" || (action === "approve" && (state !== "pending" || !props.canApprove))) return;
     setBusy(action);
     setError(null);
-    const reply = await postJson(`/account/api/device-pair/${action}`, {
-      pairingId: props.pairingId,
-    }, { retryCsrf: false });
+    const reply = await postPairingDecision(action, props.pairingId, props.pageBinding);
     setBusy(null);
     if (reply.data.ok && (reply.data.state === "approved" || reply.data.state === "denied")) {
       setState(reply.data.state);
+      setDecidedHere(true);
       return;
     }
     const code = typeof reply.data.error === "string" ? reply.data.error : reply.status === 0 ? "network" : "unknown";
@@ -61,7 +62,7 @@ export function DevicePairApproval(props: DevicePairApprovalProps) {
         </div>
       )}
       {state === "pending" && !props.canApprove && <p role="status" tabIndex={-1} className="text-sm text-mist">This request cannot be approved by the account shown above.</p>}
-      {state === "approved" && (
+      {state === "approved" && !decidedHere && (
         <button type="button" className="btn-secondary w-full" disabled={busy !== null || uncertain} onClick={() => decide("deny")}>{busy === "deny" ? "Denying…" : "Deny this approved request"}</button>
       )}
     </section>

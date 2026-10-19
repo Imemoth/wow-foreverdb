@@ -5,8 +5,10 @@ import {
   PAIRING_COOKIE_TTL_SEC,
   clearPairingCookie,
   mintPairingCookie,
+  mintPairingPageBinding,
   readPairingCookie,
   setPairingCookie,
+  verifyPairingPageBinding,
 } from "@/lib/account/pairing-cookie";
 
 const SITE = "http://localhost:3000";
@@ -101,6 +103,21 @@ describe("signed pairing cookie", () => {
     const local = new Headers();
     clearPairingCookie(local, false);
     expect(local.get("set-cookie")).toBe("fdb_pair=; Path=/account; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax");
+  });
+
+  it("binds a rendered page opaquely to the exact locator, account and logical session", async () => {
+    const value = await mintPairingCookie(COOKIE_SECRET, ID, NOW);
+    const payload = (await readPairingCookie(COOKIE_SECRET, value, NOW))!;
+    const uid = "123e4567-e89b-42d3-a456-426614174000";
+    const binding = await mintPairingPageBinding(COOKIE_SECRET, payload, uid, "session-a");
+    expect(binding).toMatch(/^fdbpg1_[A-Za-z0-9_-]{43}$/);
+    expect(binding).not.toContain(ID); expect(binding).not.toContain(uid); expect(binding).not.toContain("session-a");
+    expect(await verifyPairingPageBinding(COOKIE_SECRET, payload, uid, "session-a", binding)).toBe(true);
+    expect(await verifyPairingPageBinding(COOKIE_SECRET, payload, "223e4567-e89b-42d3-a456-426614174000", "session-a", binding)).toBe(false);
+    expect(await verifyPairingPageBinding(COOKIE_SECRET, payload, uid, "session-b", binding)).toBe(false);
+    expect(await verifyPairingPageBinding(COOKIE_SECRET, { ...payload, id: "9f790272-8cb2-4c5a-a57d-83c7d3d618aa" }, uid, "session-a", binding)).toBe(false);
+    const forged = `${binding.slice(0, -1)}${binding.endsWith("A") ? "B" : "A"}`;
+    expect(await verifyPairingPageBinding(COOKIE_SECRET, payload, uid, "session-a", forged)).toBe(false);
   });
 });
 

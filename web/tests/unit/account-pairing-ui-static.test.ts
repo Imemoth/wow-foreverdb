@@ -36,7 +36,9 @@ describe("browser pairing approval UI (static)", () => {
   it("pins account switching, accessible status and deliberate one-shot actions", () => {
     const ui = read("app/account/_components/DevicePairApproval.tsx");
     expect(ui).toMatch(/^\s*["']use client["']/);
-    expect(ui).toMatch(/postJson\([^;]+retryCsrf: false/s);
+    expect(ui).toMatch(/postPairingDecision\(action, props\.pairingId, props\.pageBinding\)/);
+    const client = read("lib/account/client.ts");
+    expect(client).toMatch(/postPairingDecision[\s\S]*x-fdb-pairing-page/);
     expect(ui).toMatch(/aria-busy=\{busy !== null\}/);
     expect(ui).toMatch(/disabled=\{busy/);
     expect(ui).toMatch(/role="(?:status|alert)"/);
@@ -44,6 +46,7 @@ describe("browser pairing approval UI (static)", () => {
     expect(ui).toMatch(/Approve/);
     expect(ui).toMatch(/Deny/);
     expect(ui).toMatch(/state === "approved"[\s\S]*Deny this approved request/);
+    expect(ui).toMatch(/state === "approved" && !decidedHere/);
     expect(ui).toMatch(/outcome_unknown[\s\S]*setUncertain\(true\)/);
     expect(ui).toMatch(/disabled=\{busy !== null \|\| uncertain\}/);
     expect(read("lib/account/messages.ts")).toMatch(/Your session changed while this page was open/);

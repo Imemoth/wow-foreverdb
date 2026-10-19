@@ -43,3 +43,22 @@ export async function postJson(path: string, body: unknown, opts: { retryCsrf?: 
   }
   return { status: 0, data: { ok: false, error: "csrf" } };
 }
+
+/** Pairing decisions have an additional rendered-page/session binding and are deliberately never retried. */
+export async function postPairingDecision(action: "approve" | "deny", pairingId: string, pageBinding: string): Promise<ApiReply> {
+  const token = await csrfToken(false);
+  if (!token) return { status: 0, data: { ok: false, error: "network" } };
+  const path = action === "approve" ? "/account/api/device-pair/approve" : "/account/api/device-pair/deny";
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", "x-fdb-csrf": token, "x-fdb-pairing-page": pageBinding },
+      body: JSON.stringify({ pairingId }),
+    });
+    return { status: res.status, data: (await res.json().catch(() => ({}))) as ApiReply["data"] };
+  } catch {
+    return { status: 0, data: { ok: false, error: "network" } };
+  }
+}
