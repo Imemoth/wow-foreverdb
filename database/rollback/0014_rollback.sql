@@ -11,6 +11,19 @@
 begin;
 set local lock_timeout = '10s';
 
+-- Reverse dependency guard: Browser Pairing owns provenance on private.devices and must be rolled back first.
+do $fdb0016_guard$
+begin
+    if to_regclass('private.device_pairing_config') is not null
+       or to_regclass('private.device_pairings') is not null
+       or to_regclass('private.device_pairing_audit') is not null
+       or to_regprocedure('private.device_pairing_revocation_trigger()') is not null
+       or exists (select 1 from pg_attribute where attrelid='private.devices'::regclass and attname='pairing_id' and not attisdropped)
+       or exists (select 1 from pg_constraint where conrelid='private.devices'::regclass and conname='devices_exactly_one_provenance') then
+        raise exception '0014 rollback pre-flight: 0016 Browser Pairing dependency/history remains; run the 0016 kill switch and reviewed 0016 rollback first';
+    end if;
+end $fdb0016_guard$;
+
 revoke all on function public.fdb_account_enrollment_ticket_issue(text) from public, anon, authenticated, service_role;
 revoke all on function public.fdb_account_enrollment_tickets() from public, anon, authenticated, service_role;
 revoke all on function public.fdb_account_enrollment_ticket_revoke(uuid) from public, anon, authenticated, service_role;

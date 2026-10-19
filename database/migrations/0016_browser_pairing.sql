@@ -98,7 +98,13 @@ begin
         raise exception '0016 pre-flight: private schema reachable by client role';
     end if;
     if to_regclass('supabase_migrations.schema_migrations') is not null then
-        if not exists (select 1 from supabase_migrations.schema_migrations where name='fix_observed_drop_rate_denominator')
+        if current_setting('fdb.browser_pairing_restore',true)='empty' then
+            if not exists (select 1 from supabase_migrations.schema_migrations where name='browser_pairing')
+               or not exists (select 1 from supabase_migrations.schema_migrations where name='rollback_browser_pairing')
+               or exists (select 1 from supabase_migrations.schema_migrations where name='browser_pairing_restore') then
+                raise exception '0016 restore pre-flight: ledger must show browser_pairing then rollback_browser_pairing exactly once';
+            end if;
+        elsif not exists (select 1 from supabase_migrations.schema_migrations where name='fix_observed_drop_rate_denominator')
            or exists (select 1 from supabase_migrations.schema_migrations
                       where name in ('browser_pairing','rollback_browser_pairing','browser_pairing_restore') or version='0016') then
             raise exception '0016 pre-flight: unexpected migration ledger state; use the reviewed restore after rollback';

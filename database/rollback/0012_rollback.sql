@@ -20,6 +20,21 @@
 begin;
 set local lock_timeout = '10s';
 select set_config('fdb.ack_second_cycle', :'acknowledge_second_cycle', true) \g /dev/null
+-- Reverse dependency guard: never dismantle Account V1 while 0016 provenance, history or trigger dependencies remain.
+do $fdb0016_guard$
+begin
+    if to_regclass('private.device_pairing_config') is not null
+       or to_regclass('private.device_pairings') is not null
+       or to_regclass('private.device_pairing_audit') is not null
+       or to_regprocedure('private.device_pairing_revocation_trigger()') is not null then
+        raise exception '0012 rollback pre-flight: 0016 Browser Pairing dependency/history remains; run the 0016 kill switch and reviewed 0016 rollback first';
+    end if;
+    if to_regclass('private.devices') is not null then
+        if exists (select 1 from pg_attribute where attrelid='private.devices'::regclass and attname='pairing_id' and not attisdropped) then
+            raise exception '0012 rollback pre-flight: 0016 Browser Pairing dependency/history remains; run the 0016 kill switch and reviewed 0016 rollback first';
+        end if;
+    end if;
+end $fdb0016_guard$;
 do $guard$
 begin
     if to_regclass('supabase_migrations.schema_migrations') is not null then

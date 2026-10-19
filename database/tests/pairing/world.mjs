@@ -9,7 +9,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { makeWorld as enrollmentWorld } from "../enrollment/world.mjs";
 import { repoRoot, connect, cloneDatabase, dropDatabase, psqlFile, HOST, PORT, JWT_SECRET } from "../account/harness.mjs";
 export { connect, dropDatabase, psqlFile, randomUUID };
-export const migration = path.join(repoRoot, "database/migrations/0016_browser_pairing.sql");
+export const migration = process.env.FDB_PAIRING_MIGRATION ?? path.join(repoRoot, "database/migrations/0016_browser_pairing.sql");
 export const makeWorld = enrollmentWorld;
 export const roles = ["public", "anon", "authenticated", "service_role"];
 export const events = ["pairing_started", "pairing_approved", "pairing_denied", "pairing_expired", "pairing_connected", "pairing_revoked", "pairing_retry_deferred"];
