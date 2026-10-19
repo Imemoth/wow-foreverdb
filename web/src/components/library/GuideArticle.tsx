@@ -15,7 +15,7 @@ import { CategoryBadge } from "./CategoryBadge";
  * The premium Guides reader: breadcrumb (including a category crumb back into the filtered
  * library), refined header, an accessible table of contents when the guide has more than one
  * chapter, safe Markdown, related database entries and "Read next" - all guides-scoped. News and
- * Blog keep ArticleViews.tsx's ArticlePage untouched.
+ * Blog (P2-C) now have their own parallel reader, components/content/ArticleReader.tsx.
  */
 export async function GuideArticle({ slug }: { slug: string }) {
   const { nonce, baseUrl } = await pageContext();
