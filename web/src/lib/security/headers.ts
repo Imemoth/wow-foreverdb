@@ -49,11 +49,16 @@ export type DeploymentKindName = "local" | "preview" | "production";
  * non-production response out of search indexes (HTML, APIs and error responses).
  * `X-ForeverDB-Deployment` lets operators and tests tell a preview from a real
  * production release at the HTTP level, regardless of the Vercel target.
+ *
+ * `allowIndexing` lifts the blocking tag for exactly one narrowly-scoped response: the public-beta
+ * homepage (see isPublicBetaHomepage in lib/seo.ts). Callers must have already verified all five
+ * of its conditions themselves - this function does not check anything; every other call site
+ * (APIs, error responses, every other page) must keep passing the default.
  */
-export function deploymentHeaders(kind: DeploymentKindName): Record<string, string> {
+export function deploymentHeaders(kind: DeploymentKindName, allowIndexing = false): Record<string, string> {
   return {
     "X-ForeverDB-Deployment": kind,
-    ...(kind === "production" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
+    ...(kind === "production" || allowIndexing ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
   };
 }
 

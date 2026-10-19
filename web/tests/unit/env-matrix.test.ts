@@ -228,6 +228,30 @@ describe("review hardening: normalisation, value-free messages, trusted IP", () 
   });
 });
 
+describe("public-beta homepage SEO authorization flag (branch-scoped)", () => {
+  it("arms only when the flag equals the branch actually serving this deployment", () => {
+    expect(ok({ ...branchPreview, VERCEL_GIT_COMMIT_REF: "web/azerdex-beta", BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" }).betaSeoBranchAuthorized).toBe(true);
+  });
+  it("stays inert if the value was copied to a different branch's deployment", () => {
+    expect(ok({ ...branchPreview, VERCEL_GIT_COMMIT_REF: "feature/unrelated", BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" }).betaSeoBranchAuthorized).toBe(false);
+  });
+  it("is false when unset, even on the right branch", () => {
+    expect(ok({ ...branchPreview, VERCEL_GIT_COMMIT_REF: "web/azerdex-beta" }).betaSeoBranchAuthorized).toBe(false);
+  });
+  it("is false when VERCEL_GIT_COMMIT_REF is missing entirely", () => {
+    expect(ok({ ...branchPreview, BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" }).betaSeoBranchAuthorized).toBe(false);
+  });
+  it("refuses to carry the flag into production (fail closed, not silently inert)", () => {
+    expect(issues({ ...production, VERCEL_GIT_COMMIT_REF: "main", BETA_SEO_AUTHORIZED_BRANCH: "main" })).toMatch(/BETA_SEO_AUTHORIZED_BRANCH is only meaningful in preview/);
+  });
+  it("refuses to carry the flag into local mode", () => {
+    expect(issues({ BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" })).toMatch(/BETA_SEO_AUTHORIZED_BRANCH is only meaningful in preview/);
+  });
+  it("never flips isIndexable() - the global gate stays production-only regardless", () => {
+    expect(isIndexable(ok({ ...branchPreview, VERCEL_GIT_COMMIT_REF: "web/azerdex-beta", BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" }))).toBe(false);
+  });
+});
+
 describe("deployment headers keep non-production out of search indexes", () => {
   it("stamps preview and local as noindex and identifies the designation", () => {
     expect(deploymentHeaders("preview")).toEqual({ "X-ForeverDB-Deployment": "preview", "X-Robots-Tag": "noindex, nofollow" });
@@ -235,6 +259,11 @@ describe("deployment headers keep non-production out of search indexes", () => {
   });
   it("does not noindex the production release but still identifies it", () => {
     expect(deploymentHeaders("production")).toEqual({ "X-ForeverDB-Deployment": "production" });
+  });
+  it("allowIndexing lifts the tag only when explicitly passed true, for any deployment kind", () => {
+    expect(deploymentHeaders("preview", true)).toEqual({ "X-ForeverDB-Deployment": "preview" });
+    expect(deploymentHeaders("preview", false)).toEqual({ "X-ForeverDB-Deployment": "preview", "X-Robots-Tag": "noindex, nofollow" });
+    expect(deploymentHeaders("preview")).toEqual({ "X-ForeverDB-Deployment": "preview", "X-Robots-Tag": "noindex, nofollow" });
   });
 });
 
@@ -244,7 +273,7 @@ describe("indexing surfaces follow the designation (robots.txt, sitemap)", () =>
     vi.resetModules();
     for (const k of Object.keys(process.env)) if (/^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP)/.test(k)) delete process.env[k];
     Object.assign(process.env, env);
-    const robots = (await import("@/app/robots")).default();
+    const robots = await (await import("@/app/robots")).default();
     const sitemap = await (await import("@/app/sitemap")).default();
     return { robots, sitemap };
   }
@@ -256,6 +285,14 @@ describe("indexing surfaces follow the designation (robots.txt, sitemap)", () =>
   });
   it("local: robots.txt disallows everything and the sitemap is empty", async () => {
     const { robots, sitemap } = await surfaces({});
+    expect(robots.rules).toEqual([{ userAgent: "*", disallow: "/" }]);
+    expect(sitemap).toEqual([]);
+  });
+  it("a fully-authorized beta env still falls back to the default preview policy with no request scope (fail closed)", async () => {
+    // requestHostname() can only resolve a hostname inside a real request (see tests/e2e/beta-seo.spec.ts
+    // for the HTTP-level, request-scoped behavior of the exception itself); a direct call like this one
+    // must never guess, so it behaves exactly like any other preview.
+    const { robots, sitemap } = await surfaces({ ...branchPreview, VERCEL_GIT_COMMIT_REF: "web/azerdex-beta", BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta" });
     expect(robots.rules).toEqual([{ userAgent: "*", disallow: "/" }]);
     expect(sitemap).toEqual([]);
   });

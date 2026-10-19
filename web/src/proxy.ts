@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
+import { isPublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
@@ -87,6 +88,15 @@ export async function proxy(request: NextRequest) {
   const https = env.SITE_URL.startsWith("https://");
   const kind = env.FOREVERDB_DEPLOYMENT;
   const stamp = deploymentHeaders(kind);
+  // The one narrowly-scoped page allowed to drop the blocking tag - see lib/seo.ts. Computed from
+  // the request's own parsed hostname/pathname, never from anything a client can set; pathname "/"
+  // alone already rules out /api/* and /account/*, so this can never apply to either.
+  // request.nextUrl.hostname is NOT the incoming Host header on a self-hosted (non-Vercel-routed)
+  // Next.js server - it reports "localhost" regardless of what the client sent. The Host header
+  // itself (as Vercel's own edge routing sets it for the domain actually requested) is the only
+  // reliable signal here, exactly like requestHostname() in lib/seo.ts uses for every other surface.
+  const requestHost = (request.headers.get("host") ?? "").split(":")[0]!.toLowerCase();
+  const publicBetaHomepage = isPublicBetaHomepage(env, requestHost, pathname);
   // The __Host- prefix (and Secure) follows the real origin: never a Secure-less cookie on an https site.
   const sidCookie = https ? "__Host-fdb_sid" : "fdb_sid";
 
@@ -165,10 +175,14 @@ export async function proxy(request: NextRequest) {
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  // Lets the root layout (which wraps every route and cannot otherwise see the current path) build
+  // correct canonical/JSON-LD URLs on the one eligible page without affecting any other route.
+  requestHeaders.set("x-request-pathname", pathname);
   requestHeaders.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
-  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders })) res.headers.set(k, v);
+  const htmlStamp = deploymentHeaders(kind, publicBetaHomepage);
+  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...htmlStamp, ...accountHeaders })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
   // The anonymous rate-limit cookie is for public browsing only: account pages neither receive nor issue it.
   if (!isAccount && !sessionId && request.method === "GET") {
