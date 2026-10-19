@@ -29,8 +29,12 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let seq = Math.floor(Math.random() * 100000);
 export const uniqueEmail = (tag = "u") => `${tag}-${Date.now().toString(36)}-${++seq}@example.test`;
 /** Every client is a distinct visitor to the website's per-IP budgets. */
-let ipSeq = Math.floor(Math.random() * 200);
-export const uniqueIp = () => `198.51.100.${(++ipSeq % 250) + 1}`;
+let ipSeq = Math.floor(Math.random() * 700);
+const TEST_NETS = ["192.0.2", "198.51.100", "203.0.113"] as const;
+export const uniqueIp = () => {
+  const n = ++ipSeq % 750;
+  return `${TEST_NETS[Math.floor(n / 250)]}.${(n % 250) + 1}`;
+};
 
 export async function newClient(playwright: Playwright, site: keyof typeof SITES = "main", ip = uniqueIp()): Promise<APIRequestContext> {
   return playwright.request.newContext({ baseURL: SITES[site], extraHTTPHeaders: { "x-forwarded-for": ip } });

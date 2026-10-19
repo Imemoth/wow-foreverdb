@@ -98,6 +98,7 @@ test("redirect allowlist: the new pages are valid return paths, everything else 
   const users = [await webUser(playwright, "redir1"), await webUser(playwright, "redir2")]; // (sign-ins are throttled per address: 10 / 15 min)
   const cases: [string, string][] = [
     ["/account/link", "/account/link"], ["/account/installations", "/account/installations"], ["/account/guildbook", "/account/guildbook"],
+    ["/account/device-pair", "/account/device-pair"],
     ["/account/link?code=ABCDEF0123456789ABCDEF0123456789", "/account/link"], ["/account/link#x", "/account/link"],
     ["//evil.example/account/link", "/account"], ["https://evil.example", "/account"], ["/\\evil.example", "/account"], ["/account/link/../../admin", "/account"],
     ["/account/linkx", "/account"], ["/account/%2e%2e/api/me", "/account"], ["%2F%2Fevil.example", "/account"], ["/account/guildbook/", "/account/guildbook"],

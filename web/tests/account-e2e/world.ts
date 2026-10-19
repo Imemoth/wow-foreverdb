@@ -1,5 +1,6 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { APIRequestContext, APIResponse, PlaywrightWorkerArgs } from "@playwright/test";
+import type pg from "pg";
 import { PASSWORD, cookieOf, json, newClient, openSessionCookie, post, signedInClient, uniqueEmail, waitForMail } from "../account/helpers";
 import { anonymous, claimsOf, ingest, relaxFixtureCeilings, rpc, snapshot, type Identity, uniq } from "./stack";
 
@@ -30,10 +31,10 @@ export async function loginAgain(playwright: Playwright, u: Pick<WebUser, "email
 export interface Companion { id: Identity; installationId: string }
 
 /** An anonymous Companion identity that has really ingested one installation (sources, loot, locations, quest drops, Guildbook). */
-export async function companionWithInstallation(o: { guilds?: number; members?: number; tag?: string; sources?: number } = {}): Promise<Companion> {
+export async function companionWithInstallation(o: { guilds?: number; members?: number; tag?: string; sources?: number; installationId?: string } = {}): Promise<Companion> {
   await relaxFixtureCeilings();
   const id = await anonymous();
-  const installationId = uniq("e2e");
+  const installationId = o.installationId ?? uniq("e2e");
   const r = await ingest(id.token, snapshot(installationId, { updatedAt: 1000, sources: o.sources ?? 3, guilds: o.guilds ?? 2, members: o.members ?? 4, tag: o.tag ?? "M" }));
   if (r.status !== 200 || r.body?.ok !== true) throw new Error(`ingest answered ${r.status} ${JSON.stringify(r.body)}`);
   return { id, installationId };
@@ -62,4 +63,86 @@ export async function clientWithSessionCookie(playwright: Playwright, value: str
     extraHTTPHeaders: { "x-forwarded-for": ip },
     storageState: { cookies: [{ name: "fdb_acct", value, domain: "localhost", path: "/account", httpOnly: true, secure: false, sameSite: "Lax", expires: -1 }], origins: [] },
   });
+}
+
+// ------------------------------------------------------------------------------------------------ Browser Pairing V1
+export interface PairingMaterial {
+  pairingId: string;
+  pollSecret: string;
+  pollSecretHash: string;
+  deviceId: string;
+  deviceCredential: string;
+  deviceCredentialHash: string;
+  installationId: string;
+  computerName: string;
+}
+
+export function pairingMaterial(overrides: Partial<PairingMaterial> = {}): PairingMaterial {
+  const pairingId = randomUUID();
+  const deviceId = randomUUID();
+  const pollSecret = `fdbp1_${randomBytes(32).toString("base64url")}`;
+  const deviceCredential = `fdbd1_${deviceId.replaceAll("-", "")}_${randomBytes(32).toString("base64url")}`;
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  return {
+    pairingId,
+    pollSecret,
+    pollSecretHash: digest(pollSecret),
+    deviceId,
+    deviceCredential,
+    deviceCredentialHash: digest(deviceCredential),
+    installationId: randomBytes(16).toString("hex"),
+    computerName: "Task 9 Test PC",
+    ...overrides,
+  };
+}
+
+export async function nativePairingPost(
+  c: APIRequestContext,
+  action: "start" | "poll" | "cancel",
+  identity: Pick<Identity, "token">,
+  pairing: PairingMaterial,
+  headers: Record<string, string> = {},
+): Promise<APIResponse> {
+  const data = action === "start"
+    ? { pairingId: pairing.pairingId, pollSecretHash: pairing.pollSecretHash, deviceId: pairing.deviceId,
+        deviceCredentialHash: pairing.deviceCredentialHash, installationId: pairing.installationId, computerName: pairing.computerName }
+    : { pairingId: pairing.pairingId, pollSecret: pairing.pollSecret };
+  return c.post(`/account/api/device-pair/${action}`, {
+    headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json", ...headers },
+    data: JSON.stringify(data),
+  });
+}
+
+/** Follow the one-shot locator intake and return the rendered opaque page/session binding. */
+export async function openPairing(c: APIRequestContext, pairingId: string): Promise<{ html: string; pageBinding: string }> {
+  const intake = await c.get(`/account/device-pair?request=${pairingId}`);
+  if (intake.status() !== 200) throw new Error(`pairing intake answered ${intake.status()}: ${await intake.text()}`);
+  const html = await intake.text();
+  const m = /fdbpg1_[A-Za-z0-9_-]{43}/.exec(html);
+  if (!m) throw new Error("rendered pairing page has no opaque page binding");
+  return { html, pageBinding: m[0] };
+}
+
+export async function pairingDecision(
+  c: APIRequestContext,
+  action: "approve" | "deny",
+  pairingId: string,
+  pageBinding: string,
+  options: { origin?: string | null; fetchSite?: string | null; csrf?: "auto" | "none" | string; raw?: string } = {},
+): Promise<APIResponse> {
+  const headers: Record<string, string> = { "x-fdb-pairing-page": pageBinding };
+  const origin = options.origin === undefined ? "http://localhost:3210" : options.origin;
+  if (origin !== null) headers.origin = origin;
+  const site = options.fetchSite === undefined ? "same-origin" : options.fetchSite;
+  if (site !== null) headers["sec-fetch-site"] = site;
+  const csrf = options.csrf === "none" ? null : options.csrf && options.csrf !== "auto" ? options.csrf : await (await import("../account/helpers")).csrfToken(c);
+  if (csrf) headers["x-fdb-csrf"] = csrf;
+  return c.post(`/account/api/device-pair/${action}`, {
+    headers: { ...headers, "content-type": "application/json" },
+    data: options.raw ?? JSON.stringify({ pairingId }),
+  });
+}
+
+export async function makePairingDue(db: pg.Client, pairingId: string): Promise<void> {
+  await db.query("update private.device_pairings set next_poll_at=clock_timestamp()-interval '1 second' where id=$1", [pairingId]);
 }

@@ -70,14 +70,20 @@ export async function logoutLocal(token: string): Promise<number> {
 // ------------------------------------------------------------------------------------------------ database (verification only)
 /** Direct database connection used ONLY to verify outcomes (the application path always goes through PostgREST). */
 export async function admin(): Promise<pg.Client> {
-  const c = new pg.Client({ host: env.PGHOST ?? "127.0.0.1", port: Number(env.PGPORT ?? 5432), database: DB, user: "fdb_migrator", password: "local-test-password" });
+  const c = new pg.Client({ host: env.E2E_PGHOST ?? env.PGHOST ?? "127.0.0.1", port: Number(env.E2E_PGPORT ?? env.PGPORT ?? 5432), database: DB, user: "fdb_migrator", password: "local-test-password" });
   await c.connect();
   return c;
 }
 
 /** Superuser connection of the DISPOSABLE cluster: needed only to observe other backends' lock waits in pg_stat_activity. */
 export async function superAdmin(): Promise<pg.Client> {
-  const c = new pg.Client({ host: env.PGHOST ?? "127.0.0.1", port: Number(env.PGPORT ?? 5432), database: DB, user: env.PGUSER, password: env.PGPASSWORD });
+  const c = new pg.Client({
+    host: env.E2E_PGHOST ?? env.PGHOST ?? "127.0.0.1",
+    port: Number(env.E2E_PGPORT ?? env.PGPORT ?? 5432),
+    database: DB,
+    user: env.E2E_PGUSER ?? env.PGUSER,
+    password: env.E2E_PGPASSWORD ?? env.PGPASSWORD,
+  });
   await c.connect();
   return c;
 }

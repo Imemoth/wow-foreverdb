@@ -85,13 +85,42 @@ done
 probe() { curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_installations"; }
 BEFORE="$(probe)"
 
-# 4. Migration 0012 (pre-flight inside), then wait for PostgREST to pick the new functions up: the migration ends with `notify pgrst, 'reload schema'`.
+# 4. Account ownership, enrollment and browser-pairing migrations. PostgREST was
+# deliberately started first, so every migration's schema-cache notification is
+# exercised by the real process used by the tests.
 "$REPO/database/tests/account/stack.sh" apply
 T0=$(date +%s%3N); AFTER=""
 for i in $(seq 1 100); do AFTER="$(probe)"; [ "$AFTER" != "$BEFORE" ] && break; sleep 0.2; done
 T1=$(date +%s%3N)
 echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\": $AFTER, \"reload_observed_ms\": $((T1-T0))}" >"$STACK_DIR/schema-cache.json"
 [ "$BEFORE" = 404 ] && [ "$AFTER" != 404 ] || { echo "schema cache did not reload after 0012 (before=$BEFORE after=$AFTER)"; exit 1; }
+
+"$REPO/database/tests/account/stack.sh" apply14
+PAIR_PROBE_BODY='{"p_pairing_id":"00000000-0000-4000-8000-000000000001","p_poll_secret_hash":"0000000000000000000000000000000000000000000000000000000000000000","p_device_id":"00000000-0000-4000-8000-000000000002","p_device_credential_hash":"0000000000000000000000000000000000000000000000000000000000000000","p_installation_id":"pairing-schema-probe","p_computer_name":"probe"}'
+PAIR_BEFORE="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d "$PAIR_PROBE_BODY" "http://127.0.0.1:$GW/rest/v1/rpc/fdb_device_pair_start")"
+PAIR_T0=$(date +%s%3N)
+"$REPO/database/tests/account/stack.sh" apply16
+# The checked-in default remains false. Only this throw-away database is enabled.
+PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h "$PGHOST" -p "$PGPORT" -U fdb_migrator -d "$DB" \
+  -c "update private.device_pairing_config set enabled = true where singleton" >/dev/null
+PAIR_AFTER=""
+for i in $(seq 1 100); do
+  PAIR_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d "$PAIR_PROBE_BODY" "http://127.0.0.1:$GW/rest/v1/rpc/fdb_device_pair_start")"
+  [ "$PAIR_AFTER" != 404 ] && break
+  sleep 0.2
+done
+PAIR_T1=$(date +%s%3N)
+[ "$PAIR_BEFORE" = 404 ] && [ "$PAIR_AFTER" != 404 ] || { echo "schema cache did not reload after 0016 (before=$PAIR_BEFORE after=$PAIR_AFTER)"; exit 1; }
+
+PAIRING_FUNCTIONS="$(PGPASSWORD=local-test-password psql -X -At -h "$PGHOST" -p "$PGPORT" -U fdb_migrator -d "$DB" -c \
+  "select json_agg(proname order by proname) from pg_proc where pronamespace='public'::regnamespace and proname in ('fdb_device_pair_start','fdb_device_pair_poll','fdb_device_pair_cancel','fdb_account_device_pair_preview','fdb_account_device_pair_approve','fdb_account_device_pair_deny')")"
+[ "$(printf '%s' "$PAIRING_FUNCTIONS" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.exit(JSON.parse(s).length===6?0:1))')" = "" ] || exit 1
+MIGRATION_0016_SHA256="$(sha256sum "$REPO/database/migrations/0016_browser_pairing.sql" | cut -d' ' -f1)"
+cat >"$STACK_DIR/schema-cache.json" <<JSON
+{"function_status_before_0012":$BEFORE,"function_status_after_0012":$AFTER,"reload_observed_ms":$((T1-T0)),
+ "0012":{"function_status_before":$BEFORE,"function_status_after":$AFTER,"reload_observed_ms":$((T1-T0))},
+ "0016":{"function_status_before":$PAIR_BEFORE,"function_status_after":$PAIR_AFTER,"reload_observed_ms":$((PAIR_T1-PAIR_T0)),"functions":$PAIRING_FUNCTIONS,"migration_sha256":"$MIGRATION_0016_SHA256","disposable_gate_enabled":true}}
+JSON
 
 # 5. What was REALLY started (recorded, not assumed).
 GOTRUE_VERSION="$(curl -fsS "http://127.0.0.1:9999/health" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("unknown")}})')"
@@ -101,7 +130,8 @@ GOTRUE_COMMIT="$(grep -oE '4eee58f2[0-9a-f]*' "$REPO/database/tests/account/buil
 cat >"$STACK_DIR/versions.json" <<JSON
 {"gotrue": {"tag": "${GOTRUE_TAG:-v2.197.0}", "reported": "$GOTRUE_VERSION", "commit_prefix": "$GOTRUE_COMMIT"},
  "postgrest": "$PGRST_VERSION", "postgres": "$PG_VERSION", "mailpit": "${MAILPIT_TAG:-v1.31.5}",
- "postgrest_settings": {"db-tx-end": "commit (main) / commit-allow-override (override instance, negative test only)", "db-schemas": "public", "db-anon-role": "anon", "db-max-rows": 1000, "jwt": "HS256 shared secret with GoTrue"}}
+ "postgrest_settings": {"db-tx-end": "commit (main) / commit-allow-override (override instance, negative test only)", "db-schemas": "public", "db-anon-role": "anon", "db-max-rows": 1000, "jwt": "HS256 shared secret with GoTrue"},
+ "browser_pairing": {"migration_sha256": "$MIGRATION_0016_SHA256", "database_gate": "enabled only in this disposable database", "source_gate": false}}
 JSON
 cat >"$STACK_DIR/env" <<ENV
 ACCOUNT_STACK_URL=http://127.0.0.1:$GW
@@ -114,6 +144,10 @@ E2E_POSTGREST_URL=http://127.0.0.1:$REST
 E2E_POSTGREST_OVERRIDE_URL=http://127.0.0.1:$REST_OVERRIDE
 E2E_JWT_SECRET=$JWT_SECRET
 E2E_DB=$DB
+E2E_PGHOST=$PGHOST
+E2E_PGPORT=$PGPORT
+E2E_PGUSER=$PGUSER
+E2E_PGPASSWORD=$PGPASSWORD
 E2E_STACK_DIR=$STACK_DIR
 ENV
-echo "e2e stack ready: gateway :$GW (auth + rest), mailpit :$MAIL_HTTP, PostgREST :$REST ($PGRST_VERSION), schema reload after 0012 observed (status $BEFORE -> $AFTER)"
+echo "e2e stack ready: gateway :$GW (auth + rest), mailpit :$MAIL_HTTP, PostgREST :$REST ($PGRST_VERSION), schema reloads after 0012 and 0016 observed"

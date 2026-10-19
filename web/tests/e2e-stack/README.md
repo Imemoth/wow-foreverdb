@@ -12,15 +12,16 @@ credential, never production. If a component cannot start, the suite **fails** (
 | Mail | Mailpit (captures every message GoTrue sends over SMTP) | v1.31.5 |
 | Gateway | `web/tests/auth-stack/stack-server.mjs`: stands in for Kong: `/auth/v1/*` -> GoTrue, `/rest/v1/*` -> PostgREST (prefix stripped, `apikey` must equal the stack's anon key, no other behaviour) | — |
 | Fault injector | `chaos-proxy.mjs`: forwards untouched unless a test switches a mode (lost redemption reply, failing logout). Only `web/tests/account-e2e/05-resilience.spec.ts` uses it | — |
-| Database | repository migrations **0001-0009, 0011 and 0012**, applied by `database/tests/account/stack.sh` as a non-superuser migration role (stand-in for Supabase `postgres`); `0010` and `0013` are **not** applied | — |
+| Database | repository migrations **0001-0009, 0011, 0012, 0014 and 0016**, applied by `database/tests/account/stack.sh` as a non-superuser migration role (stand-in for Supabase `postgres`); `0010` and `0013` are **not** applied | — |
 
 PostgREST settings (recorded in `.stack/versions.json` at start-up): `db-schemas = public`, `db-anon-role = anon`, HS256 JWT secret shared with GoTrue,
 `db-max-rows = 1000`, **`db-tx-end = commit`**. A second instance with `commit-allow-override` exists ONLY so that one test can show why the reviewed value matters
 (with the override, `Prefer: tx=rollback` rolls the abuse counters back). Auth settings: confirm e-mail ON, anonymous sign-in ON, refresh-token rotation ON (reuse
 interval 10 s), CAPTCHA / single-session-per-user / session time-box / inactivity timeout OFF, access-token lifetime 3600 s.
 
-`up.sh` starts PostgREST **before** migration 0012, then applies 0012 and waits until the migration's `notify pgrst, 'reload schema'` makes the functions appear
-(status 404 `PGRST202` -> 401 for the anon role). The observation is written to `.stack/schema-cache.json` and asserted by the suite.
+`up.sh` starts PostgREST **before** migrations 0012 and 0016, applies 0012, 0014 and 0016 as the non-superuser migrator, and waits for each `notify pgrst, 'reload schema'`. It records all six pairing RPCs, the migration SHA, reload timings, and the database gate that is enabled only inside this disposable database in `.stack/schema-cache.json`.
+
+`build-pairing.sh` temporarily opens the literal web source gate only while producing the local `.next` test artifact, restores the checked-in literal `false`, and runs the release scanner before returning. This is necessary to exercise successful browser routes while the review branch keeps every distributable source gate off. The test artifact is ephemeral and must never be deployed.
 
 ## Run locally
 
@@ -32,7 +33,7 @@ database/tests/account/build-gotrue.sh /path/to/gotrue                      # re
 export GOTRUE_BIN=/path/to/gotrue POSTGREST_BIN=/path/to/postgrest MAILPIT_BIN=/path/to/mailpit
 web/tests/e2e-stack/up.sh                     # refuses to start if one of its ports is taken by a leftover process
 cd web && FOREVERDB_DEPLOYMENT=local ACCOUNT_AUTH_MODE=local ACCOUNT_CSRF_SECRET=... \
-  ACCOUNT_AUTH_URL=http://127.0.0.1:54321 ACCOUNT_AUTH_PUBLISHABLE_KEY=$(. tests/e2e-stack/.stack/env; echo $ACCOUNT_STACK_ANON_KEY) npm run build
+  ACCOUNT_AUTH_URL=http://127.0.0.1:54321 ACCOUNT_AUTH_PUBLISHABLE_KEY=$(. tests/e2e-stack/.stack/env; echo $ACCOUNT_STACK_ANON_KEY) tests/e2e-stack/build-pairing.sh
 npx playwright test -c playwright.account-e2e.config.ts      # starts three `next start` instances itself (3210 main, 3211 chaos, 3212 dead limiter)
 web/tests/e2e-stack/down.sh
 ```
@@ -42,7 +43,7 @@ Ports used: 9999 (GoTrue), 54321 (gateway), 54323/54327 (PostgREST + admin), 543
 
 ## What this stack proves, and what it does not
 
-Proves: website <-> real GoTrue <-> real PostgREST <-> migration 0012 interoperate (JWT validation, session-claim propagation, EXECUTE privileges, commit semantics,
+Proves: website <-> real GoTrue <-> real PostgREST <-> migrations 0012/0014/0016 interoperate (JWT validation, session-claim propagation, EXECUTE privileges, commit semantics,
 PT401/PT403/PT429/PT400 propagation, schema-cache reload, response shapes the website's Zod contracts expect). Does **not** prove: the hosted Supabase gateway (Kong, new-style
 `sb_publishable_` keys), the hosted GoTrue/PostgREST versions and settings, connection pooling and statement timeouts of a hosted database, real SMTP delivery, or anything about
 Windows. Those are the owner's staging checks: [../../../docs/account-v1/staging-runbook.md](../../../docs/account-v1/staging-runbook.md).
