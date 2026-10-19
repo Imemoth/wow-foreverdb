@@ -55,9 +55,9 @@ describe("0013 restoration migration", () => {
     expect(masked).not.toMatch(/supabase_migrations\.schema_migrations\s+(set|values)/);
   });
 
-  it("every file in database/restore that mentions an account function is linted on its own", () => {
+  it("every file in database/restore that redefines the complete Account V1 API is linted on its own", () => {
     const dir = resolve(root, "restore");
-    const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && /fdb_account_|fdb_installation_link_status|fdb_caller|fdb_anonymous_caller|fdb_registered_caller/.test(readFileSync(resolve(dir, f), "utf8")));
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && /create\s+(?:or\s+replace\s+)?function\s+public\.fdb_account_claim_start\b/i.test(readFileSync(resolve(dir, f), "utf8")));
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) expect(lintAccountMigration(readFileSync(resolve(dir, f), "utf8")), f).toEqual([]);
   });

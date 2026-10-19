@@ -144,14 +144,14 @@ export async function rollback(admin, fn) {
 
 // Task 2 worlds always build the current migration on an independent pristine predecessor.
 // Enabling the gate is explicit and confined to the disposable clone.
-export async function makePairingWorld() {
+export async function makePairingWorld({ enabled = true } = {}) {
   const source = await prerequisiteTemplate();
   const database = `fdb_pairing_rpc_${randomBytes(6).toString("hex")}`;
   await cloneDatabase(source.database, database);
   const result = psqlFile(database, migration);
   assert.equal(result.status, 0, result.out);
   const w = await enrollmentWorld({database});
-  await w.admin.query("update private.device_pairing_config set enabled=true");
+  if (enabled) await w.admin.query("update private.device_pairing_config set enabled=true");
   const close = w.close;
   w.database = database;
   w.close = async () => { await close(); await dropDatabase(database); await closeBefore16Template(); };

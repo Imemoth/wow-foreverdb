@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "../account/harness.mjs";
-import { makeWorld, before16, protectedState, functions, closeBefore16Template, assertPreserved, assertNoPublicPairingFunctions, migration, psqlFile, pending, rollback, roles, events, randomUUID } from "./world.mjs";
+import { makeWorld, makePairingWorld, before16, protectedState, functions, closeBefore16Template, assertPreserved, assertNoPublicPairingFunctions, migration, psqlFile, pending, rollback, roles, events, randomUUID } from "./world.mjs";
 let w;
-before(async () => { w = await makeWorld(); });
+const freshSchemaWorld = () => makePairingWorld({enabled:false});
+before(async () => { w = await freshSchemaWorld(); });
 after(async () => { await w?.close(); await closeBefore16Template(); });
 const cols = async (table) => (await w.admin.query(`select attname name, format_type(atttypid,atttypmod) type, attnotnull required
  from pg_attribute where attrelid=$1::regclass and attnum>0 and not attisdropped order by attnum`, [table])).rows;
@@ -153,7 +154,7 @@ it("apply16 succeeds without any 0015 object and with azerdex_welcome_outbox rec
     assert.deepEqual((await admin.query("select * from supabase_migrations.schema_migrations order by version")).rows,ledger);
     assert.equal((await admin.query("select enabled from private.device_pairing_config")).rows[0].enabled,false);
   });
-  } finally { w=await makeWorld(); }
+  } finally { w=await freshSchemaWorld(); }
 });
 it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/privileges, and recorded lifecycle entries atomically", async()=> {
   await w.close(); w=null;
@@ -172,7 +173,7 @@ it("preflight rejects missing 0012/0014, conflicting names, missing Auth/crypto/
     const r=psqlFile(database,migration); assert.notEqual(r.status,0,damage); assert.match(r.out,/0016 pre-flight/,r.out);
     assert.equal((await admin.query("select to_regclass('private.device_pairing_config')::text t")).rows[0].t,null,"failed migration left no config");
   });
-  } finally { w=await makeWorld(); }
+  } finally { w=await freshSchemaWorld(); }
 });
 it("Task 3 exposes exactly the six approved public pairing signatures", async () => {
   const rows = await functions(w.admin);
@@ -209,7 +210,7 @@ it("the pre-0016 baseline is independent of a predecessor ACL changed in the pos
       assert.equal((await admin.query("select to_regclass('private.device_pairings')::text t")).rows[0].t, null);
     });
   } finally {
-    w=await makeWorld();
+    w=await freshSchemaWorld();
     await w.admin.query("grant execute on function public.fdb_account_devices() to authenticated");
   }
 });
@@ -231,7 +232,7 @@ it("the external preservation proof rejects an ACL mutation before the migration
         assert.throws(() => assertPreserved(before, after), /public.fdb_account_devices/);
       } finally { fs.rmSync(dir, {recursive:true,force:true}); }
     });
-  } finally { w=await makeWorld(); }
+  } finally { w=await freshSchemaWorld(); }
 });
 it("preflight rejects live-device indexes with altered ownership, uniqueness, columns, predicate or validity", async () => {
   await w.close(); w=null;
@@ -254,7 +255,7 @@ it("preflight rejects live-device indexes with altered ownership, uniqueness, co
         assert.equal((await admin.query("select to_regclass('private.device_pairing_config')::text t")).rows[0].t,null);
       });
     }
-  } finally { w=await makeWorld(); }
+  } finally { w=await freshSchemaWorld(); }
 });
 it("complete connected/revoked states and all approval-nullability combinations obey the schema", async () => {
   const account=await w.account(); const linked=await w.enrolled(account);

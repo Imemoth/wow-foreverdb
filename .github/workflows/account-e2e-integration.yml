@@ -111,7 +111,7 @@ jobs:
         run: |
           set -a; . "$GITHUB_WORKSPACE/.stack/env"; set +a
           export ACCOUNT_AUTH_URL="$ACCOUNT_STACK_URL" ACCOUNT_AUTH_PUBLISHABLE_KEY="$ACCOUNT_STACK_ANON_KEY"
-          npm run build
+          ./tests/e2e-stack/build-pairing.sh
           npm run check:bundle-secrets
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
