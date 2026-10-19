@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures";
 test("home: honest banner, central search and entry points", async ({ page }) => {
   await page.goto("/");
   if (process.env.FOREVERDB_DATA_SOURCE === "postgres") await expect(page.getByText(/Observed data · publication #\d+/)).toBeVisible();
-  else await expect(page.getByRole("note").first()).toContainText("synthetic sample data");
+  else await expect(page.getByRole("complementary", { name: "Dataset status" })).toContainText("synthetic sample data");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.getByLabel("Search items, creatures, nodes or a game ID").fill("copper");
   await page.getByRole("button", { name: "Search database" }).click();
