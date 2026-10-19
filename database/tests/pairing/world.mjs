@@ -35,19 +35,23 @@ async function prerequisiteTemplate() {
     });
   });
   const stack = path.join(repoRoot, "database/tests/account/stack.sh");
-  const r = spawnSync("bash", ["-c", `set -e
-    trap 'if [ -f "$FDB_IT_RUN_DIR/gotrue.pid" ]; then kill "$(cat "$FDB_IT_RUN_DIR/gotrue.pid")" 2>/dev/null || true; fi' EXIT
-    "$1" up
-    "$1" apply
-    "$1" apply14`, "pairing-prerequisites", stack], {
-    cwd: repoRoot,
-    env: {...process.env, FDB_IT_DB:database, FDB_IT_RUN_DIR:run, GOTRUE_PORT:String(port)},
-    encoding: "utf8", timeout: 180000,
-  });
-  if (r.status !== 0) {
+  const env = {...process.env, FDB_IT_DB:database, FDB_IT_RUN_DIR:run, GOTRUE_PORT:String(port)};
+  let bootstrapFailure, bootstrapOutput = "";
+  for (const command of ["up", "apply", "apply14"]) {
+    const result = spawnSync(stack, [command], { cwd: repoRoot, env, encoding: "utf8", timeout: 180000 });
+    bootstrapOutput += `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.error || result.status !== 0) { bootstrapFailure = result.error ?? `exit ${result.status}`; break; }
+  }
+  const pidFile = path.join(run, "gotrue.pid");
+  if (fs.existsSync(pidFile)) {
+    const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+    try { if (Number.isSafeInteger(pid) && pid > 1) process.kill(pid); } catch (error) { if (error?.code !== "ESRCH") throw error; }
+    fs.rmSync(pidFile, {force:true});
+  }
+  if (bootstrapFailure) {
     await dropDatabase(database);
     fs.rmSync(run, {recursive:true,force:true});
-    assert.fail(`pristine 0014 bootstrap failed: ${r.error ?? ""}\n${r.stdout}${r.stderr}`);
+    assert.fail(`pristine 0014 bootstrap failed: ${bootstrapFailure}\n${bootstrapOutput}`);
   }
   template = {database, run};
   return template;
