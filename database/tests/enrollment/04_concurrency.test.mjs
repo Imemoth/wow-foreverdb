@@ -132,6 +132,14 @@ describe("races between different tickets", () => {
         enrolled += 1;
         assert.equal(row.status, "consumed");
         assert.deepEqual(r.value, { ok: false, error: "not_available" });
+        // Revoke the device this round enrolled before the next round starts: this loop reuses one
+        // account for all 30 rounds, and migration 0014 caps an account at 10 live devices. Without
+        // this cleanup, enough "enrolled" rounds legitimately hit that cap and fdb_device_enroll
+        // correctly returns device_limit instead of racing to ticket_revoked - a test-fixture bug,
+        // not a production one. The round's race (enroll vs. ticket-revoke) is already fully
+        // resolved by this point, so revoking afterwards cannot affect its outcome.
+        const cleanup = await acct.call("fdb_account_device_revoke", [e.value.device_id]);
+        assert.deepEqual(cleanup, { ok: true }, `cleanup revoke of the round's enrolled device failed: ${JSON.stringify(cleanup)}`);
       } else {
         revoked += 1;
         assert.equal(e.value.error, "ticket_revoked");
