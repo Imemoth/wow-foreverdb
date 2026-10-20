@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { CartographyBanner } from "@/components/cartography/CartographyBanner";
+import { CartographyHero } from "@/components/cartography/CartographyHero";
+import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { EmptyState } from "@/components/EmptyState";
 import { fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
@@ -18,24 +19,32 @@ export default async function ZonesPage() {
   return (
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Zones" }]} />
-      <CartographyBanner>
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-300">Arcane Cartography</p>
-        <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-parchment sm:text-4xl">Zones</h1>
-        <p className="mt-1 max-w-2xl text-sm text-mist sm:text-base">
+      <CartographyHero variant="zones" eyebrow="Arcane Cartography" eyebrowIcon="/library/medallions/cartography.webp">
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-parchment sm:text-5xl lg:text-6xl">Zones</h1>
+        <p className="mt-3 max-w-2xl text-sm text-mist sm:text-base lg:text-lg">
           Every surveyed region, charted from real player observations. Zones appear here once something has been seen in them.
         </p>
-      </CartographyBanner>
+      </CartographyHero>
       {zones.length === 0 ? <EmptyState title="No zones published yet" /> : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {zones.map((z) => (
             <li key={z.mapId}>
               <Link href={zonePath(z.mapId)}
-                className="panel group relative block overflow-hidden p-5 no-underline transition hover:border-gold-500/70 focus-visible:border-gold-500/70">
+                className="panel group relative flex items-start gap-3 overflow-hidden p-5 no-underline transition hover:border-gold-500/70 focus-visible:border-gold-500/70">
                 <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-gold-500/60 to-transparent opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
-                <span className="block min-w-0 break-words font-[family-name:var(--font-display)] text-lg font-semibold text-gold-300">{z.zoneName}</span>
-                <span className="mt-2 block text-sm text-mist">
-                  {fmtInt(z.sourceCount)} sources · {fmtInt(z.itemCount)} related items · {fmtInt(z.observations)} located observations
-                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+                <img src={medallionFor(z.zoneName)} alt="" aria-hidden="true"
+                  className="h-11 w-11 shrink-0 rounded-full border border-ink-600 bg-ink-900/60 object-cover p-1.5 opacity-90 transition group-hover:opacity-100" />
+                <div className="min-w-0">
+                  <span className="block min-w-0 break-words font-[family-name:var(--font-display)] text-lg font-semibold text-gold-300">{z.zoneName}</span>
+                  <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm text-mist">
+                    <span><span className="font-semibold text-parchment">{fmtInt(z.sourceCount)}</span> sources</span>
+                    <span aria-hidden="true" className="text-ink-600">·</span>
+                    <span><span className="font-semibold text-parchment">{fmtInt(z.itemCount)}</span> related items</span>
+                    <span aria-hidden="true" className="text-ink-600">·</span>
+                    <span><span className="font-semibold text-parchment">{fmtInt(z.observations)}</span> located observations</span>
+                  </p>
+                </div>
               </Link>
             </li>
           ))}

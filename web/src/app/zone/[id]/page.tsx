@@ -5,6 +5,7 @@ import { cache } from "react";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CartographyBanner } from "@/components/cartography/CartographyBanner";
+import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { DataNote } from "@/components/DataNote";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
@@ -83,10 +84,20 @@ export default async function ZonePage({ params, searchParams }: { params: Param
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Zones", href: "/zones" }, { name: z.zoneName }]} />
 
-      {/* 1. Zone identity and summary */}
+      {/* 1. Zone identity and summary - a decorative medallion (same rotation as the Zones
+          directory, see zoneMedallion.ts) ties this page back to its card, but the banner itself
+          stays the existing contained CartographyBanner at its original height: this is a
+          data-heavy detail page, not a landing hero. */}
       <CartographyBanner>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Zone · uiMapID {z.mapId}</p>
-        <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-parchment sm:text-4xl">{z.zoneName}</h1>
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+          <img src={medallionFor(z.zoneName)} alt="" aria-hidden="true"
+            className="mt-0.5 hidden h-10 w-10 shrink-0 rounded-full border border-ink-600/80 bg-ink-900/60 object-cover p-1.5 opacity-90 sm:block" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Zone · uiMapID {z.mapId}</p>
+            <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-parchment sm:text-4xl">{z.zoneName}</h1>
+          </div>
+        </div>
       </CartographyBanner>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
@@ -109,15 +120,37 @@ export default async function ZonePage({ params, searchParams }: { params: Param
         </section>
       )}
 
-      {/* 3. Available entity categories */}
+      {/* 3. Available entity categories - small 16px icons reuse the same public/icons/*.webp as
+          the Database "Start browsing" tiles for visual continuity; Chests has no dedicated icon
+          and stays plain, same "icon-less tile" rule as Database. */}
       <section aria-labelledby="categories-title" className="space-y-2">
         <h2 id="categories-title" className="panel-title text-lg">Entity categories</h2>
         <nav aria-label="Quick filters" className="flex flex-wrap gap-2 text-sm">
-          <Link className="btn-ghost" href={href({ type: "creature", kind: "", page: 1 })}>Creatures <span className="text-mist">{fmtInt(z.displayKinds.creature ?? 0)}</span></Link>
-          <Link className="btn-ghost" href={href({ type: "item", kind: "", page: 1 })}>Items <span className="text-mist">{fmtInt(z.displayKinds.item ?? 0)}</span></Link>
-          <Link className="btn-ghost" href={href({ type: "", kind: "mining", page: 1 })}>Mining <span className="text-mist">{fmtInt(lk.mining ?? 0)}</span></Link>
-          <Link className="btn-ghost" href={href({ type: "", kind: "herbalism", page: 1 })}>Herbalism <span className="text-mist">{fmtInt(lk.herbalism ?? 0)}</span></Link>
-          <Link className="btn-ghost" href={href({ type: "", kind: "fishing_pool", page: 1 })}>Fishing pools <span className="text-mist">{fmtInt(lk.fishing_pool ?? 0)}</span></Link>
+          <Link className="btn-ghost inline-flex items-center gap-1.5" href={href({ type: "creature", kind: "", page: 1 })}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+            <img src="/icons/creatures.webp" alt="" aria-hidden="true" className="h-4 w-4" />
+            Creatures <span className="text-mist">{fmtInt(z.displayKinds.creature ?? 0)}</span>
+          </Link>
+          <Link className="btn-ghost inline-flex items-center gap-1.5" href={href({ type: "item", kind: "", page: 1 })}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+            <img src="/icons/items.webp" alt="" aria-hidden="true" className="h-4 w-4" />
+            Items <span className="text-mist">{fmtInt(z.displayKinds.item ?? 0)}</span>
+          </Link>
+          <Link className="btn-ghost inline-flex items-center gap-1.5" href={href({ type: "", kind: "mining", page: 1 })}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+            <img src="/icons/mining.webp" alt="" aria-hidden="true" className="h-4 w-4" />
+            Mining <span className="text-mist">{fmtInt(lk.mining ?? 0)}</span>
+          </Link>
+          <Link className="btn-ghost inline-flex items-center gap-1.5" href={href({ type: "", kind: "herbalism", page: 1 })}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+            <img src="/icons/herbalism.webp" alt="" aria-hidden="true" className="h-4 w-4" />
+            Herbalism <span className="text-mist">{fmtInt(lk.herbalism ?? 0)}</span>
+          </Link>
+          <Link className="btn-ghost inline-flex items-center gap-1.5" href={href({ type: "", kind: "fishing_pool", page: 1 })}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+            <img src="/icons/fishing.webp" alt="" aria-hidden="true" className="h-4 w-4" />
+            Fishing pools <span className="text-mist">{fmtInt(lk.fishing_pool ?? 0)}</span>
+          </Link>
           <Link className="btn-ghost" href={href({ type: "", kind: "chest", page: 1 })}>Chests <span className="text-mist">{fmtInt(lk.chest ?? 0)}</span></Link>
         </nav>
       </section>
