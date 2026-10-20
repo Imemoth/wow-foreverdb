@@ -39,8 +39,17 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
-        <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 sm:flex">
-          <form action="/database" method="get" role="search" className="flex min-w-0 flex-1 sm:max-w-xs">
+        {/*
+          Tablet (sm-lg, ~640-1023px): the logo+nav row alone is already close to full width, so
+          giving the search field `flex-1` here left it squeezed into whatever sliver of the row
+          remained - a narrow, right-aligned field with its placeholder clipped. `w-full` makes it
+          claim the whole flex line, which this flex-wrap row has no room for, so it wraps onto its
+          own full-width second row instead. At `lg:` and up there's room for everything inline, so
+          it reverts to `w-auto`/`max-w-xs`, right-aligned on the same row as the logo+nav - the
+          original wide-desktop layout, unchanged.
+        */}
+        <div className="hidden w-full sm:block lg:ml-auto lg:w-auto">
+          <form action="/database" method="get" role="search" className="flex min-w-0 w-full lg:max-w-xs">
             <label htmlFor="header-q" className="sr-only">Search the database</label>
             <input id="header-q" name="q" type="search" maxLength={80} minLength={2} autoComplete="off"
               placeholder="Search items, creatures, nodes…" className="field w-full text-sm" />

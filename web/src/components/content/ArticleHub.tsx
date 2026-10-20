@@ -124,15 +124,20 @@ export async function ArticleHub({
       </div>
 
       {/*
-        minmax(0, Nfr), not bare Nfr: News categories ("ForeverDB development") run longer than
-        Guides' ("Professions", "Setup"), and a bare `1fr` track has an implicit `minmax(auto, 1fr)`
-        - it cannot shrink below its content's min-content width, so a long <select> option was
-        widening its track past the viewport at the md breakpoint (768px) and pushing the Search
-        button off-screen. minmax(0, ...) lets every track shrink to the grid's actual width; w-full
-        on each control then fills whatever width its track ends up with.
+        Three tiers, not two: a single-row 4-column layout only has room for Search/Category/Topic/
+        Search-button once each track has real width to work with, which tablet (768-1279px)
+        doesn't have - cramming 4 tracks in there made every label/control too narrow to read even
+        after the minmax(0, Nfr) overflow fix below. md: switches to a 2-column grid instead (two
+        short rows), which xl: (>=1280px) replaces with the original compact single row.
+        minmax(0, Nfr), not bare Nfr, on that xl: row: News categories ("ForeverDB development")
+        run longer than Guides' ("Professions", "Setup"), and a bare `1fr` track has an implicit
+        `minmax(auto, 1fr)` - it cannot shrink below its content's min-content width, so a long
+        <select> option was widening its track past the viewport and pushing the Search button
+        off-screen. minmax(0, ...) lets every track shrink to the grid's actual width; w-full on
+        each control then fills whatever width its track ends up with.
       */}
       <form action={`/${section}`} method="get" role="search" aria-label={searchLabel} autoComplete="off"
-        className="panel grid gap-3 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+        className="panel grid gap-3 p-4 md:grid-cols-2 md:items-end xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div className="flex min-w-0 flex-col gap-1">
           <label htmlFor={`${section}-q`} className="text-xs font-semibold uppercase tracking-wide text-mist">Search</label>
           <input id={`${section}-q`} name="q" type="search" defaultValue={query.q} maxLength={80} autoComplete="off" className="field w-full" placeholder="Title, description or tag" />
