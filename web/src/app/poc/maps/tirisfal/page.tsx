@@ -7,6 +7,8 @@ import { zoneObservations } from "@/lib/maps/zone-observations";
 import { serverEnv } from "@/lib/env";
 
 const TIRISFAL = 1420;
+// Which immutable asset version to display. "v1" is the original POC image; atlas imports are v2+. Strictly validated: it ends up in a URL path.
+const VERSION = /^v[1-9]\d{0,3}$/;
 
 // Isolated proof of concept: never indexable, whatever the deployment (also enforced by proxy.ts headers on non-production).
 export const metadata: Metadata = {
@@ -14,8 +16,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function TirisfalMapPocPage() {
+export default async function TirisfalMapPocPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (!mapsPocEnabled({ FOREVERDB_DEPLOYMENT: serverEnv().FOREVERDB_DEPLOYMENT, AZERDEX_POC_MAPS: process.env.AZERDEX_POC_MAPS, NODE_ENV: process.env.NODE_ENV })) notFound();
+  const raw = (await searchParams).version;
+  const version = typeof raw === "string" && VERSION.test(raw) ? raw : "v1";
   const { points } = zoneObservations(TIRISFAL);
   return (
     <div className="space-y-6">
@@ -28,7 +32,7 @@ export default async function TirisfalMapPocPage() {
         observations, and are not genuine spawn positions. Points are aggregated to an approximate 1% grid. Map registration is{" "}
         <em>provisional</em> until visually verified.
       </DataNote>
-      <ZoneMapPoc zoneId={TIRISFAL} zoneName="Tirisfal Glades" version="v1" points={points} />
+      <ZoneMapPoc zoneId={TIRISFAL} zoneName="Tirisfal Glades" version={version} points={points} />
     </div>
   );
 }

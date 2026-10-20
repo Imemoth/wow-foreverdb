@@ -74,6 +74,12 @@ export function ZoneMapPoc({ zoneId, zoneName, version, points }: Props) {
             <MapStatus>Loading map…</MapStatus>
           ) : (
             <>
+              {load.state === "ready" && (
+                <p data-testid="map-art" className="text-xs text-mist">
+                  Artwork: {load.manifest.image.variant ?? "owner-supplied POC image"} · {version}
+                  {load.manifest.clientBuild ? ` · client ${load.manifest.clientBuild.version}` : ""}
+                </p>
+              )}
               {load.state === "fallback" && (
                 <p role="alert" data-testid="map-fallback" className="rounded-md border border-gold-400/60 bg-ink-900 p-3 text-sm text-parchment">
                   Map artwork unavailable ({load.reason}). Showing a plain 0–100% coordinate grid instead; marker positions are unaffected.

@@ -53,7 +53,7 @@ def check_limits(root: Path) -> dict:
         problems.append(f"{len(files)} files exceeds the {PAGES_MAX_FILES} file limit")
     if over:
         problems.append(f"files over {PAGES_MAX_FILE_BYTES} bytes: {', '.join(over[:5])}")
-    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or f.startswith("atlas/") or f == "_headers")]
+    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or (f.startswith("atlas/") and f.count("/") == 1) or f == "_headers")]
     if bad_paths:
         problems.append(f"files outside the CDN path convention: {', '.join(bad_paths[:5])}")
     return {"fileCount": len(files), "largestBytes": max(((root / f).stat().st_size for f in files), default=0),
@@ -77,24 +77,76 @@ def verify_superset(root: Path, ledger: dict) -> list[str]:
     return problems
 
 
+def manifest_image_records(d: dict) -> list[dict]:
+    """Every stored-file record a manifest declares, in either layout: the original flat `variants[]` records or the
+    atlas-import layout (`variants[].images[]`), plus the top-level display `image`."""
+    recs = [d["image"]]
+    for v in d.get("variants", []) or []:
+        if isinstance(v.get("images"), list):
+            recs += v["images"]
+        elif "file" in v:
+            recs.append(v)
+    return recs
+
+
 def verify_manifests(root: Path) -> list[str]:
     problems = []
     for mp in sorted((root / "forever").glob("*/*/manifest.json")):
         d = json.loads(mp.read_text(encoding="utf-8"))
         mid, ver = mp.parent.parent.name, mp.parent.name
+        rel = mp.relative_to(root)
         if str(d.get("zoneId")) != mid or d.get("version") != ver:
-            problems.append(f"{mp.relative_to(root)}: id/version do not match its path")
+            problems.append(f"{rel}: id/version do not match its path")
         if "uiMapId" in d and d["uiMapId"] != d["zoneId"]:
-            problems.append(f"{mp.relative_to(root)}: uiMapId != zoneId")
-        files = [d["image"]] + list(d.get("variants", []))
-        for im in files:
+            problems.append(f"{rel}: uiMapId != zoneId")
+        for im in manifest_image_records(d):
             f = mp.parent / im["file"]
-            if not f.is_file():
-                problems.append(f"{mp.relative_to(root)}: image {im['file']} missing")
+            if not ASSET_PATH_RE.match(f"forever/{mid}/{ver}/{im['file']}"):
+                problems.append(f"{rel}: image name {im['file']!r} breaks the CDN path convention")
+            elif not f.is_file():
+                problems.append(f"{rel}: image {im['file']} missing")
             elif sha256_file(f) != im["sha256"] or f.stat().st_size != im["bytes"]:
-                problems.append(f"{mp.relative_to(root)}: hash/size mismatch for {im['file']}")
+                problems.append(f"{rel}: hash/size mismatch for {im['file']}")
         if d.get("calibration", {}).get("status") not in ("provisional", "validated"):
-            problems.append(f"{mp.relative_to(root)}: bad calibration status")
+            problems.append(f"{rel}: bad calibration status")
+    return problems
+
+
+ATLAS_FILES = {"index.json", "hierarchy.json", "builds.json", "instances.json"}
+
+
+def verify_catalog(root: Path) -> list[str]:
+    """The global catalog must resolve completely: every entry's manifest and image paths exist with the recorded hash, nothing
+    private (source diagnostics, local paths) is published, and only the documented atlas files exist."""
+    problems = []
+    extra = [f for f in list_files(root) if f.startswith("atlas/") and f.split("/", 1)[1] not in ATLAS_FILES]
+    if extra:
+        problems.append(f"unexpected files under atlas/: {extra[:5]}")
+    idx_path = root / "atlas/index.json"
+    if not idx_path.is_file():
+        return problems + ["atlas/index.json missing"]
+    idx = json.loads(idx_path.read_text(encoding="utf-8"))
+    ids = set()
+    for e in idx["maps"]:
+        ids.add(e["uiMapId"])
+        for ver in e.get("versions", []):
+            if not (root / "forever" / str(e["uiMapId"]) / ver / "manifest.json").is_file():
+                problems.append(f"index: {e['uiMapId']}/{ver} manifest missing")
+        if e.get("manifest") and not (root / e["manifest"]).is_file():
+            problems.append(f"index: {e['uiMapId']} latest manifest {e['manifest']} missing")
+        img = e.get("image")
+        if img and (not (root / img["path"]).is_file() or sha256_file(root / img["path"]) != img["sha256"]):
+            problems.append(f"index: {e['uiMapId']} image {img['path']} missing or hash mismatch")
+        for v in e.get("variants", []) or []:
+            if not (root / v["path"]).is_file() or sha256_file(root / v["path"]) != v["sha256"]:
+                problems.append(f"index: {e['uiMapId']} variant {v.get('variant')} file {v['path']} missing or hash mismatch")
+    on_disk = {int(p.name) for p in (root / "forever").glob("*") if p.is_dir()}
+    if on_disk - ids:
+        problems.append(f"forever/ has maps that are not in the index: {sorted(on_disk - ids)[:5]}")
+    leaks = re.compile(r"[A-Za-z]:\\\\|/home/|/Users/|/tmp/")  # JSON text escapes a Windows path as C:\\Users
+    for rel in list_files(root):
+        if rel.endswith(".json") and leaks.search((root / rel).read_text(encoding="utf-8")):
+            problems.append(f"{rel}: looks like it contains a local filesystem path")
     return problems
 
 

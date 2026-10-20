@@ -13,7 +13,7 @@ import json
 # stored manifest but do not make a set "different" (a re-run with a newer exporter version over identical art reuses its version).
 VOLATILE_TOP = ("version", "clientBuild")
 VOLATILE_PROVENANCE = ("source", "exporterVersion", "importerVersion", "assembledBy")
-VOLATILE_SOURCE = ("assembledBy",)
+VOLATILE_SOURCE = ("assembledBy", "exporter", "metadataSource")  # who/what produced the set, not what it contains
 
 
 def material_view(manifest: dict) -> dict:

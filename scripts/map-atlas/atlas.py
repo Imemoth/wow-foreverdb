@@ -13,9 +13,12 @@ sys.path.insert(0, str(HERE))
 from mapatlas.build import DEFAULT_FOREVER_CHECKS, Options, run_build  # noqa: E402
 from mapatlas.casc import CtypesCasc, extract_blps  # noqa: E402
 from mapatlas.fetch import fetch_tables  # noqa: E402
+from mapatlas.exporter_zip import ImportValidationError  # noqa: E402
 from mapatlas.identity import DEFAULT_PRODUCT, IdentityError, read_identity  # noqa: E402
+from mapatlas.importer import ImportOptions, run_import  # noqa: E402
 from mapatlas.inventory import build_inventory  # noqa: E402
 from mapatlas.packaging import PackageError, check_limits, verify_manifests, verify_superset  # noqa: E402
+from mapatlas.remote import verify_remote  # noqa: E402
 from mapatlas.versioning import Ledger  # noqa: E402
 
 REPO = HERE.parent.parent
@@ -66,6 +69,20 @@ def cmd_build(a):
     print(f"dist files {r['package']['limits']['fileCount']} · zip {r['package']['zip']['bytes']} bytes · new versions {r['package']['newVersionsThisRun']}")
 
 
+def cmd_import(a):
+    o = ImportOptions(Path(a.zip), Path(a.out), Path(a.ledger), Path(a.previous_dist) if a.previous_dist else None,
+                      Path(a.legacy_assets) if a.legacy_assets else None, Path(a.reference_1420) if a.reference_1420 else None, a.product,
+                      a.expect_version, a.expect_zip_sha256, a.expect_maps, a.expect_variants, a.expect_instances)
+    r = run_import(o)
+    c, pk = r["counts"], r["package"]
+    print(f"client {r['source']['client']['version']} · maps {c['maps']} ({c['mapsWithArtwork']} with artwork) · variants {c['variants']} · instances {c['instances']['records']}")
+    print(f"dist files {pk['fileCount']} ({pk['imageFiles']} images) · {pk['totalBytes']} bytes · versions {pk['immutableVersions']} (new {len(pk['newVersionsThisRun'])}) · zip {pk['zip']['bytes']} bytes")
+    bad = [p for p in r["preflight"] if not p["ok"]]
+    print("preflight: " + ("all automated checks passed" if not bad else "FAILED: " + "; ".join(p["check"] for p in bad)))
+    if bad:
+        sys.exit(1)
+
+
 def cmd_verify(a):
     root = Path(a.dist)
     ledger = Ledger.load(Path(a.ledger))
@@ -74,6 +91,15 @@ def cmd_verify(a):
         print("\n".join(problems))
         sys.exit(1)
     print(f"dist OK: {check_limits(root)['fileCount']} files")
+
+
+def cmd_verify_remote(a):
+    r = verify_remote(a.base_url, Path(a.dist))
+    print(f"checked {r['checked']} files at {r['base']}")
+    if not r["ok"]:
+        print("\n".join(r["problems"][:50]))
+        sys.exit(1)
+    print("remote matches the audited distribution")
 
 
 def cmd_promote(a):
@@ -102,13 +128,24 @@ def main(argv=None):
     s.add_argument("--reference-1420", default=str(REPO / "web/public/maps/forever/1420/v1/tirisfal-glades.webp"))
     s.add_argument("--quality", type=int, default=90); s.add_argument("--allow-partial", action="store_true")
     s.add_argument("--baseline-db2"); s.add_argument("--forever-check", action="append"); s.add_argument("--expect-version"); s.set_defaults(f=cmd_build)
+    s = sub.add_parser("import-exporter", help="package a ForeverDB.AtlasExporter delivery ZIP (no DB2/CASC/network needed) as a versioned dist")
+    s.add_argument("--zip", required=True); s.add_argument("--out", required=True); s.add_argument("--ledger", default=str(DEFAULT_LEDGER))
+    s.add_argument("--previous-dist"); s.add_argument("--legacy-assets", default=str(REPO / "web/public/maps"))
+    s.add_argument("--reference-1420", default=str(REPO / "web/public/maps/forever/1420/v1/tirisfal-glades.webp"))
+    s.add_argument("--product", default=DEFAULT_PRODUCT); s.add_argument("--expect-version"); s.add_argument("--expect-zip-sha256")
+    s.add_argument("--expect-maps", type=int); s.add_argument("--expect-variants", type=int); s.add_argument("--expect-instances", type=int)
+    s.set_defaults(f=cmd_import)
     s = sub.add_parser("verify-dist", help="re-check a dist directory against the ledger, manifests and Pages limits")
     s.add_argument("--dist", required=True); s.add_argument("--ledger", default=str(DEFAULT_LEDGER)); s.set_defaults(f=cmd_verify)
+    s = sub.add_parser("verify-remote", help="AFTER an approved upload: compare every served file and header with the audited dist (read-only)")
+    s.add_argument("--base-url", required=True); s.add_argument("--dist", required=True); s.set_defaults(f=cmd_verify_remote)
     s = sub.add_parser("promote-ledger", help="after the owner has published a build, adopt its ledger (append-only)")
     s.add_argument("--from", dest="src", required=True); s.add_argument("--to", default=str(DEFAULT_LEDGER)); s.set_defaults(f=cmd_promote)
     a = p.parse_args(argv)
     try:
         a.f(a)
+    except ImportValidationError as e:
+        sys.exit("import refused:\n  - " + "\n  - ".join(e.problems[:40]))
     except (IdentityError, PackageError, OSError, ValueError) as e:
         sys.exit(f"error: {e}")
 
