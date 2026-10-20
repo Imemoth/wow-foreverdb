@@ -3,10 +3,18 @@ namespace Atlas.Exporter.Tests;
 internal static class FixtureWriter
 {
     /// <summary>Layout: &lt;dir&gt;/.build.info, _classic_beta_/, csv/*.csv, assets/&lt;fdid&gt;.blp</summary>
-    public static void Write(string directory)
+    public static void Write(string directory, int extraZones = 0)
     {
         Directory.CreateDirectory(directory);
         var world = World.Standard(Path.Combine(directory, "_world"));
+
+        // Optional bulk: full-size 1002x668 zones with their own tiles, for resource measurements.
+        for (var i = 0; i < extraZones; i++)
+        {
+            var id = 10_000 + i;
+            world.Map(id, $"Bulk Zone {i}", 3, 1415).Art(20_000 + i, (0, 1002, 668)).Link(id, 20_000 + i);
+        }
+
         Directory.Move(world.AssetsDir, Path.Combine(directory, "assets"));
         Directory.Delete(Path.Combine(directory, "_world"), recursive: true);
         Directory.CreateDirectory(Path.Combine(directory, "_classic_beta_"));

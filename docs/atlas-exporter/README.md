@@ -179,6 +179,14 @@ interchange files (they are versioned by `schemaVersion`).
 
 ## Resources, safety, resume
 
+Measured (synthetic client, Linux container, CPU/memory only – **excludes CASC and CDN I/O**, which dominate on a
+real install): 157 drawable maps (150 full-size 1002×668 zones, 1,851 tiles) exported in 10.2 s with a peak working
+set of 333 MB. Image *sizes* of that run are not representative (flat-colour tiles); the P2-D reference image of
+Tirisfal Glades (1002×668 WebP) is 255 KB, so budget roughly 0.3–0.6 MB per map for overview + reveal plus any
+detail layer. Memory scales with the largest canvas (≈ width × height × 4 bytes × ~4 copies) plus the texture cache
+(96 MiB). File count ≈ 4–6 files per drawable map (images + manifests) plus ~10 index/report files.
+
+
 * One map canvas in memory at a time; decoded textures live in a bounded LRU (96 MiB default);
   identical FileDataIDs are read/decoded once; canvases above 8192² are refused.
 * The WoW files are opened read-only. The exporter writes only to `--output`, its ZIP beside it,
