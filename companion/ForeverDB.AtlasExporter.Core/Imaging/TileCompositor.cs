@@ -15,7 +15,7 @@ public sealed record CompositionResult(
 public static class TileCompositor
 {
     private const int MaxProblemsReported = 8;
-    public const long MaxCanvasPixels = 16_384L * 16_384L;
+    public const long MaxCanvasPixels = 8_192L * 8_192L;
 
     /// <summary>
     /// Places each tile at (column * tileWidth, row * tileHeight) from its row/column

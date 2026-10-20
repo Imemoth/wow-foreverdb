@@ -211,6 +211,8 @@ public sealed class AtlasReportWriter
             map.StatusDetail,
             map.InheritsFromUiMapId,
             MapArtIds = map.Arts.Select(art => art.UiMapArtId).Distinct().OrderBy(id => id).ToArray(),
+            ArtNotInReviewedAtlas = map.Arts.Where(art => art.IsDrawable)
+                .Any(art => !ForeverDB.Companion.Services.FullRevealMapArt.GetEmbeddedAtlas().ContainsKey(art.UiMapArtId)),
             Variants = result.Variants.Where(v => v.UiMapId == map.UiMapId)
                 .OrderBy(v => v.Variant, StringComparer.Ordinal)
                 .Select(v => new
@@ -393,6 +395,10 @@ public sealed class AtlasReportWriter
                 VariantsExported = result.Variants.Count(v => v.Status is ItemStatus.Exported or ItemStatus.Reused),
                 VariantsFailed = result.Variants.Count(v => v.Status == ItemStatus.Failed)
             },
+            MapsWithArtNotInReviewedAtlas = _plan.Maps.Count(map => map.Arts.Where(art => art.IsDrawable)
+                .Any(art => !ForeverDB.Companion.Services.FullRevealMapArt.GetEmbeddedAtlas().ContainsKey(art.UiMapArtId))),
+            ReviewedAtlasNote = "The Companion's reviewed reveal atlas covers 84 classic-era arts. A map whose art is outside it " +
+                "is only a hint that the content may be new or changed in Forever, not proof.",
             DiscoveredByCategory = s.DiscoveredByCategory.OrderBy(p => p.Key, StringComparer.Ordinal)
                 .ToDictionary(p => p.Key, p => p.Value),
             DrawableByCategory = s.DrawableByCategory.OrderBy(p => p.Key, StringComparer.Ordinal)
