@@ -16,9 +16,14 @@ export interface MapPoint {
   observations: number;
 }
 
+/** Restricts the view to one source (its levels stay separate markers; `level` null = every observed level). */
+export interface SourceFocus { type: MapPoint["sourceType"]; id: number; level: number | null }
+
 export interface MapFilterState {
   /** Empty set = all categories. */
   kinds: ReadonlySet<LootKind>;
+  /** Optional: only this source (e.g. arriving from a source page). Absent/null = all sources. */
+  source?: SourceFocus | null;
   /** Applies to creature-sourced kinds only (mob, skinning); null = any level. */
   levelMin: number | null;
   levelMax: number | null;
@@ -37,6 +42,7 @@ export function pointsForMap(points: readonly MapPoint[], mapId: number): MapPoi
 export function filterPoints(points: readonly MapPoint[], f: MapFilterState): MapPoint[] {
   return points.filter((p) => {
     if (f.kinds.size > 0 && !f.kinds.has(p.lootKind)) return false;
+    if (f.source && (p.sourceType !== f.source.type || p.sourceId !== f.source.id || (f.source.level != null && p.level !== f.source.level))) return false;
     if (LEVELED_KINDS.has(p.lootKind)) {
       if (f.levelMin != null && p.level < f.levelMin) return false;
       if (f.levelMax != null && p.level > f.levelMax) return false;

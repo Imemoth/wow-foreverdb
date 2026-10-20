@@ -20,6 +20,8 @@ interface Props {
   /** Incremented by the parent to refit the view. */
   resetKey: number;
   label: string;
+  /** Tailwind height classes (default: the full zone-page size). */
+  heightClass?: string;
   onSelect: (s: Selection | null) => void;
   onImageError: () => void;
 }
@@ -33,7 +35,7 @@ const BASE_CELL_PERCENT = 6;
  * the server renders just the empty, labelled container. Markers are DOM elements styled through the CSSOM
  * (no inline style attributes in markup), which keeps the nonce-based style-src CSP intact.
  */
-export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, onSelect, onImageError }: Props) {
+export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, heightClass = "h-[58vh] min-h-[22rem] sm:h-[34rem]", onSelect, onImageError }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{ map: LMap; render: () => void; fit: () => void } | null>(null);
   const live = useRef({ points, mode, onSelect, onImageError });
@@ -201,7 +203,7 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
       aria-label={label}
       data-testid="zone-map"
       data-ready={ready ? "true" : "false"}
-      className="azd-map h-[58vh] min-h-[22rem] w-full overflow-hidden rounded-md border border-ink-600 bg-ink-900 sm:h-[34rem]"
+      className={`azd-map ${heightClass} w-full overflow-hidden rounded-md border border-ink-600 bg-ink-900`}
     />
   );
 }

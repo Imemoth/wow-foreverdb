@@ -89,6 +89,15 @@ jobs:
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
       - name: Responsive layout (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
+      # Zone atlas maps (feature-gated, off by default): needs a second build WITH the CDN origin baked in. Runs against a real local HTTPS
+      # server standing in for the CDN host (synthetic atlas generated from the bundled catalog snapshot): wiring, scaling, CSP and CORS
+      # are enforced by the real browser; no private artwork and no network access to the real CDN are involved.
+      - name: Zone atlas maps (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+        run: |
+          npm run build
+          npx playwright test -c playwright.zone-maps.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }

@@ -9,10 +9,15 @@ import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { DataNote } from "@/components/DataNote";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
+import { ZoneMapSection } from "@/components/maps/ZoneMapSection";
 import { ResultsTable } from "@/components/ResultsTable";
 import { StatTile } from "@/components/StatTile";
 import { data } from "@/lib/data";
-import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type ZoneEntityQuery, type ZoneEntityRow } from "@/lib/data/types";
+import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type ZoneDetail, type ZoneEntityQuery, type ZoneEntityRow } from "@/lib/data/types";
+import { atlasCatalog } from "@/lib/maps/atlas/catalog";
+import { isDirectoryMap } from "@/lib/maps/atlas/zone-catalog";
+import { parseMapFocus } from "@/lib/maps/focus";
+import { zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
 import { DISPLAY_KIND_PLURAL, LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
@@ -22,22 +27,37 @@ import { parseEntityId, parseZoneEntityQuery } from "@/lib/validation";
 type Params = Promise<{ id: string }>;
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
-const load = cache(async (raw: string) => {
+/**
+ * Resolves a zone. A zone with published observations always resolves (unchanged). With AZERDEX_ZONE_MAPS=1 a zone/city of the atlas
+ * also resolves when it has NO published observations (`observed: false`): its real artwork is shown with an explicit empty-data state.
+ * Counts of such a zone are never invented: they do not exist in the public read model.
+ */
+const load = cache(async (raw: string): Promise<{ z: ZoneDetail; observed: boolean } | null> => {
   const id = parseEntityId(raw);
-  return id == null || id > 999_999 ? null : data().zone(id);
+  if (id == null || id > 999_999) return null;
+  const z = await data().zone(id);
+  if (z) return { z, observed: true };
+  if (!zoneMapsEnabled()) return null;
+  const m = (await atlasCatalog()).byId.get(id);
+  if (!m || !isDirectoryMap(m)) return null;
+  return { z: { mapId: m.uiMapId, zoneName: m.name, observations: 0, sourceCount: 0, itemCount: 0, displayKinds: {}, lootKinds: {} }, observed: false };
 });
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: SP }): Promise<Metadata> {
-  const z = await load((await params).id);
-  if (!z) return { title: "Zone not found", robots: { index: false } };
+  const r = await load((await params).id);
+  if (!r) return { title: "Zone not found", robots: { index: false } };
+  const { z, observed } = r;
   const filtered = Object.keys(await searchParams).length > 0;
-  const description = `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} related items (linked through those sources), from AzerDex player observations.`;
+  // A zone without published observations is a real, reachable map page but thin content: kept out of the index, no invented counts.
+  const description = observed
+    ? `${z.zoneName} in WoW: Forever: ${fmtInt(z.sourceCount)} observed creatures, nodes and fishing sources and ${fmtInt(z.itemCount)} related items (linked through those sources), from AzerDex player observations.`
+    : `${z.zoneName} in WoW: Forever: interactive zone map from the AzerDex atlas. No public observations are available for this zone yet.`;
   return {
     title: `${z.zoneName} — Zone`,
     description,
     alternates: { canonical: zonePath(z.mapId) },
     openGraph: { title: `${z.zoneName} · AzerDex`, description, url: zonePath(z.mapId) },
-    robots: robotsFor(!filtered),
+    robots: robotsFor(!filtered && observed),
   };
 }
 
@@ -52,16 +72,20 @@ function toParams(sp: Record<string, string | string[] | undefined>): URLSearchP
 
 export default async function ZonePage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const { db, nonce, baseUrl } = await pageContext();
-  const z = await load((await params).id);
-  if (!z) notFound();
+  const loaded = await load((await params).id);
+  if (!loaded) notFound();
+  const { z, observed } = loaded;
   const sp = toParams(await searchParams);
+  const gated = zoneMapsEnabled();
+  const atlasMap = gated ? (await atlasCatalog()).byId.get(z.mapId) : undefined;
+  const focus = parseMapFocus(sp);
 
   let q: ZoneEntityQuery | null = null;
   let result: Page<ZoneEntityRow> | null = null;
   let error: string | null = null;
   try {
     q = parseZoneEntityQuery(z.mapId, sp, "lenient");
-    result = await db.zoneEntities(q);
+    result = observed ? await db.zoneEntities(q) : { rows: [], total: 0 };
   } catch (e) {
     if (e instanceof InvalidQueryError) error = "Those filters are not valid.";
     else throw e;
@@ -99,17 +123,19 @@ export default async function ZonePage({ params, searchParams }: { params: Param
           </div>
         </div>
       </CartographyBanner>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
-        <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
-        <StatTile label="Located obs." value={fmtInt(z.observations)} />
-      </div>
+      {observed && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
+          <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
+          <StatTile label="Located obs." value={fmtInt(z.observations)} />
+        </div>
+      )}
 
-      {/* 2. Geographic observations - deliberately a pointer, not a new map: a zone-wide aggregated
-          plot would need a new cross-source location aggregation this round does not add. Each
-          source already listed below (Observed entities) carries its own observation map when it
-          has located data - see e.g. its Object/Creature/Fishing detail page. */}
-      {z.observations > 0 && (
+      {/* 2. Geographic observations. With the zone-map experience enabled this is the interactive atlas map (real CDN artwork + the
+          published zone-wide observation layer); otherwise the original pointer to each source's own map. */}
+      {gated ? (
+        <ZoneMapSection mapId={z.mapId} zoneName={z.zoneName} atlasMap={atlasMap} kinds={focus.kinds} source={focus.source} knownEmpty={!observed} />
+      ) : z.observations > 0 && (
         <section aria-labelledby="geo-title" className="panel p-4 sm:p-5">
           <h2 id="geo-title" className="panel-title text-lg">Geographic observations</h2>
           <p className="mt-1 text-sm text-mist">
@@ -120,6 +146,13 @@ export default async function ZonePage({ params, searchParams }: { params: Param
         </section>
       )}
 
+      {!observed && (
+        <EmptyState title="No public observations are available for this zone yet">
+          Nothing has been published for {z.zoneName}. The map above is the real zone artwork; it carries no markers because there is no published data to show.
+        </EmptyState>
+      )}
+
+      {observed && (<>
       {/* 3. Available entity categories - small 16px icons reuse the same public/icons/*.webp as
           the Database "Start browsing" tiles for visual continuity; Chests has no dedicated icon
           and stays plain, same "icon-less tile" rule as Database. */}
@@ -203,6 +236,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
           </>
         )}
       </div>
+      </>)}
     </div>
   );
 }
