@@ -14,6 +14,8 @@ const Manifest = z.object({
     height: z.number().int().positive().max(16384),
     bytes: z.number().int().positive().optional(),
     sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    /** Atlas manifests: which art this display image is ("base" | "full-reveal"); absent on the legacy POC manifest. */
+    variant: z.string().regex(/^[a-z0-9-]{1,41}$/).optional(),
   }),
   projection: z.object({
     type: z.literal("normalized-percent"),
@@ -23,6 +25,7 @@ const Manifest = z.object({
     range: z.tuple([z.literal(0), z.literal(100)]),
   }).passthrough(),
   provenance: z.object({ source: z.string().min(1) }).passthrough(),
+  clientBuild: z.object({ version: z.string().max(40) }).passthrough().optional(),
   calibration: z.object({ status: z.enum(["provisional", "validated"]) }).passthrough(),
 });
 

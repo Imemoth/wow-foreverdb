@@ -11,6 +11,9 @@ Isolated POC at `/poc/maps/tirisfal`. It does **not** replace `/zone/1420`, is n
 | Heatmap | Not implemented (follow-up) |
 | Licensing of the artwork | **Unreviewed.** See below |
 
+## Showing an imported atlas version
+`/poc/maps/tirisfal?version=v2` loads that immutable asset version (`v1` = the original POC image, the default). The value must match `^v[1-9]\d{0,3}$`; anything else is ignored and `v1` is used. The page shows which artwork is displayed (`Artwork: full-reveal · v2 · client …`). Unknown versions fall back to the labelled grid. This stays inside the gated, non-indexable POC route.
+
 ## Enabling the route
 Off by default. Served only in `next dev`, or when a non-production deployment sets `AZERDEX_POC_MAPS=1`. `FOREVERDB_DEPLOYMENT=production` always answers 404. The page is `noindex, nofollow`.
 

@@ -1,6 +1,6 @@
 # P2-D — WoW: Forever map atlas: acquisition & packaging
 
-Phase status: **tooling complete and tested on synthetic fixtures; real-client export not yet run** (`CLIENT_ASSET_SOURCE_REQUIRED`).
+Phase status: acquisition tooling tested on synthetic fixtures; **the owner's real export (ForeverDB.AtlasExporter ZIP, client 1.60.1.70450) is imported by `atlas.py import-exporter`** (below). Upload preflight/rollback: [`map-atlas-cdn-deploy.md`](map-atlas-cdn-deploy.md).
 Nothing here deploys anything. The package it produces is prepared for a *later, owner-approved* upload to the existing Cloudflare Pages project `azerdex-assets`.
 
 ## What it does
@@ -63,3 +63,28 @@ This repository's tests use a synthetic client (real BLP2/DXT1 tiles, DB2-shaped
 3. Pillow decoding of the client's real BLP2 files (it supports palette, DXT1/3/5 and raw BGRA; DXT-with-mipmaps/large tiles untested here).
 4. Whether Forever's world/continent art is a single layer or needs the optional tiled representation; full-reveal `WorldMapOverlay` layers are recorded in the report but **not composited** (base art only).
 5. City maps cannot be separated from other zone maps: the client metadata used has no verified city discriminator, so the report says so instead of guessing.
+
+
+## Importing a ForeverDB.AtlasExporter ZIP (`import-exporter`)
+The Windows exporter already produced final WebP images and metadata, so this path needs **no DB2, CASC, Wago or BLP decoding** and works offline:
+
+```
+python scripts/map-atlas/atlas.py import-exporter --zip ForeverDB-Atlas-Export-<build>.zip --out <out> \
+   --expect-version 1.60.1.70450 --expect-maps 60 --expect-variants 105 --expect-instances 55 --expect-zip-sha256 <sha256> \
+   [--previous-dist <last published dist>] [--ledger scripts/map-atlas/ledger/published.json]
+```
+The acquisition commands (`identity`, `fetch-db2`, `extract`, `build`, `verify-dist`, `promote-ledger`) are unchanged.
+
+**Validation (the archive is untrusted; nothing is extracted to disk).** Refused, with every problem listed: unsafe/absolute/backslash/drive paths, duplicate or case-conflicting entries, symlinks, encrypted/oversized/bomb-like members, CRC errors, missing/changed/non-WebP images, wrong size/hash/dimensions, id/slug/name/category/parent/variant/build/internalMapId disagreements between `index.json`, each variant manifest, `build.json`, `hierarchy.json` and `instances.json`, a non-`provisional` calibration or non-accepted projection, incomplete tiles, `partial`/`failed` variants, `partial-overlays` reveals, a full-reveal byte-identical to its base, unreferenced files under `maps/`, and anything that is not a **complete** export: status other than exactly `COMPLETE` (a filtered run says `COMPLETE (FILTERED RUN …)`), `mapsSkippedByFilter`, `allowPartial`, no full-reveal pass, or `UiMap` table rows ≠ listed maps.
+
+**Packaging.** Images are copied byte-for-byte (never re-encoded), one file per variant, named `{variant}.webp` (`base.webp`, `full-reveal.webp`); the manifest's `image` is the explicit default display image: a full-reveal that matches the reviewed atlas and is `complete` (or only skips tile-less declared overlays), otherwise base. Base is never labelled full-reveal; unaccepted reveals are still stored, flagged, but not the default. Identical bytes inside one map are stored once and referenced twice. Manifests keep `schemaVersion: 1` and are a strict superset of the web contract (`variants[]`, `defaultImage`, `internalMapId`, `mapArtIds`, reveal metadata, classification evidence, world bounds, client build, provenance); `floor` stays `null` (no verified floor data).
+
+**Versions are keyed on the complete asset set** (`assetSetSha256` = every stored file's bytes + the manifest's material content, excluding the version, client build and provenance-only labels). A change to a full-reveal, an alternate variant or any material metadata therefore allocates the next version instead of hiding inside an old one; an unchanged source reuses its versions (idempotent, also fully offline), and published bytes are never rewritten.
+
+**Determinism contract.** The dist is a deterministic function of the source **archive bytes** (same ZIP ⇒ byte-identical `dist/`, zip and ledger proposal, with or without `--previous-dist`). A *different* archive with identical content — re-zipped, other compression/entry order/wrapper folder, or an exporter re-run that reports `reused` instead of `exported` and has different volatile diagnostics — produces the same immutable assets, manifests, versions, ledger proposal and catalog; the **only** difference is the provenance field `atlas/builds.json → builds[].import.zipSha256` (+`zipBytes`), which records exactly which archive was audited and imported (the hash you pin with `--expect-zip-sha256`). `tests/test_importer.py` pins this in both flows.
+
+**Catalog.** `atlas/index.json` lists maps (`availability`: `available`, `no-artwork`, `published-earlier`) and says nothing about observations; `atlas/hierarchy.json` is the exporter's tree with availability; `atlas/instances.json` is the raw instance catalog kept apart from the map index (`mapId` is the internal Map ID, never a uiMapID; no fake UiMapIDs; `catalog.releaseStatus: "unverified"`, `visibility: "unreviewed"`, transparent `developmentFlags` heuristics); `atlas/builds.json` records builds, source ZIP hash, exporter and tool versions.
+
+**Review package** written beside `dist/`: `reports/` (coverage, asset inventory JSON+CSV, instance catalog, Tirisfal regression, category/full-reveal availability, ledger proposal), `preview/index.html` (offline gallery), `ledger.next.json` (proposal — never promoted automatically), `atlas-dist-<build>.zip` (deterministic), `SHA256SUMS.txt`, `dist-files.json`.
+
+**Acceptance against the real export** is local-only (the ZIP is private artwork): `ATLAS_REAL_EXPORT_ZIP=… python -m unittest test_real_source` (Python), `ATLAS_REAL_DIST=<out>/dist npx vitest run tests/unit/map-atlas-contract.test.ts` and `npx playwright test maps-poc-atlas` (same-origin), and the cross-origin CDN/CSP/CORS suite `playwright.atlas-cdn.config.ts` (needs a build made with `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev`).

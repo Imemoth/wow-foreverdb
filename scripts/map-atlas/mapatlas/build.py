@@ -12,6 +12,7 @@ from PIL import Image, features
 
 from . import TOOL_VERSION
 from .assemble import assemble_layer
+from .assetset import asset_set_sha256
 from .identity import BuildIdentity, identity_from_json
 from .inventory import Inventory, MapEntry, Variant, build_inventory, children_index
 from .manifest import build_manifest, canonical_json, image_record, sha256_hex, tiles_digest
@@ -170,14 +171,27 @@ def run_build(o: Options) -> dict:
             i.role = f"variant:{i.variant.map_art_id}:layer:{i.layer_index}"
             i.file = f"layer-{i.layer_index}.webp" if same_variant else (f"variant-{i.variant.map_art_id}.webp" if i.layer_index == (i.variant.primary_layer.index if i.variant.primary_layer else -1) else f"variant-{i.variant.map_art_id}-layer-{i.layer_index}.webp")
         kept = [primary] + [i for i in imgs if i is not primary and i.ok]
-        layout = sorted([i.role, i.pixel_sha] for i in kept)
-        layout_sha = sha256_hex(json.dumps(layout).encode())
         for i in kept:
             all_pixel.setdefault(i.pixel_sha, []).append((mid, i.file))
         slug_ = slug(e.name, mid)
-        version = ledger.lookup(mid, layout_sha, primary.pixel_sha)
-        reuse = version is not None
-        if reuse:
+        reg = None
+        if mid == 1420 and ref_img is not None:
+            with Image.open(io.BytesIO(primary.data)) as f:
+                reg = compare_to_reference(ref_img, f.convert("RGBA")).to_json()
+        pm = {"mapArtId": primary.variant.map_art_id, "phaseId": primary.variant.phase_id, "styleId": primary.variant.style_id,
+              "layerIndex": primary.layer_index, "tileCount": primary.tile_count, "expectedTiles": primary.expected_tiles, "tilesSha256": primary.tiles_sha}
+        extras = [image_record(i.file, "webp", i.size[0], i.size[1], i.data, i.pixel_sha) | {
+            "mapArtId": i.variant.map_art_id, "phaseId": i.variant.phase_id, "layerIndex": i.layer_index, "partial": i.partial} for i in kept[1:]]
+        warnings = sorted({w for i in kept for w in i.warnings})
+
+        def manifest_for(ver: str) -> dict:
+            return build_manifest(e, slug_, ver, ident, image_record(primary.file, "webp", primary.size[0], primary.size[1], primary.data, primary.pixel_sha),
+                                  pm, extras, reg, any(i.partial for i in kept), warnings)
+
+        # The version is keyed on the COMPLETE asset set (every file's bytes + material manifest content), never on the primary image alone.
+        set_sha = asset_set_sha256({i.file: sha256_hex(i.data) for i in kept}, manifest_for("v0"))
+        version = ledger.lookup_asset_set(mid, set_sha)
+        if version is not None:
             ledger.note_seen(mid, version, build_label)
             _carry_forward(o, ledger, mid, version, dist)
             mf = json.loads((dist / "forever" / str(mid) / version / "manifest.json").read_text(encoding="utf-8"))
@@ -185,19 +199,7 @@ def run_build(o: Options) -> dict:
             rec["image"] = mf["image"]
         else:
             version = ledger.next_version(mid)
-            reg = None
-            if mid == 1420 and ref_img is not None:
-                with Image.open(io.BytesIO(primary.data)) as f:
-                    reg = compare_to_reference(ref_img, f.convert("RGBA")).to_json()
-            pm = {"mapArtId": primary.variant.map_art_id, "phaseId": primary.variant.phase_id, "styleId": primary.variant.style_id,
-                  "layerIndex": primary.layer_index, "tileCount": primary.tile_count, "expectedTiles": primary.expected_tiles, "tilesSha256": primary.tiles_sha}
-            extras = []
-            for i in kept[1:]:
-                extras.append(image_record(i.file, "webp", i.size[0], i.size[1], i.data, i.pixel_sha) | {
-                    "mapArtId": i.variant.map_art_id, "phaseId": i.variant.phase_id, "layerIndex": i.layer_index, "partial": i.partial})
-            warnings = sorted({w for i in kept for w in i.warnings})
-            man = build_manifest(e, slug_, version, ident, image_record(primary.file, "webp", primary.size[0], primary.size[1], primary.data, primary.pixel_sha),
-                                 pm, extras, reg, any(i.partial for i in kept), warnings)
+            man = manifest_for(version)
             mdir = dist / "forever" / str(mid) / version
             mdir.mkdir(parents=True)
             for i in kept:
@@ -206,7 +208,7 @@ def run_build(o: Options) -> dict:
             (mdir / "manifest.json").write_text(mtext, encoding="utf-8")
             files = {i.file: {"sha256": sha256_hex(i.data), "bytes": len(i.data)} for i in kept}
             files["manifest.json"] = {"sha256": sha256_hex(mtext.encode()), "bytes": len(mtext.encode())}
-            ledger.record(mid, version, layout_sha, primary.pixel_sha, files, build_label)
+            ledger.record(mid, version, set_sha, files, build_label, pixelSha256=primary.pixel_sha)
             rec["version"], rec["reusedVersion"] = version, False
             rec["image"] = man["image"]
             if reg:

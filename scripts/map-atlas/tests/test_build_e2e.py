@@ -215,6 +215,28 @@ class DeterminismAndVersioningTests(unittest.TestCase):
         self.assertEqual(idx["lookup"]["byBuild"]["1.60.1.70451"], [2023])
         self.assertEqual(verify_superset(d2, json.loads((second.out / "ledger.next.json").read_text())), [])
 
+    def test_a_change_to_a_non_primary_layer_or_variant_cannot_hide_inside_an_old_version(self):
+        """Primary image identical, secondary art changed: must allocate a NEW version, never reuse (or overwrite) the old one."""
+        from mapatlas.inventory import build_inventory
+        first = opts(self.work, self.work / "bundle", "one")
+        run_build(first)
+        inv = build_inventory(self.work / "bundle/db2")
+        k = inv.maps[1414]
+        layer1 = next(l for l in k.variants[0].layers if l.index == 1)
+        alt = k.variants[1]
+        # (map 3000 deliberately shares the alternate variant's MapArt, so changing that art must version it too)
+        for label, fd, expected in (("secondary layer", next(iter(layer1.tiles.values())), ["1414/v2"]),
+                                    ("alternate variant", next(iter(alt.layers[0].tiles.values())), ["1414/v2", "3000/v2"])):
+            orig = (self.work / f"bundle/blp/{fd}.blp").read_bytes()
+            (self.work / f"bundle/blp/{fd}.blp").write_bytes(tile_blp(0, 0, 700, 520, 250))
+            r = run_build(opts(self.work, self.work / "bundle", "two", ledger=first.out / "ledger.next.json", previous=first.out / "dist"))
+            self.assertEqual(r["package"]["newVersionsThisRun"], expected, label)
+            d1, d2 = first.out / "dist/forever/1414/v1", self.work / "two/dist/forever/1414"
+            for f in packaging.list_files(d1):
+                self.assertEqual(sha(d1 / f), sha(d2 / "v1" / f), f"{label}: v1/{f} must be untouched")
+            self.assertEqual(sha(d1 / "overview.webp"), sha(d2 / "v2/overview.webp"), f"{label}: primary image is unchanged")
+            (self.work / f"bundle/blp/{fd}.blp").write_bytes(orig)
+
     def _fds(self, ui_map_id):
         from mapatlas.inventory import build_inventory
         inv = build_inventory(self.work / "bundle/db2")

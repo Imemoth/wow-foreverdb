@@ -90,14 +90,45 @@ class VersioningTests(unittest.TestCase):
     def test_ledger_is_append_only(self):
         L = Ledger({"schemaVersion": 1, "maps": {}})
         self.assertEqual(L.next_version(5), "v1")
-        L.record(5, "v1", "lay", "pix", {"a": {"sha256": "x", "bytes": 1}}, "1.0.0.1")
-        self.assertEqual(L.lookup(5, "lay", "pix"), "v1")
-        self.assertIsNone(L.lookup(5, "lay", "other"))
+        L.record(5, "v1", "setA", {"a": {"sha256": "x", "bytes": 1}}, "1.0.0.1")
+        self.assertEqual(L.lookup_asset_set(5, "setA"), "v1")
+        self.assertIsNone(L.lookup_asset_set(5, "setB"))
         self.assertEqual(L.next_version(5), "v2")
         with self.assertRaises(LedgerError):
-            L.record(5, "v1", "lay2", "pix2", {}, "1.0.0.2")
+            L.record(5, "v1", "setC", {}, "1.0.0.2")
         L.note_seen(5, "v1", "1.0.0.2")
         self.assertEqual(L.versions(5)["v1"]["seenBuilds"], ["1.0.0.1", "1.0.0.2"])
+
+    def test_records_without_an_asset_set_hash_are_protected_but_never_silently_reused(self):
+        L = Ledger({"schemaVersion": 1, "maps": {"1420": {"v1": {"pixelSha256": "p", "layoutSha256": "l", "firstBuild": "legacy-poc", "seenBuilds": ["legacy-poc"], "files": {}}}}})
+        self.assertIsNone(L.lookup_asset_set(1420, "anything"))
+        self.assertEqual(L.next_version(1420), "v2")
+
+
+class AssetSetTests(unittest.TestCase):
+    BASE = {"version": "v1", "zoneId": 5, "image": {"file": "a.webp", "sha256": "1"}, "clientBuild": {"version": "1.0.0.1"},
+            "provenance": {"source": "s", "exporterVersion": "0.2.1", "revealCompleteness": "complete"}, "source": {"assembledBy": "t 1"}}
+
+    def test_complete_set_identity_covers_every_file_and_material_metadata_but_not_provenance_only_fields(self):
+        from mapatlas.assetset import asset_set_sha256 as h
+        import copy
+        base = h({"a.webp": "aa", "b.webp": "bb"}, self.BASE)
+        self.assertEqual(base, h({"b.webp": "bb", "a.webp": "aa"}, copy.deepcopy(self.BASE)))      # order-independent
+        self.assertNotEqual(base, h({"a.webp": "aa", "b.webp": "CHANGED"}, self.BASE))              # a non-primary file changed
+        self.assertNotEqual(base, h({"a.webp": "aa"}, self.BASE))                                   # a variant disappeared
+        self.assertNotEqual(base, h({"a.webp": "aa", "b.webp": "bb", "c.webp": "cc"}, self.BASE))   # a variant appeared
+        m = copy.deepcopy(self.BASE)
+        m["provenance"]["revealCompleteness"] = "partial-overlays"
+        self.assertNotEqual(base, h({"a.webp": "aa", "b.webp": "bb"}, m))                           # material metadata changed
+        for volatile in (("version", "v9"), ("clientBuild", {"version": "2"})):
+            m = copy.deepcopy(self.BASE)
+            m[volatile[0]] = volatile[1]
+            self.assertEqual(base, h({"a.webp": "aa", "b.webp": "bb"}, m))
+        m = copy.deepcopy(self.BASE)
+        m["provenance"]["exporterVersion"] = "9.9.9"
+        m["provenance"]["source"] = "label naming another client build"
+        m["source"]["assembledBy"] = "t 2"
+        self.assertEqual(base, h({"a.webp": "aa", "b.webp": "bb"}, m))
 
 
 class ReferenceTests(unittest.TestCase):
