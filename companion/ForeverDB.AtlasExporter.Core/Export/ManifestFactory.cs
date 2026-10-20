@@ -53,6 +53,10 @@ public static class ManifestFactory
             ArtVariantKind = variant.Kind,
             Category = map.Category,
             CategorySource = map.CategorySource,
+            CategoryConfidence = map.ClassificationConfidence,
+            Floor = map.FloorGroupId is { } group && map.FloorIndex is { } floorIndex
+                ? new ManifestFloor { GroupId = group, FloorIndex = floorIndex }
+                : null,
             InstanceKind = map.InstanceKind,
             TypeName = map.TypeName,
             ParentUiMapId = map.ParentUiMapId,
@@ -90,6 +94,9 @@ public static class ManifestFactory
                 ArtVariant = variant.Variant,
                 RevealStatus = variant.RevealStatus,
                 OverlayTiles = variant.OverlayTiles,
+                RevealCompleteness = variant.RevealCompleteness,
+                RevealSkippedOverlays = variant.RevealSkippedOverlays.Count == 0 ? null : variant.RevealSkippedOverlays.ToList(),
+                InternalMapId = map.InternalMapId,
                 Encoder = options.Webp.ToString()
             },
             Calibration = new ManifestCalibration { WorldBounds = bounds },

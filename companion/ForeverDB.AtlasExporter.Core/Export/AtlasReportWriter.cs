@@ -45,6 +45,7 @@ public sealed class AtlasReportWriter
         WriteIndex(result, maps);
         WriteHierarchy();
         WriteBuild();
+        WriteInstances();
         WriteMissingAndErrors(result, maps);
         WriteRegression(result);
 
@@ -201,7 +202,12 @@ public sealed class AtlasReportWriter
             map.Slug,
             map.Category,
             map.CategorySource,
+            map.ClassificationConfidence,
+            map.ClassificationEvidence,
             map.InstanceKind,
+            map.InternalMapId,
+            map.FloorGroupId,
+            map.FloorIndex,
             map.TypeName,
             map.System,
             map.Flags,
@@ -225,6 +231,9 @@ public sealed class AtlasReportWriter
                     v.Status,
                     v.SharedWithUiMapId,
                     v.RevealStatus,
+                    v.RevealCompleteness,
+                    v.RevealFailureStage,
+                    RevealSkippedOverlays = v.RevealSkippedOverlays.Count == 0 ? null : v.RevealSkippedOverlays.ToArray(),
                     Manifest = v.ManifestPath,
                     Images = v.Images.Select(ImageView).ToArray(),
                     Problems = v.Problems.Count == 0 ? null : v.Problems.ToArray()
@@ -265,7 +274,72 @@ public sealed class AtlasReportWriter
                 node.UiMapId, node.Name, node.ParentUiMapId, node.Depth, node.Children, node.ParentMissing
             }).ToArray(),
             Links = _plan.Links.Select(link => new { link.Parent, link.Child, link.Order }).ToArray(),
+            Instances = _plan.Instances.Records.Select(r => new
+            {
+                r.MapId,
+                r.Name,
+                r.Classification,
+                UiMapIds = r.UiMaps.Select(m => m.UiMapId).ToArray(),
+                r.EntranceUiMapIds,
+                r.RegionUiMapIds
+            }).ToArray(),
             Note = "Parent/child comes from UiMap.ParentUiMapID; Links are UiMapLink rows (clickable regions between maps)."
+        }));
+    }
+
+    private void WriteInstances()
+    {
+        var catalog = _plan.Instances;
+        JsonOut.WriteAtomic(Path.Combine(Root, "atlas", "instances.json"), JsonOut.Serialize(new
+        {
+            SchemaVersion = 1,
+            Kind = "foreverdb-atlas-instances",
+            catalog.Coverage,
+            Notes = catalog.Notes.Select(_sanitizer.Clean).ToArray(),
+            Counts = new
+            {
+                Records = catalog.Records.Count,
+                Drawable = catalog.Records.Count(r => r.Drawable),
+                WithoutInteriorMap = catalog.Records.Count(r => r.UiMaps.Count == 0),
+                ByClassification = catalog.Records.GroupBy(r => r.Classification)
+                    .OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
+                DrawableByClassification = catalog.Records.Where(r => r.Drawable).GroupBy(r => r.Classification)
+                    .OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
+                DrawableMaps = catalog.Records.Sum(r => r.DrawableUiMaps),
+                Floors = catalog.Records.Sum(r => r.FloorGroups.Sum(g => g.Members.Count(m => m.Known)))
+            },
+            Identity = "mapId is the internal Map ID; uiMapId and mapArtId are different identifiers and are never substituted.",
+            Instances = catalog.Records.Select(r => new
+            {
+                r.MapId,
+                r.Name,
+                r.Directory,
+                r.Classification,
+                r.ClassificationSource,
+                r.Confidence,
+                r.InstanceTypeRaw,
+                r.MapTypeRaw,
+                r.ExpansionId,
+                r.ParentMapId,
+                r.CosmeticParentMapId,
+                r.Evidence,
+                r.Drawable,
+                r.DrawableUiMaps,
+                r.MissingArtworkReason,
+                r.EntranceUiMapIds,
+                r.RegionUiMapIds,
+                r.FloorNote,
+                UiMaps = r.UiMaps.Select(m => new
+                {
+                    m.UiMapId, m.Name, m.Category, m.ArtStatus, m.ParentUiMapId,
+                    m.FloorGroupId, m.FloorIndex, m.RelativeHeightIndex, m.FloorSource
+                }),
+                FloorGroups = r.FloorGroups.Select(g => new
+                {
+                    g.GroupId,
+                    Members = g.Members.Select(m => new { m.UiMapId, m.Name, m.FloorIndex, m.RelativeHeightIndex, m.Known })
+                })
+            })
         }));
     }
 
@@ -279,6 +353,11 @@ public sealed class AtlasReportWriter
             MetadataSource = _identity.MetadataSource,
             MetadataAttempts = _options.MetadataAttempts
                 .Select(a => new { a.Source, a.Succeeded, Detail = _sanitizer.Clean(a.Detail) }).ToArray(),
+            TableSources = _database.TableSources.OrderBy(p => p.Key, StringComparer.Ordinal)
+                .ToDictionary(p => p.Key, p => p.Value),
+            TableRowCounts = _database.TableRowCounts.OrderBy(p => p.Key, StringComparer.Ordinal)
+                .ToDictionary(p => p.Key, p => p.Value),
+            TableWarnings = _database.TableWarnings.Select(_sanitizer.Clean).ToArray(),
             OptionalTablesMissing = _database.MissingOptionalTables
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(pair => pair.Key, pair => _sanitizer.Clean(pair.Value)),
@@ -521,6 +600,13 @@ public sealed class AtlasReportWriter
         builder.Append(inv, $"Instance maps: {D(Categories.Instance)} (drawable {W(Categories.Instance)})\n");
         builder.Append(inv, $"Other maps: {D(Categories.Special) + D(Categories.Other)}" +
             $" (drawable {W(Categories.Special) + W(Categories.Other)})\n\n");
+        var instances = _plan.Instances;
+        string Kind(string kind) => instances.Records.Count(r => r.Classification == kind).ToString(inv);
+        builder.Append(inv, $"Instance records: {instances.Records.Count} " +
+            $"(dungeon {Kind(InstanceKinds.Dungeon)}, raid {Kind(InstanceKinds.Raid)}, battleground {Kind(InstanceKinds.Battleground)}, " +
+            $"arena {Kind(InstanceKinds.Arena)}, scenario {Kind(InstanceKinds.Scenario)}, unknown {Kind(InstanceKinds.Unknown)}); " +
+            $"{instances.Records.Count(r => r.Drawable)} with a drawable interior map\n");
+        builder.Append(inv, $"Instance discovery: {instances.Coverage}\n\n");
         builder.Append(inv, $"Export size: {FormatBytes(s.ExportBytes)}\n");
         builder.Append(inv, $"ZIP size: {(s.ZipBytes > 0 ? FormatBytes(s.ZipBytes) : "not created")}\n");
         builder.Append(inv, $"Cloudflare Pages Free fit: {s.CdnFileCount} files " +

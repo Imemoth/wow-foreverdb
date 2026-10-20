@@ -16,7 +16,9 @@ public sealed class VariantManifest
     public string ArtVariantKind { get; init; } = "";
     public string Category { get; init; } = "";
     public string CategorySource { get; init; } = "";
+    public string? CategoryConfidence { get; init; }
     public string? InstanceKind { get; init; }
+    public ManifestFloor? Floor { get; init; }
     public string TypeName { get; init; } = "";
     public int ParentUiMapId { get; init; }
     public string Status { get; init; } = "";
@@ -89,6 +91,11 @@ public sealed class ManifestProvenance
     public string ArtVariant { get; init; } = "";
     public string? RevealStatus { get; init; }
     public int OverlayTiles { get; init; }
+    public string? RevealCompleteness { get; init; }
+    public List<string>? RevealSkippedOverlays { get; init; }
+
+    /// <summary>Internal Map identity (UiMapAssignment). Distinct from uiMapId and mapArtId.</summary>
+    public int? InternalMapId { get; init; }
     public string Encoder { get; init; } = "";
     public string LicenseStatus { get; init; } = "unreviewed";
     public string Note { get; init; } =
@@ -111,4 +118,11 @@ public sealed class AssignmentBounds
     public double[] UiMin { get; init; } = Array.Empty<double>();
     public double[] UiMax { get; init; } = Array.Empty<double>();
     public double[] Region { get; init; } = Array.Empty<double>();
+}
+
+public sealed class ManifestFloor
+{
+    public int GroupId { get; init; }
+    public int FloorIndex { get; init; }
+    public string Source { get; init; } = "UiMapGroupMember";
 }

@@ -10,5 +10,9 @@ internal static class TestRegistry
         EnumerationTests.Register();
         ImagingTests.Register();
         PipelineTests.Register();
+        RevealRepairTests.Register();
+        InstanceTests.Register();
+        DiagnosticsTests.Register();
+        SeedAndCompatTests.Register();
     }
 }

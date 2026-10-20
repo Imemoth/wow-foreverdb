@@ -37,7 +37,7 @@ internal static class EnumerationTests
             Assert.Equal(Categories.Instance, raid.Category, "zone-typed map on an instance Map is an instance");
             Assert.Equal("raid", raid.InstanceKind);
             Assert.Equal("map-instance-type", raid.CategorySource);
-            Assert.Equal("name-list", plan.Maps.Single(m => m.UiMapId == 1453).CategorySource);
+            Assert.Equal("uimap-flags+name-list", plan.Maps.Single(m => m.UiMapId == 1453).CategorySource);
         });
 
         Harness.Add("enumeration: tiles resolve by row/column to FileDataIDs regardless of record order", () =>

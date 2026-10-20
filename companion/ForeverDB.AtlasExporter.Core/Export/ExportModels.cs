@@ -16,6 +16,12 @@ public sealed class ExportOptions
     public bool Resume { get; init; }
     public bool Force { get; init; }
     public bool AllowPartial { get; init; }
+
+    /// <summary>
+    /// Compose a full-reveal from the overlays that are complete even when others declare artwork that
+    /// cannot be assembled. The variant is labelled <c>partial-overlays</c>; never the default.
+    /// </summary>
+    public bool AllowPartialReveal { get; init; }
     public bool IncludeFullReveal { get; init; } = true;
     public bool AllLayers { get; init; }
     public bool DetailLayer { get; init; } = true;
@@ -73,6 +79,15 @@ public sealed class VariantResult
     public int? SharedWithUiMapId { get; set; }
     public string? RevealStatus { get; set; }
     public int OverlayTiles { get; set; }
+
+    /// <summary>"complete", "tileless-declared-overlays-skipped" or "partial-overlays".</summary>
+    public string? RevealCompleteness { get; set; }
+
+    /// <summary>Overlay rows that contributed no artwork, each with its reason.</summary>
+    public List<string> RevealSkippedOverlays { get; } = new();
+
+    /// <summary>"metadata", "resolve", "decode" or "compose" when a reveal failed; otherwise null.</summary>
+    public string? RevealFailureStage { get; set; }
     public string Fingerprint { get; set; } = "";
     public string? ManifestPath { get; set; }
 }

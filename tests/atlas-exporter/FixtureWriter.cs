@@ -8,6 +8,11 @@ internal static class FixtureWriter
         Directory.CreateDirectory(directory);
         var world = World.Standard(Path.Combine(directory, "_world"));
 
+        // Shapes seen in the first real-client export: an overlay row with no artwork at all (zero size, no
+        // tiles), and a battleground that only UiMapAssignment ties to its internal MapID (no Map row).
+        world.RawOverlay(102, 5551, 0, 0, 0, 0);
+        world.Map(1459, "Alterac Valley", 6, 1415, flags: 2).Art(108, (0, 512, 256)).Link(1459, 108).Assign(1459, 30, 2597);
+
         // Optional bulk: full-size 1002x668 zones with their own tiles, for resource measurements.
         for (var i = 0; i < extraZones; i++)
         {

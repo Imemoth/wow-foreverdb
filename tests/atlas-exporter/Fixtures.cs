@@ -87,6 +87,45 @@ internal sealed class World
         return this;
     }
 
+    /// <summary>An overlay row with no tiles (hit rectangle / declared-but-empty), like the rows seen in a real client.</summary>
+    public World RawOverlay(int art, int id, int x, int y, int width, int height, int playerCondition = 0)
+    {
+        Db.Overlays.Add(new OverlayRow(id, art, width, height, x, y, playerCondition));
+        return this;
+    }
+
+    /// <summary>Adds one tile row (and its texture) to an existing overlay.</summary>
+    public int OverlayTile(int overlayId, int layer, int row, int col, bool texture = true)
+    {
+        var fdid = _nextFileDataId++;
+
+        if (texture)
+        {
+            File.WriteAllBytes(System.IO.Path.Combine(AssetsDir, fdid + ".blp"), BlpWriter.Tile(256, 256, 250, 20, 20, 160));
+        }
+
+        Db.OverlayTiles.Add(new OverlayTileRow(overlayId, layer, row, col, fdid));
+        return fdid;
+    }
+
+    public World Assign(int uiMapId, int mapId, int areaId = 0)
+    {
+        Db.Assignments.Add(new AssignmentRow(uiMapId, 0, mapId, areaId, new[] { 0.0, 0.0 }, new[] { 1.0, 1.0 }, new double[6]));
+        return this;
+    }
+
+    public World WorldMap(int id, string name, int instanceType, int parent = 0, string directory = "")
+    {
+        Db.WorldMaps[id] = new WorldMapRow(id, directory, name, 0, instanceType, parent, 0);
+        return this;
+    }
+
+    public World Member(int group, int uiMapId, int floor, int height = 0)
+    {
+        Db.GroupMembers.Add(new GroupMemberRow(group, uiMapId, floor, height));
+        return this;
+    }
+
     public void DeleteTexture(int fileDataId) => File.Delete(System.IO.Path.Combine(AssetsDir, fileDataId + ".blp"));
 
     public void CorruptTexture(int fileDataId) =>
@@ -139,14 +178,14 @@ internal sealed class World
         world.Map(946, "Cosmic", 0, 0)
             .Map(947, "Azeroth", 1, 946).Art(100, (0, 512, 256)).Link(947, 100)
             .Map(1415, "Eastern Kingdoms", 2, 947).Art(101, (0, 600, 400)).Link(1415, 101)
-            .Map(1420, "Tirisfal Glades", 3, 1415).Art(102, (0, 1002, 668), (1, 1536, 1024)).Link(1420, 102)
+            .Map(1420, "Tirisfal Glades", 3, 1415, flags: 2).Art(102, (0, 1002, 668), (1, 1536, 1024)).Link(1420, 102)
             .Overlay(102, 1, 50, 60, 200, 150)
             .Map(1453, "Stormwind City", 3, 1415).Art(103, (0, 512, 256)).Link(1453, 103)
-            .Map(1500, "Shared Zone", 3, 1415).Link(1500, 102)
+            .Map(1500, "Shared Zone", 3, 1415, flags: 2).Link(1500, 102)
             .Map(1600, "The Deadmines", 4, 1415).Art(104, (0, 300, 200)).Link(1600, 104)
             .Map(1601, "Cave Under Tirisfal", 5, 1420, flags: MapEnumerator.FlagFallbackToParentMap)
-            .Map(1610, "Test Raid", 3, 1415).Art(109, (0, 300, 200)).Link(1610, 109)
-            .Map(1800, "No Art Zone", 3, 1415);
+            .Map(1610, "Test Raid", 3, 1415, flags: 2).Art(109, (0, 300, 200)).Link(1610, 109)
+            .Map(1800, "No Art Zone", 3, 1415, flags: 2);
         world.Db.WorldMaps[0] = new WorldMapRow(0, "azeroth", "Azeroth", 0, 0, 0, 0);
         world.Db.WorldMaps[409] = new WorldMapRow(409, "raid", "Raid", 2, 2, 0, 0);
         world.Db.Assignments.Add(new AssignmentRow(1420, 0, 0, 85, new[] { 0.0, 0.0 }, new[] { 1.0, 1.0 },
@@ -180,6 +219,7 @@ internal sealed class ExportOptionsBuilder
     public bool Detail { get; set; } = true;
     public bool AllLayers { get; set; }
     public bool AllowPartial { get; set; }
+    public bool AllowPartialReveal { get; set; }
     public bool Zip { get; set; } = true;
     public WebpSettings Webp { get; set; } = new(90, false);
     public IReadOnlySet<int>? Only { get; set; }
@@ -195,6 +235,7 @@ internal sealed class ExportOptionsBuilder
         DetailLayer = Detail,
         AllLayers = AllLayers,
         AllowPartial = AllowPartial,
+        AllowPartialReveal = AllowPartialReveal,
         CreateZip = Zip,
         Webp = Webp,
         OnlyMaps = Only,

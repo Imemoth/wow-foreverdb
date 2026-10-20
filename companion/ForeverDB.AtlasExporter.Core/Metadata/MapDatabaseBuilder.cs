@@ -22,7 +22,8 @@ public static class MapDatabaseBuilder
 
     public static readonly IReadOnlyList<string> OptionalTables = new[]
     {
-        "UiMapAssignment", "UiMapLink", "Map", "WorldMapOverlay", "WorldMapOverlayTile"
+        "UiMapAssignment", "UiMapLink", "Map", "WorldMapOverlay", "WorldMapOverlayTile",
+        "UiMapGroupMember", "LFGDungeons"
     };
 
     private static readonly Dictionary<string, string[]> RequiredColumns = new()
@@ -38,6 +39,8 @@ public static class MapDatabaseBuilder
         ["UiMapAssignment"] = new[] { "UiMapID", "MapID" },
         ["UiMapLink"] = new[] { "ParentUiMapID", "ChildUiMapID" },
         ["Map"] = new[] { "ID", "InstanceType" },
+        ["UiMapGroupMember"] = new[] { "UiMapGroupID", "UiMapID", "FloorIndex" },
+        ["LFGDungeons"] = new[] { "ID", "TypeID", "MapID" },
         ["WorldMapOverlay"] = new[]
         {
             "ID", "UiMapArtID", "TextureWidth", "TextureHeight", "OffsetX", "OffsetY"
@@ -165,7 +168,8 @@ public static class MapDatabaseBuilder
                 database.WorldMaps[id] = new WorldMapRow(
                     id, row.Str("Directory"), row.Str("MapName_lang"),
                     (int)row.Int("MapType"), (int)row.Int("InstanceType"),
-                    (int)row.Int("ParentMapID"), (int)row.Int("ExpansionID"));
+                    (int)row.Int("ParentMapID"), (int)row.Int("ExpansionID"),
+                    (int)row.Int("CosmeticParentMapID"));
             }
         }
 
@@ -191,6 +195,31 @@ public static class MapDatabaseBuilder
             }
         }
 
+        if (tables.TryGetValue("UiMapGroupMember", out var members))
+        {
+            foreach (var row in members.Rows)
+            {
+                database.GroupMembers.Add(new GroupMemberRow(
+                    (int)row.Int("UiMapGroupID"), (int)row.Int("UiMapID"),
+                    (int)row.Int("FloorIndex"), (int)row.Int("RelativeHeightIndex")));
+            }
+        }
+
+        if (tables.TryGetValue("LFGDungeons", out var lfg))
+        {
+            foreach (var row in lfg.Rows)
+            {
+                database.LfgDungeons.Add(new LfgDungeonRow(
+                    (int)row.Int("ID"), row.Str("Name_lang"), (int)row.Int("TypeID"),
+                    (int)row.Int("MapID"), (int)row.Int("ExpansionLevel")));
+            }
+        }
+
+        foreach (var (name, table) in tables)
+        {
+            database.TableRowCounts[name] = table.Rows.Count;
+        }
+
         foreach (var (name, reason) in missingOptional)
         {
             database.MissingOptionalTables[name] = reason;
@@ -212,6 +241,7 @@ public static class MapDatabaseBuilder
         foreach (var source in sources)
         {
             var tables = new Dictionary<string, TableData>(StringComparer.Ordinal);
+            var requiredWarnings = new List<string>();
             string? failure = null;
 
             foreach (var name in RequiredTables)
@@ -225,23 +255,61 @@ public static class MapDatabaseBuilder
                 }
 
                 tables[name] = result.Data;
+                requiredWarnings.AddRange((result.Warnings ?? Array.Empty<string>()).Select(w => $"[{source.Label}] {w}"));
             }
 
             var missingOptional = new Dictionary<string, string>(StringComparer.Ordinal);
+            var tableSources = new Dictionary<string, string>(StringComparer.Ordinal);
+            var warnings = new List<string>();
 
             if (failure is null)
             {
+                foreach (var name in RequiredTables)
+                {
+                    tableSources[name] = source.Label;
+                }
+
+                // Optional tables fall back per table: a missing Map.db2 in the client must not
+                // leave instances undiscoverable when another source (same build) has it.
                 foreach (var name in OptionalTables)
                 {
-                    var result = await source.ReadAsync(name, cancellationToken);
+                    var reasons = new List<string>();
+                    var found = false;
 
-                    if (result.Data is null)
+                    foreach (var candidate in new[] { source }.Concat(sources.Where(other => !ReferenceEquals(other, source))))
                     {
-                        missingOptional[name] = result.Error ?? "unavailable";
+                        var result = await candidate.ReadAsync(name, cancellationToken);
+
+                        if (result.Data is not null)
+                        {
+                            try
+                            {
+                                CheckColumns(result.Data);
+                            }
+                            catch (MetadataException ex)
+                            {
+                                reasons.Add($"{candidate.Label}: {ex.Message}");
+                                continue;
+                            }
+
+                            tables[name] = result.Data;
+                            tableSources[name] = candidate.Label;
+
+                            foreach (var warning in result.Warnings ?? Array.Empty<string>())
+                            {
+                                warnings.Add($"[{candidate.Label}] {warning}");
+                            }
+
+                            found = true;
+                            break;
+                        }
+
+                        reasons.Add($"{candidate.Label}: {result.Error ?? "unavailable"}");
                     }
-                    else
+
+                    if (!found)
                     {
-                        tables[name] = result.Data;
+                        missingOptional[name] = string.Join(" | ", reasons);
                     }
                 }
 
@@ -249,6 +317,14 @@ public static class MapDatabaseBuilder
                 {
                     var database = Build(tables, missingOptional);
                     database.MetadataSource = source.Label;
+
+                    foreach (var (name, label) in tableSources)
+                    {
+                        database.TableSources[name] = label;
+                    }
+
+                    database.TableWarnings.AddRange(requiredWarnings);
+                    database.TableWarnings.AddRange(warnings);
                     attempts.Add(new LoadAttempt(source.Label, true, "ok"));
                     return new MapDatabaseLoad(database, attempts);
                 }

@@ -1,5 +1,11 @@
 # ForeverDB Atlas Exporter
 
+> **0.2.0** (second iteration, driven by the first real-client export of build 1.60.1.70450):
+> see [p2d2-real-client-findings.md](p2d2-real-client-findings.md) for the root causes of the four failed
+> full-reveal variants, the instance-discovery analysis, the new diagnostics (`--diagnose-*`), `--seed-from`,
+> the additive schema changes, and the real-client retest procedure. The fixes are verified on synthetic
+> fixtures and against the real export's own files; they are **not yet verified on the real client**.
+
 `ForeverDB.AtlasExporter.exe` is a standalone Windows console tool that reads the map
 data and map artwork of the **locally installed WoW: Forever client** and packs every
 discoverable map into one validated ZIP for the AzerDex CDN packaging step.
@@ -19,7 +25,7 @@ Companion file, no network service of ours, no database access.
 
 | Claim | Evidence |
 | --- | --- |
-| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism) | 62 automated tests against **synthetic** fixtures |
+| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism, reveal repair, instances, diagnostics, seeding) | automated tests against **synthetic** fixtures |
 | Windows executable starts, loads CascLib + SkiaSharp, runs the CLI, produces a valid ZIP from a synthetic client | `atlas-exporter.yml` smoke job on `windows-latest` |
 | WDC3/4/5 DB2 reader | Implemented from the public format documentation and tested against synthetic files written by the same documentation. **Not yet run against a real client DB2.** |
 | Extraction from a real WoW: Forever install | **Not verified** – no agent has access to one. The first owner run is the real E2E test. |

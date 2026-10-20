@@ -19,7 +19,9 @@ public static class KnownTables
             ["UiMapLink"] = 2030690,
             ["UiMapXMapArt"] = 1957217,
             ["WorldMapOverlay"] = 1134579,
-            ["WorldMapOverlayTile"] = 1957212
+            ["WorldMapOverlayTile"] = 1957212,
+            ["UiMapGroupMember"] = 1957204,
+            ["LFGDungeons"] = 1361033
         };
 
     public static readonly IReadOnlyDictionary<string, uint> TableHashes =
@@ -34,6 +36,8 @@ public static class KnownTables
             ["UiMapLink"] = 0x5578EDE9,
             ["UiMapXMapArt"] = 0xADB3FC8C,
             ["WorldMapOverlay"] = 0x1D740E72,
-            ["WorldMapOverlayTile"] = 0xAC599725
+            ["WorldMapOverlayTile"] = 0xAC599725,
+            ["UiMapGroupMember"] = 0x84EEB993,
+            ["LFGDungeons"] = 0x999BB9C2
         };
 }
