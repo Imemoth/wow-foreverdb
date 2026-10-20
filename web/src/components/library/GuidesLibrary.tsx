@@ -26,8 +26,8 @@ export async function guidesQueryFrom(searchParams: SP): Promise<GuidesQuery> {
 /**
  * The Arcane Library landing page: a dedicated hero, search/filter form (plain GET - works
  * without JS, keeps state in the URL, matches the established /database and /zone/[id] pattern),
- * and a featured-first, deterministically-ordered guide grid. News and Blog keep the original
- * ArticleList (ArticleViews.tsx) untouched - this component is Guides-only.
+ * and a featured-first, deterministically-ordered guide grid. News and Blog (P2-C) have their own
+ * parallel hub, components/content/ArticleHub.tsx - this component stays Guides-only and untouched.
  */
 export async function GuidesLibrary({ searchParams }: { searchParams: SP }) {
   const { nonce, baseUrl } = await pageContext();
