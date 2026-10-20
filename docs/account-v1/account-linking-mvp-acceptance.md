@@ -45,6 +45,8 @@ Local verification on the feature branch completed with:
 - Disposable PostgreSQL and real GoTrue 2.197.0 vertical slice: 7 passed, including anonymous ownership proof, registered claim redemption, device ticket enrollment, device sync and rejection of the previous owner.
 - Disposable database concurrency and failure-recovery regressions: 21 passed after removing test-state coupling and consuming the expected terminated-client error.
 - Migration 0012/0014 ownership, replay, enrollment, logout and revocation suites passed apart from a local test-runner working-directory problem; the affected migration rollback case was rerun with the corrected wrapper and passed. Exact-head CI remains the release authority for the complete suites.
+- Pull-request CI completed all eight workflows successfully on the implementation head, including the full SQL/real-GoTrue suite, Account end-to-end GoTrue/PostgREST suite, Account web-auth real-GoTrue suite, CodeQL, API security, web/publication, Companion health and Companion Account Windows jobs.
+- The Windows job executed the real-DPAPI and multi-process tests with zero skips, built the WPF application, published the `win-x64` acceptance output and uploaded `foreverdb-companion-account-linking-mvp-win-x64`. The build remains an unpublished CI artifact for owner acceptance.
 
 ## Acceptance gates
 
@@ -52,9 +54,9 @@ Local verification on the feature branch completed with:
 - [x] Anonymous use, existing installation identity, historical data and fallback enrollment preserved.
 - [x] AutoSync and all activation gates remain off.
 - [x] Focused security review completed; material finding fixed test-first.
-- [ ] Exact-head pull-request CI is green.
-- [ ] Windows runner executes all DPAPI and cross-process tests without skips.
-- [ ] Unpublished Windows acceptance artifact is produced by CI.
+- [x] Exact-head pull-request CI is green.
+- [x] Windows runner executes all DPAPI and cross-process tests without skips.
+- [x] Unpublished Windows acceptance artifact is produced by CI.
 - [ ] Owner acceptance on the Windows build.
 - [ ] Separate authorization before any production deployment, hosted Supabase change, public activation or installer publication.
 
