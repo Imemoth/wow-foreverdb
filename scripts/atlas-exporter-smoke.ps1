@@ -83,6 +83,9 @@ Expect "ZIP has one ForeverDB-Atlas-Export root and no state files" (
     ($names | Where-Object { -not $_.StartsWith("ForeverDB-Atlas-Export/") }).Count -eq 0 -and
     ($names | Where-Object { $_ -match "\.state|\.tmp" }).Count -eq 0)
 
+$verify = Invoke-Exporter "verify-zip" @("--verify", $zip)
+Expect "--verify re-checks the delivered ZIP and finds it consistent" ($verify.Code -eq 0 -and $verify.Log -match "Export is consistent")
+
 $resume = Invoke-Exporter "resume" ($common + @("--export", "--resume", "--output", $out))
 Expect "resume exits 0 and reuses finished maps" ($resume.Code -eq 0 -and $resume.Log -match "reused 6")
 

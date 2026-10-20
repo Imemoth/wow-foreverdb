@@ -20,8 +20,11 @@ HOW TO RUN (simplest)
   4. It scans and tells you how many maps it found. Press Enter (Y) to export.
   5. When it finishes it prints the path of the result ZIP:
         ForeverDB-Atlas-Export-<build>.zip   (next to the export folder)
-  6. Send that ZIP back. Optionally open  ForeverDB-Atlas-Export\gallery\index.html
-     first - it shows every map as a thumbnail, no internet needed.
+  6. Send that ZIP back to the ForeverDB developer (a private file share or direct
+     upload - not a public link). Optionally open
+     ForeverDB-Atlas-Export\gallery\index.html first - it shows every map as a
+     thumbnail, no internet needed. To double-check the ZIP before sending:
+         ForeverDB.AtlasExporter.exe --verify "<path to the ZIP>"
 
 COMMAND LINE (same thing, explicit)
   Open "Windows Terminal" or cmd in the folder with the exe, then:

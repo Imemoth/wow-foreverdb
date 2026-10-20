@@ -19,7 +19,7 @@ Companion file, no network service of ours, no database access.
 
 | Claim | Evidence |
 | --- | --- |
-| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism) | 59 automated tests against **synthetic** fixtures |
+| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism) | 61 automated tests against **synthetic** fixtures |
 | Windows executable starts, loads CascLib + SkiaSharp, runs the CLI, produces a valid ZIP from a synthetic client | `atlas-exporter.yml` smoke job on `windows-latest` |
 | WDC3/4/5 DB2 reader | Implemented from the public format documentation and tested against synthetic files written by the same documentation. **Not yet run against a real client DB2.** |
 | Extraction from a real WoW: Forever install | **Not verified** – no agent has access to one. The first owner run is the real E2E test. |
@@ -153,6 +153,29 @@ to the owner's file.
 * Tirisfal Glades (uiMapID 1420) is compared with the P2-D reference in
   `diagnostics/regression-1420.json` (expected 1002×668, aspect, optional pixel error via
   `--reference-1420 <file>`). P2-D's marker projection code is untouched.
+
+## Integration expectations for the Atlas Acquisition task (P2-D)
+
+The exporter owns **only** the Windows client-side extraction. It does not decide CDN paths,
+slugs for public URLs, licensing, or deployment. The receiving task should:
+
+1. Run `ForeverDB.AtlasExporter.exe --verify <returned zip>` (works on Windows; the library also runs on
+   Linux with .NET 8) – it must print `Export is consistent`.
+2. Read `atlas/build.json` (client product/version/build key, metadata source and attempts) and
+   `diagnostics/export-summary.txt` (`Status:` must be `COMPLETE`, or the failures understood).
+3. Treat `atlas/index.json` as the source list: ship variants with status
+   `exported`/`reused`/`shared-art` (and `partial` only knowingly); resolve `imageRef` aliases.
+4. Map `maps/<uiMapID>/<variant>/` → the final CDN path and rewrite `image.file`; the manifest keeps the P2-D
+   field names, so existing loaders (`web/src/lib/maps/manifest.ts`) need only the added optional fields.
+5. Use `atlas/hierarchy.json` + `category` for the atlas index; keep `calibration.status = provisional`
+   until landmark registration is verified per map.
+6. Check `atlas/export-report.json › cloudflarePagesFree` (file count ≤ 20 000, largest file ≤ 25 MiB) before
+   packaging; nothing is dropped by the exporter to satisfy a limit.
+7. Do not publish the ZIP or its images before the owner records the artwork decision (P2-D #70).
+
+The exporter makes no assumption about the final schema beyond the manifest/`index.json` shapes above. If
+P2-D publishes a different atlas schema, add a converter from `atlas/index.json`; do not change the exporter's
+interchange files (they are versioned by `schemaVersion`).
 
 ## Resources, safety, resume
 
