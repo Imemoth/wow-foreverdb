@@ -1,5 +1,6 @@
 // Plain Playwright test (NOT ../e2e/fixtures): that fixture adds an x-forwarded-for header to every request, which would turn the
 // cross-origin manifest fetch into a preflighted one and no longer reflect what a real browser sends.
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoBlankSpace, expectWholeImageFits, geometry, markerError, settle } from "../e2e/maps-helpers";
 import { REAL_DIST, readAsset, startCdn, type Cdn } from "./cdn-server";
@@ -333,6 +334,25 @@ test.describe("Z3 source pages: the same map engine, one source", () => {
     await expect(page.getByTestId("zone-map")).toHaveCount(0);
     await expect(page.getByTestId("source-maps")).toHaveCount(0);
   });
+});
+
+test.describe("accessibility (axe WCAG 2.2 AA) with the map enabled", () => {
+  for (const path of ["/zones", "/zone/1420", "/zone/1426", "/object/1731"]) {
+    test(`${path} has no WCAG A/AA violations`, async ({ page }) => {
+      await page.goto(path);
+      if (path !== "/zones") await mapReady(page);
+      // WCAG 2.2 SC 2.5.8 (target size): in the DENSE whole-zone view hundreds of aggregated markers overlap by nature, which axe reports as
+      // obscured/undersized targets. Every marker element is >= 24x24 CSS px (asserted below) and the same function is available through
+      // the "Observed entities" directory and the per-source pages (the SC's "equivalent" exception). All other rules stay on, markers included.
+      const dense = path === "/zone/1420";
+      const axe = new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]);
+      if (dense) axe.disableRules(["target-size"]);
+      const r = await axe.analyze();
+      expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`)).toEqual([]);
+      const small = await page.locator(".leaflet-marker-icon").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.width < 23.5 || r.height < 23.5).length);
+      expect(small, "markers smaller than 24x24 CSS px").toBe(0);
+    });
+  }
 });
 
 test.describe("responsive", () => {
