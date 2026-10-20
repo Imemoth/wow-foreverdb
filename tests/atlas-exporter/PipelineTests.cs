@@ -530,6 +530,9 @@ internal static class PipelineTests
             var world = World.Standard(dir.Combine("w"));
             var only = await Run.Export(world, dir.Combine("a"), o => { o.Only = new HashSet<int> { 1420 }; o.Detail = false; o.Reveal = false; });
             Assert.Equal(1, only.Summary.MapsExported);
+            Assert.True(only.Status.StartsWith("COMPLETE (FILTERED"), only.Status);
+            Assert.Equal(9, only.Summary.MapsSkippedByFilter);
+            Assert.Contains(File.ReadAllText(Path.Combine(only.OutputDirectory, "diagnostics/export-summary.txt")), "Scope: FILTERED");
             Assert.False(File.Exists(Path.Combine(only.OutputDirectory, "maps/1420/base/detail.webp")));
             Assert.False(Directory.Exists(Path.Combine(only.OutputDirectory, "maps/1420/full-reveal")));
             Assert.False(Directory.Exists(Path.Combine(only.OutputDirectory, "maps/947")));

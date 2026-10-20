@@ -37,6 +37,16 @@ internal static class Program
     }
 }
 
+// Progress<T> posts to the thread pool, so late lines could appear after the final summary.
+internal sealed class InlineProgress : IProgress<ExportProgress>
+{
+    private readonly Action<ExportProgress> _report;
+
+    public InlineProgress(Action<ExportProgress> report) => _report = report;
+
+    public void Report(ExportProgress value) => _report(value);
+}
+
 internal static class Runner
 {
     public static async Task<int> RunAsync(CliOptions options, bool interactive, string exporterVersion)
@@ -359,7 +369,7 @@ internal static class Runner
 
         var pipeline = new AtlasExportPipeline(plan, database, identity, assets, exportOptions);
         var lastLine = 0;
-        var progress = new Progress<ExportProgress>(p =>
+        var progress = new InlineProgress(p =>
         {
             if (p.Total == 0)
             {

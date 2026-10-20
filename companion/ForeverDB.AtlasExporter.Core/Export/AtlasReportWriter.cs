@@ -99,7 +99,7 @@ public sealed class AtlasReportWriter
 
     private ExportSummary Summarize(ExportResult result, IReadOnlyList<AtlasMap> maps)
     {
-        var summary = new ExportSummary { MapsDiscovered = maps.Count };
+        var summary = new ExportSummary { MapsDiscovered = maps.Count, MapsSkippedByFilter = _plan.Maps.Count - maps.Count };
 
         foreach (var map in maps)
         {
@@ -180,7 +180,7 @@ public sealed class AtlasReportWriter
         }
         else
         {
-            result.Status = "COMPLETE";
+            result.Status = s.MapsSkippedByFilter > 0 ? "COMPLETE (FILTERED RUN - not the full atlas)" : "COMPLETE";
             result.ExitCode = 0;
         }
 
@@ -501,6 +501,11 @@ public sealed class AtlasReportWriter
         builder.Append(inv, $"Client product: {_identity.Product}\n");
         builder.Append(inv, $"Client build: {_identity.Version}\n");
         builder.Append(inv, $"Metadata source: {_identity.MetadataSource}\n\n");
+        if (s.MapsSkippedByFilter > 0)
+        {
+            builder.Append(inv, $"Scope: FILTERED - {s.MapsDiscovered} of {_plan.Maps.Count} maps selected (--only/--max-maps)\n\n");
+        }
+
         builder.Append(inv, $"Maps discovered: {s.MapsDiscovered}\n");
         builder.Append(inv, $"Drawable maps: {s.DrawableMaps}\n");
         builder.Append(inv, $"Successfully exported: {s.MapsExported + s.MapsReused + s.MapsSharedArt}" +
