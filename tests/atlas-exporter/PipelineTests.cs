@@ -568,4 +568,3 @@ internal static class PipelineTests
         public void Dispose() => _inner.Dispose();
     }
 }
-
