@@ -1,6 +1,6 @@
 # Manual infrastructure setup (mostly NOT done — requires owner approval)
 
-Nothing below has been provisioned or configured **beyond step 10's basic Vercel/Preview wiring, which is already live for the public `beta.azerdex.com` track** — see the 2026-10-20 addendum at the end of this document. Each step names the secret it produces and **who may hold it**.
+Most of the steps below are reserved for a future, separately approved real-data Production release. The public `beta.azerdex.com` track already has Vercel Preview wiring **and a branch-scoped Upstash rate-limiter configuration** — see the 2026-10-20 addendum at the end of this document. Each step names the secret it produces and **who may hold it**.
 
 | # | Step | Produces | Held by |
 | --- | --- | --- | --- |
@@ -39,15 +39,15 @@ Nothing below has been provisioned or configured **beyond step 10's basic Vercel
 
 This section exists because the title above, read literally, overstated things once step 10's own description had quietly become true. It does not change the step table; it clarifies which rows are done and which remain genuinely open.
 
-**Already provisioned and live, for the `beta.azerdex.com` public-beta track only (step 10):**
+**Already configured for the `beta.azerdex.com` public-beta track (step 10 and beta-specific parts of steps 7–8):**
 - The existing Vercel project `wow-foreverdb`, with `beta.azerdex.com` attached as a branch-pinned custom domain tracking `web/azerdex-beta`, and an explicit, scoped Vercel Deployment Protection Exception for that one domain (every other Preview deployment stays behind Vercel Authentication) — see `vercel-environments.md` §10.
 - `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture` on that domain: a synthetic-fixture deployment, never real observations, with the site's own "Preview with synthetic sample data" banner and the narrow homepage-only indexing exception (same §10).
-- Rate limiting on this track runs on the **in-memory limiter** (`RATE_LIMIT_BACKEND=memory`), **not** Upstash — step 7 (provisioning an Upstash Redis database) has **not** been done. Memory-backed limiting is a per-instance, best-effort control, adequate for a low-traffic synthetic demo but not the distributed limiter step 7 describes for production scale.
+- **Rate-limiter configuration (read-only Vercel verification, 2026-10-20):** the `web/azerdex-beta`-scoped Preview variable is `RATE_LIMIT_BACKEND=upstash`, and the connected Upstash Marketplace REST API variables and `RATE_LIMIT_SALT` are present in Preview scope. `web/src/lib/env.ts` accepts the Marketplace REST aliases and fails closed if an Upstash backend lacks a REST URL/token. This establishes the **configured** distributed limiter, not independent proof that a particular live request used Redis; that operational check remains separate. Upstash provisioning for the beta is not a pending task.
 
-**Still genuinely NOT done (steps 1–6, 7, 8 partially, 9, 11–13) — all reserved for a future, separately-approved real-data Production release, not for the current beta:**
+**Still open for future, separately approved real-data Production (steps 1–6, production-specific parts of 7–8, 9, 11–13):**
 - Steps 1–6: the separate public-read PostgreSQL project, its migrations, reader/publisher roles, the production-export approval gate, and the scheduled publication workflow. The public beta's fixture data does not touch any of this.
-- Step 7: Upstash Redis (see above — not connected).
-- Step 8: `RATE_LIMIT_SALT`/`CHALLENGE_COOKIE_SECRET` generation for that future production rate limiter/challenge flow.
+- Step 7 (Production-specific): review capacity, quotas, budget alerts and separation/credentials for the real-data Production workload. The beta already has an Upstash Marketplace connection; that is **not** approval of Production readiness.
+- Step 8 (Production-specific): review separate `RATE_LIMIT_SALT` and any required `CHALLENGE_COOKIE_SECRET` for the future Production flow. `RATE_LIMIT_SALT` is already present for beta Preview; this does not satisfy Production's own security gate.
 - Step 9: Cloudflare Turnstile.
 - Step 11: Vercel Firewall/WAF rules and Attack Challenge Mode — **not configured** (confirmed in `vercel-environments.md` §5: the active-firewall-config API returns 404). The public beta relies only on the application-level limiter and Vercel's platform DDoS mitigation, exactly as a synthetic low-traffic demo is expected to.
 - Step 12: a domain beyond the existing Vercel-managed `beta.azerdex.com`/`azerdex.com`, and any HSTS-preload decision.
