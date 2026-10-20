@@ -1,13 +1,16 @@
 import { expect, test } from "./fixtures";
 
 /**
- * Phase 2-A "Arcane Cartography" regression coverage: the new CartographyBanner on
- * /zones, /zone/[id] and /database, the restructured 5-section /zone/[id] layout, and the
- * decorative-only enhancement to LocationPlot's background/border (markers, legend and the
- * accessible text summary must be byte-for-byte unaffected). Fixture zone 1420 is Tirisfal
- * Glades (14 sources, 1648 located observations) - the nominated first-map prototype zone;
- * Copper Vein (#1731) and Mottled Boar (#3098) both carry real location rows in the fixture
- * dataset and are reused here rather than duplicating detail-responsive.spec.ts's own setup.
+ * Phase 2-A "Arcane Cartography" regression coverage, since extended by the P2-A visual-polish
+ * round: /zones and /database now use the full-bleed CartographyHero (owner photography over the
+ * ArcaneSurveyBanner SVG fallback), while /zone/[id] intentionally keeps the original contained
+ * CartographyBanner (a data-heavy detail page, not a landing hero) - see CartographyHero.tsx's own
+ * doc comment. Also covers the restructured 5-section /zone/[id] layout and the decorative-only
+ * enhancement to LocationPlot's background/border (markers, legend and the accessible text summary
+ * must be byte-for-byte unaffected). Fixture zone 1420 is Tirisfal Glades (14 sources, 1648 located
+ * observations) - the nominated first-map prototype zone; Copper Vein (#1731) and Mottled Boar
+ * (#3098) both carry real location rows in the fixture dataset and are reused here rather than
+ * duplicating detail-responsive.spec.ts's own setup.
  */
 
 const VIEWPORTS = [320, 390, 430, 768, 834, 1024, 1440, 1920];
@@ -127,15 +130,28 @@ test.describe("database page cartography banner", () => {
     });
   }
 
-  test("compact banner stays short (no giant hero) and search still works end to end", async ({ page }) => {
+  // P2-A visual polish: the compact SVG-only box banner (<=160px) was replaced by a full-bleed
+  // cinematic CartographyHero, same technique as the Guides/News/Blog hub heroes - see
+  // CartographyHero.tsx. `compact` keeps it meaningfully shorter than the Zones hero or the
+  // content hubs' hero (~280-360px, vs. ~360-480px+ for Zones) so the search form stays close to
+  // the fold, but it is intentionally no longer a small bordered box.
+  test("hero is a shallow cinematic banner (not an overly tall one) and search still works end to end", async ({ page }) => {
     await page.goto("/database");
-    const banner = page.locator("div.overflow-hidden.rounded-xl.border-ink-700");
-    const box = await banner.boundingBox();
-    expect(box!.height).toBeLessThanOrEqual(160); // compact prop target: h-28/h-32 (112-128px) plus padding, well under the homepage hero's scale
+    const hero = page.getByText("Arcane Archive").locator("xpath=ancestor::section[1]");
+    const box = await hero.boundingBox();
+    expect(box!.height).toBeGreaterThan(150);
+    expect(box!.height).toBeLessThanOrEqual(420); // compact: shallower than the Zones/hub heroes
 
     await page.getByLabel("Name or ID").fill("copper");
     await page.getByRole("button", { name: "Search" }).click();
     await expect(page).toHaveURL(/q=copper/);
     await expect(page.getByRole("link", { name: /Copper Ore/ }).first()).toBeVisible();
+  });
+
+  test("hero eyebrow and search form are both visible without excessive scrolling @ 1280px", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/database");
+    await expect(page.getByText("Arcane Archive")).toBeVisible();
+    await expect(page.getByLabel("Name or ID")).toBeInViewport();
   });
 });

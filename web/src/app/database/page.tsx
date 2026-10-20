@@ -2,16 +2,32 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { CartographyBanner } from "@/components/cartography/CartographyBanner";
+import { CartographyHero } from "@/components/cartography/CartographyHero";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
 import { ResultsTable } from "@/components/ResultsTable";
-import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type SearchQuery, type SearchRow } from "@/lib/data/types";
+import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type LootKind, type Page, type SearchQuery, type SearchRow } from "@/lib/data/types";
 import { DISPLAY_KIND_PLURAL, LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
 import { searchPath } from "@/lib/routes";
 import { MAX_OFFSET, PAGE_SIZE, isEmptySearch, parseSearchQuery } from "@/lib/validation";
+
+/**
+ * Decorative icons for the "Start browsing" acquisition-method tiles (P2-A visual polish) -
+ * reuses existing public/icons/*.webp; a LootKind with no exact-match icon (skinning, chest,
+ * gameobject, disenchant) renders as a plain rune-glyph tile instead of guessing one. `fishing_pool`
+ * intentionally reuses the same fishing.webp as `fishing` (there is no separate pool icon and the
+ * two are visually the same activity) - unlike the Zones directory cards, this is not "the same
+ * icon on every card", just two adjacent, thematically identical tiles out of nine.
+ */
+const LOOT_KIND_ICON: Partial<Record<LootKind, string>> = {
+  mob: "/icons/creatures.webp",
+  mining: "/icons/mining.webp",
+  herbalism: "/icons/herbalism.webp",
+  fishing: "/icons/fishing.webp",
+  fishing_pool: "/icons/fishing.webp",
+};
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
@@ -79,10 +95,10 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
   return (
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database" }]} />
-      <CartographyBanner compact>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-parchment sm:text-3xl">Database</h1>
-        <p className="mt-1 text-sm text-mist sm:text-base">Search by name or exact game ID, or browse a zone or acquisition type.</p>
-      </CartographyBanner>
+      <CartographyHero variant="database" compact eyebrow="Arcane Archive" eyebrowIcon="/icons/items.webp">
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-parchment sm:text-4xl lg:text-5xl">Database</h1>
+        <p className="mt-2 max-w-2xl text-sm text-mist sm:text-base">Search by name or exact game ID, or browse a zone or acquisition type.</p>
+      </CartographyHero>
 
       <form action="/database" method="get" role="search" aria-label="Database search and filters" autoComplete="off"
         className="panel grid gap-3 p-4 md:grid-cols-2 md:items-end lg:grid-cols-4 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
@@ -169,21 +185,59 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
 
       <div aria-live="polite">
         {empty && (
-          <section aria-labelledby="hub-title" className="space-y-4">
+          <section aria-labelledby="hub-title" className="space-y-5">
             <h2 id="hub-title" className="panel-title text-xl">Start browsing</h2>
             <p className="text-sm text-mist">
               To keep the database fast and fair for everyone, browsing without a search term needs a zone or an acquisition type.
             </p>
-            <ul className="flex flex-wrap gap-2">
-              {LOOT_KINDS.map((k) => (
-                <li key={k}><Link className="btn-ghost text-sm" href={searchPath({ kind: k, category: v.category || null })}>{LOOT_KIND_LABEL[k]}</Link></li>
-              ))}
+            {/*
+              Compact illustrated tiles, not the giant decorative cards the task explicitly warns
+              against - a 40px icon plus a label, same restrained scale as a form field. Only 5 of
+              the 9 LOOT_KINDS have a matching decorative icon (public/icons/*.webp); the rest render
+              with a plain rune-glyph placeholder rather than inventing or misassigning an icon -
+              every acquisition method stays reachable either way, per the "retain existing
+              acquisition methods, including categories without dedicated decorative icons" requirement.
+            */}
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {LOOT_KINDS.map((k) => {
+                const icon = LOOT_KIND_ICON[k];
+                return (
+                  <li key={k}>
+                    <Link
+                      href={searchPath({ kind: k, category: v.category || null })}
+                      className="group flex flex-col items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/40 p-3 text-center transition hover:border-gold-400/60 hover:bg-ink-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400"
+                    >
+                      {icon ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- static repository asset
+                        <img src={icon} alt="" aria-hidden="true" className="h-10 w-10 object-contain transition group-hover:scale-105" />
+                      ) : (
+                        <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-600 text-violet-300">
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+                            <path d="M2 17l10 5 10-5" />
+                            <path d="M2 12l10 5 10-5" />
+                          </svg>
+                        </span>
+                      )}
+                      <span className="text-sm font-medium text-parchment">{LOOT_KIND_LABEL[k]}</span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
-            <ul className="flex flex-wrap gap-2">
-              {zones.map((z) => (
-                <li key={z.mapId}><Link className="btn-ghost text-sm" href={searchPath({ zone: z.mapId, category: v.category || null })}>{z.zoneName}</Link></li>
-              ))}
-            </ul>
+
+            <div className="space-y-2">
+              <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-mist">
+                {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+                <img src="/icons/zones.webp" alt="" aria-hidden="true" className="h-5 w-5" />
+                Browse by zone
+              </h3>
+              <ul className="flex flex-wrap gap-2">
+                {zones.map((z) => (
+                  <li key={z.mapId}><Link className="btn-ghost text-sm" href={searchPath({ zone: z.mapId, category: v.category || null })}>{z.zoneName}</Link></li>
+                ))}
+              </ul>
+            </div>
           </section>
         )}
 
