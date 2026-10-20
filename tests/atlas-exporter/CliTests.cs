@@ -32,6 +32,27 @@ internal static class CliTests
             Assert.Equal("D:\\out", o.Output);
         });
 
+        Harness.Add("cli: diagnostic and seeding switches parse; diagnose cannot be mixed with export", () =>
+        {
+            var o = CliOptions.Parse(new[] { "--diagnose-tables", "--diagnose-instances", "--diagnose-overlays", "--diagnose-map", "1412",
+                "--diagnose-mapid", "30", "--seed-from", "old.zip", "--allow-partial-reveal" });
+            Assert.Equal(0, o.Errors.Count, string.Join(";", o.Errors));
+            Assert.True(o.DiagnoseTables && o.DiagnoseInstances && o.DiagnoseOverlays && o.IsDiagnose && o.AllowPartialReveal);
+            Assert.Equal(1412, o.DiagnoseMap);
+            Assert.Equal(30, o.DiagnoseMapId);
+            Assert.Equal("old.zip", o.SeedFrom);
+            Assert.False(o.OutputExplicit);
+            Assert.True(CliOptions.Parse(new[] { "--output", "x" }).OutputExplicit);
+            Assert.Equal(1, CliOptions.Parse(new[] { "--diagnose-tables", "--export" }).Errors.Count);
+            Assert.Equal(1, CliOptions.Parse(new[] { "--diagnose-map", "abc" }).Errors.Count);
+            Assert.Equal(1, CliOptions.Parse(new[] { "--diagnose-mapid", "-4" }).Errors.Count);
+
+            foreach (var flag in new[] { "--diagnose-tables", "--diagnose-map", "--diagnose-mapid", "--diagnose-instances", "--diagnose-overlays", "--seed-from", "--allow-partial-reveal" })
+            {
+                Assert.Contains(CliOptions.HelpText, flag);
+            }
+        });
+
         Harness.Add("cli: bad input is reported, never silently ignored", () =>
         {
             Assert.True(CliOptions.Parse(new[] { "--nonsense" }).Errors.Count == 1);

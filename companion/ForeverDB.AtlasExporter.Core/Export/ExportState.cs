@@ -12,6 +12,8 @@ public sealed class StateItem
     public List<ImageRecord> Images { get; set; } = new();
     public string? RevealStatus { get; set; }
     public int OverlayTiles { get; set; }
+    public string? RevealCompleteness { get; set; }
+    public List<string> RevealSkippedOverlays { get; set; } = new();
     public List<string> Problems { get; set; } = new();
 }
 
@@ -57,7 +59,8 @@ public sealed class ExportState
         Hash(string.Join('|',
             "v1", identity.Product, identity.Version, identity.BuildKey,
             options.Webp.ToString(), options.IncludeFullReveal, options.AllLayers,
-            options.DetailLayer, options.AllowPartial));
+            options.DetailLayer, options.AllowPartial)
+            + (options.AllowPartialReveal ? "|partial-reveal" : ""));
 
     public static string Fingerprint(ArtPlan art, bool includeOverlays)
     {

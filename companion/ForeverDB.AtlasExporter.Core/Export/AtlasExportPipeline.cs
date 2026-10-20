@@ -76,7 +76,7 @@ public sealed class AtlasExportPipeline
                     var prefix = primary ? "" : $"art{art.UiMapArtId}-";
                     var kinds = new List<string> { "base" };
 
-                    if (_options.IncludeFullReveal && art.Overlays.Count > 0)
+                    if (_options.IncludeFullReveal && art.HasRevealArtwork)
                     {
                         kinds.Add("full-reveal");
                     }
@@ -272,7 +272,7 @@ public sealed class AtlasExportPipeline
         if (!_options.Resume || !state.Items.TryGetValue(key, out var item) ||
             item.Fingerprint != variant.Fingerprint ||
             item.Status is not (ItemStatus.Exported or ItemStatus.Partial) ||
-            (item.Status == ItemStatus.Partial && !_options.AllowPartial))
+            (item.Status == ItemStatus.Partial && !(_options.AllowPartial || _options.AllowPartialReveal)))
         {
             return false;
         }
@@ -297,6 +297,8 @@ public sealed class AtlasExportPipeline
         variant.Images.AddRange(item.Images);
         variant.RevealStatus = item.RevealStatus;
         variant.OverlayTiles = item.OverlayTiles;
+        variant.RevealCompleteness = item.RevealCompleteness;
+        variant.RevealSkippedOverlays.AddRange(item.RevealSkippedOverlays);
         variant.Problems.AddRange(item.Problems);
         return true;
     }
@@ -309,6 +311,8 @@ public sealed class AtlasExportPipeline
         Images = variant.Images.ToList(),
         RevealStatus = variant.RevealStatus,
         OverlayTiles = variant.OverlayTiles,
+        RevealCompleteness = variant.RevealCompleteness,
+        RevealSkippedOverlays = variant.RevealSkippedOverlays.ToList(),
         Problems = variant.Problems.ToList()
     };
 
@@ -404,11 +408,47 @@ public sealed class AtlasExportPipeline
         return overviewCanvas;
     }
 
+    private static string Describe(OverlayPlan overlay) =>
+        $"overlay {overlay.Id}: {overlay.Kind} - {overlay.KindDetail}";
+
     private void ExportReveal(
         AtlasMap map, ArtPlan art, VariantResult variant, BgraImage? baseCanvas,
         TextureCache textures, CancellationToken token)
     {
         var overviewLayer = art.Layers.OrderBy(layer => layer.LayerIndex).First();
+
+        string Fail(string stage, string message)
+        {
+            variant.Status = ItemStatus.Failed;
+            variant.RevealFailureStage = stage;
+            variant.Problems.Add($"full-reveal[stage={stage}]: {message}");
+            return stage;
+        }
+
+        var usable = art.UsableOverlays.ToList();
+        var blocking = art.BlockingOverlays.ToList();
+        var skipped = art.SkippedOverlays.ToList();
+
+        // Overlay rows without artwork are recorded, never an error and never drawn.
+        variant.RevealSkippedOverlays.AddRange(skipped.Select(Describe));
+
+        if (blocking.Count > 0)
+        {
+            if (!_options.AllowPartialReveal)
+            {
+                Fail("metadata", string.Join(" | ", blocking.Take(4).Select(Describe)) +
+                    " (use --allow-partial-reveal to compose the complete overlays only, labelled partial)");
+                return;
+            }
+
+            variant.RevealSkippedOverlays.AddRange(blocking.Select(o => Describe(o) + " [omitted: partial reveal]"));
+        }
+
+        if (usable.Count == 0)
+        {
+            Fail("metadata", "no overlay of this art carries complete artwork; nothing to compose");
+            return;
+        }
 
         if (baseCanvas is null)
         {
@@ -416,29 +456,56 @@ public sealed class AtlasExportPipeline
 
             if (composition.Image is null || (!composition.IsComplete && !_options.AllowPartial))
             {
-                variant.Status = ItemStatus.Failed;
-                variant.Problems.Add("full-reveal needs a complete base map, which is unavailable.");
+                Fail("compose", "full-reveal needs a complete base map, which is unavailable");
                 return;
             }
 
             baseCanvas = composition.Image;
         }
 
-        var regions = TileCompositor.ToRegions(art.Overlays, out var problem);
+        var regions = TileCompositor.ToRegions(usable, out var problem);
 
         if (regions is null)
         {
-            variant.Status = ItemStatus.Failed;
-            variant.Problems.Add($"full-reveal overlay metadata unusable: {problem}");
+            Fail("metadata", $"overlay metadata unusable: {problem}");
             return;
         }
 
-        var (image, tiles, failure) = TileCompositor.ApplyOverlays(baseCanvas, regions, textures, token);
+        // Resolve every overlay tile first so a failure names its stage and FileDataID precisely.
+        var unresolved = new List<string>();
+        var stage = "resolve";
+
+        foreach (var overlay in usable)
+        {
+            foreach (var tile in overlay.Tiles)
+            {
+                token.ThrowIfCancellationRequested();
+
+                if (textures.Get(tile.FileDataId, out var failure) is null)
+                {
+                    if (failure?.Contains("undecodable", StringComparison.Ordinal) == true)
+                    {
+                        stage = "decode";
+                    }
+
+                    unresolved.Add(_sanitizer.Clean(
+                        $"overlay {overlay.Id} tile r{tile.Row}c{tile.Column}: {failure}"));
+                }
+            }
+        }
+
+        if (unresolved.Count > 0)
+        {
+            Fail(stage, $"{unresolved.Count} overlay tile(s) unavailable - " +
+                string.Join(" | ", unresolved.Take(5)));
+            return;
+        }
+
+        var (image, tiles, failureText) = TileCompositor.ApplyOverlays(baseCanvas, regions, textures, token);
 
         if (image is null)
         {
-            variant.Status = ItemStatus.Failed;
-            variant.Problems.Add(_sanitizer.Clean($"full-reveal unavailable: {failure}"));
+            Fail("compose", _sanitizer.Clean(failureText ?? "overlay composition failed"));
             return;
         }
 
@@ -450,6 +517,9 @@ public sealed class AtlasExportPipeline
             null => "client-metadata-only"
         };
         variant.OverlayTiles = tiles;
+        variant.RevealCompleteness = blocking.Count > 0 ? "partial-overlays"
+            : skipped.Any(o => o.Kind == OverlayKind.TilelessDeclared) ? "tileless-declared-overlays-skipped"
+            : "complete";
 
         var composition2 = new CompositionResult(image, overviewLayer.ExpectedTiles, overviewLayer.ExpectedTiles,
             Array.Empty<string>());
@@ -457,13 +527,17 @@ public sealed class AtlasExportPipeline
 
         if (record is null)
         {
-            variant.Status = ItemStatus.Failed;
-            variant.Problems.Add("full-reveal image failed read-back verification");
+            Fail("compose", "full-reveal image failed read-back verification");
             return;
         }
 
         variant.Images.Add(record);
-        variant.Status = ItemStatus.Exported;
+        variant.Status = blocking.Count > 0 ? ItemStatus.Partial : ItemStatus.Exported;
+
+        if (blocking.Count > 0)
+        {
+            variant.Problems.Add("full-reveal is partial: " + string.Join(" | ", blocking.Take(4).Select(Describe)));
+        }
     }
 
     private ImageRecord? WriteImage(
@@ -525,6 +599,8 @@ public sealed class AtlasExportPipeline
             alias.Images.AddRange(owner.Images);
             alias.RevealStatus = owner.RevealStatus;
             alias.OverlayTiles = owner.OverlayTiles;
+            alias.RevealCompleteness = owner.RevealCompleteness;
+            alias.RevealSkippedOverlays.AddRange(owner.RevealSkippedOverlays);
 
             if (owner.Status is ItemStatus.Failed or ItemStatus.Partial)
             {

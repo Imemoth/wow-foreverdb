@@ -23,6 +23,14 @@ public static class MapEnumerator
         "Undercity", "Silvermoon City", "The Exodar", "Shattrath City", "Dalaran"
     };
 
+    // Battleground MapIDs. Not guessed: the exporter verified on a real 1.60.1.70450 client that
+    // UiMapAssignment ties the maps named Alterac Valley, Warsong Gulch and Arathi Basin to exactly
+    // these MapIDs. Used only when the Map table could not classify them.
+    public static readonly IReadOnlyDictionary<int, string> CompatBattlegroundMapIds =
+        new Dictionary<int, string> { [30] = "Alterac Valley", [489] = "Warsong Gulch", [529] = "Arathi Basin" };
+
+    public const int FlagShowOverlays = 0x2;
+
     public static string Slugify(string name, int uiMapId)
     {
         var builder = new StringBuilder();
@@ -75,6 +83,7 @@ public static class MapEnumerator
             .GroupBy(assignment => assignment.UiMapId)
             .ToDictionary(group => group.Key, group => group.OrderBy(a => a.OrderIndex).First());
 
+        var uiMapTypes = database.UiMaps.ToDictionary(map => map.Id, map => map.Type);
         var artPlans = new Dictionary<(int Art, int Phase), ArtPlan>();
         var knownMapIds = database.UiMaps.Select(map => map.Id).ToHashSet();
 
@@ -92,17 +101,20 @@ public static class MapEnumerator
                 Flags = row.Flags
             };
 
-            if (assignmentByMap.TryGetValue(row.Id, out var assignment) &&
-                database.WorldMaps.TryGetValue(assignment.MapId, out var world))
+            WorldMapRow? world = null;
+
+            if (assignmentByMap.TryGetValue(row.Id, out var assignment))
             {
-                map.WorldMapId = world.Id;
-                map.WorldMapDirectory = world.Directory;
-                Classify(map, world);
+                map.InternalMapId = assignment.MapId;
+
+                if (database.WorldMaps.TryGetValue(assignment.MapId, out world))
+                {
+                    map.WorldMapId = world.Id;
+                    map.WorldMapDirectory = world.Directory;
+                }
             }
-            else
-            {
-                Classify(map, null);
-            }
+
+            Classify(map, world, database, uiMapTypes);
 
             if (linksByMap.TryGetValue(row.Id, out var links))
             {
@@ -150,14 +162,16 @@ public static class MapEnumerator
         }
 
         BuildHierarchy(plan.Maps, plan.Hierarchy);
+        plan.Instances = InstanceCatalogBuilder.Build(database, plan);
         return plan;
     }
 
-    private static void Classify(AtlasMap map, WorldMapRow? world)
+    private static void Classify(
+        AtlasMap map, WorldMapRow? world, MapDatabase database, IReadOnlyDictionary<int, int> uiMapTypes)
     {
-        var instanceType = world is null
-            ? 0
-            : world.InstanceType != 0 ? world.InstanceType : world.MapType;
+        // Documented enum (WoWDBDefs): 0 none, 1 party, 2 raid, 3 pvp, 4 arena, >=5 none.
+        // MapType has no documented meaning, so it is never used to classify.
+        var instanceType = world?.InstanceType ?? 0;
 
         string? instanceKind = instanceType switch
         {
@@ -165,15 +179,38 @@ public static class MapEnumerator
             2 => "raid",
             3 => "battleground",
             4 => "arena",
-            5 => "scenario",
             _ => null
         };
 
-        if (map.Type == 4 || instanceKind is not null)
+        void Set(string category, string source, string confidence, string evidence)
         {
-            map.Category = Categories.Instance;
-            map.InstanceKind = instanceKind ?? "dungeon";
-            map.CategorySource = instanceKind is not null ? "map-instance-type" : "uimap-type";
+            map.Category = category;
+            map.CategorySource = source;
+            map.ClassificationConfidence = confidence;
+            map.ClassificationEvidence = evidence;
+        }
+
+        if (instanceKind is not null)
+        {
+            map.InstanceKind = instanceKind;
+            Set(Categories.Instance, "map-instance-type", "confirmed",
+                $"Map {world!.Id} InstanceType={world.InstanceType}, MapType={world.MapType}");
+            return;
+        }
+
+        if (world is null && map.InternalMapId is { } internalId &&
+            CompatBattlegroundMapIds.TryGetValue(internalId, out var bgName))
+        {
+            map.InstanceKind = "battleground";
+            Set(Categories.Instance, "compat-mapid", "fallback",
+                $"UiMapAssignment MapID {internalId} is the {bgName} battleground; Map table unavailable");
+            return;
+        }
+
+        if (map.Type == 4)
+        {
+            map.InstanceKind = "dungeon";
+            Set(Categories.Instance, "uimap-type", "derived", "UiMap.Type=4 (Dungeon)");
             return;
         }
 
@@ -181,28 +218,46 @@ public static class MapEnumerator
         {
             case 0:
             case 1:
-                map.Category = Categories.World;
-                map.CategorySource = "uimap-type";
+                Set(Categories.World, "uimap-type", "confirmed", $"UiMap.Type={map.Type}");
                 break;
             case 2:
-                map.Category = Categories.Continent;
-                map.CategorySource = "uimap-type";
-                break;
-            case 3 when CityNames.Contains(map.Name):
-                map.Category = Categories.City;
-                map.CategorySource = "name-list";
+                Set(Categories.Continent, "uimap-type", "confirmed", "UiMap.Type=2 (Continent)");
                 break;
             case 3:
-                map.Category = Categories.Zone;
-                map.CategorySource = "uimap-type";
+            {
+                // Settlements are the only zone-typed maps whose client flags omit ShowOverlays
+                // (no exploration overlays); verified against the six capitals of a real client export.
+                var parentIsContinent = uiMapTypes.TryGetValue(map.ParentUiMapId, out var parentType) && parentType == 2;
+                var noOverlays = (map.Flags & FlagShowOverlays) == 0;
+                var named = CityNames.Contains(map.Name);
+
+                if (noOverlays && parentIsContinent && named)
+                {
+                    Set(Categories.City, "uimap-flags+name-list", "confirmed",
+                        "zone-type map under a continent, UiMap.Flags without ShowOverlays, name in capital list");
+                }
+                else if (noOverlays && parentIsContinent)
+                {
+                    Set(Categories.City, "uimap-flags", "derived",
+                        "zone-type map under a continent with UiMap.Flags lacking ShowOverlays (no exploration overlays)");
+                }
+                else if (named)
+                {
+                    Set(Categories.City, "name-list", "fallback", "name matches the capital-city list only");
+                }
+                else
+                {
+                    Set(Categories.Zone, "uimap-type", "confirmed", "UiMap.Type=3 (Zone)");
+                }
+
                 break;
+            }
             case 5:
-                map.Category = Categories.Special;
-                map.CategorySource = "uimap-type";
+                Set(Categories.Special, "uimap-type", "confirmed", "UiMap.Type=5 (Micro)");
                 break;
             default:
-                map.Category = Categories.Other;
-                map.CategorySource = "uimap-type";
+                Set(Categories.Other, "uimap-type", "confirmed",
+                    $"UiMap.Type={map.Type} ({map.TypeName}); no further client metadata classifies it");
                 break;
         }
     }
@@ -297,30 +352,133 @@ public static class MapEnumerator
         {
             foreach (var overlay in overlays)
             {
-                var overlayPlan = new OverlayPlan
-                {
-                    Id = overlay.Id,
-                    Width = overlay.Width,
-                    Height = overlay.Height,
-                    OffsetX = overlay.OffsetX,
-                    OffsetY = overlay.OffsetY,
-                    PlayerConditionId = overlay.PlayerConditionId
-                };
-
-                var rows = overlayTiles.GetValueOrDefault(overlay.Id) ?? new List<OverlayTileRow>();
-                var lowest = rows.Count == 0 ? 0 : rows.Min(tile => tile.LayerIndex);
-
-                foreach (var tile in rows.Where(tile => tile.LayerIndex == lowest)
-                             .OrderBy(tile => tile.Row).ThenBy(tile => tile.Column))
-                {
-                    overlayPlan.Tiles.Add(new TileCell(tile.Row, tile.Column, tile.FileDataId));
-                }
-
-                art.Overlays.Add(overlayPlan);
+                art.Overlays.Add(AnalyseOverlay(overlay, overlayTiles.GetValueOrDefault(overlay.Id)));
             }
         }
 
         return art;
+    }
+
+    /// <summary>
+    /// Judges one overlay from its own records. Overlays that carry no artwork are recorded as such and
+    /// are not an error; only overlays whose declared artwork cannot be assembled block a full reveal.
+    /// </summary>
+    public static OverlayPlan AnalyseOverlay(OverlayRow overlay, List<OverlayTileRow>? tiles)
+    {
+        var plan = new OverlayPlan
+        {
+            Id = overlay.Id,
+            Width = overlay.Width,
+            Height = overlay.Height,
+            OffsetX = overlay.OffsetX,
+            OffsetY = overlay.OffsetY,
+            PlayerConditionId = overlay.PlayerConditionId
+        };
+
+        var sized = overlay.Width > 0 && overlay.Height > 0;
+
+        if (overlay.Width > 4096 || overlay.Height > 4096 ||
+            Math.Abs((long)overlay.OffsetX) > 4096 || Math.Abs((long)overlay.OffsetY) > 4096)
+        {
+            plan.Kind = OverlayKind.UnsupportedGeometry;
+            plan.KindDetail = $"{overlay.Width}x{overlay.Height} at ({overlay.OffsetX},{overlay.OffsetY}) exceeds the supported 4096 px";
+            plan.TileRecordCount = tiles?.Count ?? 0;
+            return plan;
+        }
+
+        var columns = sized ? (overlay.Width + 255) / 256 : 0;
+        var rows = sized ? (overlay.Height + 255) / 256 : 0;
+        plan.ExpectedTiles = columns * rows;
+        tiles ??= new List<OverlayTileRow>();
+        plan.TileRecordCount = tiles.Count;
+
+        if (tiles.Count == 0)
+        {
+            plan.Kind = sized ? OverlayKind.TilelessDeclared : OverlayKind.NoArtwork;
+            plan.KindDetail = sized
+                ? $"declares a {overlay.Width}x{overlay.Height} texture ({columns}x{rows} grid) but has no tile records"
+                : "zero-size overlay with no tile records (area/hit-rectangle row, no artwork)";
+            return plan;
+        }
+
+        if (!sized)
+        {
+            plan.Kind = OverlayKind.GridInvalid;
+            plan.KindDetail = $"{tiles.Count} tile record(s) for a {overlay.Width}x{overlay.Height} overlay";
+            return plan;
+        }
+
+        // Prefer the lowest layer that forms the complete grid; otherwise report the lowest layer.
+        var layers = tiles.GroupBy(tile => tile.LayerIndex).OrderBy(group => group.Key).ToList();
+        Dictionary<(int Row, int Col), int>? chosen = null;
+        var chosenLayer = layers[0].Key;
+        var conflicts = 0;
+        var outOfRange = 0;
+
+        foreach (var layer in layers)
+        {
+            var cells = new Dictionary<(int Row, int Col), int>();
+            var layerConflicts = 0;
+            var layerOutOfRange = 0;
+
+            foreach (var tile in layer)
+            {
+                if (tile.Row < 0 || tile.Column < 0 || tile.Row >= rows || tile.Column >= columns)
+                {
+                    layerOutOfRange++;
+                }
+                else if (cells.TryGetValue((tile.Row, tile.Column), out var existing) && existing != tile.FileDataId)
+                {
+                    layerConflicts++;
+                }
+                else
+                {
+                    cells[(tile.Row, tile.Column)] = tile.FileDataId;
+                }
+            }
+
+            var complete = layerConflicts == 0 && layerOutOfRange == 0 &&
+                           cells.Count == columns * rows && cells.Values.All(id => id > 0);
+
+            if (chosen is null || complete)
+            {
+                chosen = cells;
+                chosenLayer = layer.Key;
+                conflicts = layerConflicts;
+                outOfRange = layerOutOfRange;
+            }
+
+            if (complete)
+            {
+                break;
+            }
+        }
+
+        plan.TileLayerIndex = chosenLayer;
+
+        foreach (var ((row, column), fileDataId) in chosen!.OrderBy(cell => cell.Key.Row).ThenBy(cell => cell.Key.Col))
+        {
+            plan.Tiles.Add(new TileCell(row, column, fileDataId));
+        }
+
+        var present = plan.Tiles.Count(tile => tile.FileDataId > 0);
+
+        if (conflicts > 0 || outOfRange > 0)
+        {
+            plan.Kind = OverlayKind.GridInvalid;
+            plan.KindDetail = $"{conflicts} conflicting and {outOfRange} out-of-range tile record(s) for a {columns}x{rows} grid";
+        }
+        else if (present != columns * rows)
+        {
+            plan.Kind = OverlayKind.GridIncomplete;
+            plan.KindDetail = $"{present} of {columns * rows} tiles present for a {columns}x{rows} grid";
+        }
+        else
+        {
+            plan.Kind = OverlayKind.Ok;
+        }
+
+        return plan;
     }
 
     private static void BuildHierarchy(List<AtlasMap> maps, MapHierarchy hierarchy)

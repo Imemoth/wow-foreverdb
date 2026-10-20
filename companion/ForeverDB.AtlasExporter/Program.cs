@@ -3,6 +3,7 @@ using System.Reflection;
 using ForeverDB.AtlasExporter.Cli;
 using ForeverDB.AtlasExporter.Client;
 using ForeverDB.AtlasExporter.Db2;
+using ForeverDB.AtlasExporter.Diagnostics;
 using ForeverDB.AtlasExporter.Enumeration;
 using ForeverDB.AtlasExporter.Export;
 using ForeverDB.AtlasExporter.Imaging;
@@ -240,6 +241,14 @@ internal static class Runner
 
         using var assetsDisposable = assets;
 
+        var output = Path.GetFullPath(options.IsDiagnose && !options.OutputExplicit ? "ForeverDB-Atlas-Diagnostics" : options.Output);
+        var redactions = Sanitizer.DefaultRedactions(new[]
+        {
+            client.CascRoot, install?.BranchDirectory, output, cacheRoot, options.WowRoot,
+            options.Db2Dir, options.CsvDir, options.DbdDir, options.LooseDir
+        });
+        var sanitizer = new Sanitizer(redactions);
+
         // ---- 3. metadata -------------------------------------------------------
         var allowNetwork = !options.NoNetwork;
         var dbdSources = new List<IDbdSource>();
@@ -251,6 +260,28 @@ internal static class Runner
 
         dbdSources.Add(new CachedHttpDbdSource(Path.Combine(cacheRoot, "dbd"), allowNetwork));
         var dbd = new ChainedDbdSource(dbdSources.ToArray());
+
+        using var probe = options.LooseDir is null
+            ? CascProbe.TryOpen(client.CascRoot, client.Product, install?.BranchDirectory)
+            : null;
+
+        if (options.DiagnoseTables)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Diagnosing map tables...");
+            var tableDoc = await TableDiagnostics.RunAsync(
+                new TableDiagnosticsInput(assets, probe, dbd, buildVersion, client.Version,
+                    Path.Combine(cacheRoot, "wago-csv"), allowNetwork),
+                sanitizer, cancellation.Token);
+            tableDoc.WriteTo(output, "diagnose-tables");
+            Console.WriteLine(tableDoc.ToText());
+            Console.WriteLine($"Report written to {Path.Combine(output, "diagnose-tables.txt")} (+ .json)");
+
+            if (!(options.DiagnoseInstances || options.DiagnoseOverlays || options.DiagnoseMap is not null || options.DiagnoseMapId is not null))
+            {
+                return 0;
+            }
+        }
         var sources = new List<IMapTableSource>();
         var mode = options.MetadataSource;
 
@@ -301,16 +332,14 @@ internal static class Runner
             client.Product, client.Version, client.BuildKey, client.Region, database.MetadataSource);
         var plan = MapEnumerator.Enumerate(database);
 
+        if (options.IsDiagnose)
+        {
+            return RunDiagnostics(options, database, plan, assets, probe, sanitizer, output, cancellation.Token);
+        }
+
         // ---- 4. scan report ----------------------------------------------------
         var drawable = plan.Maps.Where(map => map.Status == MapStatus.Drawable).ToList();
         PrintScan(plan, drawable, database, assets, identity);
-
-        var output = Path.GetFullPath(options.Output);
-        var redactions = Sanitizer.DefaultRedactions(new[]
-        {
-            client.CascRoot, install?.BranchDirectory, output, cacheRoot, options.WowRoot,
-            options.Db2Dir, options.CsvDir, options.DbdDir, options.LooseDir
-        });
 
         if (drawable.Count == 0)
         {
@@ -320,7 +349,7 @@ internal static class Runner
 
         if (options.ScanOnly)
         {
-            WriteScanReport(output, plan, identity, database, new Sanitizer(redactions));
+            WriteScanReport(output, plan, identity, database, sanitizer);
             Console.WriteLine($"\nScan complete. Report: {Path.Combine(output, "scan-report.json")}");
             return 0;
         }
@@ -350,9 +379,10 @@ internal static class Runner
         {
             OutputDirectory = output,
             Webp = options.Webp,
-            Resume = options.Resume,
+            Resume = options.Resume || options.SeedFrom is not null,
             Force = options.Force,
             AllowPartial = options.AllowPartial,
+            AllowPartialReveal = options.AllowPartialReveal,
             IncludeFullReveal = !options.NoReveal,
             AllLayers = options.AllLayers,
             DetailLayer = !options.NoDetail,
@@ -366,6 +396,22 @@ internal static class Runner
             ClientNotes = notes,
             StartedUtc = started.ToString("O")
         };
+
+        if (options.SeedFrom is not null)
+        {
+            var seed = ExportSeeder.Seed(Path.GetFullPath(options.SeedFrom), output, plan, identity, exportOptions);
+
+            foreach (var note in seed.Notes.Take(20))
+            {
+                Console.WriteLine("  seed: " + sanitizer.Clean(note));
+            }
+
+            if (seed.Refused)
+            {
+                Console.Error.WriteLine("Error: the earlier export cannot be reused. Nothing was exported.");
+                return 1;
+            }
+        }
 
         var pipeline = new AtlasExportPipeline(plan, database, identity, assets, exportOptions);
         var lastLine = 0;
@@ -434,6 +480,41 @@ internal static class Runner
         }
 
         return result.ExitCode;
+    }
+
+    private static int RunDiagnostics(
+        CliOptions options, MapDatabase database, AtlasPlan plan, IAssetSource assets, IAssetProbe? probe,
+        Sanitizer sanitizer, string output, CancellationToken token)
+    {
+        var written = new List<string>();
+
+        void Emit(DiagnosticsDocument document, string name)
+        {
+            document.WriteTo(output, name);
+            Console.WriteLine();
+            Console.WriteLine(document.ToText());
+            written.Add(name);
+        }
+
+        if (options.DiagnoseMap is not null || options.DiagnoseMapId is not null)
+        {
+            Emit(MapDiagnostics.Map(database, plan, assets, probe, sanitizer, options.DiagnoseMap, options.DiagnoseMapId, token),
+                options.DiagnoseMap is not null ? $"diagnose-map-{options.DiagnoseMap}" : $"diagnose-mapid-{options.DiagnoseMapId}");
+        }
+
+        if (options.DiagnoseInstances)
+        {
+            Emit(MapDiagnostics.Instances(database, plan, sanitizer), "diagnose-instances");
+        }
+
+        if (options.DiagnoseOverlays)
+        {
+            Emit(MapDiagnostics.Overlays(database, plan, assets, probe, sanitizer, options.DiagnoseMap, token),
+                options.DiagnoseMap is not null ? $"diagnose-overlays-{options.DiagnoseMap}" : "diagnose-overlays");
+        }
+
+        Console.WriteLine($"Reports written to {output}: {string.Join(", ", written.Select(name => name + ".txt/.json"))}");
+        return 0;
     }
 
     private static int SelfCheck()
@@ -561,7 +642,22 @@ internal static class Runner
 
         foreach (var (name, reason) in database.MissingOptionalTables)
         {
-            Console.WriteLine($"  note: optional table {name} unavailable ({reason}); related labels degrade.");
+            Console.WriteLine($"  WARNING: table {name} unavailable ({reason}).");
+        }
+
+        foreach (var warning in database.TableWarnings.Take(8))
+        {
+            Console.WriteLine($"  WARNING: {warning}");
+        }
+
+        var instances = plan.Instances;
+        Console.WriteLine(
+            $"  Instance discovery: {instances.Coverage}; {instances.Records.Count} instance record(s), " +
+            $"{instances.Records.Count(r => r.Drawable)} with a drawable interior map");
+
+        if (database.MissingOptionalTables.ContainsKey("Map"))
+        {
+            Console.WriteLine("  -> Map table missing: run  --diagnose-tables  and  --diagnose-instances  for the exact reason.");
         }
 
         var sample = drawable.SelectMany(map => map.Arts).Where(art => art.IsDrawable)

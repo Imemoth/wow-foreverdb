@@ -15,6 +15,12 @@ if (args.Length == 2 && args[0] == "--check-dbd-dir")
     return DbdDirectoryCheck.Run(args[1]);
 }
 
+// `--check-real-export <zip>`: seeder smoke against a real delivered export (developer tool).
+if (args.Length == 2 && args[0] == "--check-real-export")
+{
+    return RealExportCheck.Run(args[1]);
+}
+
 TestRegistry.RegisterAll();
 var filter = args.FirstOrDefault(a => !a.StartsWith('-'));
 return await Harness.RunAsync(filter);

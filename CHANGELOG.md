@@ -9,9 +9,19 @@ version contract and release checklist are documented in
 - Addon: **0.5.0-alpha**
 - Export schema: **9**
 - Companion: **0.9.0-alpha**
-- Atlas Exporter (standalone Windows tool, separate from the Companion): **0.1.0**
+- Atlas Exporter (standalone Windows tool, separate from the Companion): **0.2.0**
 
 # Atlas Exporter
+
+## 0.2.0 — 2026-10-20 (first real-client findings; fixes await a real retest)
+
+Based on the first real export (1.60.1.70450, 60 UiMaps). See [docs/atlas-exporter/p2d2-real-client-findings.md](docs/atlas-exporter/p2d2-real-client-findings.md).
+
+- **Full reveal:** the four failures (1412, 1434, 2521, 2548) were an exporter validation defect: zero-size / tile-less `WorldMapOverlay` rows aborted the whole reveal. Overlay rows are now analysed individually; rows without artwork are skipped and recorded, incomplete grids still block (opt-in `--allow-partial-reveal`), failures name their stage and FileDataID.
+- **Instances:** per-table metadata fallback (a table missing in the client is tried in the same-build CSV source), `atlas/instances.json`, instance records independent of artwork, floors from `UiMapGroupMember` only, battlegrounds classified from verified MapIDs (labelled fallback) and from the Map table when readable. Cities now use client flags plus the name list.
+- **Diagnostics:** `--diagnose-tables`, `--diagnose-map`, `--diagnose-mapid`, `--diagnose-instances`, `--diagnose-overlays` (text + JSON, no local paths); CascLib error codes explain unreadable files; DB2 encrypted-section warnings and tolerant empty-table headers.
+- **Resume:** `--seed-from <zip|dir>` adopts verified images of an earlier export of the same build.
+- Interchange schema extended additively; schemaVersion unchanged.
 
 ## 0.1.0 — 2026-10-20 (initial, unverified against a real client)
 

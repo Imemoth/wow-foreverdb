@@ -97,6 +97,20 @@ internal static class Assert
         }
     }
 
+    public static TException ThrowsReturn<TException>(Action action) where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException ex)
+        {
+            return ex;
+        }
+
+        throw new AssertException($"expected {typeof(TException).Name}");
+    }
+
     public static async Task ThrowsAsync<TException>(Func<Task> action) where TException : Exception
     {
         try

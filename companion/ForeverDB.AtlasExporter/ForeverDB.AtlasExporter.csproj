@@ -8,7 +8,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>ForeverDB.AtlasExporter</AssemblyName>
     <RootNamespace>ForeverDB.AtlasExporter.Cli</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.1</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>

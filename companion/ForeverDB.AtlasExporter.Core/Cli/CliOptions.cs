@@ -16,6 +16,15 @@ public sealed class CliOptions
     public bool Version { get; set; }
     public bool SelfCheck { get; set; }
     public string? Verify { get; set; }
+    public bool DiagnoseTables { get; set; }
+    public bool DiagnoseInstances { get; set; }
+    public bool DiagnoseOverlays { get; set; }
+    public int? DiagnoseMap { get; set; }
+    public int? DiagnoseMapId { get; set; }
+    public string? SeedFrom { get; set; }
+    public bool AllowPartialReveal { get; set; }
+    public bool OutputExplicit { get; set; }
+    public bool IsDiagnose => DiagnoseTables || DiagnoseInstances || DiagnoseOverlays || DiagnoseMap is not null || DiagnoseMapId is not null;
     public bool AllowPartial { get; set; }
     public bool NoReveal { get; set; }
     public bool AllLayers { get; set; }
@@ -96,7 +105,7 @@ public sealed class CliOptions
             switch (raw.ToLowerInvariant())
             {
                 case "--wow-root": options.WowRoot = Get(ref i, raw); break;
-                case "--output": case "-o": options.Output = Get(ref i, raw) ?? options.Output; break;
+                case "--output": case "-o": options.Output = Get(ref i, raw) ?? options.Output; options.OutputExplicit = true; break;
                 case "--product": options.Product = Get(ref i, raw); break;
                 case "--scan-only": options.ScanOnly = true; break;
                 case "--export": options.Export = true; break;
@@ -107,6 +116,33 @@ public sealed class CliOptions
                 case "--version": options.Version = true; break;
                 case "--selfcheck": options.SelfCheck = true; break;
                 case "--verify": options.Verify = Get(ref i, raw); break;
+                case "--diagnose-tables": options.DiagnoseTables = true; break;
+                case "--diagnose-instances": options.DiagnoseInstances = true; break;
+                case "--diagnose-overlays": options.DiagnoseOverlays = true; break;
+                case "--allow-partial-reveal": options.AllowPartialReveal = true; break;
+                case "--seed-from": options.SeedFrom = Get(ref i, raw); break;
+                case "--diagnose-map":
+                    if (int.TryParse(Get(ref i, raw), out var diagnoseMap) && diagnoseMap > 0)
+                    {
+                        options.DiagnoseMap = diagnoseMap;
+                    }
+                    else
+                    {
+                        options.Errors.Add("--diagnose-map needs a uiMapID (a positive number).");
+                    }
+
+                    break;
+                case "--diagnose-mapid":
+                    if (int.TryParse(Get(ref i, raw), out var diagnoseMapId) && diagnoseMapId >= 0)
+                    {
+                        options.DiagnoseMapId = diagnoseMapId;
+                    }
+                    else
+                    {
+                        options.Errors.Add("--diagnose-mapid needs an internal MapID (a number).");
+                    }
+
+                    break;
                 case "--allow-partial": options.AllowPartial = true; break;
                 case "--no-reveal": options.NoReveal = true; break;
                 case "--all-layers": options.AllLayers = true; break;
@@ -173,6 +209,11 @@ public sealed class CliOptions
             }
         }
 
+        if (options.IsDiagnose && (options.Export || options.ScanOnly))
+        {
+            options.Errors.Add("--diagnose-* commands cannot be combined with --export or --scan-only.");
+        }
+
         if (options.ScanOnly && options.Export)
         {
             options.Errors.Add("--scan-only and --export cannot be combined.");
@@ -209,6 +250,10 @@ QUALITY
   --no-detail           Overview only.
   --no-reveal           Skip fully-revealed (exploration overlay) variants.
   --allow-partial       Keep maps with missing tiles (transparent holes, labelled partial).
+  --allow-partial-reveal  Compose a full-reveal from the complete overlays only when other overlays declare
+                        artwork that cannot be assembled (labelled partial-overlays; never the default).
+  --seed-from <dir|zip> Adopt the verified images of an earlier export (same build) so only missing,
+                        failed or changed maps are redone. Implies --resume.
 
 SOURCES
   --metadata-source <auto|client|db2-dir|csv-dir|wago>
@@ -219,6 +264,14 @@ SOURCES
   --no-network          Never contact the internet (no DB definitions download, no wago.tools).
   --no-cdn              Do not fall back to Blizzard's CDN for tiles missing from the local install.
   --loose-dir <dir>     Read textures from a folder of <FileDataID>.blp files instead of CASC.
+
+DIAGNOSTICS (read-only, write a readable .txt and a structured .json; no local paths inside)
+  --diagnose-tables     For every map table: where it is, why it cannot be opened, header/layout/encryption facts.
+  --diagnose-map <uiMapID>   Everything known about one map: ids, category and why, art, tiles, overlays, floors.
+  --diagnose-mapid <MapID>   The same for an internal MapID (never confused with a uiMapID).
+  --diagnose-instances  Instance records, their sources, interior maps and floors - and why there are none.
+  --diagnose-overlays   Full-reveal overlay state for every map (add --diagnose-map to limit to one).
+                        Results go to --output (default .\ForeverDB-Atlas-Diagnostics).
 
 OTHER
   --only 1420,1425      Export only these uiMapIDs.  --max-maps <n>  Limit (testing).

@@ -4,9 +4,9 @@ using ForeverDB.AtlasExporter.Model;
 
 namespace ForeverDB.AtlasExporter.Metadata;
 
-public sealed record TableReadResult(TableData? Data, string? Error)
+public sealed record TableReadResult(TableData? Data, string? Error, IReadOnlyList<string>? Warnings = null)
 {
-    public static TableReadResult Ok(TableData data) => new(data, null);
+    public static TableReadResult Ok(TableData data, IReadOnlyList<string>? warnings = null) => new(data, null, warnings);
     public static TableReadResult Fail(string error) => new(null, error);
 }
 
@@ -110,7 +110,20 @@ public sealed class Db2TableSource : IMapTableSource
                     " in the available .dbd file.");
             }
 
-            return TableReadResult.Ok(file.Read(table, layout));
+            var data = file.Read(table, layout);
+            var warnings = file.Warnings.ToList();
+
+            if (file.IsEmptyTable)
+            {
+                warnings.Add($"{table}: the client file is a valid but empty table (0 records, 0 sections); no rows exist in this build.");
+            }
+
+            if (data.Rows.Count == 0 && file.RecordCount > 0)
+            {
+                warnings.Add($"{table}: header declares {file.RecordCount} record(s) but none could be read.");
+            }
+
+            return TableReadResult.Ok(data, warnings);
         }
         catch (Exception ex) when (ex is Db2FormatException or InvalidDataException or OverflowException)
         {

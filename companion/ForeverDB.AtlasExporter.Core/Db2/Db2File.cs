@@ -37,11 +37,22 @@ public sealed class Db2File
     public uint LayoutHash { get; private set; }
     public string LayoutHashHex => LayoutHash.ToString("X8");
     public int RecordCount { get; private set; }
+
+    /// <summary>True for a well-formed file that declares no records and no sections.</summary>
+    public bool IsEmptyTable => RecordCount == 0 && _sections.Count == 0;
     public int RecordSize { get; private set; }
     public ushort Flags { get; private set; }
     public int IdIndex { get; private set; }
     public int FieldCount { get; private set; }
     public List<string> Warnings { get; } = new();
+
+    public sealed record SectionInfo(ulong TactKeyHash, int RecordCount, int StringTableSize, int IdListSize,
+        int CopyTableCount, int RelationshipDataSize, bool Encrypted);
+
+    /// <summary>Per-section facts. A non-zero TACT key hash means rows may be unreadable without that key.</summary>
+    public IReadOnlyList<SectionInfo> Sections => _sections
+        .Select(s => new SectionInfo(s.TactKeyHash, s.RecordCount, s.StringTableSize, s.IdListSize,
+            s.CopyTableCount, s.RelationshipDataSize, s.TactKeyHash != 0)).ToArray();
 
     private sealed record Section(
         ulong TactKeyHash, int FileOffset, int RecordCount, int StringTableSize,
@@ -93,7 +104,9 @@ public sealed class Db2File
         var alternative = preferred == 4 ? 4 + 4 + 128 : 4;
         var position = HeaderIsConsistent(preferred) ? preferred
             : HeaderIsConsistent(alternative) ? alternative
-            : throw new Db2FormatException("DB2 header is not consistent with any known WDC layout.");
+            : throw new Db2FormatException(
+                "DB2 header is not consistent with any known WDC layout (" +
+                string.Join("; ", new[] { preferred, alternative }.Select(p => $"prefix {p}: {CheckHeader(p).Reason}")) + ").");
 
         RecordCount = checked((int)U32(position)); position += 4;
         FieldCount = checked((int)U32(position)); position += 4;
@@ -202,33 +215,76 @@ public sealed class Db2File
         }
     }
 
-    private bool HeaderIsConsistent(int start)
+    private bool HeaderIsConsistent(int start) => CheckHeader(start).Ok;
+
+    public sealed record HeaderCandidate(
+        int Prefix, bool Ok, string Reason, uint RecordCount, uint FieldCount, uint RecordSize,
+        uint StringTableSize, uint TableHash, uint LayoutHash, uint StorageInfoSize, uint SectionCount);
+
+    /// <summary>Header facts for both known prefix layouts - used by diagnostics when parsing fails.</summary>
+    public static IReadOnlyList<HeaderCandidate> Describe(byte[] data)
     {
-        try
+        if (data.Length < 8)
         {
-            if ((long)start + 4 * 6 + 12 + 4 + 28 > _data.Length)
-            {
-                return false;
-            }
-
-            var fieldCount = U32(start + 4);
-            var recordSize = U32(start + 8);
-            var tail = start + 24 + 12 + 4; // after id_index: total, bitpacked, lookup
-            var storageInfoSize = U32(tail + 12);
-            var sectionCount = U32(tail + 24);
-            var sectionsEnd = (long)tail + 28 + sectionCount * SectionHeaderSize;
-
-            return fieldCount is > 0 and < 4096 &&
-                   recordSize is > 0 and < 1 << 20 &&
-                   sectionCount is > 0 and <= 64 &&
-                   storageInfoSize % FieldStorageInfoSize == 0 &&
-                   storageInfoSize / FieldStorageInfoSize <= fieldCount + 8 &&
-                   sectionsEnd + fieldCount * 4L + storageInfoSize <= _data.Length;
+            return Array.Empty<HeaderCandidate>();
         }
-        catch (Db2FormatException)
+
+        var probe = new Db2File(data);
+        return new[] { 4, 4 + 4 + 128 }.Select(probe.CheckHeader).ToArray();
+    }
+
+    private HeaderCandidate CheckHeader(int start)
+    {
+        const int fixedPart = 24 + 12 + 4 + 28;
+
+        if ((long)start + fixedPart > _data.Length)
         {
-            return false;
+            return new HeaderCandidate(start, false, "file shorter than the header", 0, 0, 0, 0, 0, 0, 0, 0);
         }
+
+        var recordCount = U32(start);
+        var fieldCount = U32(start + 4);
+        var recordSize = U32(start + 8);
+        var stringTableSize = U32(start + 12);
+        var tableHash = U32(start + 16);
+        var layoutHash = U32(start + 20);
+        var tail = start + 24 + 12 + 4; // after id_index: total, bitpacked, lookup
+        var storageInfoSize = U32(tail + 12);
+        var sectionCount = U32(tail + 24);
+        var sectionsEnd = (long)tail + 28 + sectionCount * SectionHeaderSize;
+
+        string? problem = null;
+
+        // An empty table legitimately has no records, and may carry no sections or record size.
+        var empty = recordCount == 0;
+
+        if (fieldCount is 0 or >= 4096)
+        {
+            problem = $"implausible field count {fieldCount}";
+        }
+        else if (!empty && recordSize is 0 or >= 1 << 20)
+        {
+            problem = $"implausible record size {recordSize}";
+        }
+        else if (sectionCount > 64 || (!empty && sectionCount == 0))
+        {
+            problem = $"implausible section count {sectionCount}";
+        }
+        else if (storageInfoSize % FieldStorageInfoSize != 0)
+        {
+            problem = $"storage info size {storageInfoSize} is not a multiple of {FieldStorageInfoSize}";
+        }
+        else if (storageInfoSize / FieldStorageInfoSize > fieldCount + 8)
+        {
+            problem = $"{storageInfoSize / FieldStorageInfoSize} storage entries for {fieldCount} fields";
+        }
+        else if (sectionsEnd + fieldCount * 4L + storageInfoSize > _data.Length)
+        {
+            problem = "header structures extend past the end of the file";
+        }
+
+        return new HeaderCandidate(start, problem is null, problem ?? "consistent", recordCount, fieldCount,
+            recordSize, stringTableSize, tableHash, layoutHash, storageInfoSize, sectionCount);
     }
 
     private void RequireRange(int position, int length)
@@ -287,6 +343,14 @@ public sealed class Db2File
     /// <summary>Reads every row using the given definition.</summary>
     public TableData Read(string tableName, DbdVersionBlock layout)
     {
+        if (IsEmptyTable)
+        {
+            // A valid header with no records and no sections (the client ships some tables as empty
+            // stubs) has no column storage to compare with the definition; it is an empty table,
+            // not a layout mismatch.
+            return new TableData(tableName, layout.Fields.Select(field => field.Name).ToArray());
+        }
+
         var inline = layout.Fields.Where(field => !field.NonInline).ToList();
 
         if (inline.Count != _storage.Count)

@@ -27,6 +27,10 @@ internal sealed class Wdc5Writer
     public ulong TactKeyHash { get; init; }
     public string Magic { get; init; } = "WDC5";
     public bool SchemaPrefix { get; init; } = true;
+    public bool OmitSection { get; init; }
+
+    /// <summary>Declare the columns but write no storage info (an empty stub as shipped by the real client).</summary>
+    public bool OmitStorageInfo { get; init; }
 
     public byte[] Build()
     {
@@ -104,8 +108,13 @@ internal sealed class Wdc5Writer
             }
         }
 
+        if (OmitStorageInfo)
+        {
+            infos.SetLength(0);
+        }
+
         var headerSize = 4 + (SchemaPrefix ? 4 + 128 : 0) + 4 * 6 + 4 * 3 + 2 + 2 + 4 * 7 + 40; // up to and including one section header
-        var fixedPart = headerSize + Columns.Count * 4 + (int)infos.Length + (int)palletBlock.Length + (int)commonBlock.Length;
+        var fixedPart = headerSize - (OmitSection ? 40 : 0) + Columns.Count * 4 + (int)infos.Length + (int)palletBlock.Length + (int)commonBlock.Length;
 
         using var file = new MemoryStream();
         using var w = new BinaryWriter(file, Encoding.ASCII);
@@ -132,17 +141,20 @@ internal sealed class Wdc5Writer
         w.Write((uint)infos.Length);
         w.Write((uint)commonBlock.Length);
         w.Write((uint)palletBlock.Length);
-        w.Write(1u);                                             // sections
+        w.Write(OmitSection ? 0u : 1u);                          // sections
 
-        w.Write(TactKeyHash);
-        w.Write((uint)fixedPart);                                // file offset
-        w.Write((uint)Records.Count);
-        w.Write((uint)StringTable.Length);
-        w.Write(0u);                                             // offset records end
-        w.Write((uint)idList.Length);
-        w.Write((uint)relationship.Length);
-        w.Write(0u);                                             // offset map id count
-        w.Write((uint)CopyTable.Count);
+        if (!OmitSection)
+        {
+            w.Write(TactKeyHash);
+            w.Write((uint)fixedPart);                            // file offset
+            w.Write((uint)Records.Count);
+            w.Write((uint)StringTable.Length);
+            w.Write(0u);                                         // offset records end
+            w.Write((uint)idList.Length);
+            w.Write((uint)relationship.Length);
+            w.Write(0u);                                         // offset map id count
+            w.Write((uint)CopyTable.Count);
+        }
 
         for (var i = 0; i < Columns.Count; i++)
         {
