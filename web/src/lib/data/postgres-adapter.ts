@@ -15,6 +15,8 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type ZoneMapPoints,
+  type LootKind,
   type ZoneSummary,
 } from "./types";
 
@@ -132,6 +134,19 @@ export class PostgresAdapter implements PublicDataAdapter {
         associatedSourceCount: num(r.associated_source_count),
       })),
       total: rows.length ? Number(rows[0]!.total_count) : 0,
+    };
+  }
+
+  async zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints> {
+    const rows = await this.q("select * from web_api.zone_map_points($1, $2, $3)", [mapId, lootKind, limit]);
+    return {
+      mapId,
+      points: rows.map((r) => ({
+        sourceType: r.source_type as SourceType, sourceId: Number(r.source_id), sourceLevel: Number(r.source_level), name: String(r.name),
+        lootKind: r.loot_kind as LootKind, subzone: String(r.subzone_name ?? ""), x: Number(r.x), y: Number(r.y), observations: Number(r.observations),
+      })),
+      totalCells: rows.length ? Number(rows[0]!.total_count) : 0,
+      truncated: rows.length ? Number(rows[0]!.total_count) > rows.length : false,
     };
   }
 

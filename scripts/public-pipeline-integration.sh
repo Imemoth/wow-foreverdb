@@ -35,7 +35,8 @@ $PSQL -d $PRIV -f database/tests/fixtures/synthetic_private_seed.sql >/dev/null
 $PSQL -d $PRIV -f database/tests/public_projection_export_smoke.sql 2>&1 | grep -E "PASS|FAIL" || fail "export smoke"
 
 $PSQL -d $PUB -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
-pass "public read model applied"
+$PSQL -d $PUB -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
+pass "public read model applied (0001 + 0002)"
 
 # Test-only logins (never reused anywhere real).
 $PSQL -d postgres -c "alter role foreverdb_projection_reader login password 'it-only'" \
@@ -84,6 +85,7 @@ $PSQL -d $PUB -f database/public-read/tests/public_read_model_security.sql 2>&1 
 PUB2=fdb_it_zone
 $PSQL -d postgres -c "drop database if exists $PUB2" -c "create database $PUB2" >/dev/null
 $PSQL -d $PUB2 -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
+$PSQL -d $PUB2 -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
 out=$(cd publisher && PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${PUB2}" \
       npx tsx src/cli.ts publish --from-export ../database/tests/fixtures/zone_semantics_export.json)
 echo "$out" | grep -q '"outcome":"activated"' || fail "zone-semantics publish: $out"
@@ -92,6 +94,21 @@ echo "$zs" | grep -E "PASS|FAIL"
 echo "$zs" | grep -q FAIL && fail "zone semantics SQL reported FAIL"
 [ "$(echo "$zs" | grep -c PASS)" = 2 ] || fail "zone semantics SQL: expected 2 PASS lines"
 pass "zone-semantics regression database published and verified (PUB2=$PUB2)"
+
+# P2-Z1: zone-wide map points (0002). Own throwaway database: the test plants rows a real worker would never publish
+# (sub-threshold / sub-grid cells, an item-backed source, a disenchant bucket) to prove the function enforces the privacy floor itself.
+PUB3=fdb_it_zonemap
+$PSQL -d postgres -c "drop database if exists $PUB3" -c "create database $PUB3" >/dev/null
+$PSQL -d $PUB3 -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
+$PSQL -d $PUB3 -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
+out=$(cd publisher && PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${PUB3}" \
+      npx tsx src/cli.ts publish --from-export ../database/tests/fixtures/zone_semantics_export.json)
+echo "$out" | grep -q '"outcome":"activated"' || fail "zone-map publish: $out"
+zm=$($PSQL -d $PUB3 -f database/public-read/tests/public_read_zone_map_points.sql 2>&1) || { echo "$zm"; fail "zone map points SQL"; }
+echo "$zm" | grep -E "PASS|FAIL"
+echo "$zm" | grep -q FAIL && fail "zone map points SQL reported FAIL"
+[ "$(echo "$zm" | grep -c PASS)" = 7 ] || fail "zone map points SQL: expected 7 PASS lines"
+pass "zone-map points: privacy floor, quantization, bounds and access verified (PUB3=$PUB3)"
 echo "ALL PIPELINE CHECKS PASSED"
 echo "PUBLIC_READ_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB}"
 echo "PARITY_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB2}"
