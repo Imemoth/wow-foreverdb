@@ -15,6 +15,7 @@ public sealed class CliOptions
     public bool Help { get; set; }
     public bool Version { get; set; }
     public bool SelfCheck { get; set; }
+    public string? Verify { get; set; }
     public bool AllowPartial { get; set; }
     public bool NoReveal { get; set; }
     public bool AllLayers { get; set; }
@@ -79,6 +80,7 @@ public sealed class CliOptions
                 case "--help": case "-h": case "-?": case "/?": options.Help = true; break;
                 case "--version": options.Version = true; break;
                 case "--selfcheck": options.SelfCheck = true; break;
+                case "--verify": options.Verify = Get(ref i, raw); break;
                 case "--allow-partial": options.AllowPartial = true; break;
                 case "--no-reveal": options.NoReveal = true; break;
                 case "--all-layers": options.AllLayers = true; break;
@@ -196,6 +198,7 @@ OTHER
   --only 1420,1425      Export only these uiMapIDs.  --max-maps <n>  Limit (testing).
   --no-zip              Skip the ZIP.  --reference-1420 <file>  Compare Tirisfal Glades to a reference image.
   --selfcheck           Verify the executable and its CASC library load, then exit.
+  --verify <dir|zip>    Re-check a finished export (hashes, dimensions, manifests vs index). Needs no game.
 
 EXIT CODES
   0 complete   1 error   2 partial (some maps failed)   3 nothing exported   130 cancelled

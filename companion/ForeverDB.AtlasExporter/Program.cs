@@ -69,6 +69,24 @@ internal static class Runner
             return SelfCheck();
         }
 
+        if (options.Verify is not null)
+        {
+            var path = Path.GetFullPath(options.Verify);
+            var report = path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? ExportVerifier.VerifyZip(path)
+                : ExportVerifier.Verify(path);
+            Console.WriteLine(
+                $"Checked {report.MapsChecked} maps, {report.ManifestsChecked} manifests, {report.ImagesChecked} images.");
+
+            foreach (var problem in report.Problems.Take(50))
+            {
+                Console.WriteLine("  PROBLEM: " + problem);
+            }
+
+            Console.WriteLine(report.IsValid ? "Export is consistent." : $"{report.Problems.Count} problem(s) found.");
+            return report.IsValid ? 0 : 1;
+        }
+
         using var cancellation = new CancellationTokenSource();
         var cancelRequests = 0;
         Console.CancelKeyPress += (_, e) =>

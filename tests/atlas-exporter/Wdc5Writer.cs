@@ -25,6 +25,8 @@ internal sealed class Wdc5Writer
     public List<(uint ForeignId, uint RecordIndex)> Relationship { get; init; } = new();
     public byte[] StringTable { get; init; } = new byte[] { 0 };
     public ulong TactKeyHash { get; init; }
+    public string Magic { get; init; } = "WDC5";
+    public bool SchemaPrefix { get; init; } = true;
 
     public byte[] Build()
     {
@@ -102,14 +104,19 @@ internal sealed class Wdc5Writer
             }
         }
 
-        var headerSize = 4 + 4 + 128 + 4 * 6 + 4 * 3 + 2 + 2 + 4 * 7 + 40; // up to and including one section header
+        var headerSize = 4 + (SchemaPrefix ? 4 + 128 : 0) + 4 * 6 + 4 * 3 + 2 + 2 + 4 * 7 + 40; // up to and including one section header
         var fixedPart = headerSize + Columns.Count * 4 + (int)infos.Length + (int)palletBlock.Length + (int)commonBlock.Length;
 
         using var file = new MemoryStream();
         using var w = new BinaryWriter(file, Encoding.ASCII);
-        w.Write(Encoding.ASCII.GetBytes("WDC5"));
-        w.Write(5u);
-        w.Write(new byte[128]);
+        w.Write(Encoding.ASCII.GetBytes(Magic));
+
+        if (SchemaPrefix)
+        {
+            w.Write(5u);
+            w.Write(new byte[128]);
+        }
+
         w.Write((uint)Records.Count);
         w.Write((uint)Columns.Count);
         w.Write((uint)RecordSizeBytes);

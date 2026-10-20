@@ -400,6 +400,31 @@ internal static class PipelineTests
             Assert.Contains(summaryText, new FileInfo(result.ZipPath!).Length.ToString("N0"));
         });
 
+        Harness.Add("verify: an untouched export (folder and ZIP) is consistent; tampering is detected", async () =>
+        {
+            using var dir = new TempDir();
+            var world = World.Standard(dir.Combine("w"));
+            var result = await Run.Export(world, dir.Combine("out"));
+            var clean = ExportVerifier.Verify(result.OutputDirectory);
+            Assert.True(clean.IsValid, string.Join("; ", clean.Problems));
+            Assert.Equal(10, clean.MapsChecked);
+            Assert.True(clean.ImagesChecked >= 9);
+            var zipped = ExportVerifier.VerifyZip(result.ZipPath!);
+            Assert.True(zipped.IsValid, string.Join("; ", zipped.Problems));
+
+            var image = Path.Combine(result.OutputDirectory, "maps/947/base/overview.webp");
+            var original = File.ReadAllBytes(image);
+            File.WriteAllBytes(image, original.Take(original.Length - 20).ToArray());
+            Assert.True(ExportVerifier.Verify(result.OutputDirectory).Problems.Any(p => p.Contains("947")), "truncated image");
+            File.WriteAllBytes(image, original);
+
+            File.Delete(Path.Combine(result.OutputDirectory, "maps/1420/base/manifest.json"));
+            Assert.True(ExportVerifier.Verify(result.OutputDirectory).Problems.Any(p => p.Contains("manifest missing")));
+            File.Delete(Path.Combine(result.OutputDirectory, "maps/1420/base/overview.webp"));
+            Assert.True(ExportVerifier.Verify(result.OutputDirectory).Problems.Any(p => p.Contains("missing")));
+            Assert.False(ExportVerifier.VerifyZip(Path.Combine(dir.Path, "nonexistent.zip")).IsValid);
+        });
+
         Harness.Add("summary: every figure is the measured value and the required lines exist", async () =>
         {
             using var dir = new TempDir();

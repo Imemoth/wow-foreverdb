@@ -163,6 +163,22 @@ Name_lang
             Assert.Equal(99L, table.Rows.Single(r => r.Int("ID") == 20).Int("V"));
         });
 
+        Harness.Add("db2: WDC3/WDC4 (no schema prefix) and a WDC5 magic without prefix both parse", () =>
+        {
+            foreach (var (magic, prefix) in new[] { ("WDC3", false), ("WDC4", false), ("WDC5", true), ("WDC5", false) })
+            {
+                var bytes = new Wdc5Writer
+                {
+                    Magic = magic, SchemaPrefix = prefix, RecordSizeBytes = 4,
+                    Records = new List<byte[]> { BitConverter.GetBytes(77u) },
+                    Columns = new List<Wdc5Writer.Column> { new(Wdc5Writer.Storage.None, 32, 0) }
+                }.Build();
+                var dbd = DbdFile.Parse("T", "COLUMNS\nint ID\n\nLAYOUT DB51D55F\n$id$ID<32>\n\n");
+                var table = Db2File.Parse(bytes).Read("T", dbd.Select("DB51D55F", null)!);
+                Assert.Equal(77L, table.Rows.Single().Int("ID"), $"{magic} prefix={prefix}");
+            }
+        });
+
         Harness.Add("db2: layout is chosen by LayoutHash first, build range second", () =>
         {
             var dbd = DbdFile.Parse("TestTable", Dbd);

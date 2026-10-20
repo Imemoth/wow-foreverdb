@@ -86,12 +86,14 @@ public sealed class Db2File
                 $"Unsupported DB2 container '{Magic}'. Supported: WDC3, WDC4, WDC5.");
         }
 
-        var position = 4;
-
-        if (Magic == "WDC5")
-        {
-            position += 4 + 128; // version + schema string
-        }
+        // WDC5 inserts "uint32 version; char schema[128]" after the magic; WDC3/4 do not.
+        // The layout after it is identical, so both prefixes are tried for every version and
+        // the one that yields a structurally consistent header wins.
+        var preferred = Magic == "WDC5" ? 4 + 4 + 128 : 4;
+        var alternative = preferred == 4 ? 4 + 4 + 128 : 4;
+        var position = HeaderIsConsistent(preferred) ? preferred
+            : HeaderIsConsistent(alternative) ? alternative
+            : throw new Db2FormatException("DB2 header is not consistent with any known WDC layout.");
 
         RecordCount = checked((int)U32(position)); position += 4;
         FieldCount = checked((int)U32(position)); position += 4;
@@ -197,6 +199,35 @@ public sealed class Db2File
             {
                 _common.Add(null);
             }
+        }
+    }
+
+    private bool HeaderIsConsistent(int start)
+    {
+        try
+        {
+            if ((long)start + 4 * 6 + 12 + 4 + 28 > _data.Length)
+            {
+                return false;
+            }
+
+            var fieldCount = U32(start + 4);
+            var recordSize = U32(start + 8);
+            var tail = start + 24 + 12 + 4; // after id_index: total, bitpacked, lookup
+            var storageInfoSize = U32(tail + 12);
+            var sectionCount = U32(tail + 24);
+            var sectionsEnd = (long)tail + 28 + sectionCount * SectionHeaderSize;
+
+            return fieldCount is > 0 and < 4096 &&
+                   recordSize is > 0 and < 1 << 20 &&
+                   sectionCount is > 0 and <= 64 &&
+                   storageInfoSize % FieldStorageInfoSize == 0 &&
+                   storageInfoSize / FieldStorageInfoSize <= fieldCount + 8 &&
+                   sectionsEnd + fieldCount * 4L + storageInfoSize <= _data.Length;
+        }
+        catch (Db2FormatException)
+        {
+            return false;
         }
     }
 
