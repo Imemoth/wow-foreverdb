@@ -12,6 +12,10 @@ interface Props {
   filter: MapFilterState;
   levels: { min: number; max: number } | null;
   mode: MapMode;
+  /** Source view: slimmer layout (no "Categories" panel title). */
+  compact?: boolean;
+  /** Source name shown while the filter is restricted to one source. */
+  sourceLabel?: string;
   onFilter: (f: MapFilterState) => void;
   onMode: (m: MapMode) => void;
   onReset: () => void;
@@ -19,9 +23,9 @@ interface Props {
 
 const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.min(999, Math.floor(Number(v)))));
 
-export function MapFilters({ available, filter, levels, mode, onFilter, onMode, onReset }: Props) {
+export function MapFilters({ available, filter, levels, mode, compact = false, sourceLabel, onFilter, onMode, onReset }: Props) {
   const kinds = (Object.keys(available) as LootKind[]).sort((a, b) => (available[b] ?? 0) - (available[a] ?? 0));
-  const active = filter.kinds.size > 0 || filter.levelMin != null || filter.levelMax != null;
+  const active = filter.kinds.size > 0 || filter.levelMin != null || filter.levelMax != null || filter.source != null;
   const toggle = (k: LootKind) => {
     const next = new Set(filter.kinds);
     if (next.has(k)) next.delete(k); else next.add(k);
@@ -29,7 +33,7 @@ export function MapFilters({ available, filter, levels, mode, onFilter, onMode, 
   };
   const levelApplies = filter.kinds.size === 0 || [...filter.kinds].some((k) => LEVELED_KINDS.has(k));
   return (
-    <div className="panel space-y-4 p-4" role="group" aria-label="Map controls">
+    <div className={`panel space-y-4 ${compact ? "p-3" : "p-4"}`} role="group" aria-label="Map controls">
       <div>
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="panel-title text-base">Categories</h2>
@@ -50,6 +54,13 @@ export function MapFilters({ available, filter, levels, mode, onFilter, onMode, 
           })}
         </ul>
       </div>
+
+      {filter.source && (
+        <p className="text-sm text-parchment" data-testid="source-focus">
+          Showing only <strong>{sourceLabel ?? "the selected source"}</strong>{" "}
+          <button type="button" className="underline decoration-dotted underline-offset-2 text-mist hover:text-parchment" onClick={() => onFilter({ ...filter, source: null })}>Show all sources</button>
+        </p>
+      )}
 
       {levels && (
         <fieldset className="space-y-1" disabled={!levelApplies}>
@@ -76,7 +87,7 @@ export function MapFilters({ available, filter, levels, mode, onFilter, onMode, 
           ))}
         </div>
         <button type="button" className="btn-ghost text-sm" onClick={onReset} data-testid="fit-view">Fit / reset view</button>
-        <button type="button" className="btn-ghost text-sm" disabled={!active} onClick={() => onFilter({ kinds: new Set(), levelMin: null, levelMax: null })}>Clear filters</button>
+        <button type="button" className="btn-ghost text-sm" disabled={!active} onClick={() => onFilter({ kinds: new Set(), source: null, levelMin: null, levelMax: null })}>Clear filters</button>
       </div>
     </div>
   );

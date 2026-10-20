@@ -20,11 +20,15 @@ interface Props {
   /** Incremented by the parent to refit the view. */
   resetKey: number;
   label: string;
+  /** Tailwind height classes (default: the full zone-page size). */
+  heightClass?: string;
   onSelect: (s: Selection | null) => void;
   onImageError: () => void;
 }
 
 const MAX_EXTRA_ZOOM = 3;
+/** Minimum size of an interactive marker target (WCAG 2.2 SC 2.5.8). */
+const MIN_TARGET_PX = 24;
 /** Cluster cell edge in map-percent at the fit zoom; halves with every zoom level. */
 const BASE_CELL_PERCENT = 6;
 
@@ -33,7 +37,7 @@ const BASE_CELL_PERCENT = 6;
  * the server renders just the empty, labelled container. Markers are DOM elements styled through the CSSOM
  * (no inline style attributes in markup), which keeps the nonce-based style-src CSP intact.
  */
-export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, onSelect, onImageError }: Props) {
+export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, heightClass = "h-[58vh] min-h-[22rem] sm:h-[34rem]", onSelect, onImageError }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{ map: LMap; render: () => void; fit: () => void } | null>(null);
   const live = useRef({ points, mode, onSelect, onImageError });
@@ -113,7 +117,9 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
         const place = (x: number, y: number, el: HTMLElement, px: number, lines: string[], aria: string, onClick: () => void, attrs: Record<string, string>) => {
           const pos = percentToLatLng(size, x, y);
           if (!pos) return;
-          const icon = L.divIcon({ html: el, className: "azd-icon", iconSize: [px, px], iconAnchor: [px / 2, px / 2] });
+          // WCAG 2.2 target size (2.5.8) and touch use: the interactive element is at least 24x24 CSS px even when the drawn dot is smaller.
+          const hit = Math.max(MIN_TARGET_PX, px);
+          const icon = L.divIcon({ html: el, className: "azd-icon", iconSize: [hit, hit], iconAnchor: [hit / 2, hit / 2] });
           // No `title` option: the native browser tooltip would duplicate the Leaflet one.
           const mk = L.marker(pos, { icon, keyboard: true, riseOnHover: true }).addTo(layer);
           const tip = document.createElement("div");
@@ -123,10 +129,14 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
             row.textContent = t;
             tip.appendChild(row);
           });
-          mk.bindTooltip(tip, { direction: "top", offset: [0, -px / 2], opacity: 1, className: "azd-tooltip" });
+          mk.bindTooltip(tip, { direction: "top", offset: [0, -hit / 2], opacity: 1, className: "azd-tooltip" });
           mk.on("click", onClick);
           const e = mk.getElement();
           if (e) {
+            e.style.display = "flex";
+            e.style.alignItems = "center";
+            e.style.justifyContent = "center";
+            e.style.cursor = "pointer";
             e.setAttribute("role", "button");
             e.setAttribute("aria-label", aria);
             for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
@@ -201,7 +211,7 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
       aria-label={label}
       data-testid="zone-map"
       data-ready={ready ? "true" : "false"}
-      className="azd-map h-[58vh] min-h-[22rem] w-full overflow-hidden rounded-md border border-ink-600 bg-ink-900 sm:h-[34rem]"
+      className={`azd-map ${heightClass} w-full overflow-hidden rounded-md border border-ink-600 bg-ink-900`}
     />
   );
 }

@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:zone-maps": "playwright test -c playwright.zone-maps.config.ts",
     "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
     "fixture:refresh": "node scripts/refresh-fixture.mjs",
     "test:parity": "vitest run --config vitest.parity.config.ts"

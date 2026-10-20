@@ -1,4 +1,5 @@
 import "server-only";
+import { aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
 import {
   InvalidQueryError,
@@ -18,6 +19,7 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type ZoneMapPoints,
   type ZoneSummary,
 } from "./types";
 
@@ -182,6 +184,14 @@ export class FixtureAdapter implements PublicDataAdapter {
       if (e.entity_kind === "source") for (const k of e.loot_kinds) lootKinds[k] = (lootKinds[k] ?? 0) + 1;
     }
     return { mapId, zoneName: z.zone_name, observations: z.observations, sourceCount: z.source_count, itemCount: z.item_count, displayKinds, lootKinds };
+  }
+
+  async zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints> {
+    if (!Number.isInteger(mapId) || mapId < 1 || mapId > 999_999 || !Number.isInteger(limit) || limit < 1 || limit > 3000 || lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateZoneMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), mapId, lootKind, limit);
   }
 
   async zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>> {

@@ -38,6 +38,7 @@ function cached(inner: PublicDataAdapter): PublicDataAdapter {
     zones: () => c.get(k("zones", []), () => inner.zones()),
     zone: (id) => c.get(k("zone", [id]), () => inner.zone(id)),
     zoneEntities: (q) => c.get(k("zoneEntities", [q]), () => inner.zoneEntities(q)),
+    zoneMapPoints: (id, kind, lim) => c.get(k("zoneMapPoints", [id, kind, lim]), () => inner.zoneMapPoints(id, kind, lim)),
     recent: (n) => c.get(k("recent", [n]), () => inner.recent(n)),
     sitemap: (e, o, l) => c.get(k("sitemap", [e, o, l]), () => inner.sitemap(e, o, l)),
   };

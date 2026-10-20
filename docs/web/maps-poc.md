@@ -44,3 +44,5 @@ Custom hostname/DNS is a separate approval.
 
 ## Replacing the fixture selector
 `web/src/lib/maps/zone-observations.ts` is the only data seam (`zoneObservations(mapId) → MapPoint[]`). A later approved BFF adapter replaces it; the viewer and filters are data-source agnostic.
+
+> **Superseded for ordinary zones by P2-Z1:** the same engine now serves `/zones`, `/zone/<uiMapID>` and source pages behind `AZERDEX_ZONE_MAPS=1`; see [zone-atlas.md](zone-atlas.md). This POC route and its tests are unchanged.
