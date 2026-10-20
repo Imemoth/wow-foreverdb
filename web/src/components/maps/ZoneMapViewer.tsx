@@ -5,6 +5,7 @@ import type { Map as LMap } from "leaflet";
 import { useEffect, useRef, useState } from "react";
 import { KIND_FILL } from "@/components/LocationPlot";
 import { imageBounds, percentToLatLng, type MapSize } from "@/lib/maps/coordinates";
+import { clusterAriaLabel, clusterTooltipLines, pointAriaLabel, pointTooltipLines } from "@/lib/maps/marker-text";
 import { clusterPoints, type MapCluster, type MapPoint } from "@/lib/maps/observations";
 
 export type MapMode = "markers" | "clusters";
@@ -94,19 +95,30 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
       const render = () => {
         layer.clearLayers();
         const { points: pts, mode: m, onSelect: select } = live.current;
-        const place = (x: number, y: number, el: HTMLElement, px: number, title: string, onClick: () => void, attrs: Record<string, string>) => {
+        const place = (x: number, y: number, el: HTMLElement, px: number, lines: string[], aria: string, onClick: () => void, attrs: Record<string, string>) => {
           const pos = percentToLatLng(size, x, y);
           if (!pos) return;
           const icon = L.divIcon({ html: el, className: "azd-icon", iconSize: [px, px], iconAnchor: [px / 2, px / 2] });
-          const mk = L.marker(pos, { icon, title, keyboard: true, riseOnHover: true }).addTo(layer);
-          mk.bindTooltip(title, { direction: "top", offset: [0, -px / 2], opacity: 0.95 });
+          // No `title` option: the native browser tooltip would duplicate the Leaflet one.
+          const mk = L.marker(pos, { icon, keyboard: true, riseOnHover: true }).addTo(layer);
+          const tip = document.createElement("div");
+          lines.forEach((t, i) => {
+            const row = document.createElement("div");
+            row.className = i === 0 ? "azd-tip-title" : "azd-tip-line";
+            row.textContent = t;
+            tip.appendChild(row);
+          });
+          mk.bindTooltip(tip, { direction: "top", offset: [0, -px / 2], opacity: 1, className: "azd-tooltip" });
           mk.on("click", onClick);
           const e = mk.getElement();
           if (e) {
             e.setAttribute("role", "button");
-            e.setAttribute("aria-label", title);
+            e.setAttribute("aria-label", aria);
             for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
             // Leaflet's own Enter handling is unreliable across browsers; make the marker a real keyboard button.
+            // Hover is not available to keyboard users: focus shows the same tooltip.
+            e.addEventListener("focus", () => mk.openTooltip());
+            e.addEventListener("blur", () => mk.closeTooltip());
             e.addEventListener("keydown", (ev) => {
               if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); onClick(); }
             });
@@ -116,7 +128,7 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
           for (const p of pts) {
             const px = 10 + Math.min(8, Math.round(Math.sqrt(p.observations)));
             place(p.x, p.y, dot(KIND_FILL[p.lootKind], px), px,
-              `${p.sourceName} · ${p.observations} obs.`, () => select({ kind: "point", point: p }),
+              pointTooltipLines(p), pointAriaLabel(p), () => select({ kind: "point", point: p }),
               { "data-marker-id": p.id, "data-x": String(p.x), "data-y": String(p.y) });
           }
         } else {
@@ -125,12 +137,14 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
             const px = c.pointCount === 1 ? 14 : Math.min(46, 24 + Math.round(Math.sqrt(c.pointCount) * 4));
             const top = c.points.reduce((a, b) => (b.observations > a.observations ? b : a));
             place(c.x, c.y, dot(KIND_FILL[top.lootKind], px, c.pointCount > 1 ? String(c.pointCount) : undefined), px,
-              c.pointCount > 1 ? `${c.pointCount} locations · ${c.observations} obs. · ${c.label}` : `${top.sourceName} · ${c.observations} obs.`,
+              c.pointCount > 1 ? clusterTooltipLines(c) : pointTooltipLines(top),
+              c.pointCount > 1 ? clusterAriaLabel(c) : pointAriaLabel(top),
               () => {
                 if (c.pointCount > 1 && map.getZoom() < map.getMaxZoom()) {
                   const ll = c.points.map((p) => percentToLatLng(size, p.x, p.y)!);
                   map.flyToBounds(L.latLngBounds(ll).pad(0.4), { maxZoom: map.getMaxZoom(), duration: 0.4 });
-                } else select({ kind: "cluster", cluster: c });
+                } else if (c.pointCount === 1) select({ kind: "point", point: top });
+                else select({ kind: "cluster", cluster: c });
               },
               { "data-cluster-count": String(c.pointCount), "data-x": c.x.toFixed(3), "data-y": c.y.toFixed(3) });
           }

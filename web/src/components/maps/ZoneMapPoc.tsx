@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { resolveMapAssetUrl } from "@/lib/maps/asset-url";
 import { loadManifest, type MapManifest } from "@/lib/maps/manifest";
+import { formatCentroid, formatPair } from "@/lib/maps/marker-text";
 import { NO_FILTER, countByKind, filterPoints, levelRange, totalObservations, type MapFilterState, type MapPoint } from "@/lib/maps/observations";
 import { MapFilters } from "./MapFilters";
 import type { MapMode, Selection } from "./ZoneMapViewer";
@@ -92,6 +93,10 @@ export function ZoneMapPoc({ zoneId, zoneName, version, points }: Props) {
             <>
               <p className="text-parchment">{selected.cluster.pointCount} locations · {fmtInt(selected.cluster.observations)} observations</p>
               <p className="text-mist">{selected.cluster.label}</p>
+              <p data-testid="detail-coords" className="text-mist">
+                Approximate cluster centre (X, Y): <span className="font-[family-name:var(--font-mono)] text-parchment">{formatCentroid(selected.cluster.x, selected.cluster.y)}</span>
+                <span className="block text-xs">Computed average of the listed locations, not an observed position.</span>
+              </p>
               <ul className="space-y-1">
                 {selected.cluster.points.slice(0, 8).map((p) => <li key={p.id}><PointLine p={p} /></li>)}
               </ul>
@@ -114,7 +119,7 @@ function PointDetail({ p }: { p: MapPoint }) {
       <dt className="text-xs uppercase tracking-wide text-mist">Category</dt><dd>{LOOT_KIND_LABEL[p.lootKind]}</dd>
       {(p.lootKind === "mob" || p.lootKind === "skinning") && (<><dt className="text-xs uppercase tracking-wide text-mist">Level</dt><dd>{p.level}</dd></>)}
       <dt className="text-xs uppercase tracking-wide text-mist">Area</dt><dd>{p.subzone || "—"}</dd>
-      <dt className="text-xs uppercase tracking-wide text-mist">Map position (approx. 1% cell)</dt><dd className="font-[family-name:var(--font-mono)]">{p.x}, {p.y}</dd>
+      <dt className="text-xs uppercase tracking-wide text-mist">Coordinates (X, Y)</dt><dd data-testid="detail-coords" className="font-[family-name:var(--font-mono)]">{formatPair(p.x, p.y)}</dd>
       <dt className="text-xs uppercase tracking-wide text-mist">Observations</dt><dd>{fmtInt(p.observations)}</dd>
     </dl>
   );

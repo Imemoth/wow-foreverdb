@@ -37,10 +37,14 @@ export function parseManifest(raw: unknown): ManifestResult {
 
 export type LoadResult = ManifestResult | { ok: false; error: "unavailable" };
 
-/** Fetches and validates a manifest. Never throws: a missing/blocked/garbled asset becomes an error result. */
+/**
+ * Fetches and validates a manifest. Never throws: a missing/blocked/garbled asset becomes an error result.
+ * credentials "same-origin": a same-origin manifest carries the site's own cookies (needed behind Vercel
+ * deployment protection), while a cross-origin CDN manifest never receives any credentials.
+ */
 export async function loadManifest(url: string, fetchImpl: typeof fetch = fetch, signal?: AbortSignal): Promise<LoadResult> {
   let res: Response;
-  try { res = await fetchImpl(url, { signal, credentials: "omit" }); } catch { return { ok: false, error: "unavailable" }; }
+  try { res = await fetchImpl(url, { signal, credentials: "same-origin" }); } catch { return { ok: false, error: "unavailable" }; }
   if (!res.ok) return { ok: false, error: "unavailable" };
   let json: unknown;
   try { json = await res.json(); } catch { return { ok: false, error: "invalid_json" }; }

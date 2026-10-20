@@ -8,6 +8,7 @@ import { ALLOWED_ASSET_HOSTS, assetOrigin, parseAssetBase, resolveMapAssetUrl } 
 import { imageBounds, isValidPercent, latLngToPercent, percentToLatLng, percentToPixel } from "@/lib/maps/coordinates";
 import { loadManifest, parseManifest } from "@/lib/maps/manifest";
 import { LEVELED_KINDS, NO_FILTER, clusterPoints, countByKind, filterPoints, pointsForMap, totalObservations, type MapPoint } from "@/lib/maps/observations";
+import { clusterAriaLabel, clusterTooltipLines, formatCentroid, formatPair, pointAriaLabel, pointTooltipLines } from "@/lib/maps/marker-text";
 import { mapsPocEnabled } from "@/lib/maps/poc-gate";
 import { zoneObservations } from "@/lib/maps/zone-observations";
 import { buildPageCsp } from "@/lib/security/headers";
@@ -192,5 +193,45 @@ describe("POC gate, CSP, SSR safety", () => {
     expect(src).not.toMatch(/^import\s+(?!type)[^;]*from\s+"leaflet"/m);
     expect(src).toContain('await import("leaflet")');
     expect(src).not.toMatch(/style=\{|style="|innerHTML/);
+  });
+});
+
+describe("manifest fetch credentials", () => {
+  const spy = () => { const calls: RequestInit[] = []; const f = (async (_u: string, init: RequestInit) => { calls.push(init); return { ok: true, json: async () => manifestJson }; }) as unknown as typeof fetch; return { calls, f }; };
+  it("sends same-origin credentials only (cookies for same-origin Preview auth, none cross-origin)", async () => {
+    const { calls, f } = spy();
+    await loadManifest("/maps/forever/1420/v1/manifest.json", f);
+    await loadManifest("https://assets.azerdex.com/forever/1420/v1/manifest.json", f);
+    expect(calls.map((c) => c.credentials)).toEqual(["same-origin", "same-origin"]);
+    expect(calls.every((c) => c.credentials !== "include")).toBe(true);
+  });
+  it("source never requests credentials: 'include'", () => {
+    expect(readFileSync(resolve(__dirname, "../../src/lib/maps/manifest.ts"), "utf8")).not.toMatch(/credentials:\s*"include"/);
+  });
+});
+
+describe("marker text", () => {
+  const z = zoneObservations(1420).points;
+  it("tooltip uses the published X/Y exactly, plus name, category and observations", () => {
+    const p: MapPoint = { ...z[0]!, sourceName: "Cursed Darkhound", lootKind: "skinning", x: 55, y: 40, observations: 4 };
+    expect(pointTooltipLines(p)).toEqual(["Cursed Darkhound", "Coordinates: 55, 40", "Skinning · 4 observations"]);
+    expect(pointAriaLabel(p)).toBe("Cursed Darkhound, Skinning, coordinates X 55, Y 40, 4 observations");
+    expect(pointTooltipLines({ ...p, observations: 1 })[2]).toBe("Skinning · 1 observation");
+  });
+  it("does not invent precision", () => {
+    expect(formatPair(55, 40)).toBe("55, 40");
+    expect(formatPair(55.5, 40.25)).toBe("55.5, 40.25");
+    for (const p of z) expect(formatPair(p.x, p.y)).toBe(`${p.x}, ${p.y}`);
+  });
+  it("cluster text labels the centroid as approximate, not a spawn position", () => {
+    const mining = z.filter((p) => p.lootKind === "mining");
+    const [c] = clusterPoints(mining, 25);
+    const lines = clusterTooltipLines(c!);
+    expect(lines[0]).toBe("Mining cluster");
+    expect(lines[1]).toMatch(/^\d+ locations · [\d,]+ observations?$/);
+    expect(lines[2]).toBe(`Approximate cluster centre: ${formatCentroid(c!.x, c!.y)}`);
+    expect(formatCentroid(51.2345, 43.7)).toBe("51.2, 43.7");
+    expect(clusterAriaLabel(c!)).toContain("not an observed position");
+    expect(clusterTooltipLines(clusterPoints(z, 25).find((k) => new Set(k.points.map((p) => p.lootKind)).size > 1)!)[0]).toBe("Mixed cluster");
   });
 });
