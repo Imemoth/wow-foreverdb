@@ -9,6 +9,12 @@ if (args.Length == 2 && args[0] == "--make-fixture")
     return 0;
 }
 
+// `--check-dbd-dir <WoWDBDefs/definitions>`: parse every real definition and report problems.
+if (args.Length == 2 && args[0] == "--check-dbd-dir")
+{
+    return DbdDirectoryCheck.Run(args[1]);
+}
+
 TestRegistry.RegisterAll();
 var filter = args.FirstOrDefault(a => !a.StartsWith('-'));
 return await Harness.RunAsync(filter);

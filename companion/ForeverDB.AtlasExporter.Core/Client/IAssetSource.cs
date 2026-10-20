@@ -19,11 +19,13 @@ public sealed class FallbackAssetSource : IAssetSource
 {
     private readonly IReadOnlyList<Func<IAssetSource?>> _factories;
     private readonly List<IAssetSource?> _opened = new();
+    private readonly bool[] _attempted;
     private readonly Dictionary<string, int> _served = new(StringComparer.Ordinal);
 
     public FallbackAssetSource(params Func<IAssetSource?>[] factories)
     {
         _factories = factories;
+        _attempted = new bool[factories.Length];
 
         foreach (var _ in factories)
         {
@@ -45,8 +47,13 @@ public sealed class FallbackAssetSource : IAssetSource
     {
         for (var i = 0; i < _factories.Count; i++)
         {
-            // Sources are opened lazily so a healthy local CASC never touches the CDN.
-            _opened[i] ??= _factories[i]();
+            // Sources are opened lazily (a healthy local CASC never touches the CDN) and
+            // at most once: a CDN that failed to open is not retried for every missing file.
+            if (!_attempted[i])
+            {
+                _attempted[i] = true;
+                _opened[i] = _factories[i]();
+            }
 
             if (_opened[i] is null)
             {
