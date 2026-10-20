@@ -46,6 +46,10 @@ export default defineConfig({
         TRUSTED_IP_HEADER: "x-forwarded-for",
         RATE_LIMITS_JSON: JSON.stringify({ api_search: { perIp: 12, perSession: 1000, challengeAt: 1000 } }),
         NEXT_TELEMETRY_DISABLED: "1",
+        // Gates the Playwright-only /test-fixtures/lightbox harness (see its page.tsx) - never set
+        // anywhere else (not in the real app, beta, or production config), so that route 404s
+        // everywhere except this local E2E server.
+        E2E_FIXTURES_ENABLED: "1",
       },
     },
     {

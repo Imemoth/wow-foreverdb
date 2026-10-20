@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MediaSlot } from "@/lib/download/media-slots";
 
@@ -11,21 +11,23 @@ import type { MediaSlot } from "@/lib/download/media-slots";
  * never a fabricated mock screenshot. Swapping a placeholder for a real screenshot later
  * is a media-slots.ts edit only; this component does not change.
  *
- * The enlarged view is a simple, dependency-free modal (same pattern as MobileNav.tsx):
- * a portal, Escape to close, backdrop click to close, focus moves to the dialog on open
- * and returns to the trigger button on close. prefers-reduced-motion is handled globally
- * by globals.css (every transition/animation duration collapses to ~0), so no extra JS
- * branching is needed here.
+ * The enlarged view is a dependency-free modal: a portal, Escape to close, backdrop click to
+ * close (clicking inside the dialog itself does not, via stopPropagation), focus moves to the
+ * dialog on open and returns to the trigger button on close, a real Tab/Shift+Tab focus trap
+ * keeps keyboard focus inside the dialog while it's open, and every other top-level element gets
+ * the `inert` attribute for the duration (not just visually covered - actually unfocusable and
+ * hidden from the accessibility tree). Scroll lock uses a stylesheet-backed class
+ * (`.body-scroll-locked` in globals.css) toggled via classList, not a per-element inline `style`
+ * mutation, so there's no ambiguity about the page's style-src CSP. prefers-reduced-motion is
+ * handled globally by globals.css (every transition/animation duration collapses to ~0), so no
+ * extra JS branching is needed here. See `tests/e2e/download-lightbox.spec.ts` (driven against the
+ * gated `/test-fixtures/lightbox` harness, since every public slot ships without a real asset).
  */
 export function MediaSlotGallery({ slots }: { slots: MediaSlot[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const triggerRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const close = () => {
-    const i = openIndex;
-    setOpenIndex(null);
-    if (i != null) triggerRefs.current[i]?.focus();
-  };
+  const close = () => setOpenIndex(null);
 
   return (
     <>
@@ -41,7 +43,12 @@ export function MediaSlotGallery({ slots }: { slots: MediaSlot[] }) {
         ))}
       </ul>
       {openIndex != null && slots[openIndex]?.asset && (
-        <MediaSlotLightbox slot={slots[openIndex]} onClose={close} />
+        <MediaSlotLightbox
+          slot={slots[openIndex]}
+          onClose={close}
+          triggerRefs={triggerRefs}
+          triggerIndex={openIndex}
+        />
       )}
     </>
   );
@@ -102,27 +109,73 @@ function PlaceholderArt() {
   );
 }
 
-function MediaSlotLightbox({ slot, onClose }: { slot: MediaSlot; onClose: () => void }) {
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function MediaSlotLightbox({
+  slot, onClose, triggerRefs, triggerIndex,
+}: {
+  slot: MediaSlot;
+  onClose: () => void;
+  triggerRefs: RefObject<(HTMLButtonElement | null)[]>;
+  triggerIndex: number;
+}) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
 
   useEffect(() => {
+    const triggerEl = triggerRefs.current[triggerIndex];
     dialogRef.current?.focus();
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    document.documentElement.classList.add("body-scroll-locked");
+
+    // Make every other top-level element inert (unfocusable, untabbable, hidden from the
+    // accessibility tree) while the modal is open, so background content is never keyboard- or
+    // screen-reader-reachable behind it - not just visually covered. `overlayRef.current` is this
+    // portal's own container, which must stay interactive, so it's excluded.
+    const siblings = Array.from(document.body.children).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && el !== overlayRef.current,
+    );
+    for (const el of siblings) el.setAttribute("inert", "");
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      // Trap Tab/Shift+Tab inside the dialog: wrap from the last focusable element back to the
+      // first (and vice versa) instead of letting focus escape into the (now-inert) page behind it.
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKeyDown);
+
     return () => {
-      document.body.style.overflow = prevOverflow;
-      document.removeEventListener("keydown", onKey);
+      document.documentElement.classList.remove("body-scroll-locked");
+      // Remove `inert` before returning focus: a focus() call on an element that is still
+      // inert (or a descendant of one) is a silent no-op per spec, so restoring focus has to
+      // happen strictly after the background is un-inerted, not in the same tick as the
+      // setOpenIndex(null) call that triggers this unmount.
+      for (const el of siblings) el.removeAttribute("inert");
+      document.removeEventListener("keydown", onKeyDown);
+      triggerEl?.focus();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only on mount/unmount
   }, []);
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/90 p-4"
       onClick={onClose}
     >
