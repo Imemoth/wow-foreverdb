@@ -11,7 +11,8 @@ public sealed class AccountRuntime
         InstallationSyncCoordinator sync,
         ClaimService claims,
         AccountEndpoint endpoint,
-        DeviceRuntime? device)
+        DeviceRuntime? device,
+        AccountLinkService linking)
     {
         Device = device;
         Gate = gate;
@@ -21,6 +22,7 @@ public sealed class AccountRuntime
         Sync = sync;
         Claims = claims;
         Endpoint = endpoint;
+        Linking = linking;
     }
 
     public AccountGateDecision Gate { get; }
@@ -31,6 +33,8 @@ public sealed class AccountRuntime
     public ClaimService Claims { get; }
     /// <summary>The single Supabase project all Companion Auth and RPC traffic uses.</summary>
     public AccountEndpoint Endpoint { get; }
+    /// <summary>Direct account connection for an existing anonymous installation.</summary>
+    public AccountLinkService Linking { get; }
     /// <summary>Zero-touch enrollment and device sync. Null unless <see cref="AccountFeatureGate.ZeroTouchAvailable"/> allows it (never in the default production mode).</summary>
     public DeviceRuntime? Device { get; }
 
@@ -127,7 +131,8 @@ public sealed class AccountRuntime
                 new DeviceSyncService(context));
         }
 
-        return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint, device);
+        var linking = new AccountLinkService(sessions, rpc, claims, device);
+        return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint, device, linking);
     }
 
     private static ICredentialProtector CreateDefaultProtector() =>

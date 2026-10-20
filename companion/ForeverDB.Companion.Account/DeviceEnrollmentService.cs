@@ -165,6 +165,55 @@ public sealed class DeviceEnrollmentService
         }
     }
 
+    /// <summary>
+    /// Enrolls a ticket issued directly to the signed-in Companion. The ticket is never written to an activation file.
+    /// Existing readable device credentials are preserved, and damaged credentials are never silently replaced.
+    /// </summary>
+    public async Task<DeviceStatus> EnrollTicketAsync(ActivationTicket ticket, string installationId, CancellationToken ct = default)
+    {
+        if (!_enabled || !DeviceContract.InstallationIdPattern.IsMatch(installationId))
+        {
+            return _ctx.Status;
+        }
+
+        using var lease = await _ctx.TryAcquireAsync(ct).ConfigureAwait(false);
+        if (lease is null)
+        {
+            _ctx.Set(_ctx.Status.State, DeviceDetail.LockTimeout);
+            return _ctx.Status;
+        }
+
+        var read = _ctx.Store.Read();
+        if (read.Status == DeviceCredentialStatus.IoError)
+        {
+            _ctx.Set(_ctx.Status.State, DeviceDetail.StorageFailure);
+            return _ctx.Status;
+        }
+
+        if (read.Status == DeviceCredentialStatus.Unreadable)
+        {
+            _ctx.NoteInstallation(read.MarkerInstallationId);
+            _ctx.Set(DeviceState.CredentialDamaged);
+            return _ctx.Status;
+        }
+
+        if (read.Status == DeviceCredentialStatus.Ok)
+        {
+            _ctx.NoteInstallation(read.Credential!.InstallationId);
+            if (string.Equals(read.Credential.InstallationId, installationId, StringComparison.Ordinal))
+            {
+                SetLocalRegistered();
+                return _ctx.Status;
+            }
+
+            _ctx.Set(DeviceState.OwnershipConflict, DeviceDetail.IdentityInUse);
+            return _ctx.Status;
+        }
+
+        await RedeemTicketAsync(ticket, null, installationId, removeActivationFile: false, ct).ConfigureAwait(false);
+        return _ctx.Status;
+    }
+
     private void SetLocalRegistered() => _ctx.MarkLocalRegistered();
 
     private ActivationCandidate? FreshCandidate(string? redeemedHash)
@@ -201,6 +250,11 @@ public sealed class DeviceEnrollmentService
 
         // Only a computer without a usable device credential may create its anonymous identity; re-activation of a registered
         // device reuses the session it has.
+        await RedeemTicketAsync(ticket, existing, installationId, removeActivationFile: true, ct).ConfigureAwait(false);
+    }
+
+    private async Task RedeemTicketAsync(ActivationTicket ticket, DeviceCredential? existing, string installationId, bool removeActivationFile, CancellationToken ct)
+    {
         var token = await _ctx.Session.GetTokenAsync(allowCreate: true, ct).ConfigureAwait(false);
         if (!token.Ok)
         {
@@ -257,7 +311,7 @@ public sealed class DeviceEnrollmentService
             }
 
             _ctx.NoteInstallation(credential.InstallationId);
-            _source.Remove(ticket.Hash);
+            if (removeActivationFile) _source.Remove(ticket.Hash);
             _ctx.Set(DeviceState.Registered);
             return;
         }
@@ -265,24 +319,24 @@ public sealed class DeviceEnrollmentService
         switch (answer.Error)
         {
             case DeviceEnrollError.TicketExpired:
-                _source.Remove(ticket.Hash);
+                if (removeActivationFile) _source.Remove(ticket.Hash);
                 _ctx.Set(DeviceState.ActivationExpired, DeviceDetail.TicketExpired);
                 break;
 
             case DeviceEnrollError.TicketConsumed:
                 // The ticket is spent. If this computer already holds a credential for the installation, it is simply registered;
                 // otherwise the reply of the first redemption was lost and only a NEW activation file helps.
-                _source.Remove(ticket.Hash);
+                if (removeActivationFile) _source.Remove(ticket.Hash);
                 _ctx.Set(existing is not null ? DeviceState.Registered : DeviceState.ActivationRejected, existing is not null ? DeviceDetail.None : DeviceDetail.TicketConsumed);
                 break;
 
             case DeviceEnrollError.TicketRevoked:
-                _source.Remove(ticket.Hash);
+                if (removeActivationFile) _source.Remove(ticket.Hash);
                 _ctx.Set(DeviceState.ActivationRejected, DeviceDetail.TicketRevoked);
                 break;
 
             case DeviceEnrollError.InvalidTicket:
-                _source.Remove(ticket.Hash);
+                if (removeActivationFile) _source.Remove(ticket.Hash);
                 _ctx.Set(DeviceState.ActivationRejected, DeviceDetail.TicketInvalid);
                 break;
 

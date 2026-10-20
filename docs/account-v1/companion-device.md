@@ -50,8 +50,9 @@ Nothing here is written to `settings.json` or SavedVariables; no secret is logge
   (`foreverdb-activation*.fdbact` only). Top directory only, no links, files > 1 KiB ignored, newest first inside a location.
 * **Parser decision:** extra top-level fields are tolerated (forward compatible inside v1); `format`, `v`, `ticket`, `expiresAt`, `createdAt`
   must have their documented types when present; a repeated known field is refused; `expiresAt` is only a hint (the server decides).
-* **Enrollment** (under the device gate, once per call): installation id comes from the discovered SavedVariables installations (exactly one
-  required). The device's anonymous session is created lazily and only here. `fdb_device_enroll`; the credential is written durably
+* **Enrollment** (under the device gate, once per call): an activation-file enrollment discovers the installation id from SavedVariables
+  (exactly one required); the signed-in account-linking MVP supplies the already selected installation id and an in-memory one-time ticket.
+  The device's anonymous session is created lazily and only here. `fdb_device_enroll`; the credential is written durably
   **before** the file is deleted. Terminal answers (success, `ticket_expired`, `ticket_consumed`, `ticket_revoked`, `invalid_ticket`) delete the
   file; network/429/5xx/404, `installation_conflict|bound`, `identity_in_use`, limits and `account_unavailable` keep it (refused tickets are not
   retried in the same process).

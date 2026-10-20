@@ -34,6 +34,8 @@ public sealed class FakeSupabase
     private sealed class SessionRec { public string UserId = ""; public bool Alive = true; }
     private sealed class RefreshRec { public string SessionId = ""; public bool Used; }
     private sealed class ClaimRec { public string Code = ""; public string Uid = ""; public string SessionId = ""; public DateTimeOffset Expires; public string Status = "pending"; }
+    private sealed class TicketRec { public string AccountUid = ""; public bool Consumed; public DateTimeOffset Expires; }
+    private sealed class DeviceRec { public string Id = ""; public string AccountUid = ""; public string AuthUid = ""; public string InstallationId = ""; public string Secret = ""; public bool Revoked; }
 
     private readonly object _gate = new();
     private readonly List<LoggedRequest> _requests = new();
@@ -43,6 +45,8 @@ public sealed class FakeSupabase
     private readonly Dictionary<string, string?> _owners = new();
     private readonly Dictionary<string, string> _previousOwners = new();
     private readonly Dictionary<string, ClaimRec> _claims = new();
+    private readonly Dictionary<string, TicketRec> _tickets = new();
+    private readonly Dictionary<string, DeviceRec> _devices = new();
     private int _counter;
 
     /// <summary>Return a response to override normal handling (fault injection). May throw or delay.</summary>
@@ -67,6 +71,8 @@ public sealed class FakeSupabase
     public int IngestCount { get; private set; }
     public int SuccessfulRefreshCount { get; private set; }
     public int AlreadyUsedRefreshCount { get; private set; }
+    public string? LastClaimCode { get; private set; }
+    public string? LastEnrollmentTicket { get; private set; }
 
     public IReadOnlyList<LoggedRequest> Requests
     {
@@ -213,6 +219,16 @@ public sealed class FakeSupabase
                 return LinkStatus(bearer, body);
             case ("POST", "/rest/v1/rpc/fdb_account_claim_start"):
                 return ClaimStart(bearer, body);
+            case ("POST", "/rest/v1/rpc/fdb_account_claim_redeem"):
+                return ClaimRedeem(bearer, body);
+            case ("POST", "/rest/v1/rpc/fdb_account_enrollment_ticket_issue"):
+                return IssueEnrollmentTicket(bearer);
+            case ("POST", "/rest/v1/rpc/fdb_device_enroll"):
+                return EnrollDevice(bearer, body);
+            case ("POST", "/rest/v1/rpc/fdb_device_status"):
+                return DeviceStatus(bearer, body);
+            case ("POST", "/rest/v1/rpc/fdb_device_ingest"):
+                return DeviceIngest(bearer, body);
             case ("POST", "/rest/v1/rpc/ingest_foreverdb_snapshot_auth"):
                 if (Hold is { } hold)
                 {
@@ -349,7 +365,144 @@ public sealed class FakeSupabase
             }
 
             _claims[id] = new ClaimRec { Code = code, Uid = user.Id, SessionId = sid!, Expires = DateTimeOffset.UtcNow.AddMinutes(10) };
+            LastClaimCode = code;
             return Ok("{\"ok\":true,\"code\":\"" + code + "\",\"expires_at\":\"" + DateTimeOffset.UtcNow.AddMinutes(10).ToString("o") + "\"}");
+        }
+    }
+
+    private FakeResponse ClaimRedeem(string? bearer, string body)
+    {
+        lock (_gate)
+        {
+            if (!ValidateLocked(bearer, out var account, out _) || account!.Anonymous || !account.Confirmed)
+            {
+                return Error(account is null ? 401 : 403, account is null ? "PT401" : "PT403", "registered session required");
+            }
+
+            string code;
+            try { code = JsonNode.Parse(body)!["p_code"]!.GetValue<string>(); }
+            catch { return Ok("{\"ok\":false,\"error\":\"invalid_claim\"}"); }
+            var pair = _claims.FirstOrDefault(x => x.Value.Code == code);
+            var claim = pair.Value;
+            if (claim is null || claim.Status != "pending" || claim.Expires <= DateTimeOffset.UtcNow ||
+                !_sessions.TryGetValue(claim.SessionId, out var issuingSession) || !issuingSession.Alive ||
+                !_owners.TryGetValue(pair.Key, out var owner) || owner != claim.Uid)
+            {
+                return Ok("{\"ok\":false,\"error\":\"invalid_claim\"}");
+            }
+
+            _previousOwners[pair.Key] = claim.Uid;
+            _owners[pair.Key] = account.Id;
+            claim.Status = "consumed";
+            return Ok(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["installation_id"] = pair.Key,
+                ["linked_at"] = DateTimeOffset.UtcNow.ToString("o")
+            }));
+        }
+    }
+
+    private FakeResponse IssueEnrollmentTicket(string? bearer)
+    {
+        lock (_gate)
+        {
+            if (!ValidateLocked(bearer, out var account, out _) || account!.Anonymous || !account.Confirmed)
+            {
+                return Error(account is null ? 401 : 403, account is null ? "PT401" : "PT403", "registered session required");
+            }
+
+            var ticket = "fdba1_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var expires = DateTimeOffset.UtcNow.AddDays(7);
+            _tickets[ticket] = new TicketRec { AccountUid = account.Id, Expires = expires };
+            LastEnrollmentTicket = ticket;
+            return Ok(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["ticket_id"] = Guid.NewGuid(),
+                ["ticket"] = ticket,
+                ["expires_at"] = expires.ToString("o")
+            }));
+        }
+    }
+
+    private FakeResponse EnrollDevice(string? bearer, string body)
+    {
+        lock (_gate)
+        {
+            if (!ValidateLocked(bearer, out var deviceUser, out _) || !deviceUser!.Anonymous)
+            {
+                return Error(deviceUser is null ? 401 : 403, deviceUser is null ? "PT401" : "PT403", "anonymous device session required");
+            }
+
+            string ticket, installationId;
+            try
+            {
+                var node = JsonNode.Parse(body)!;
+                ticket = node["p_ticket"]!.GetValue<string>();
+                installationId = node["p_installation_id"]!.GetValue<string>();
+            }
+            catch { return Ok("{\"ok\":false,\"error\":\"invalid_ticket\"}"); }
+
+            if (!_tickets.TryGetValue(ticket, out var ticketRec)) return Ok("{\"ok\":false,\"error\":\"invalid_ticket\"}");
+            if (ticketRec.Consumed) return Ok("{\"ok\":false,\"error\":\"ticket_consumed\"}");
+            if (ticketRec.Expires <= DateTimeOffset.UtcNow) return Ok("{\"ok\":false,\"error\":\"ticket_expired\"}");
+            if (!_owners.TryGetValue(installationId, out var owner) || owner != ticketRec.AccountUid)
+                return Ok("{\"ok\":false,\"error\":\"installation_conflict\"}");
+
+            var existing = _devices.Values.FirstOrDefault(d => !d.Revoked && d.InstallationId == installationId);
+            if (existing is not null && existing.AuthUid != deviceUser.Id)
+                return Ok("{\"ok\":false,\"error\":\"installation_bound\"}");
+            if (existing is not null) existing.Revoked = true;
+
+            var id = Guid.NewGuid();
+            var secret = "fdbd1_" + id.ToString("N") + "_" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            _devices[id.ToString()] = new DeviceRec
+            {
+                Id = id.ToString(), AccountUid = ticketRec.AccountUid, AuthUid = deviceUser.Id,
+                InstallationId = installationId, Secret = secret
+            };
+            ticketRec.Consumed = true;
+            return Ok(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["device_id"] = id,
+                ["device_secret"] = secret,
+                ["installation_id"] = installationId
+            }));
+        }
+    }
+
+    private FakeResponse DeviceStatus(string? bearer, string body)
+    {
+        lock (_gate)
+        {
+            if (!ValidateLocked(bearer, out var user, out _) || !user!.Anonymous)
+                return Error(user is null ? 401 : 403, user is null ? "PT401" : "PT403", "anonymous device session required");
+            var secret = JsonNode.Parse(body)!["p_device_secret"]!.GetValue<string>();
+            var device = _devices.Values.FirstOrDefault(d => d.AuthUid == user.Id && d.Secret == secret);
+            var state = device is null ? "unknown" : device.Revoked ? "revoked" : "active";
+            return Ok(JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["state"] = state, ["installation_id"] = device?.InstallationId, ["needs_rotation"] = false, ["reason"] = null
+            }));
+        }
+    }
+
+    private FakeResponse DeviceIngest(string? bearer, string body)
+    {
+        lock (_gate)
+        {
+            if (!ValidateLocked(bearer, out var user, out _) || !user!.Anonymous)
+                return Error(user is null ? 401 : 403, user is null ? "PT401" : "PT403", "anonymous device session required");
+            var node = JsonNode.Parse(body)!;
+            var secret = node["p_device_secret"]!.GetValue<string>();
+            var installationId = node["p_snapshot"]!["installationId"]!.GetValue<string>();
+            var device = _devices.Values.FirstOrDefault(d => !d.Revoked && d.AuthUid == user.Id && d.Secret == secret);
+            if (device is null) return Ok("{\"ok\":false,\"error\":\"device_unauthorized\"}");
+            if (device.InstallationId != installationId) return Ok("{\"ok\":false,\"error\":\"wrong_installation\"}");
+            IngestCount++;
+            return Ok("{\"ok\":true,\"status\":\"stored\"}");
         }
     }
 

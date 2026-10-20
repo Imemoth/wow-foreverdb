@@ -109,6 +109,14 @@ jobs:
           Write-Host "ProductVersion=$v"
           if (-not $v.StartsWith("0.9.0-alpha")) { throw "unexpected version $v" }
 
+      - name: Upload unpublished Windows acceptance build
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreverdb-companion-account-linking-mvp-win-x64
+          path: artifacts/publish-check/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: git diff --check
         shell: pwsh
         run: |

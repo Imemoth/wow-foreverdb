@@ -56,6 +56,22 @@ public sealed class ClaimStartReply
     public override string ToString() => Granted ? "ClaimStartReply(granted, redacted)" : "ClaimStartReply(not_available)";
 }
 
+public sealed class ClaimRedeemReply
+{
+    public bool Linked { get; init; }
+    public bool AccountLimit { get; init; }
+    public string? InstallationId { get; init; }
+    public override string ToString() => Linked ? "ClaimRedeemReply(linked)" : $"ClaimRedeemReply(rejected, accountLimit={AccountLimit})";
+}
+
+public sealed class EnrollmentTicketReply
+{
+    public bool Issued { get; init; }
+    public bool LimitReached { get; init; }
+    public ActivationTicket? Ticket { get; init; }
+    public override string ToString() => Issued ? "EnrollmentTicketReply(issued, redacted)" : "EnrollmentTicketReply(limit)";
+}
+
 /// <summary>
 /// The approved PR C RPCs the Companion uses (and ingest). Nothing generic: a closed set of method names
 /// validated here, with strict response parsing against web/src/lib/account/contracts.ts.
@@ -177,6 +193,95 @@ public sealed class OwnershipRpcClient
         }
 
         return RpcResult<ClaimStartReply>.Fail(RpcFailure.MalformedResponse, reply.Status);
+    }
+
+    /// <summary>Redeems one backend-generated claim with the registered account's own live session.</summary>
+    public async Task<RpcResult<ClaimRedeemReply>> ClaimRedeemAsync(string registeredAccessToken, string canonicalCode, string expectedInstallationId, CancellationToken ct)
+    {
+        if (!_allowWrites || !CodePattern.IsMatch(canonicalCode) || !InstallationIdPattern.IsMatch(expectedInstallationId))
+        {
+            return RpcResult<ClaimRedeemReply>.Fail(RpcFailure.InvalidRequest);
+        }
+
+        var body = JsonSerializer.Serialize(new Dictionary<string, string> { ["p_code"] = canonicalCode });
+        var reply = await PostAsync("fdb_account_claim_redeem", body, registeredAccessToken, ct).ConfigureAwait(false);
+        if (reply.Failure != RpcFailure.None)
+        {
+            return RpcResult<ClaimRedeemReply>.Fail(reply.Failure, reply.Status);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(reply.Body);
+            var root = doc.RootElement;
+            var count = root.ValueKind == JsonValueKind.Object ? root.EnumerateObject().Count() : 0;
+            if (count == 3 && root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True &&
+                root.TryGetProperty("installation_id", out var installation) && installation.ValueKind == JsonValueKind.String &&
+                string.Equals(installation.GetString(), expectedInstallationId, StringComparison.Ordinal) &&
+                root.TryGetProperty("linked_at", out var linkedAt) && linkedAt.ValueKind == JsonValueKind.String &&
+                DateTimeOffset.TryParse(linkedAt.GetString(), out _))
+            {
+                return RpcResult<ClaimRedeemReply>.Success(
+                    new ClaimRedeemReply { Linked = true, InstallationId = expectedInstallationId }, reply.Status);
+            }
+
+            if (count == 2 && root.TryGetProperty("ok", out ok) && ok.ValueKind == JsonValueKind.False &&
+                root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String &&
+                error.GetString() is "invalid_claim" or "account_limit")
+            {
+                return RpcResult<ClaimRedeemReply>.Success(
+                    new ClaimRedeemReply { AccountLimit = error.GetString() == "account_limit" }, reply.Status);
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return RpcResult<ClaimRedeemReply>.Fail(RpcFailure.MalformedResponse, reply.Status);
+    }
+
+    /// <summary>Issues a single-use device ticket with the registered account session. The raw ticket is returned once and remains in memory.</summary>
+    public async Task<RpcResult<EnrollmentTicketReply>> IssueEnrollmentTicketAsync(string registeredAccessToken, string? label, CancellationToken ct)
+    {
+        if (!_allowWrites || label?.Length > 60 || label?.Any(char.IsControl) == true)
+        {
+            return RpcResult<EnrollmentTicketReply>.Fail(RpcFailure.InvalidRequest);
+        }
+
+        var body = JsonSerializer.Serialize(new Dictionary<string, string?> { ["p_label"] = string.IsNullOrWhiteSpace(label) ? null : label.Trim() });
+        var reply = await PostAsync("fdb_account_enrollment_ticket_issue", body, registeredAccessToken, ct).ConfigureAwait(false);
+        if (reply.Failure != RpcFailure.None)
+        {
+            return RpcResult<EnrollmentTicketReply>.Fail(reply.Failure, reply.Status);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(reply.Body);
+            var root = doc.RootElement;
+            var count = root.ValueKind == JsonValueKind.Object ? root.EnumerateObject().Count() : 0;
+            if (count == 4 && root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True &&
+                root.TryGetProperty("ticket_id", out var ticketId) && ticketId.ValueKind == JsonValueKind.String && Guid.TryParse(ticketId.GetString(), out _) &&
+                root.TryGetProperty("ticket", out var ticket) && ticket.ValueKind == JsonValueKind.String && DeviceContract.TicketPattern.IsMatch(ticket.GetString() ?? "") &&
+                root.TryGetProperty("expires_at", out var expires) && expires.ValueKind == JsonValueKind.String &&
+                DateTimeOffset.TryParse(expires.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var expiresAt))
+            {
+                return RpcResult<EnrollmentTicketReply>.Success(
+                    new EnrollmentTicketReply { Issued = true, Ticket = new ActivationTicket(ticket.GetString()!, expiresAt, _clock.GetUtcNow()) }, reply.Status);
+            }
+
+            if (count == 2 && root.TryGetProperty("ok", out ok) && ok.ValueKind == JsonValueKind.False &&
+                root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String && error.GetString() == "ticket_limit")
+            {
+                return RpcResult<EnrollmentTicketReply>.Success(new EnrollmentTicketReply { LimitReached = true }, reply.Status);
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return RpcResult<EnrollmentTicketReply>.Fail(RpcFailure.MalformedResponse, reply.Status);
     }
 
     /// <summary>

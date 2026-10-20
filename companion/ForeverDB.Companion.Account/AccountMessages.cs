@@ -215,6 +215,25 @@ public static class AccountMessages
         _ => "Sign-in failed."
     };
 
+    public static string Describe(AccountLinkResult result) => result.Outcome switch
+    {
+        AccountLinkOutcome.Connected => "This installation is linked to your account and this computer is registered. Use Sync now; automatic device sync stays off.",
+        AccountLinkOutcome.FeatureDisabled => "Account linking is not enabled in this build.",
+        AccountLinkOutcome.InvalidInstallation => "This installation identifier is not valid. Local data was not changed.",
+        AccountLinkOutcome.SignInRequired => "Sign in to the ForeverDB account you want to use, then connect this installation.",
+        AccountLinkOutcome.NoAnonymousOwner => "The original anonymous identity is not available, so ownership could not be proved.",
+        AccountLinkOutcome.NotOwnedByAnonymousIdentity => "The server did not confirm that this computer's anonymous identity owns the installation. Nothing was transferred.",
+        AccountLinkOutcome.AccountLimit => "This account has reached its installation limit. The installation was not transferred.",
+        AccountLinkOutcome.RateLimited => "Too many linking attempts. Wait a moment and try again.",
+        AccountLinkOutcome.ServiceNotReady => "The ForeverDB account-linking service is not available on this environment.",
+        AccountLinkOutcome.DeviceRegistrationRequired when result.OwnershipLinked =>
+            "The installation is linked to your account, but this computer could not finish registration. Try Connect again or use an activation file from Account > Devices.",
+        AccountLinkOutcome.OutcomeUnknown when result.OwnershipLinked =>
+            "The installation is linked, but device registration could not be confirmed. Check status, then try Connect again if needed.",
+        AccountLinkOutcome.OutcomeUnknown => "ForeverDB could not confirm whether the ownership transfer completed. Check status before trying again.",
+        _ => "The account connection could not be completed. Nothing was deleted; try again when ForeverDB is available."
+    };
+
     public static string Describe(SignOutOutcome outcome) => outcome switch
     {
         SignOutOutcome.Confirmed => "Signed out. The server confirmed the session ended.",
