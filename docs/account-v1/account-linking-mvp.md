@@ -29,6 +29,7 @@ The claim code and enrollment ticket live only in process memory during the exch
 - A revoked registered session fails before claim creation. A missing or wrong anonymous owner credential cannot start a claim. A different account cannot take an installation by ID.
 - A lost ownership-transfer reply is reconciled once through link status and is never redeemed automatically again. If ownership transfers but device enrollment cannot finish, the UI reports that split state; retrying Connect issues a new one-time ticket without moving ownership again.
 - A damaged existing device credential is preserved and never silently replaced. The user can recover through the existing activation-file flow.
+- A readable credential for a different local installation, or an unreadable device credential, is detected before claim creation; no ownership transfer occurs when this computer cannot accept the resulting device registration.
 - Sign-out continues to revoke only the human Companion session. Registered device revocation remains independent and effective on the next device call.
 
 ## Reused implementation

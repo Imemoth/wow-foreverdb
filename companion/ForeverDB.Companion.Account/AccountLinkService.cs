@@ -62,6 +62,17 @@ public sealed class AccountLinkService
                 return new(AccountLinkOutcome.SignInRequired, false);
             }
 
+            // One local device identity can represent one installation. Prove that this computer can be enrolled before moving
+            // ownership; otherwise a second local installation could be transferred and left without its intended device path.
+            var stored = _device.Context.Store.Read();
+            if (stored.Status is DeviceCredentialStatus.Unreadable or DeviceCredentialStatus.IoError ||
+                (stored.Status == DeviceCredentialStatus.Ok &&
+                 !string.Equals(stored.Credential!.InstallationId, installationId, StringComparison.Ordinal)))
+            {
+                _device.Enrollment.LoadLocalState();
+                return new(AccountLinkOutcome.DeviceRegistrationRequired, false, _device.Status);
+            }
+
             var linked = await _rpc.LinkStatusAsync(registered.AccessToken, installationId, ct).ConfigureAwait(false);
             if (!linked.Ok)
             {
@@ -69,6 +80,11 @@ public sealed class AccountLinkService
             }
 
             var ownershipLinked = linked.Value == LinkState.Owned;
+            if (stored.Status == DeviceCredentialStatus.Ok && !ownershipLinked)
+            {
+                return new(AccountLinkOutcome.DeviceRegistrationRequired, false, _device.Status);
+            }
+
             if (!ownershipLinked)
             {
                 var claim = await _claims.StartClaimAsync(installationId, ct).ConfigureAwait(false);
@@ -112,18 +128,11 @@ public sealed class AccountLinkService
 
             await _claims.CheckLinkStatusAsync(installationId, ct).ConfigureAwait(false);
 
-            var stored = _device.Context.Store.Read();
             if (stored.Status == DeviceCredentialStatus.Ok &&
                 string.Equals(stored.Credential!.InstallationId, installationId, StringComparison.Ordinal))
             {
                 _device.Enrollment.LoadLocalState();
                 return new(AccountLinkOutcome.Connected, true, _device.Status);
-            }
-
-            if (stored.Status is DeviceCredentialStatus.Unreadable or DeviceCredentialStatus.IoError)
-            {
-                _device.Enrollment.LoadLocalState();
-                return new(AccountLinkOutcome.DeviceRegistrationRequired, true, _device.Status);
             }
 
             var issued = await _rpc.IssueEnrollmentTicketAsync(registered.AccessToken, deviceLabel, ct).ConfigureAwait(false);

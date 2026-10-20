@@ -138,4 +138,26 @@ public sealed class AccountLinkingMvpTests
         Assert.DoesNotContain("access_token", ingest.Body, StringComparison.OrdinalIgnoreCase);
         Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
     }
+
+    [Fact]
+    public async Task Existing_device_for_another_installation_blocks_before_any_second_ownership_transfer()
+    {
+        const string secondInstallation = "fedcba9876543210fedcba9876543210";
+        using var rig = new Rig();
+        var anonymous = rig.SeedAnonymous();
+        rig.Server.AddRegisteredUser("elara@example.test", "a-long-password-1");
+        rig.Server.SetOwner(InstallationId, anonymous.UserId);
+        rig.Server.SetOwner(secondInstallation, anonymous.UserId);
+        await rig.Sessions.InitializeAsync();
+        Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync("elara@example.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(AccountLinkOutcome.Connected, (await rig.Runtime.Linking.ConnectAsync(InstallationId, "This PC", default)).Outcome);
+        var claimsBefore = rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count;
+
+        var result = await rig.Runtime.Linking.ConnectAsync(secondInstallation, "This PC", default);
+
+        Assert.Equal(AccountLinkOutcome.DeviceRegistrationRequired, result.Outcome);
+        Assert.False(result.OwnershipLinked);
+        Assert.Equal(anonymous.UserId, rig.Server.OwnerOf(secondInstallation));
+        Assert.Equal(claimsBefore, rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count);
+    }
 }
