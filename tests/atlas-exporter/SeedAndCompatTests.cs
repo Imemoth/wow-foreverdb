@@ -166,6 +166,25 @@ internal static class SeedAndCompatTests
             }
         });
 
+        Harness.Add("db2: a real-client style empty stub (0 records, 0 sections, 0 stored columns) loads as an empty table with a warning", async () =>
+        {
+            // The first real-client diagnostics showed UiMapLink/UiMapGroupMember as 0 records, 0 sections and
+            // 0 stored columns; the definition has several columns, which used to fail as a layout mismatch.
+            var bytes = new Wdc5Writer
+            {
+                TableHash = KnownTables.TableHashes["UiMapLink"], OmitSection = true, OmitStorageInfo = true, RecordSizeBytes = 0,
+                Records = new List<byte[]>(),
+                Columns = new List<Wdc5Writer.Column> { new(Wdc5Writer.Storage.None, 32, 0), new(Wdc5Writer.Storage.None, 32, 32), new(Wdc5Writer.Storage.None, 32, 64) }
+            }.Build();
+            var dbd = "COLUMNS\nint ID\nint A\nint B\n\nLAYOUT DB51D55F\n$id$ID<32>\nA<32>\nB<32>\n\n";
+            var source = new Db2TableSource("client-db2", _ => bytes, new StaticDbd(dbd), null);
+            var result = await source.ReadAsync("UiMapLink", default);
+            Assert.True(result.Data is not null, result.Error ?? "no data");
+            Assert.Equal(0, result.Data!.Rows.Count);
+            Assert.True(result.Warnings is { Count: > 0 } && result.Warnings.Any(w => w.Contains("valid but empty table")),
+                string.Join(" | ", result.Warnings ?? Array.Empty<string>()));
+        });
+
         Harness.Add("db2: a file with an implausible header names the reason for each layout it tried", () =>
         {
             var junk = new byte[400];

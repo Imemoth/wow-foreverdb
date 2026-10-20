@@ -45,23 +45,38 @@ public static class TableDiagnostics
             {
                 ["table"] = table,
                 ["expectedFileDataId"] = fileDataId,
-                ["located"] = bytes is null ? "no" : byName is not null ? "by-name" : "by-filedataid",
+                ["located"] = bytes is null
+                    ? (nameProbe?.Found == true || idProbe?.Found == true ? "listed-but-unreadable" : "no")
+                    : byName is not null ? "by-name" : "by-filedataid",
                 ["byNameProbe"] = nameProbe,
                 ["byFileDataIdProbe"] = idProbe
             };
 
             if (bytes is null)
             {
-                doc.Line("  NOT FOUND in storage (name or FileDataID).");
+                var listed = nameProbe?.Found == true || idProbe?.Found == true;
+                doc.Line(listed
+                    ? "  LISTED in the local storage but its data could not be read (see below); no source returned its bytes."
+                    : "  NOT FOUND in storage (name or FileDataID).");
 
-                if (nameProbe is not null)
+                foreach (var (label, probe) in new[] { ("by name:       ", nameProbe), ("by FileDataID: ", idProbe) })
                 {
-                    doc.Line($"    by name:        {nameProbe.ErrorMeaning} (error {nameProbe.ErrorCode}, {nameProbe.Source})");
-                }
+                    if (probe is null)
+                    {
+                        continue;
+                    }
 
-                if (idProbe is not null)
-                {
-                    doc.Line($"    by FileDataID:  {idProbe.ErrorMeaning} (error {idProbe.ErrorCode}, {idProbe.Source})");
+                    doc.Line($"    {label} {probe.ErrorMeaning} (error {probe.ErrorCode}, {probe.Source})" +
+                             (probe.Found ? $", size {probe.Size:N0} bytes" : ""));
+
+                    if (probe.Found && probe.Readable == false)
+                    {
+                        doc.Line($"      read FAILED after {probe.BytesRead:N0} byte(s): {probe.ReadErrorMeaning} (error {probe.ReadErrorCode})");
+                    }
+                    else if (probe.Found && probe.Readable == true)
+                    {
+                        doc.Line("      local read succeeded here, yet the production reader returned nothing - report this");
+                    }
                 }
             }
             else

@@ -113,6 +113,11 @@ public sealed class Db2TableSource : IMapTableSource
             var data = file.Read(table, layout);
             var warnings = file.Warnings.ToList();
 
+            if (file.IsEmptyTable)
+            {
+                warnings.Add($"{table}: the client file is a valid but empty table (0 records, 0 sections); no rows exist in this build.");
+            }
+
             if (data.Rows.Count == 0 && file.RecordCount > 0)
             {
                 warnings.Add($"{table}: header declares {file.RecordCount} record(s) but none could be read.");

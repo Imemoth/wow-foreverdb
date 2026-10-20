@@ -59,8 +59,43 @@ internal sealed class CascProbe : IAssetProbe, IDisposable
 
         ulong size = 0;
         Native.CascGetFileSize64(file, ref size);
+
+        // Opening only proves the file is listed. Reading is what the exporter needs, and it is the
+        // step that fails for encrypted or not-yet-downloaded data, so attempt it and keep the code.
+        var (readable, readCode, bytesRead) = TryReadAll(file, size);
         Native.CascCloseFile(file);
-        return new AssetProbeResult(true, (long)size, 0, "opened", "local");
+
+        return new AssetProbeResult(
+            true, (long)size, 0, "opened", "local",
+            readable, readable ? 0 : readCode, readable ? "read completely" : Describe(readCode), bytesRead);
+    }
+
+    private static (bool Readable, int ErrorCode, long BytesRead) TryReadAll(IntPtr file, ulong size)
+    {
+        if (size == 0 || size > int.MaxValue)
+        {
+            return (false, size == 0 ? 0 : 1003, 0);
+        }
+
+        var buffer = new byte[Math.Min((long)size, 1024 * 1024)];
+        long total = 0;
+
+        while (total < (long)size)
+        {
+            if (!Native.CascReadFile(file, buffer, (uint)Math.Min(buffer.Length, (long)size - total), out var read))
+            {
+                return (false, Marshal.GetLastWin32Error(), total);
+            }
+
+            if (read == 0)
+            {
+                break;
+            }
+
+            total += read;
+        }
+
+        return (total == (long)size, total == (long)size ? 0 : 1003, total);
     }
 
     /// <summary>Windows system codes plus CascLib's own (CascPort.h) for the pinned CascLib commit.</summary>
@@ -118,6 +153,10 @@ internal sealed class CascProbe : IAssetProbe, IDisposable
         [DllImport(DllName, EntryPoint = "CascGetFileSize64", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CascGetFileSize64(IntPtr file, ref ulong size);
+
+        [DllImport(DllName, EntryPoint = "CascReadFile", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CascReadFile(IntPtr file, [System.Runtime.InteropServices.Out] byte[] buffer, uint toRead, out uint read);
 
         [DllImport(DllName, EntryPoint = "CascCloseFile", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

@@ -1,6 +1,6 @@
 # ForeverDB Atlas Exporter
 
-> **0.2.0** (second iteration, driven by the first real-client export of build 1.60.1.70450):
+> **0.2.1** (0.2.0 + diagnostics fixes) (second iteration, driven by the first real-client export of build 1.60.1.70450):
 > see [p2d2-real-client-findings.md](p2d2-real-client-findings.md) for the root causes of the four failed
 > full-reveal variants, the instance-discovery analysis, the new diagnostics (`--diagnose-*`), `--seed-from`,
 > the additive schema changes, and the real-client retest procedure. The fixes are verified on synthetic

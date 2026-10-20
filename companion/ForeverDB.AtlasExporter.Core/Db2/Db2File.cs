@@ -37,6 +37,9 @@ public sealed class Db2File
     public uint LayoutHash { get; private set; }
     public string LayoutHashHex => LayoutHash.ToString("X8");
     public int RecordCount { get; private set; }
+
+    /// <summary>True for a well-formed file that declares no records and no sections.</summary>
+    public bool IsEmptyTable => RecordCount == 0 && _sections.Count == 0;
     public int RecordSize { get; private set; }
     public ushort Flags { get; private set; }
     public int IdIndex { get; private set; }
@@ -340,6 +343,14 @@ public sealed class Db2File
     /// <summary>Reads every row using the given definition.</summary>
     public TableData Read(string tableName, DbdVersionBlock layout)
     {
+        if (IsEmptyTable)
+        {
+            // A valid header with no records and no sections (the client ships some tables as empty
+            // stubs) has no column storage to compare with the definition; it is an empty table,
+            // not a layout mismatch.
+            return new TableData(tableName, layout.Fields.Select(field => field.Name).ToArray());
+        }
+
         var inline = layout.Fields.Where(field => !field.NonInline).ToList();
 
         if (inline.Count != _storage.Count)

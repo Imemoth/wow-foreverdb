@@ -16,6 +16,14 @@ internal static class DiagnosticsTests
         public AssetProbeResult ProbeName(string path) => new(false, 0, 2, "file not found in this storage", "local");
     }
 
+    private sealed class UnreadableProbe : IAssetProbe
+    {
+        public AssetProbeResult ProbeFileDataId(int id) =>
+            new(true, 10197, 0, "opened", "local", Readable: false, ReadErrorCode: 6002,
+                ReadErrorMeaning: "ENCRYPTED: the file needs a TACT key that CascLib does not have", BytesRead: 0);
+        public AssetProbeResult ProbeName(string path) => new(false, 0, 2, "file not found in this storage", "local");
+    }
+
     private sealed class FixedDbd : IDbdSource
     {
         private readonly string _text;
@@ -68,6 +76,23 @@ internal static class DiagnosticsTests
             var map = json.EnumerateArray().Single(t => t.GetProperty("table").GetString() == "Map");
             Assert.Equal("no", map.GetProperty("located").GetString());
             Assert.DoesNotContain(text + doc.ToJson(), dir.Path);
+        });
+
+        Harness.Add("diagnose-tables: a file that opens but cannot be read is reported as listed-but-unreadable with the read error", async () =>
+        {
+            using var dir = new TempDir();
+            Directory.CreateDirectory(Path.Combine(dir.Path, "a"));
+            var input = new TableDiagnosticsInput(new DirectoryAssetSource(Path.Combine(dir.Path, "a")), new UnreadableProbe(),
+                new FixedDbd("COLUMNS\nint ID\n\nLAYOUT DB51D55F\n$id$ID<32>\n\n"), null, "1.0.0.1", dir.Combine("c"), false);
+            var doc = await TableDiagnostics.RunAsync(input, Clean(), default);
+            var text = doc.ToText();
+            Assert.Contains(text, "LISTED in the local storage but its data could not be read");
+            Assert.Contains(text, "read FAILED after 0 byte(s)");
+            Assert.Contains(text, "error 6002");
+            Assert.DoesNotContain(text, "NOT FOUND in storage");
+            var map = JsonDocument.Parse(doc.ToJson()).RootElement.GetProperty("data").GetProperty("tables")
+                .EnumerateArray().Single(t => t.GetProperty("table").GetString() == "Map");
+            Assert.Equal("listed-but-unreadable", map.GetProperty("located").GetString());
         });
 
         Harness.Add("diagnose-tables: encrypted DB2 sections and unknown layouts are surfaced", async () =>

@@ -3,7 +3,13 @@ using ForeverDB.AtlasExporter.Export;
 
 namespace ForeverDB.AtlasExporter.Diagnostics;
 
-public sealed record AssetProbeResult(bool Found, long Size, int ErrorCode, string ErrorMeaning, string Source);
+/// <summary>
+/// <c>Found</c> = the storage opened the file. <c>Readable</c> = its data could then be read in full;
+/// a file can open (it is listed and has a size) and still fail to read (encrypted, data not local).
+/// </summary>
+public sealed record AssetProbeResult(
+    bool Found, long Size, int ErrorCode, string ErrorMeaning, string Source,
+    bool? Readable = null, int ReadErrorCode = 0, string? ReadErrorMeaning = null, long BytesRead = 0);
 
 /// <summary>Optional low-level storage probe (Windows CASC) that can say *why* a file did not open.</summary>
 public interface IAssetProbe

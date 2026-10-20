@@ -29,6 +29,9 @@ internal sealed class Wdc5Writer
     public bool SchemaPrefix { get; init; } = true;
     public bool OmitSection { get; init; }
 
+    /// <summary>Declare the columns but write no storage info (an empty stub as shipped by the real client).</summary>
+    public bool OmitStorageInfo { get; init; }
+
     public byte[] Build()
     {
         var infos = new MemoryStream();
@@ -103,6 +106,11 @@ internal sealed class Wdc5Writer
                 relationship.Write(BitConverter.GetBytes(foreign));
                 relationship.Write(BitConverter.GetBytes(index));
             }
+        }
+
+        if (OmitStorageInfo)
+        {
+            infos.SetLength(0);
         }
 
         var headerSize = 4 + (SchemaPrefix ? 4 + 128 : 0) + 4 * 6 + 4 * 3 + 2 + 2 + 4 * 7 + 40; // up to and including one section header

@@ -1,4 +1,4 @@
-# Atlas Exporter 0.2.0 - findings from the first real-client export (build 1.60.1.70450)
+# Atlas Exporter 0.2.1 - findings from the first real-client export (build 1.60.1.70450)
 
 Evidence: the delivered `ForeverDB-Atlas-Export-1.60.1.70450.zip` (60 UiMaps, 101 image variants).
 It contains the index, hierarchy, build record, reports, diagnostics and manifests - **not** the raw DB2
@@ -131,7 +131,7 @@ Not classifiable from the available data: Darkspear Islands (MapID 2997), Zephra
 ## 5. Real-client retest (targeted first)
 
 Exe: artifact `ForeverDB-AtlasExporter-win-x64` of the PR's latest Windows run. `--version` must print
-`ForeverDB Atlas Exporter 0.2.0`.
+`ForeverDB Atlas Exporter 0.2.1` (0.2.0 also works for the targeted export; 0.2.1 only fixes diagnostics, section 8).
 
 ```
 :: 1. why can't Map.db2 / UiMapLink be read?  (about a minute, read-only)
@@ -171,7 +171,7 @@ ForeverDB.AtlasExporter.exe --export --wow-root "..." --seed-from "C:\path\Forev
 If the original output *folder* still exists, `--resume --output <that folder>` does the same using the
 original resume state. Either way run `--verify` on the new ZIP before returning it.
 
-## 7. Remaining gaps
+## 7. Remaining gaps (before the second real-client run - superseded by section 8)
 
 * Why `Map.db2` is unreadable on this client, and therefore whether instance records exist beyond the three
   battlegrounds (needs diagnostics output).
@@ -179,3 +179,84 @@ original resume state. Either way run `--verify` on the new ZIP before returning
 * `UiMapLink`: empty table or an unsupported layout (diagnostics show the header facts).
 * Encrypted DB2 sections: now reported; unreadable rows cannot be recovered without TACT keys.
 * City category for new Forever settlements relies on the flag rule (derived); capitals are confirmed.
+
+## 8. Second real-client run: diagnostics output (build 1.60.1.70450, exporter 0.2.0)
+
+Inputs: `diagnose-tables`, `diagnose-instances`, `diagnose-overlays` (txt + json) from the owner's machine. Each
+statement below is tagged **[confirmed]** (read from those reports), **[inferred]** (follows from them but was
+not observed directly) or **[open]**.
+
+### 8.1 Tables
+* **[confirmed]** 10 of 12 map tables are located by FileDataID (never by name - the client lists no names, error 2
+  for every table, which is normal), are WDC5, unencrypted (`tactKeyHash 0`), match the expected table hash,
+  and match a `.dbd` layout. Rows read: UiMap 60, UiMapArt 144 (55 records + 89 copy rows), UiMapArtStyleLayer 6,
+  UiMapArtTile 1672, UiMapAssignment 61, UiMapXMapArt 60, WorldMapOverlay 1081, WorldMapOverlayTile 1739.
+* **[confirmed] `UiMapGroupMember` and `UiMapLink` are empty in this client**: valid headers, matching table and
+  layout hash, 0 records, 0 sections, 0 stored columns. 0.2.0 reported this as a "layout mismatch" - **that was an
+  exporter defect, not a client problem**: an empty stub has no column storage to compare with the definition.
+  0.2.1 loads it as an empty table and records "valid but empty table" in `build.json` `tableWarnings`.
+  The wago CSV was also unavailable for both (`HttpRequestException`; **[open]** whether wago has no such table
+  for this build or the request failed - it does not change the result).
+* **[confirmed] `Map` and `LFGDungeons` open by FileDataID (10,197 and 3,875 bytes) yet the report said
+  `NOT FOUND`** - the inconsistency you flagged. Cause: the reader opens a file and then reads it with
+  `CascReadFile`; when the read fails it returns nothing without a code, and the 0.2.0 probe only *opened*
+  the file, so it showed "opened" under a "NOT FOUND" heading. So these two files are **listed in local storage
+  but their data could not be read** (and the production reader, local first then CDN unless `--no-cdn`, got no
+  bytes either). **[open]** *why* the read fails (encrypted blob / data not present locally / other) - 0.2.0
+  never recorded the read error. 0.2.1 attempts the read in the probe and reports it:
+  `LISTED in the local storage but its data could not be read` with `read FAILED after N byte(s): <meaning>
+  (error <code>)`, and JSON `located: "listed-but-unreadable"`.
+* **[confirmed]** `Map` (73 rows) and `LFGDungeons` (71 rows) were loaded from the **same-build wago.tools CSV**,
+  not from the client file. All instance data below therefore rests on that mirror (`coverage: map-table
+  (wago-csv:1.60.1.70450, 73 Map rows)`), not on the client's own `Map.db2`.
+
+### 8.2 Instances
+* **[confirmed]** 55 instance records from `Map.InstanceType` (documented values only): 37 dungeons (type 1), 13 raids
+  (type 2), 5 battlegrounds (type 3); 18 Map rows are type 0 (not instances). 0 arenas.
+* **[confirmed]** Drawable: 4 - Alterac Valley (MapID 30 / UiMap 1459), Warsong Gulch (489 / 1460), Arathi Basin
+  (529 / 1461), Darkspear Islands (2997 / 2524). Not drawable: 51 - including the 5th battleground (Battle for
+  Gilneas, 3005) and all 37 dungeons and 13 raids, with the stated reason *the client defines no UiMap
+  (UiMapAssignment) for this MapID*.
+* **[confirmed] No dungeon or raid has an interior map in this client's metadata**: the 60 UiMaps have types
+  1:1, 2:4, 3:51, 6:4 (no dungeon-type map) and `UiMapAssignment` references only MapIDs 0, 1, 30, 489, 529, 2991,
+  2997. This is a *correct discovery result*, not an exporter gap; no dungeon art is invented.
+* **[confirmed]** Floors: 0 independent floors (`UiMapGroupMember` is empty, and no instance has more than one
+  UiMap). Entrances: none (`UiMapLink` is empty).
+* **[inferred] Darkspear Islands is now a battleground** because its Map row says `InstanceType=3`; it is a
+  type-6 UiMap like the three classic battlegrounds. Treat it as data-driven; a consumer that disagrees can
+  filter on MapID 2997.
+* Names are reported as the client data has them and are not curated: development entries (`Test Dungeon` 13,
+  `CashTest` 29, `<unused> Monastery` 44), a duplicate Naxxramas (533 raid, 2921 dungeon) and entries such as
+  `City of Dalaran` or `Deadwind Pass` typed as dungeons come straight from `Map.InstanceType`.
+
+### 8.3 The four failed reveals
+**[confirmed]** `--diagnose-overlays`: all 45 candidates `READY_TO_EXPORT`; all 982 required overlay tiles resolved
+from **local** storage (no CDN); each map's client overlays **match the reviewed atlas exactly**.
+
+| uiMapID | Map | MapArtID | Overlay rows | Skipped (no artwork) | Verdict |
+|---|---|---|---|---|---|
+| 1412 | Mulgore | 1200 | 16 | 5551 (`no-artwork`, 0x0, no tiles) | ready, 15 regions / 18 tiles |
+| 1434 | Stranglethorn Vale | 2160 | 27 | 5252 (`tileless-declared`: 256x256 declared, **no tile records**) | ready, 26 regions / 26 tiles |
+| 2521 | Zephras Isle | 2031 | 20 | 5545-5549 (`no-artwork`) | ready, 15 regions / 27 tiles |
+| 2548 | Riverglades | 2054 | 14 | 5550 (`no-artwork`) | ready, 13 regions / 35 tiles |
+
+The earlier open question about row 5252 is answered: `WorldMapOverlayTile` (1739 rows read from the client) holds
+no tile for it, and the reviewed atlas never had it either (26 regions), so there is no artwork to composite; the
+reveal will not contain it and says so (`tileless-declared-overlays-skipped`). **Not yet claimed as
+`FULL_REVEAL_FIXED`**: that requires the actual export of the four variants and their integrity checks
+(`--export --seed-from ... --only 1412,1434,2521,2548`).
+
+### 8.4 What changed in 0.2.1
+Diagnostics and one false error only; no change to image output, manifests or resume state.
+* Empty client tables load as empty (see 8.1) instead of failing as a layout mismatch.
+* `--diagnose-tables` reads the located file and reports the CascLib read error for a file that opens but
+  cannot be read.
+* Tests: 107 synthetic (a stub with the real client's shape reproduces the exact `definition has N stored
+  columns, file has 0` error without the fix).
+
+### 8.5 Remaining limitations
+* **[open]** Why `Map.db2` / `LFGDungeons.db2` cannot be read (rerun `--diagnose-tables` with 0.2.1; about a minute).
+* `Map` data depends on the wago.tools same-build CSV (needs network on the first run, cached afterwards); the
+  client file is the preferred source once it is readable.
+* The corrected categories (3 battlegrounds as `instance`, Darkspear Islands) and `instances.json` only appear in
+  a new export; the original ZIP still carries the first run's categories until it is re-exported with `--seed-from`.

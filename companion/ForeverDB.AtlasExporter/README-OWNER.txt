@@ -1,4 +1,4 @@
-ForeverDB Atlas Exporter 0.2.0  (for the owner of a WoW: Forever installation)
+ForeverDB Atlas Exporter 0.2.1  (for the owner of a WoW: Forever installation)
 =========================================================================
 
 WHAT IT DOES
@@ -32,7 +32,8 @@ SECOND-ROUND RETEST (after the first real export) - targeted first, small and re
   1) Why could Map.db2 not be read?  (about a minute, nothing is exported)
        ForeverDB.AtlasExporter.exe --diagnose-tables --wow-root "C:\Program Files (x86)\World of Warcraft" --output .\diag
      Expect a list of every map table; for "Map" either "found by name/FileDataID" or the storage error
-     (for example "error 6002 ENCRYPTED" or "error 4350 file offline").
+     (for example "error 6002 ENCRYPTED" or "error 4350 file offline"). A file that is listed but cannot be read says
+     "LISTED in the local storage but its data could not be read" and the read error code.
   2) Instances and full-reveal overlays
        ForeverDB.AtlasExporter.exe --diagnose-instances --diagnose-overlays --wow-root "..." --output .\diag
      Expect a verdict summary such as READY_TO_EXPORT: 45 and, for Mulgore (1412), rows listed as "no-artwork".
