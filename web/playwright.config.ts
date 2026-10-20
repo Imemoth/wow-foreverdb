@@ -23,7 +23,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } },
       testIgnore: /preview-safety\.spec\.ts/,
     },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /responsive\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(responsive|maps-poc)\.spec\.ts/ },
     {
       name: "preview",
       testMatch: /preview-safety\.spec\.ts/,
@@ -38,6 +38,7 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         FOREVERDB_DEPLOYMENT: "local",
+        AZERDEX_POC_MAPS: "1",
         FOREVERDB_DATA_SOURCE: process.env.FOREVERDB_DATA_SOURCE ?? "fixture",
         PUBLIC_READ_DATABASE_URL: process.env.PUBLIC_READ_DATABASE_URL ?? "",
         SITE_URL: `http://localhost:${PORT}`,

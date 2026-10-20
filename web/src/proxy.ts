@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
+import { assetOrigin } from "@/lib/maps/asset-url";
 import { isPublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
@@ -172,6 +173,8 @@ export async function proxy(request: NextRequest) {
     dev: process.env.NODE_ENV !== "production",
     turnstile: Boolean(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
     https,
+    // Narrowest possible: only the POC map route may load assets from the (allow-listed) asset host.
+    assetOrigin: pathname.startsWith("/poc/maps/") ? assetOrigin(process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL) : null,
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

@@ -14,3 +14,6 @@ Location data is shown as **coordinate plots on a neutral 0–100 % grid**, aggr
 
 ## Extensible path (Phase D)
 `LocationPlot` takes points in map-percent coordinates, so a future map layer can sit underneath it unchanged. Acceptable future backgrounds: (a) original, self-drawn zone outlines; (b) community maps under a compatible licence with recorded attribution; (c) explicit written permission. Clustering and heatmaps can be computed server-side from `pub.locations` without new data.
+
+## P2-D proof of concept
+An isolated interactive map POC (`/poc/maps/tirisfal`, off by default, non-indexable, synthetic data only) uses an owner-supplied map image. This does **not** change the V1 decision above for the public site: the image's licensing is unreviewed and it must not be deployed publicly or published to a CDN until the owner decides. Details: [`maps-poc.md`](maps-poc.md).

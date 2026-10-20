@@ -1,7 +1,7 @@
 import type { LocationPoint, LootKind } from "@/lib/data/types";
 import { LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 
-const KIND_FILL: Record<LootKind, string> = {
+export const KIND_FILL: Record<LootKind, string> = {
   mob: "#ec8b80", skinning: "#d9b88f", mining: "#de9a62", herbalism: "#86d67e", fishing: "#6cbcef",
   fishing_pool: "#5ccdd3", chest: "#e6b95c", gameobject: "#c3aeea", disenchant: "#d0a0f5",
 };
