@@ -4,6 +4,8 @@ Status: **AUDIT, not a rewrite.** Produced as part of AzerDex P2-E (Addon & Comp
 
 **Correction (this revision):** the original version of this document stated a total of 85 and several incorrect per-directory subtotals. Both are corrected below, verified by direct `git ls-files` counts rather than hand-counted prose, with every category subtotal checked to sum exactly to the file total.
 
+**Additional factual correction (2026-10-20, final P2-E review):** the earlier discrepancy #4 misclassified the public beta as memory-backed and claimed Upstash had not been provisioned. Read-only Vercel inspection instead confirms `RATE_LIMIT_BACKEND=upstash` scoped to `web/azerdex-beta`, with Marketplace REST variables and `RATE_LIMIT_SALT` in Preview. `infrastructure-setup.md` and `vercel-environments.md` now distinguish beta configuration from still-open Production-specific gates. No live Redis request was independently validated in this correction.
+
 ## File counts — baseline vs. this PR's head
 
 | | Count | Verified via |
@@ -113,9 +115,9 @@ Note: **none of the 26 files mention "Browser Pairing," "Stage B," "Stage C," or
 
 ### 4. `docs/web/infrastructure-setup.md` header overstates "nothing provisioned" — MEDIUM — FIXED NOW
 - **Location:** document title line 1 ("NOT done — requires owner approval") versus step 10 in its own table.
-- **Evidence:** step 10 itself already states accurately: *"Vercel project (exists: `wow-foreverdb`, root directory `web/`, Hobby)... Current temporary demo and previews: `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture`"* — this is live today (confirmed against the deployed beta). Steps 1–9 and 11–13 (separate public DB, Upstash, WAF, custom domain beyond the existing `beta.azerdex.com`/`azerdex.com` Vercel-managed domains, monitoring) remain genuinely not provisioned. The top-of-file framing ("Nothing below has been provisioned") was only true if read as "nothing **beyond step 10**."
-- **Correction:** reworded the title/intro to "mostly NOT done" with a pointer to the new addendum, and added a dated "Addendum (2026-10-20)" at the end of the file spelling out exactly what's live for the public beta (the Vercel project, the `beta.azerdex.com` domain + protection exception, `preview`/`fixture`, and — checked directly, not assumed — the **memory** rate limiter, since Upstash/step 7 has not actually been provisioned) versus what steps 1–9/11–13 still genuinely reserve for a future real-data Production. The step table itself is unedited.
-- **Status:** Fixed now.
+- **Evidence:** step 10 itself already states accurately: *"Vercel project (exists: `wow-foreverdb`, root directory `web/`, Hobby)... Current temporary demo and previews: `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture`"* — this is live today (confirmed against the deployed beta). Steps 1–6 and Production-specific parts of 7–8, 9, and 11–13 (separate public DB, Production scaling/credentials for Upstash, WAF, other domain work, monitoring) remain open for Production; Upstash rate limiting is already configured for the public beta. The top-of-file framing ("Nothing below has been provisioned") was only true if read as "nothing **beyond step 10**."
+- **Correction:** reworded the title/intro to "mostly NOT done" with a pointer to the new addendum, and added a dated "Addendum (2026-10-20)" at the end of the file spelling out exactly what's live for the public beta (the Vercel project, the `beta.azerdex.com` domain + protection exception, `preview`/`fixture`, and the branch-scoped **Upstash** rate-limiter configuration, supported by read-only Vercel environment-variable inspection) versus what steps 1–9/11–13 still genuinely reserve for a future real-data Production. The step table itself is unedited.
+- **Status:** Corrected in the final P2-E review following read-only Vercel verification; future Production-specific controls remain open.
 
 ### 5–10 (candidates checked, **no discrepancy found**)
 - `docs/web/go-live-checklist.md`: confirmed scoped to future real-data Production; no gate is marked done that shouldn't be; correctly separate from the already-live synthetic beta. **No correction needed.**
