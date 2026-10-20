@@ -124,7 +124,7 @@ for p in companion_files:
     if PRODUCTION_REF in p.read_text(encoding="utf-8"):
         check(rel in allowed_ref_files, f"{rel}: mentions the production project reference")
 gate = read("companion/ForeverDB.Companion.Account/AccountFeatureGate.cs")
-check("public const bool ProductionAccountAuthApproved = true;" in gate, "standard Account Linking approval must stay enabled")
+check("public static readonly bool ProductionAccountAuthApproved = true;" in gate, "standard Account Linking approval must stay enabled")
 check("public const bool ZeroTouchEnrollmentApproved = false;" in gate, "ZeroTouchEnrollmentApproved must stay false")
 check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSyncApproved must stay false")
 

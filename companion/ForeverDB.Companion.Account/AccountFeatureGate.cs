@@ -41,7 +41,7 @@ public sealed record AccountGateDecision(
 public static class AccountFeatureGate
 {
     /// <summary>Owner-approved for the standard Account Linking MVP package; public rollout still requires owner acceptance.</summary>
-    public const bool ProductionAccountAuthApproved = true;
+    public static readonly bool ProductionAccountAuthApproved = true;
 
     // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
     // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.

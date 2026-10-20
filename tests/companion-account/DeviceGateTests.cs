@@ -40,8 +40,8 @@ public class DeviceGateTests
     public void Production_account_linking_is_approved_while_zero_touch_and_auto_sync_stay_off()
     {
         var production = typeof(AccountFeatureGate).GetField(nameof(AccountFeatureGate.ProductionAccountAuthApproved), BindingFlags.Public | BindingFlags.Static)!;
-        Assert.True(production.IsLiteral);
-        Assert.Equal(true, production.GetRawConstantValue());
+        Assert.True(production.IsInitOnly);
+        Assert.Equal(true, production.GetValue(null));
 
         foreach (var name in new[] { nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), nameof(AccountFeatureGate.DeviceAutoSyncApproved) })
         {
