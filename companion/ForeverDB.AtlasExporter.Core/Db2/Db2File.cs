@@ -314,6 +314,24 @@ public sealed class Db2File
                 long id = idList is not null ? idList[index] : -1;
                 var storageIndex = 0;
 
+                if (id < 0)
+                {
+                    // Common-data columns are keyed by record ID, so read an inline ID first
+                    // even when it is declared after them.
+                    var position = 0;
+
+                    foreach (var field in layout.Fields.Where(f => !f.NonInline))
+                    {
+                        if (field.IsId && ReadField(record, recordPosition, stringStart, position, field, -1) is long inlineId)
+                        {
+                            id = inlineId;
+                            break;
+                        }
+
+                        position++;
+                    }
+                }
+
                 foreach (var field in layout.Fields)
                 {
                     if (field.NonInline)

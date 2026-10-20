@@ -19,7 +19,7 @@ Companion file, no network service of ours, no database access.
 
 | Claim | Evidence |
 | --- | --- |
-| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism) | 58 automated tests against **synthetic** fixtures |
+| Logic (enumeration, composition, WebP, manifests, resume, cancel, ZIP, determinism) | 59 automated tests against **synthetic** fixtures |
 | Windows executable starts, loads CascLib + SkiaSharp, runs the CLI, produces a valid ZIP from a synthetic client | `atlas-exporter.yml` smoke job on `windows-latest` |
 | WDC3/4/5 DB2 reader | Implemented from the public format documentation and tested against synthetic files written by the same documentation. **Not yet run against a real client DB2.** |
 | Extraction from a real WoW: Forever install | **Not verified** – no agent has access to one. The first owner run is the real E2E test. |

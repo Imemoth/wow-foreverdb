@@ -98,3 +98,5 @@ if ($failures.Count -gt 0) {
 
 Write-Host ""
 Write-Host "Smoke test passed (synthetic client)."
+# Deliberate failing runs above leave $LASTEXITCODE at 1; do not let it leak out.
+exit 0

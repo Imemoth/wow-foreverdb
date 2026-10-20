@@ -136,6 +136,33 @@ Name_lang
             Assert.Equal("Alpha", copy.Str("Name_lang"), "copy table row duplicates its source");
         });
 
+        Harness.Add("db2: a common-data column declared before the inline ID still resolves per record", () =>
+        {
+            var records = new List<byte[]>();
+
+            foreach (var id in new uint[] { 10, 20 })
+            {
+                var record = new byte[4];
+                PutBits(record, 0, 32, id);
+                records.Add(record);
+            }
+
+            var bytes = new Wdc5Writer
+            {
+                RecordSizeBytes = 4,
+                Records = records,
+                Columns = new List<Wdc5Writer.Column>
+                {
+                    new(Wdc5Writer.Storage.Common, 0, 0, 7, 0, 0, CommonValues: new Dictionary<uint, uint> { [20] = 99 }),
+                    new(Wdc5Writer.Storage.None, 32, 0)
+                }
+            }.Build();
+            var dbd = DbdFile.Parse("T", "COLUMNS\nint V\nint ID\n\nLAYOUT DB51D55F\nV<32>\n$id$ID<32>\n\n");
+            var table = Db2File.Parse(bytes).Read("T", dbd.Select("DB51D55F", null)!);
+            Assert.Equal(7L, table.Rows.Single(r => r.Int("ID") == 10).Int("V"));
+            Assert.Equal(99L, table.Rows.Single(r => r.Int("ID") == 20).Int("V"));
+        });
+
         Harness.Add("db2: layout is chosen by LayoutHash first, build range second", () =>
         {
             var dbd = DbdFile.Parse("TestTable", Dbd);
