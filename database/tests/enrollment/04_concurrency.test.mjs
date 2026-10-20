@@ -139,6 +139,11 @@ describe("races between different tickets", () => {
         assert.deepEqual(r.value, { ok: true });
       }
       assert.equal((await w.row("select count(*)::int n from private.devices where ticket_id = $1", [t.ticket_id]))[0].n, e.value.ok ? 1 : 0);
+      // Each round tests the same account. Retire a winning device so this race test cannot accidentally become a device-cap test.
+      if (e.value.ok) {
+        await w.fx.resetBudgets();
+        assert.deepEqual(await acct.call("fdb_account_device_revoke", [e.value.device_id]), { ok: true });
+      }
     }
     assert.equal(enrolled + revoked, 30);
   });
