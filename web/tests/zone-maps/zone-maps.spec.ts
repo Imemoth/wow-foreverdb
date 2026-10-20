@@ -254,7 +254,7 @@ test.describe("security: CSP, CORS, resilience", () => {
   });
 
   test("image failure falls back without losing markers", async ({ page }) => {
-    await page.route(new RegExp(`https://${CDN_HOST.replace(/\./g, "\\.")}/forever/1412/v1/(?!manifest).*`), (r) => r.abort());
+    await page.route((u) => u.hostname === CDN_HOST && /^\/forever\/1412\/v1\/(?!manifest)/.test(u.pathname), (r) => r.abort());
     await page.goto("/zone/1412");
     await section(page).scrollIntoViewIfNeeded();
     await expect(page.getByTestId("map-fallback")).toContainText("image could not be loaded");

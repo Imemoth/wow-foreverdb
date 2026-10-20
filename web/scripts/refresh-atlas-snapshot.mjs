@@ -1,5 +1,6 @@
-// Regenerates src/lib/maps/atlas/atlas-index.snapshot.json from a published atlas/index.json (a file path or the https CDN URL).
-//   node scripts/refresh-atlas-snapshot.mjs <path-to-index.json | https://azerdex-assets.pages.dev/atlas/index.json> [approved-zip-sha256]
+// Regenerates src/lib/maps/atlas/atlas-index.snapshot.json from a published atlas/index.json.
+//   node scripts/refresh-atlas-snapshot.mjs <path-to-index.json> [approved-zip-sha256]
+// Reads a LOCAL file only (download the index first, e.g. with curl or Invoke-WebRequest, and compare its sha256 with the published one).
 // The snapshot is only the OFFLINE FALLBACK of the runtime catalog loader (lib/maps/atlas/catalog.ts). It never replaces the CDN as
 // source of truth; tests/unit/atlas-snapshot.test.ts validates it with the same schema the runtime uses. Output is deterministic.
 import { createHash } from "node:crypto";
@@ -7,13 +8,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const [src, zipSha = null] = process.argv.slice(2);
-if (!src) { console.error("usage: refresh-atlas-snapshot.mjs <index.json|url> [zip-sha256]"); process.exit(2); }
+if (!src) { console.error("usage: refresh-atlas-snapshot.mjs <index.json> [zip-sha256]"); process.exit(2); }
 if (zipSha && !/^[0-9a-f]{64}$/.test(zipSha)) { console.error("zip sha256 must be 64 lowercase hex chars"); process.exit(2); }
-let bytes;
-if (/^https:\/\//.test(src)) {
-  if (new URL(src).hostname !== "azerdex-assets.pages.dev" && new URL(src).hostname !== "assets.azerdex.com") { console.error("refusing non-allow-listed host"); process.exit(2); }
-  bytes = Buffer.from(await (await fetch(src, { redirect: "error" })).arrayBuffer());
-} else bytes = readFileSync(src);
+const bytes = readFileSync(src);
 const index = JSON.parse(bytes.toString("utf8"));
 const pick = (v) => v && { variant: v.variant, kind: v.kind, path: v.path, width: v.width, height: v.height, bytes: v.bytes, sha256: v.sha256, isDefault: v.isDefault };
 const maps = index.maps.map((m) => ({
