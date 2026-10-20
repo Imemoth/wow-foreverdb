@@ -45,7 +45,8 @@ Local verification on the feature branch completed with:
 - Disposable PostgreSQL and real GoTrue 2.197.0 vertical slice: 7 passed, including anonymous ownership proof, registered claim redemption, device ticket enrollment, device sync and rejection of the previous owner.
 - Disposable database concurrency and failure-recovery regressions: 21 passed after removing test-state coupling and consuming the expected terminated-client error.
 - Migration 0012/0014 ownership, replay, enrollment, logout and revocation suites passed apart from a local test-runner working-directory problem; the affected migration rollback case was rerun with the corrected wrapper and passed. Exact-head CI remains the release authority for the complete suites.
-- The previous implementation head completed all eight workflows successfully. The standard-package gate change requires a fresh exact-head run before owner acceptance.
+- The standard-package gate implementation completed all eight pull-request workflows successfully, including Windows real-DPAPI/multi-process tests, SQL/real-GoTrue, GoTrue/PostgREST end-to-end, web auth, CodeQL, API security and existing Companion regressions.
+- Owner acceptance uses the existing self-contained `ForeverDB-Companion-win-x64` workflow artifact. The account test workflow no longer publishes an acceptance-only package.
 
 ## Acceptance gates
 
@@ -53,9 +54,9 @@ Local verification on the feature branch completed with:
 - [x] Anonymous use, existing installation identity, historical data and fallback enrollment preserved.
 - [x] AutoSync, activation-file enrollment, web production activation and temporary pilot gates remain off.
 - [x] Focused security review completed; material finding fixed test-first.
-- [ ] Exact-head pull-request CI is green after the standard-package gate change.
-- [ ] Windows runner executes all DPAPI and cross-process tests without skips.
-- [ ] Normal `ForeverDB-Companion-win-x64` workflow artifact is produced.
+- [x] Exact-head pull-request CI is green after the standard-package gate change.
+- [x] Windows runner executes all DPAPI and cross-process tests without skips.
+- [x] Normal `ForeverDB-Companion-win-x64` workflow artifact is produced.
 - [ ] Owner acceptance on the Windows build.
 - [ ] Separate authorization before any production deployment, hosted Supabase change, public activation or installer publication.
 

@@ -49,7 +49,7 @@ No PR #62 migration, pairing endpoint, raw-header ingress, HMAC attestation, bro
 - Companion suite on Windows with real DPAPI and multi-process tests, including `AccountLinkingMvpTests`.
 - Disposable PostgreSQL + real GoTrue enrollment suite, including the claim-to-device vertical slice in `database/tests/enrollment/09_gotrue.test.mjs`.
 - Existing 0012/0014 SQL concurrency, replay, ownership-preservation, logout and revocation suites.
-- Release WPF build and unpublished Windows test artifact.
+- Release WPF build and the normal self-contained `ForeverDB-Companion-win-x64` workflow artifact.
 - One scoped security review of the final diff and exact-head CI.
 
 Public rollout, hosted Supabase migration/configuration changes, deployment, installer publication, activation-file enrollment and AutoSync require separate owner approval.
