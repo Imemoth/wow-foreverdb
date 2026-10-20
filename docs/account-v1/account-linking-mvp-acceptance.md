@@ -1,7 +1,9 @@
 # Account linking MVP acceptance record
 
-Date: 2026-10-20  
-Target: October 30, 2026  
+Date: 2026-10-20
+
+Target: October 30, 2026
+
 Branch: `feature/account-linking-mvp`
 
 ## Release behavior
