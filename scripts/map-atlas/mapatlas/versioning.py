@@ -23,7 +23,7 @@ class LedgerError(ValueError):
 
 @dataclass
 class Ledger:
-    """{"maps": {"<uiMapId>": {"<version>": {"contentSha256": ..., "pixelSha256": ..., "firstBuild": ..., "seenBuilds": [...], "files": {name: {"sha256","bytes"}}}}}}"""
+    """{"maps": {"<uiMapId>": {"<version>": {"assetSetSha256": ..., "firstBuild": ..., "seenBuilds": [...], "files": {name: {"sha256","bytes"}}}}}}"""
     data: dict
 
     @classmethod
@@ -38,10 +38,11 @@ class Ledger:
     def versions(self, ui_map_id: int) -> dict:
         return self.data["maps"].get(str(ui_map_id), {})
 
-    def lookup(self, ui_map_id: int, layout_sha: str, pixel_sha: str) -> str | None:
-        """Version already published/recorded for exactly this pixel content, or None."""
+    def lookup_asset_set(self, ui_map_id: int, asset_set_sha: str) -> str | None:
+        """Version whose COMPLETE asset set (all file bytes + material manifest) is identical. Records written before asset-set
+        hashing existed (e.g. the legacy POC v1) never match: they stay protected as published, but are never silently reused."""
         for ver, rec in self.versions(ui_map_id).items():
-            if rec["pixelSha256"] == pixel_sha and rec["layoutSha256"] == layout_sha:
+            if rec.get("assetSetSha256") == asset_set_sha:
                 return ver
         return None
 
@@ -54,11 +55,11 @@ class Ledger:
         if build not in seen:
             seen.append(build)
 
-    def record(self, ui_map_id: int, version: str, layout_sha: str, pixel_sha: str, files: dict[str, dict], build: str) -> None:
+    def record(self, ui_map_id: int, version: str, asset_set_sha: str, files: dict[str, dict], build: str, **extra) -> None:
         vs = self.data["maps"].setdefault(str(ui_map_id), {})
         if version in vs:
             raise LedgerError(f"refusing to overwrite {ui_map_id}/{version}")
-        vs[version] = {"layoutSha256": layout_sha, "pixelSha256": pixel_sha, "firstBuild": build, "seenBuilds": [build], "files": files}
+        vs[version] = {"assetSetSha256": asset_set_sha, "firstBuild": build, "seenBuilds": [build], "files": files, **extra}
 
     def to_text(self) -> str:
         return json.dumps(self.data, indent=2, sort_keys=True) + "\n"
