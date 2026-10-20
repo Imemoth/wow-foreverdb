@@ -26,12 +26,14 @@ public static class ClientLocator
     /// </summary>
     public static ClientInstall? Inspect(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        path = path?.Trim().Trim('"') ?? "";
+
+        if (path.Length == 0 || !Directory.Exists(path))
         {
             return null;
         }
 
-        var current = new DirectoryInfo(path.Trim().Trim('"'));
+        var current = new DirectoryInfo(path);
         string? branchDirectory = null;
 
         for (var depth = 0; current is not null && depth < 4; depth++, current = current.Parent)

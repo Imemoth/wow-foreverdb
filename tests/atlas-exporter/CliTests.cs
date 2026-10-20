@@ -23,6 +23,15 @@ internal static class CliTests
             Assert.Equal("wow_classic_beta", o.Product);
         });
 
+        Harness.Add("cli: a quoted path ending in a backslash does not swallow the rest of the command line", () =>
+        {
+            var o = CliOptions.Parse(new[] { "--wow-root", "C:\\Games\\WoW\" --export --resume", "--output", "\"D:\\out\"" });
+            Assert.Equal(0, o.Errors.Count, string.Join(";", o.Errors));
+            Assert.Equal("C:\\Games\\WoW", o.WowRoot);
+            Assert.True(o.Export && o.Resume);
+            Assert.Equal("D:\\out", o.Output);
+        });
+
         Harness.Add("cli: bad input is reported, never silently ignored", () =>
         {
             Assert.True(CliOptions.Parse(new[] { "--nonsense" }).Errors.Count == 1);

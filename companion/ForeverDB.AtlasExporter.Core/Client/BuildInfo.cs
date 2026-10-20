@@ -73,7 +73,17 @@ public static class BuildInfo
     {
         try
         {
-            return Parse(File.ReadAllLines(path));
+            // The Battle.net launcher may hold the file open; read it with shared access.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            var lines = new List<string>();
+
+            while (reader.ReadLine() is { } line)
+            {
+                lines.Add(line);
+            }
+
+            return Parse(lines);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

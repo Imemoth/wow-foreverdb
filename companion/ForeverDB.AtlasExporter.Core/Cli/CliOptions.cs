@@ -38,8 +38,34 @@ public sealed class CliOptions
 
     public WebpSettings Webp => new(Quality, Lossless);
 
+    /// <summary>
+    /// Windows pitfall: a quoted path ending in a backslash (<c>"C:\Games\WoW\"</c>) swallows the closing
+    /// quote and every following option into one argument. Split such an argument back apart.
+    /// </summary>
+    public static string[] RepairArguments(string[] args)
+    {
+        var repaired = new List<string>();
+
+        foreach (var arg in args)
+        {
+            var index = arg.IndexOf("\" --", StringComparison.Ordinal);
+
+            if (index < 0)
+            {
+                repaired.Add(arg);
+                continue;
+            }
+
+            repaired.Add(arg[..index]);
+            repaired.AddRange(arg[(index + 2)..].Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        return repaired.ToArray();
+    }
+
     public static CliOptions Parse(string[] args)
     {
+        args = RepairArguments(args);
         var options = new CliOptions();
 
         string? Value(ref int index, string name)
@@ -65,7 +91,7 @@ public sealed class CliOptions
                 raw = raw[..eq];
             }
 
-            string? Get(ref int index, string name) => inline ?? Value(ref index, name);
+            string? Get(ref int index, string name) => (inline ?? Value(ref index, name))?.Trim().Trim('"');
 
             switch (raw.ToLowerInvariant())
             {
