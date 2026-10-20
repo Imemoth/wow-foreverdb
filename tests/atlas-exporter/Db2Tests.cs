@@ -183,6 +183,26 @@ Name_lang
             Assert.True((await noFile.ReadAsync("TestTable", default)).Error!.Contains("not found"));
         });
 
+        Harness.Add("db2: a file whose table hash is not the requested table is rejected", async () =>
+        {
+            var wrongTable = new Wdc5Writer
+            {
+                TableHash = 0xDEADBEEF, RecordSizeBytes = 4, Records = new List<byte[]> { new byte[4] },
+                Columns = new List<Wdc5Writer.Column> { new(Wdc5Writer.Storage.None, 32, 0) }
+            }.Build();
+            var source = new Db2TableSource("t", _ => wrongTable, new Fixed(Dbd), null);
+            var result = await source.ReadAsync("UiMap", default);
+            Assert.True(result.Data is null && result.Error!.Contains("table hash"), result.Error ?? "");
+        });
+
+        Harness.Add("db2: client source falls back from name to the manifest FileDataID", () =>
+        {
+            using var assets = new NameMissAssets();
+            var source = Db2TableSource.FromClient(assets, new Fixed(null), null);
+            _ = source.ReadAsync("UiMap", default).GetAwaiter().GetResult();
+            Assert.True(assets.NameTried && assets.IdTried == ForeverDB.AtlasExporter.Db2.KnownTables.FileDataIds["UiMap"]);
+        });
+
         Harness.Add("dbd: parser handles annotations, arrays, comments and build ranges", () =>
         {
             var dbd = DbdFile.Parse("UiMapAssignment", """
@@ -286,6 +306,16 @@ $relation$UiMapID<u16> // trailing
         }
 
         throw new AssertException("expected MetadataException");
+    }
+
+    private sealed class NameMissAssets : ForeverDB.AtlasExporter.Client.IAssetSource
+    {
+        public bool NameTried { get; private set; }
+        public int IdTried { get; private set; }
+        public string Label => "x";
+        public byte[]? ReadByName(string path) { NameTried = path.EndsWith("UiMap.db2"); return null; }
+        public byte[]? ReadByFileDataId(int id) { IdTried = id; return null; }
+        public void Dispose() { }
     }
 
     private sealed class Fixed : IDbdSource

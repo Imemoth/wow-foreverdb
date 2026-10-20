@@ -11,6 +11,21 @@ public sealed record WebpSettings(int Quality, bool Lossless)
 
 public static class WebpCodec
 {
+    /// <summary>Fails fast (before any export work) when the native imaging library cannot load.</summary>
+    public static string? Probe()
+    {
+        try
+        {
+            var probe = Encode(BgraImage.Blank(2, 2), WebpSettings.Default);
+            return TryDecode(probe) is null ? "WebP encoder round trip failed." : null;
+        }
+        catch (Exception ex) when (ex is TypeInitializationException or DllNotFoundException or
+                                       BadImageFormatException or InvalidOperationException)
+        {
+            return $"{ex.GetType().Name}: {ex.InnerException?.Message ?? ex.Message}";
+        }
+    }
+
     public static byte[] Encode(BgraImage image, WebpSettings settings)
     {
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Unpremul);

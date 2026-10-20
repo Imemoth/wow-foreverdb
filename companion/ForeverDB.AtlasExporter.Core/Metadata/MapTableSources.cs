@@ -43,7 +43,15 @@ public sealed class Db2TableSource : IMapTableSource
 
     public static Db2TableSource FromClient(
         IAssetSource assets, IDbdSource definitions, Version? build) =>
-        new("client-db2", table => assets.ReadByName($@"DBFilesClient\{table}.db2"), definitions, build);
+        new("client-db2", table =>
+        {
+            // CASC resolves most DB2 names; the FileDataID is the exact fallback.
+            var bytes = assets.ReadByName($@"DBFilesClient\{table}.db2");
+
+            return bytes is null && KnownTables.FileDataIds.TryGetValue(table, out var id)
+                ? assets.ReadByFileDataId(id)
+                : bytes;
+        }, definitions, build);
 
     public static Db2TableSource FromDirectory(
         string directory, IDbdSource definitions, Version? build) =>
@@ -71,6 +79,13 @@ public sealed class Db2TableSource : IMapTableSource
         catch (Db2FormatException ex)
         {
             return TableReadResult.Fail($"{table}.db2: {ex.Message}");
+        }
+
+        if (KnownTables.TableHashes.TryGetValue(table, out var expectedHash) && file.TableHash != expectedHash)
+        {
+            return TableReadResult.Fail(
+                $"{table}.db2: unexpected table hash {file.TableHash:X8} (expected {expectedHash:X8}); " +
+                "this is not the table it claims to be or the header was misread.");
         }
 
         var dbdText = await _definitions.GetAsync(table, cancellationToken);

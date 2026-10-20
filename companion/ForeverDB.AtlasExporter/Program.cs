@@ -5,6 +5,7 @@ using ForeverDB.AtlasExporter.Client;
 using ForeverDB.AtlasExporter.Db2;
 using ForeverDB.AtlasExporter.Enumeration;
 using ForeverDB.AtlasExporter.Export;
+using ForeverDB.AtlasExporter.Imaging;
 using ForeverDB.AtlasExporter.Metadata;
 using ForeverDB.AtlasExporter.Model;
 
@@ -83,6 +84,14 @@ internal static class Runner
         var cacheRoot = options.CacheDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ForeverDB", "AtlasExporter");
+
+        if (WebpCodec.Probe() is { } imagingProblem)
+        {
+            Console.Error.WriteLine(
+                "Error: the image library (SkiaSharp) could not load: " + imagingProblem +
+                "\nRe-extract the complete ZIP (all files must stay together) and use 64-bit Windows 10/11.");
+            return 1;
+        }
 
         // ---- 1. client discovery -------------------------------------------------
         var install = options.LooseDir is not null && options.WowRoot is null
@@ -417,9 +426,13 @@ internal static class Runner
             return 1;
         }
 
-        var skia = ForeverDB.AtlasExporter.Imaging.WebpCodec.Encode(
-            ForeverDB.AtlasExporter.Imaging.BgraImage.Blank(4, 4), ForeverDB.AtlasExporter.Imaging.WebpSettings.Default);
-        Console.WriteLine($"WebP encoder: ok ({skia.Length} bytes)");
+        if (WebpCodec.Probe() is { } problem)
+        {
+            Console.WriteLine("WebP encoder: FAILED - " + problem);
+            return 1;
+        }
+
+        Console.WriteLine("WebP encoder: ok");
         Console.WriteLine("Self-check passed.");
         return 0;
     }

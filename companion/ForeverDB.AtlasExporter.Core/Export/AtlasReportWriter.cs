@@ -436,7 +436,7 @@ public sealed class AtlasReportWriter
                 continue;
             }
 
-            foreach (var variant in variants.Where(v => v.Primary || v.Kind == "base"))
+            foreach (var variant in variants.OrderBy(v => v.Variant, StringComparer.Ordinal))
             {
                 var overview = variant.Images.FirstOrDefault(i => i.Role == "overview");
                 entries.Add(new GalleryEntry
@@ -454,21 +454,8 @@ public sealed class AtlasReportWriter
                     SourceImagePath = overview?.Path,
                     ThumbFile = overview is null ? null : $"{map.UiMapId}-{variant.Variant}.webp",
                     Note = variant.Problems.Count > 0 ? _sanitizer.Clean(variant.Problems[0]) :
-                        variant.SharedWithUiMapId is { } owner ? $"shares art with map {owner}" : null
-                });
-            }
-
-            foreach (var variant in variants.Where(v => v.Kind == "full-reveal" && v.Primary))
-            {
-                var overview = variant.Images.FirstOrDefault(i => i.Role == "overview");
-                entries.Add(new GalleryEntry
-                {
-                    UiMapId = map.UiMapId, Name = map.Name, MapArtId = variant.UiMapArtId,
-                    Variant = variant.Variant, Category = map.Category, InstanceKind = map.InstanceKind,
-                    Status = variant.Status, Width = overview?.Width ?? 0, Height = overview?.Height ?? 0,
-                    Image = overview?.Path, SourceImagePath = overview?.Path,
-                    ThumbFile = overview is null ? null : $"{map.UiMapId}-{variant.Variant}.webp",
-                    Note = variant.RevealStatus
+                        variant.SharedWithUiMapId is { } owner ? $"shares art with map {owner}" :
+                        variant.RevealStatus
                 });
             }
         }
