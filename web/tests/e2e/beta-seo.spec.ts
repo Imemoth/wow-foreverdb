@@ -122,7 +122,7 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
 
   test("non-indexable beta data pages: Database, Zones, entity, API, verify, Account all stay noindex", async () => {
     await withServer(3222, authorizedBeta, async (base) => {
-      for (const path of ["/database", "/zones", "/zone/1420", "/item/2770"]) {
+      for (const path of ["/database", "/zones", "/zone/1420", "/item/2770", "/download"]) {
         const r = await curlGet(`${base}${path}`, { Host: BETA_HOST, ...client() });
         expect(r.headers["x-robots-tag"], path).toBe("noindex, nofollow");
         expect(r.body, path).toMatch(/<meta name="robots" content="noindex/);
