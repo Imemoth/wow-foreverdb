@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
-import { extname, join, resolve, sep } from "node:path";
+import { extname, join } from "node:path";
 // Plain Playwright test (NOT ../e2e/fixtures): that fixture adds an x-forwarded-for header to every request, which would turn the
 // cross-origin manifest fetch into a preflighted one and no longer reflect what a real browser sends.
 import { expect, test } from "@playwright/test";
-import { expectWholeImageFits, geometry, markerError, settle } from "../e2e/maps-helpers";
+import { expectWholeImageFits, geometry, hasFile, markerError, readDistFile, settle } from "../e2e/maps-helpers";
 
 const DIST = process.env.ATLAS_REAL_DIST;
 const ORIGIN = "https://azerdex-assets.pages.dev";
@@ -28,7 +28,7 @@ function parseHeaders(text: string): { re: RegExp; headers: Record<string, strin
   return rules;
 }
 
-test.skip(!DIST || !existsSync(join(DIST ?? "", "_headers")), "ATLAS_REAL_DIST not set (private real artwork)");
+test.skip(!DIST || !hasFile(join(DIST ?? "", "_headers")), "ATLAS_REAL_DIST not set (private real artwork)");
 
 const CDN_PORT = Number(process.env.E2E_CDN_ORIGIN_PORT ?? 3443);
 
@@ -39,17 +39,17 @@ async function startCdn(): Promise<Cdn> {
   const dir = mkdtempSync(join(tmpdir(), "azd-cdn-"));
   execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "k.pem"), "-out", join(dir, "c.pem"), "-days", "1",
     "-subj", "/CN=azerdex-assets.pages.dev", "-addext", "subjectAltName=DNS:azerdex-assets.pages.dev"], { stdio: "ignore" });
-  const rules = parseHeaders(readFileSync(join(DIST!, "_headers"), "utf8"));
+  const rules = parseHeaders((readDistFile(DIST!, "/_headers") ?? Buffer.alloc(0)).toString("utf8"));
   const state: Cdn = { seen: [], stripCors: false, rules, close: async () => {} };
   const server = createServer({ key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) }, (req, res) => {
     const path = new URL(req.url ?? "/", ORIGIN).pathname;
     state.seen.push({ url: path, headers: req.headers });
-    const file = resolve(DIST!, "." + path);
-    if (!file.startsWith(resolve(DIST!) + sep) || !existsSync(file) || !statSync(file).isFile()) { res.writeHead(404, { "content-type": "text/plain" }).end("not found"); return; }
-    const headers: Record<string, string> = { "content-type": MIME[extname(file)] ?? "application/octet-stream" };
+    const body = readDistFile(DIST!, path);
+    if (body === null) { res.writeHead(404, { "content-type": "text/plain" }).end("not found"); return; }
+    const headers: Record<string, string> = { "content-type": MIME[extname(path)] ?? "application/octet-stream" };
     for (const r of rules) if (r.re.test(path)) Object.assign(headers, r.headers);
     if (state.stripCors) delete headers["Access-Control-Allow-Origin"];
-    res.writeHead(200, headers).end(readFileSync(file));
+    res.writeHead(200, headers).end(body);
   });
   await new Promise<void>((ok) => server.listen(CDN_PORT, "127.0.0.1", ok));
   state.close = () => new Promise<void>((ok) => { server.close(() => { rmSync(dir, { recursive: true, force: true }); ok(); }); });
@@ -57,7 +57,7 @@ async function startCdn(): Promise<Cdn> {
 }
 
 let cdn: Cdn;
-test.beforeAll(async () => { if (DIST && existsSync(join(DIST, "_headers"))) cdn = await startCdn(); });
+test.beforeAll(async () => { if (DIST && hasFile(join(DIST, "_headers"))) cdn = await startCdn(); });
 test.afterAll(async () => { await cdn?.close(); });
 test.beforeEach(() => { if (cdn) { cdn.seen.length = 0; cdn.stripCors = false; } });
 

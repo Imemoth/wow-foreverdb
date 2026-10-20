@@ -1,3 +1,5 @@
+import { closeSync, fstatSync, openSync, readFileSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import type { CDPSession, Page } from "@playwright/test";
 
 export const MAP_URL = "/poc/maps/tirisfal";
@@ -106,3 +108,26 @@ export function markerError(page: Page) {
     return { worst, checked };
   });
 }
+
+/**
+ * Reads a regular file below `root` for a URL path with ONE open + fstat on the descriptor, so there is no check-then-use window
+ * between "does it exist / is it a file" and "read it" (CodeQL js/file-system-race). Returns null for anything that is not a plain
+ * file strictly inside `root` (traversal, missing, directory).
+ */
+export function readDistFile(root: string, urlPath: string): Buffer | null {
+  const base = resolve(root);
+  const file = resolve(base, "." + urlPath);
+  if (!file.startsWith(base + sep)) return null;
+  let fd: number | undefined;
+  try {
+    fd = openSync(file, "r");
+    return fstatSync(fd).isFile() ? readFileSync(fd) : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Existence check in a single call (no separate exists/stat pair). */
+export const hasFile = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isFile() ?? false;

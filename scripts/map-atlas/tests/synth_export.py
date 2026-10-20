@@ -132,10 +132,17 @@ def edit_json(F: dict[str, bytes], path: str, fn) -> None:
     F[path] = jdump(d)
 
 
-def write_zip(F: dict[str, bytes], path: Path, root: str = ROOT, extra: list[tuple[zipfile.ZipInfo, bytes]] | None = None) -> Path:
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, data in F.items():
-            z.writestr(root + name, data)
+def write_zip(F: dict[str, bytes], path: Path, root: str = ROOT, extra: list[tuple[zipfile.ZipInfo, bytes]] | None = None,
+              compression: int = zipfile.ZIP_DEFLATED, order: str = "given") -> Path:
+    """Byte-deterministic archive: fixed timestamps and attributes, so the same input is the same bytes whatever the wall clock
+    (zipfile stamps the current time otherwise, which made two "identical" fixtures differ by 2 s boundaries on slow CI runners)."""
+    names = sorted(F) if order == "sorted" else (list(reversed(list(F))) if order == "reversed" else list(F))
+    with zipfile.ZipFile(path, "w", compression) as z:
+        for name in names:
+            zi = zipfile.ZipInfo(root + name, date_time=(1980, 1, 1, 0, 0, 0))
+            zi.compress_type = compression
+            zi.external_attr = 0o644 << 16
+            z.writestr(zi, F[name])
         for info, data in extra or []:
             z.writestr(info, data)
     return path

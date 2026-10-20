@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveMapAssetUrl } from "@/lib/maps/asset-url";
@@ -86,7 +86,8 @@ describe("atlas ZIP importer manifests <-> web manifest contract", () => {
 // Local-only: validates EVERY manifest of the real atlas distribution (private artwork, never in CI).
 //   ATLAS_REAL_DIST=/path/to/out/dist npx vitest run tests/unit/map-atlas-contract.test.ts
 const realDist = process.env.ATLAS_REAL_DIST;
-describe.skipIf(!realDist || !existsSync(join(realDist ?? "", "atlas/index.json")))("REAL atlas distribution (local acceptance)", () => {
+const isFile = (p: string): boolean => statSync(p, { throwIfNoEntry: false })?.isFile() ?? false; // one call: no exists-then-stat race
+describe.skipIf(!realDist || !isFile(join(realDist ?? "", "atlas/index.json")))("REAL atlas distribution (local acceptance)", () => {
   const dist = realDist ?? "";
   const manifests = (): { id: string; ver: string; m: any }[] => // eslint-disable-line @typescript-eslint/no-explicit-any
     readdirSync(join(dist, "forever")).flatMap((id) => readdirSync(join(dist, "forever", id)).map((ver) => ({ id, ver, m: JSON.parse(readFileSync(join(dist, "forever", id, ver, "manifest.json"), "utf8")) })));
@@ -102,7 +103,8 @@ describe.skipIf(!realDist || !existsSync(join(realDist ?? "", "atlas/index.json"
       for (const f of files) {
         const url = resolveMapAssetUrl("https://azerdex-assets.pages.dev", m.zoneId, m.version, f);
         const rel = url.replace("https://azerdex-assets.pages.dev/", "");
-        expect(existsSync(join(dist, rel)) && statSync(join(dist, rel)).size > 0, rel).toBe(true);
+        const st = statSync(join(dist, rel), { throwIfNoEntry: false });
+        expect(st?.isFile() === true && st.size > 0, rel).toBe(true);
       }
     }
   });

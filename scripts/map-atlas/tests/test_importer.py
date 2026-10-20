@@ -354,16 +354,83 @@ class VersioningTests(Base):
         return o, run_import(o)
 
     def test_deterministic_and_idempotent(self):
-        o1, r1 = self.run_import(None, "a")
-        o2, r2 = self.run_import(None, "b")
+        """Same source = the same archive BYTES (one file, imported repeatedly)."""
+        zp = self.zip(name="src.zip")
+        o1 = self.opts(zp, "a")
+        r1 = run_import(o1)
+        o2 = self.opts(zp, "b")
+        r2 = run_import(o2)
         self.assertEqual(file_table(o1.out / "dist"), file_table(o2.out / "dist"))
         self.assertEqual(r1["package"]["zip"]["sha256"], r2["package"]["zip"]["sha256"])
         # repeat on the proposed ledger: nothing new, with the previous snapshot and fully offline without it
         for prev in (o1.out / "dist", None):
-            o3, r3 = self.run_import(None, f"c{bool(prev)}", ledger=o1.out / "ledger.next.json", previous=prev)
+            o3 = self.opts(zp, f"c{bool(prev)}", ledger=o1.out / "ledger.next.json", previous=prev)
+            r3 = run_import(o3)
             self.assertEqual((r3["package"]["newVersionsThisRun"], len(r3["package"]["reusedVersionsThisRun"])), ([], 8))
             self.assertEqual(file_table(o1.out / "dist"), file_table(o3.out / "dist"))
             self.assertEqual((o1.out / "ledger.next.json").read_text(), (o3.out / "ledger.next.json").read_text())
+            self.assertEqual(r1["package"]["zip"]["sha256"], r3["package"]["zip"]["sha256"])
+
+    def test_fixture_archives_are_byte_deterministic_whatever_the_wall_clock(self):
+        """Regression for the CI failure: two writes straddling a 2-second ZIP-timestamp boundary must still be identical."""
+        with mock.patch("time.time", return_value=1_800_000_000.0):
+            a = self.zip(name="a.zip").read_bytes()
+        with mock.patch("time.time", return_value=1_800_000_003.0):
+            b = self.zip(name="b.zip").read_bytes()
+        self.assertEqual(a, b)
+
+    def test_repackaged_or_rerun_export_changes_only_the_recorded_source_archive_hash(self):
+        """The dist is a deterministic function of the source ARCHIVE BYTES. A different archive with identical content (re-zipped,
+        other compression/order/wrapper folder, volatile diagnostics, an exporter re-run that reports `reused` instead of `exported`)
+        yields the same immutable assets, manifests, versions, ledger and catalog: the ONLY difference is the provenance field
+        atlas/builds.json -> builds[].import.zipSha256, in both the with- and without-previous-dist flows."""
+        base_zip = self.zip(name="base.zip")
+        o1 = self.opts(base_zip, "first")
+        run_import(o1)
+
+        def rerun(F):  # the exporter run again over the same art: run statuses/counters and volatile run data differ
+            for path in list(F):
+                if path.endswith("manifest.json") and path.startswith("maps/"):
+                    edit_json(F, path, lambda d: d.update(status="reused" if d["status"] == "exported" else "exported"))
+            def flip(d):
+                for m in d["maps"]:
+                    for v in m["variants"]:
+                        v["status"] = "reused" if v["status"] == "exported" else "exported"
+            edit_json(F, "atlas/index.json", flip)
+            edit_json(F, "atlas/export-report.json", lambda d: d["counts"].update(mapsExported=7, mapsReused=1))
+            edit_json(F, "diagnostics/run-info.json", lambda d: d.update(startedUtc="2031-01-01T00:00:00Z"))
+            F["diagnostics/export-summary.txt"] = b"a different run summary\n"
+            F["gallery/index.html"] = b"<html>other gallery</html>"
+
+        variants = {
+            "stored-compression-reversed-order": dict(compression=zipfile.ZIP_STORED, order="reversed"),
+            "sorted-order-other-wrapper-folder": dict(order="sorted", root="Atlas-Export-Renamed/"),
+            "no-wrapper-folder": dict(root=""),
+            "exporter-rerun-volatile-data": dict(mutate=rerun),
+        }
+        for label, kw in variants.items():
+            F = make_export()
+            if "mutate" in kw:
+                kw = dict(kw)
+                kw.pop("mutate")(F)
+            zp = write_zip(F, self.work / f"{label}.zip", **kw)
+            self.assertNotEqual(zp.read_bytes(), base_zip.read_bytes(), label)
+            for prev in (o1.out / "dist", None):
+                o2 = self.opts(zp, f"{label}-{bool(prev)}", ledger=o1.out / "ledger.next.json", previous=prev)
+                r2 = run_import(o2)
+                self.assertEqual((r2["package"]["newVersionsThisRun"], len(r2["package"]["reusedVersionsThisRun"])), ([], 8), label)
+                t1, t2 = file_table(o1.out / "dist"), file_table(o2.out / "dist")
+                self.assertEqual(sorted(p for p in set(t1) | set(t2) if t1.get(p) != t2.get(p)), ["atlas/builds.json"], f"{label} prev={bool(prev)}")
+                b1 = json.loads((o1.out / "dist/atlas/builds.json").read_text())
+                b2 = json.loads((o2.out / "dist/atlas/builds.json").read_text())
+                self.assertEqual(b1["builds"][-1]["import"]["zipSha256"], hashlib.sha256(base_zip.read_bytes()).hexdigest())
+                self.assertEqual(b2["builds"][-1]["import"]["zipSha256"], hashlib.sha256(zp.read_bytes()).hexdigest())
+                for b in (b1, b2):  # neutralise the one provenance field: nothing else may differ
+                    for e in b["builds"]:
+                        e["import"].pop("zipSha256")
+                        e["import"].pop("zipBytes")
+                self.assertEqual(b1, b2, label)
+                self.assertEqual((o1.out / "ledger.next.json").read_text(), (o2.out / "ledger.next.json").read_text(), label)
 
     def test_changed_full_reveal_alone_gets_a_new_version_and_never_overwrites_the_old_one(self):
         o1, _ = self.run_import(None, "one")

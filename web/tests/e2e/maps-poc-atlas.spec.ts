@@ -1,8 +1,8 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { extname, join, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { extname, join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { TOL, expectNoBlankSpace, expectWholeImageFits, geometry, markerError, openMap, settle, zoomIn } from "./maps-helpers";
+import { TOL, expectNoBlankSpace, expectWholeImageFits, geometry, hasFile, markerError, openMap, readDistFile, settle, zoomIn } from "./maps-helpers";
 
 const DIST = process.env.ATLAS_REAL_DIST;
 const MIME: Record<string, string> = { ".webp": "image/webp", ".json": "application/json" };
@@ -10,10 +10,10 @@ const MIME: Record<string, string> = { ".webp": "image/webp", ".json": "applicat
 /** Serve the real atlas dist under the same-origin /maps path the POC resolves against (what NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL unset means). */
 async function serveDist(page: Page) {
   await page.route(/\/maps\/forever\/[^?]*$/, async (route) => {
-    const rel = new URL(route.request().url()).pathname.replace(/^\/maps\//, "");
-    const file = resolve(DIST!, rel);
-    if (!file.startsWith(resolve(DIST!) + sep) || !existsSync(file) || !statSync(file).isFile()) return route.continue();
-    return route.fulfill({ status: 200, contentType: MIME[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
+    const rel = new URL(route.request().url()).pathname.replace(/^\/maps/, "");
+    const body = readDistFile(DIST!, rel);
+    if (body === null) return route.continue();
+    return route.fulfill({ status: 200, contentType: MIME[extname(rel)] ?? "application/octet-stream", body });
   });
 }
 
@@ -40,7 +40,7 @@ test.describe("POC version parameter (no atlas needed)", () => {
 });
 
 test.describe("REAL atlas distribution rendered by the POC (local acceptance: ATLAS_REAL_DIST)", () => {
-  test.skip(!DIST || !existsSync(join(DIST ?? "", "atlas/index.json")), "ATLAS_REAL_DIST not set (private real artwork)");
+  test.skip(!DIST || !hasFile(join(DIST ?? "", "atlas/index.json")), "ATLAS_REAL_DIST not set (private real artwork)");
 
   async function openV2(page: Page, size?: { width: number; height: number }) {
     await serveDist(page);
