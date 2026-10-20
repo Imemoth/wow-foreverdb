@@ -1,6 +1,6 @@
 # Companion account linking MVP
 
-Status: implemented for local/staging and acceptance builds. Production account approval, AutoSync and every public activation flag remain off. No new migration or hosted infrastructure is required.
+Status: implemented in the normal Companion package for owner acceptance. Standard production account sign-in and direct linking are approved in this unmerged PR; activation-file enrollment, registered-device AutoSync, web production activation and temporary pilot modes remain off. No new migration or hosted infrastructure is required.
 
 ## Chosen flow
 
@@ -11,7 +11,9 @@ Status: implemented for local/staging and acceptance builds. Production account 
 5. The same registered session issues a 0014 enrollment ticket. A separate anonymous device session redeems it for the same installation. The resulting device secret is stored by the existing `DeviceCredentialStore` under Windows DPAPI.
 6. Manual sync uses `fdb_device_ingest` and the revocable device credential. `DeviceAutoSyncApproved` remains `false`.
 
-The claim code and enrollment ticket live only in process memory during the exchange. Access tokens, refresh tokens, claim codes, enrollment tickets and device secrets are never put in a browser URL or application log. The existing website claim-code route and `.fdbact` activation-file route remain recovery fallbacks.
+The normal package validates the exact built-in production Supabase HTTPS origin and a modern publishable key before it enables sign-in. An explicit process-level `FOREVERDB_ACCOUNT_MODE=disabled` remains a kill switch. Alternate origins, paths, ports and secret/service-role keys fail closed.
+
+The claim code and enrollment ticket live only in process memory during the exchange. Access tokens, refresh tokens, claim codes, enrollment tickets and device secrets are never put in a browser URL or application log. The existing website claim-code route remains a recovery fallback. `.fdbact` support remains in the codebase, but production activation-file discovery stays disabled until its separate approval.
 
 ## Why this route
 
@@ -50,4 +52,4 @@ No PR #62 migration, pairing endpoint, raw-header ingress, HMAC attestation, bro
 - Release WPF build and unpublished Windows test artifact.
 - One scoped security review of the final diff and exact-head CI.
 
-Production activation, hosted Supabase migration, deployment, installer publication and AutoSync require separate owner approval.
+Public rollout, hosted Supabase migration/configuration changes, deployment, installer publication, activation-file enrollment and AutoSync require separate owner approval.

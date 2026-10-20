@@ -124,9 +124,17 @@ for p in companion_files:
     if PRODUCTION_REF in p.read_text(encoding="utf-8"):
         check(rel in allowed_ref_files, f"{rel}: mentions the production project reference")
 gate = read("companion/ForeverDB.Companion.Account/AccountFeatureGate.cs")
-check("public const bool ProductionAccountAuthApproved = false;" in gate, "ProductionAccountAuthApproved must stay false")
+check("public const bool ProductionAccountAuthApproved = true;" in gate, "standard Account Linking approval must stay enabled")
 check("public const bool ZeroTouchEnrollmentApproved = false;" in gate, "ZeroTouchEnrollmentApproved must stay false")
 check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSyncApproved must stay false")
+
+# Owner acceptance uses the repository's normal self-contained package, never an account-linking-only build.
+account_workflow = read(".github/workflows/companion-account-auth.yml")
+normal_build_workflow = read(".github/workflows/companion-build.yml")
+check("account-linking-mvp-win-x64" not in account_workflow, "account CI must not publish a special Account Linking build")
+check("name: ForeverDB-Companion-win-x64" in normal_build_workflow, "normal Companion artifact name changed")
+check("--self-contained true" in normal_build_workflow, "normal Companion build must stay self-contained")
+check("-p:PublishSingleFile=true" in normal_build_workflow, "normal Companion build must stay single-file")
 
 # Tests may only use the production host as a deny-list fixture.
 for p in (ROOT / "tests" / "companion-account").rglob("*.cs"):

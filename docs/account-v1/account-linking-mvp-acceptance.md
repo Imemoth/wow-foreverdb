@@ -11,9 +11,9 @@ Branch: `feature/account-linking-mvp`
 - Anonymous Companion use remains available and unchanged.
 - A user with an existing confirmed ForeverDB account can sign in inside the Companion, prove control of the current anonymous installation, transfer that installation through the existing Account V1 claim RPCs, and register the local Companion through the existing device-enrollment RPCs.
 - The installation ID, historical observations and Guildbook relationships are preserved by the existing database ownership transfer.
-- The website claim-code flow and `.fdbact` activation-file flow remain available as recovery paths.
+- The website claim-code flow remains available as a recovery path. `.fdbact` support is preserved, while production activation-file discovery remains disabled.
 - Account access/refresh tokens and device credentials remain in the existing Windows DPAPI stores. Claim and enrollment secrets exist only in process memory and are not placed in URLs or logs.
-- AutoSync and every production, pilot, claim and zero-touch feature gate remain off.
+- Standard Companion account sign-in/direct linking is enabled for owner acceptance. AutoSync, activation-file enrollment, web production activation and temporary pilot/claim gates remain off.
 
 ## Focused security review
 
@@ -32,7 +32,7 @@ The final flow keeps these boundaries:
 - The native client calls a fixed RPC allowlist and contains no generic proxy or service-role credential.
 - Existing database rate limits, single-use locks, device limits and revocation checks remain authoritative.
 
-No unresolved Critical, High or Medium finding remains in the scoped diff. Before public activation, the owner must still approve the existing production-account gate and confirm the hosted GoTrue abuse/rate-limit configuration; this branch does not change either setting.
+No unresolved Critical, High or Medium finding remains in the scoped ownership diff. Before public rollout, the owner must complete hands-on acceptance of the normal Windows package and confirm the hosted GoTrue abuse/rate-limit configuration. This branch changes no hosted setting.
 
 ## Verification evidence
 
@@ -45,18 +45,17 @@ Local verification on the feature branch completed with:
 - Disposable PostgreSQL and real GoTrue 2.197.0 vertical slice: 7 passed, including anonymous ownership proof, registered claim redemption, device ticket enrollment, device sync and rejection of the previous owner.
 - Disposable database concurrency and failure-recovery regressions: 21 passed after removing test-state coupling and consuming the expected terminated-client error.
 - Migration 0012/0014 ownership, replay, enrollment, logout and revocation suites passed apart from a local test-runner working-directory problem; the affected migration rollback case was rerun with the corrected wrapper and passed. Exact-head CI remains the release authority for the complete suites.
-- Pull-request CI completed all eight workflows successfully on the implementation head, including the full SQL/real-GoTrue suite, Account end-to-end GoTrue/PostgREST suite, Account web-auth real-GoTrue suite, CodeQL, API security, web/publication, Companion health and Companion Account Windows jobs.
-- The Windows job executed the real-DPAPI and multi-process tests with zero skips, built the WPF application, published the `win-x64` acceptance output and uploaded `foreverdb-companion-account-linking-mvp-win-x64`. The build remains an unpublished CI artifact for owner acceptance.
+- The previous implementation head completed all eight workflows successfully. The standard-package gate change requires a fresh exact-head run before owner acceptance.
 
 ## Acceptance gates
 
 - [x] Focused end-to-end Companion implementation and regression tests.
 - [x] Anonymous use, existing installation identity, historical data and fallback enrollment preserved.
-- [x] AutoSync and all activation gates remain off.
+- [x] AutoSync, activation-file enrollment, web production activation and temporary pilot gates remain off.
 - [x] Focused security review completed; material finding fixed test-first.
-- [x] Exact-head pull-request CI is green.
-- [x] Windows runner executes all DPAPI and cross-process tests without skips.
-- [x] Unpublished Windows acceptance artifact is produced by CI.
+- [ ] Exact-head pull-request CI is green after the standard-package gate change.
+- [ ] Windows runner executes all DPAPI and cross-process tests without skips.
+- [ ] Normal `ForeverDB-Companion-win-x64` workflow artifact is produced.
 - [ ] Owner acceptance on the Windows build.
 - [ ] Separate authorization before any production deployment, hosted Supabase change, public activation or installer publication.
 

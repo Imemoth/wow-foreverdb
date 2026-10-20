@@ -12,7 +12,8 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [security.md](security.md) | Account-specific threat model, abuse prevention, negative-test matrix mapped to the 20 mandatory tests |
 | [acceptance-and-owner-actions.md](acceptance-and-owner-actions.md) | Evidence ledger rules, per-PR acceptance, the owner action checklist, and the enforceable direct-Auth-abuse criteria (§5) |
 | [web-linking.md](web-linking.md) | PR E as built: `/account/link`, fresh-password + same-UID reauthentication, temporary-session lifecycle, closed PostgREST client, installation list, private Guildbook |
-| [account-linking-mvp.md](account-linking-mvp.md) | Simplified native Companion sign-in → existing ownership claim → existing registered-device enrollment path; production gates remain off |
+| [account-linking-mvp.md](account-linking-mvp.md) | Simplified native Companion sign-in → existing ownership claim → existing registered-device enrollment path; AutoSync and activation-file enrollment remain off |
+| [account-linking-mvp-windows-test.md](account-linking-mvp-windows-test.md) | Short first-install procedure using the normal Windows package inside an isolated profile |
 | [account-linking-mvp-acceptance.md](account-linking-mvp-acceptance.md) | Focused security review, local verification evidence and release acceptance gates for the simplified MVP |
 | [integration-and-acceptance-report.md](integration-and-acceptance-report.md) | PR E evidence ledger, scenario map, real-PostgREST observations, independent reviews, pending gates |
 | [staging-runbook.md](staging-runbook.md) / [windows-acceptance-checklist.md](windows-acceptance-checklist.md) | owner-run staging deployment/acceptance and the Windows W1a..W10 evidence template |

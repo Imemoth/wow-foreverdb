@@ -1,8 +1,9 @@
 namespace ForeverDB.Companion.Account;
 
 /// <summary>
-/// Zero-touch first run: finds the activation file, redeems its ticket for a device credential with the device's own anonymous
-/// session, stores that credential durably and only then deletes the file. Enrollment never reads or changes the legacy anonymous
+/// Registers a device either from an explicitly supplied in-memory Account Linking ticket or, where independently enabled, from
+/// a zero-touch activation file. It redeems the ticket with the device's own anonymous session, stores that credential durably and
+/// only then deletes an activation file. Enrollment never reads or changes the legacy anonymous
 /// session, the saved installations or SavedVariables; it enrolls the installation id the Addon already wrote, and the server
 /// refuses (installation_conflict) any installation it cannot hand to the ticket's account, which fails closed here.
 ///
@@ -15,24 +16,31 @@ public sealed class DeviceEnrollmentService
     private readonly IActivationSource _source;
     private readonly Func<IReadOnlyCollection<string>> _installations;
     private readonly bool _enabled;
+    private readonly bool _activationFilesEnabled;
     // The server consumed the ticket but the disk refused the secret: kept in memory so this process can still store it.
     private DeviceCredential? _unpersisted;
     // Tickets the server answered with a non-terminal refusal this process (conflict, limit): not tried again until restart.
     private readonly HashSet<string> _refused = new(StringComparer.Ordinal);
 
-    public DeviceEnrollmentService(DeviceContext context, IActivationSource source, Func<IReadOnlyCollection<string>> installations, bool enabled = true)
+    public DeviceEnrollmentService(
+        DeviceContext context,
+        IActivationSource source,
+        Func<IReadOnlyCollection<string>> installations,
+        bool enabled = true,
+        bool activationFilesEnabled = true)
     {
         _ctx = context;
         _source = source;
         _installations = installations;
         _enabled = enabled;
+        _activationFilesEnabled = activationFilesEnabled;
     }
 
     public DeviceStatus Status => _ctx.Status;
 
     /// <summary>
-    /// Local-only classification, safe to call on the UI thread at startup: reads the device credential and looks for an activation
-    /// file. No network, no gate, nothing created or deleted. Lets the sync layer know which installation is (or is about to be)
+    /// Local-only classification, safe to call on the UI thread at startup: reads the device credential and, only when activation
+    /// files are enabled, looks for one. No network, no gate, nothing created or deleted. Lets the sync layer know which installation is (or is about to be)
     /// device-owned before any upload can start.
     /// </summary>
     public DeviceStatus LoadLocalState()
@@ -52,7 +60,7 @@ public sealed class DeviceEnrollmentService
             case DeviceCredentialStatus.Unreadable:
                 _ctx.Set(DeviceState.CredentialDamaged);
                 break;
-            case DeviceCredentialStatus.Missing when _ctx.Status.State == DeviceState.Anonymous && _source.Discover().Count > 0:
+            case DeviceCredentialStatus.Missing when _activationFilesEnabled && _ctx.Status.State == DeviceState.Anonymous && _source.Discover().Count > 0:
                 _ctx.Set(DeviceState.PendingActivation);
                 break;
         }
@@ -62,7 +70,7 @@ public sealed class DeviceEnrollmentService
 
     public async Task<DeviceStatus> InitializeAsync(CancellationToken ct = default)
     {
-        if (!_enabled)
+        if (!_enabled || !_activationFilesEnabled)
         {
             return _ctx.Status;
         }

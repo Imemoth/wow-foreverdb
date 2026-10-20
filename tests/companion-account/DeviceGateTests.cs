@@ -3,7 +3,7 @@ using Xunit;
 
 namespace ForeverDB.Companion.Account.Tests;
 
-/// <summary>The default (production, anonymous-only) mode must not change at all: no file scanning, no network, no new objects.</summary>
+/// <summary>Production account linking is narrow: direct linking/manual device sync, without activation-file enrollment or AutoSync.</summary>
 public class DeviceGateTests
 {
     private const string Key = "sb_publishable_testkey";
@@ -33,10 +33,17 @@ public class DeviceGateTests
         (AccountFeatureGate.UrlVariable, "http://127.0.0.1:54321"),
         (AccountFeatureGate.KeyVariable, Key));
 
+    private static AccountGateDecision Standard() =>
+        AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
+
     [Fact]
-    public void The_new_approval_and_auto_sync_flags_are_compile_time_constants_that_default_to_false()
+    public void Production_account_linking_is_approved_while_zero_touch_and_auto_sync_stay_off()
     {
-        foreach (var name in new[] { nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), nameof(AccountFeatureGate.DeviceAutoSyncApproved), nameof(AccountFeatureGate.ProductionAccountAuthApproved) })
+        var production = typeof(AccountFeatureGate).GetField(nameof(AccountFeatureGate.ProductionAccountAuthApproved), BindingFlags.Public | BindingFlags.Static)!;
+        Assert.True(production.IsLiteral);
+        Assert.Equal(true, production.GetRawConstantValue());
+
+        foreach (var name in new[] { nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), nameof(AccountFeatureGate.DeviceAutoSyncApproved) })
         {
             var field = typeof(AccountFeatureGate).GetField(name, BindingFlags.Public | BindingFlags.Static)!;
             Assert.True(field.IsLiteral, $"{name} must be a const");
@@ -60,12 +67,22 @@ public class DeviceGateTests
     public void Zero_touch_is_available_for_isolated_local_and_staging_gates_only()
     {
         Assert.False(AccountFeatureGate.ZeroTouchAvailable(Eval()));
-        Assert.False(AccountFeatureGate.ZeroTouchAvailable(Eval((AccountFeatureGate.ModeVariable, "production"))));
+        Assert.False(AccountFeatureGate.ZeroTouchAvailable(Standard()));
         Assert.False(AccountFeatureGate.ZeroTouchAvailable(Eval((AccountFeatureGate.ModeVariable, "bogus"))));
         Assert.True(AccountFeatureGate.ZeroTouchAvailable(Local()));
         Assert.True(AccountFeatureGate.ZeroTouchAvailable(TestEnv.StagingGate()));
         // An invalid staging endpoint is off, so zero-touch is too.
         Assert.False(AccountFeatureGate.ZeroTouchAvailable(TestEnv.StagingGate($"https://{AccountFeatureGate.ProductionProjectRef}.supabase.co")));
+    }
+
+    [Fact]
+    public void Direct_linking_is_available_in_the_standard_build_without_enabling_zero_touch()
+    {
+        var standard = Standard();
+        Assert.True(AccountFeatureGate.DirectAccountLinkingAvailable(standard));
+        Assert.False(AccountFeatureGate.ZeroTouchAvailable(standard));
+        Assert.False(AccountFeatureGate.ZeroTouchEnrollmentApproved);
+        Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
     }
 
     [Fact]
@@ -80,7 +97,7 @@ public class DeviceGateTests
     }
 
     [Fact]
-    public async Task Default_production_mode_creates_no_device_runtime_scans_nothing_and_makes_no_request()
+    public async Task Standard_production_mode_wires_direct_linking_without_scanning_activation_files_or_making_a_request()
     {
         var server = new FakeSupabase();
         var handler = new FakeHandler(server);
@@ -92,10 +109,13 @@ public class DeviceGateTests
         var before = (File.ReadAllBytes(file), Directory.GetFileSystemEntries(dir, "*", SearchOption.AllDirectories));
 
         var runtime = AccountRuntime.Create(
-            AccountFeatureGate.Evaluate(_ => null), TestEnv.ProductionEndpoint, handler, TestEnv.Protector(), dir, null, null,
+            Standard(), TestEnv.ProductionEndpoint, handler, TestEnv.Protector(), dir, null, null,
             new ThrowingSource(), () => throw new InvalidOperationException("installations must not be read"));
 
-        Assert.Null(runtime.Device);
+        Assert.NotNull(runtime.Device);
+        Assert.Equal(Path.Combine(dir, DeviceContract.DeviceSubdirectory), runtime.Device!.Context.Directory);
+        Assert.Equal(DeviceState.Anonymous, runtime.Device.Enrollment.LoadLocalState().State);
+        Assert.Equal(DeviceState.Anonymous, (await runtime.Device.Enrollment.InitializeAsync()).State);
         await runtime.Sessions.InitializeAsync();
         Assert.Empty(handler.RequestUris);
         Assert.Empty(server.Requests);

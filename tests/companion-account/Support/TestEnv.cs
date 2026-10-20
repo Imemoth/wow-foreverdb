@@ -52,7 +52,7 @@ public static class TestEnv
         });
 
     public static readonly AccountEndpoint ProductionEndpoint =
-        new("https://" + ProductionHost, "sb_publishable_prodkey", "production");
+        new("https://" + ProductionHost, "sb_publishable_productiontestkey123456", "production");
 
     public static byte[] ReadAllFiles(string directory)
     {

@@ -7,6 +7,44 @@ public sealed class AccountLinkingMvpTests
     private const string InstallationId = "0123456789abcdef0123456789abcdef";
 
     [Fact]
+    public async Task Standard_build_supports_fresh_anonymous_use_account_linking_and_manual_device_sync()
+    {
+        var server = new FakeSupabase();
+        var handler = new FakeHandler(server);
+        var directory = TestEnv.NewDirectory();
+        var gate = AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
+        var runtime = AccountRuntime.Create(
+            gate,
+            TestEnv.ProductionEndpoint,
+            handler,
+            TestEnv.Protector(),
+            directory,
+            activationSource: new FileActivationSource(Array.Empty<ActivationSearchLocation>()));
+
+        await runtime.Sessions.InitializeAsync();
+        Assert.Equal(StartAnonymousOutcome.Created, await runtime.Sessions.StartAnonymousAsync(false));
+        var anonymous = await runtime.Sessions.GetAccessTokenAsync(SlotRole.Primary);
+        server.SetOwner(InstallationId, JwtInspector.TryDecode(anonymous.AccessToken)!.Subject);
+        server.AddRegisteredUser("elara@example.test", "a-long-password-1");
+
+        Assert.Equal(SignInOutcome.Success,
+            await runtime.Sessions.SignInRegisteredAsync("elara@example.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(AccountLinkOutcome.Connected,
+            (await runtime.Linking.ConnectAsync(InstallationId, "This PC")).Outcome);
+
+        var automatic = await runtime.Device!.Sync.SyncAutomaticAsync(
+            $"{{\"p_snapshot\":{{\"installationId\":\"{InstallationId}\"}}}}");
+        var manual = await runtime.Device.Sync.SyncNowAsync(
+            $"{{\"p_snapshot\":{{\"installationId\":\"{InstallationId}\"}}}}");
+
+        Assert.Equal(DeviceSyncOutcome.AutoSyncOff, automatic.Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, manual.Outcome);
+        Assert.Single(server.RequestsTo("/rest/v1/rpc/fdb_device_ingest"));
+        Assert.False(AccountFeatureGate.ZeroTouchAvailable(gate));
+        Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
+    }
+
+    [Fact]
     public async Task Signed_in_user_can_link_the_existing_anonymous_installation_and_register_this_device()
     {
         using var rig = new Rig();
