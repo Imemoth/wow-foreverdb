@@ -133,6 +133,12 @@ public static class MapDiagnostics
                 doc.Heading($"{map.UiMapId} {map.Name} (MapArtID {art.UiMapArtId}, canvas {overview.LayerWidth}x{overview.LayerHeight})");
                 doc.Line($"  overlays: {art.Overlays.Count} rows - {usable.Count} with artwork, " +
                          $"{art.SkippedOverlays.Count()} without artwork (ignored), {art.BlockingOverlays.Count()} blocking");
+                var beyondCanvas = rows.Count(row => (bool)row.GetType().GetProperty("ExtendsOutsideCanvas")!.GetValue(row)!);
+
+                if (beyondCanvas > 0)
+                {
+                    doc.Line($"  geometry: {beyondCanvas} overlay(s) extend beyond the {overview.LayerWidth}x{overview.LayerHeight} base canvas (clipped when composed)");
+                }
 
                 foreach (var overlay in art.Overlays.Where(o => o.Kind != OverlayKind.Ok))
                 {
@@ -171,6 +177,15 @@ public static class MapDiagnostics
         }
 
         doc.Heading("Summary");
+
+        if (assets is FallbackAssetSource fallback)
+        {
+            doc.Line("  tile sources used: " + (fallback.ServedBy.Count == 0
+                ? "none"
+                : string.Join(", ", fallback.ServedBy.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key} x{p.Value}"))) +
+                "  (a 'cdn:' entry means tiles missing from the local install were resolved from the exact-build CDN)");
+            doc.Data("tileSources", fallback.ServedBy.OrderBy(p => p.Key, StringComparer.Ordinal).ToDictionary(p => p.Key, p => p.Value));
+        }
 
         foreach (var (verdict, count) in verdicts.OrderBy(p => p.Key, StringComparer.Ordinal))
         {

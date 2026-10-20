@@ -135,6 +135,18 @@ internal static class DiagnosticsTests
             Assert.DoesNotContain(only, "EmptyRows");
         });
 
+        Harness.Add("diagnose-overlays: reports overlays beyond the canvas and which storage served the tiles", () =>
+        {
+            using var dir = new TempDir();
+            var world = new World(dir.Combine("w")).Map(1, "Z", 3, 0, flags: 2).Art(1, (0, 400, 300)).Link(1, 1)
+                .Overlay(1, 11, 350, 250, 200, 200);                     // runs past a 400x300 canvas
+            using var local = new DirectoryAssetSource(world.AssetsDir);
+            using var fallback = new FallbackAssetSource(() => local, () => null);
+            var text = MapDiagnostics.Overlays(world.Db, world.Plan(), fallback, null, Clean(), null, default).ToText();
+            Assert.Contains(text, "1 overlay(s) extend beyond the 400x300 base canvas");
+            Assert.Contains(text, "tile sources used: directory x");
+        });
+
         Harness.Add("diagnose-overlays: the reviewed atlas comparison is reported", () =>
         {
             var embedded = ForeverDB.Companion.Services.FullRevealMapArt.GetEmbeddedAtlas();
