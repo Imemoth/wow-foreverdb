@@ -236,6 +236,59 @@ test.describe("database tablet toolbar (regression: Search button must never cli
   });
 });
 
+// P2-E remediation: a voluntary, no-strings "Buy Me a Coffee" support link - a plain external
+// link, never an embedded widget/script/tracking/payment API - visually secondary to primary
+// navigation, top-right on desktop and the last hamburger-menu item on mobile.
+test.describe("community support link ('Buy Me a Coffee')", () => {
+  const SUPPORT_URL = "https://buymeacoffee.com/azerdex";
+
+  test("desktop header carries the support link, opening in a new tab safely", async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop", "desktop header only renders at sm+");
+    await page.goto("/");
+    const link = page.getByRole("banner").getByRole("link", { name: /Support/ });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", SUPPORT_URL);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+    await expect(link).toHaveAttribute("rel", /noreferrer/);
+  });
+
+  test("desktop header: the support link is keyboard-focusable with a visible focus state", async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop", "desktop header only renders at sm+");
+    await page.goto("/");
+    const link = page.getByRole("banner").getByRole("link", { name: /Support/ });
+    await link.focus();
+    await expect(link).toBeFocused();
+  });
+
+  test("mobile hamburger menu carries the support link as its last item", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile", "exercises the mobile-only hamburger menu");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open menu" }).click();
+    const nav = page.getByRole("navigation", { name: "Primary" }).last();
+    const items = nav.getByRole("listitem");
+    const lastItem = items.last();
+    const supportLink = lastItem.getByRole("link", { name: /Support AzerDex/ });
+    await expect(supportLink).toBeVisible();
+    await expect(supportLink).toHaveAttribute("href", SUPPORT_URL);
+    await expect(supportLink).toHaveAttribute("target", "_blank");
+    await expect(supportLink).toHaveAttribute("rel", /noopener/);
+    await expect(supportLink).toHaveAttribute("rel", /noreferrer/);
+  });
+
+  for (const width of [768, 820, 1024, 1032]) {
+    test(`header stays overflow-free with the support link present @ ${width}px`, async ({ page }) => {
+      test.skip(test.info().project.name !== "desktop", "pins exact viewport widths directly");
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await expect(page.getByRole("banner").getByRole("link", { name: /Support/ })).toBeVisible();
+      await expect(page.getByLabel("Search the database").first()).toBeVisible();
+    });
+  }
+});
+
 // P1-B regression: the public-beta scope has Account Auth disabled, so a global nav link that
 // always 404s is misleading - removed from both the desktop header and the mobile hamburger menu
 // without SiteHeader/MobileNav ever importing or checking account state (ADR-015 stays intact;

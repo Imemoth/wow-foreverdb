@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_URL } from "@/lib/support-link";
 import { LogoMark } from "./Logo";
 import { MobileNav } from "./MobileNav";
 
@@ -48,12 +49,23 @@ export function SiteHeader() {
           it reverts to `w-auto`/`max-w-xs`, right-aligned on the same row as the logo+nav - the
           original wide-desktop layout, unchanged.
         */}
-        <div className="hidden w-full sm:block lg:ml-auto lg:w-auto">
-          <form action="/database" method="get" role="search" className="flex min-w-0 w-full lg:max-w-xs">
+        <div className="hidden w-full items-center gap-2 sm:flex lg:ml-auto lg:w-auto">
+          <form action="/database" method="get" role="search" className="flex min-w-0 flex-1 lg:max-w-xs lg:flex-none">
             <label htmlFor="header-q" className="sr-only">Search the database</label>
             <input id="header-q" name="q" type="search" maxLength={80} minLength={2} autoComplete="off"
               placeholder="Search items, creatures, nodes…" className="field w-full text-sm" />
           </form>
+          {/* Visually secondary to primary navigation and search: smaller, outlined rather than
+              filled, and placed last in this top-right cluster. A plain external link - no widget,
+              script or tracking. */}
+          <a
+            href={SUPPORT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 whitespace-nowrap rounded-md border border-gold-500/30 bg-ink-950/60 px-2.5 py-1.5 text-xs font-medium text-mist no-underline transition hover:border-gold-500/60 hover:text-violet-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400"
+          >
+            ☕ Support
+          </a>
         </div>
         {/* Mobile-only compact row: full nav/search collapse into a search shortcut and the hamburger menu. */}
         <div className="ml-auto flex items-center gap-1 sm:hidden">

@@ -471,6 +471,8 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 PR #22 merged to `main` (2026-10-10). **Website status: repo-complete foundation MVP on synthetic sample data; separate public infrastructure not provisioned and web publication/export (`0010`) not deployed.** Docs: [docs/web/](web/README.md).
 
+**This section is a historical foundation record and is not updated for later work.** The website was rebranded to AzerDex and has since shipped a `web/azerdex-beta` public-beta track (homepage/brand, Database & Zones, Guides, News & Blog, an interactive-cartography proof of concept, and this Addon & Companion presentation) entirely separate from the `main`/`release` Production gates and milestones tracked below. The current, authoritative AzerDex website milestone ledger — scope, PR references, verified state, deployment state, outstanding acceptance criteria and dependencies for every one of those milestones — is [docs/web/azerdex-roadmap.md](web/azerdex-roadmap.md). Nothing in the public beta changes the Production/`main`/`release` blockers or the Account System V1 gate documented in this file.
+
 - [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the Companion stats RPCs previously under-counted the observed-rate denominator for multi-installation buckets. **F3_FULLY_VERIFIED (2026-10-10): production SQL PASS and Windows Companion acceptance 5/5 PASS** (see below).
 - [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**

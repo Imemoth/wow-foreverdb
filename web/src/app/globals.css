@@ -373,6 +373,14 @@
     pointer-events: none;
   }
 
+  /* Scroll lock for modal overlays (e.g. the /download screenshot lightbox). A stylesheet-backed
+     class toggled via classList, not a per-element inline `style` mutation, so there is no
+     ambiguity about the page's style-src CSP - the rule lives in this stylesheet, loaded like any
+     other, and JS only ever adds/removes the class name. */
+  .body-scroll-locked {
+    overflow: hidden;
+  }
+
   /*
    * Database "Advanced filters" disclosure (see database/page.tsx). The toggle is a native
    * <details>/<summary> for free keyboard/AT support, but its controlled fields are rendered as

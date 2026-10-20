@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { SUPPORT_URL } from "@/lib/support-link";
 
 /**
  * Mobile hamburger disclosure. ADR-015: like SiteHeader.tsx, this file must never import
@@ -116,6 +117,19 @@ export function MobileNav() {
                       </Link>
                     </li>
                   ))}
+                  <li className="mt-1 border-t border-ink-700/80 pt-1">
+                    {/* Last item, visually secondary: a plain external link, not another nav
+                        destination. See SiteHeader.tsx's desktop placement for the same link. */}
+                    <a
+                      href={SUPPORT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setOpen(false)}
+                      className="flex min-h-11 items-center rounded-md border border-gold-500/30 bg-ink-950/60 px-3 py-2.5 text-sm font-medium text-mist no-underline hover:border-gold-500/60 hover:text-violet-300"
+                    >
+                      ☕ Support AzerDex
+                    </a>
+                  </li>
                 </ul>
               </nav>
             </div>
