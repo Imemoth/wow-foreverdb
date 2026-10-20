@@ -423,3 +423,5 @@
 .leaflet-tooltip-top.azd-tooltip::before { border-top-color: var(--color-violet-400); }
 .azd-tip-title { font-weight: 600; color: var(--color-parchment); }
 .azd-tip-line { color: var(--color-mist); }
+/* Letterbox area around the map image (phones are narrower than the image aspect): AzerDex dark, not Leaflet's #ddd. */
+.azd-map.leaflet-container { background: var(--color-ink-900); }

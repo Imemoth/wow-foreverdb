@@ -48,18 +48,33 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
       if (disposed || !host.current) return;
       const bounds = imageBounds(size);
       const map = L.map(host.current, {
-        crs: L.CRS.Simple, zoomSnap: 0.25, zoomDelta: 0.5, attributionControl: false,
-        maxBoundsViscosity: 0.9, keyboard: true, zoomControl: true,
+        // zoomSnap 0: the fit zoom is fractional (e.g. -1.56 on a phone) and must be reachable exactly.
+        crs: L.CRS.Simple, zoomSnap: 0, zoomDelta: 0.5, attributionControl: false,
+        // Hard edge: the pan limit is the image itself, with no padding and no rubber-banding.
+        maxBounds: bounds, maxBoundsViscosity: 1.0, keyboard: true, zoomControl: true,
       });
-      const fitZoom = () => map.getBoundsZoom(bounds, false);
-      const fit = () => {
-        const z = fitZoom();
+      const centre = L.latLngBounds(bounds).getCenter();
+      // Zoom at which the whole image fits the CURRENT container. Computed from the live size and never through
+      // getBoundsZoom(): that clamps to the map's current min/max zoom (0 until set), which cropped the image on
+      // every viewport narrower than the image, and kept the crop after the first setMinZoom().
+      let fitZ: number | null = null;
+      const applyLimits = () => {
+        const s = map.getSize();
+        if (!s.x || !s.y) return false;
+        const z = map.getScaleZoom(Math.min(s.x / size.width, s.y / size.height), 0) - 1e-6;
+        if (!Number.isFinite(z)) return false;
+        fitZ = z;
         map.setMinZoom(z);
         map.setMaxZoom(z + MAX_EXTRA_ZOOM);
-        map.fitBounds(bounds, { animate: false });
+        return true;
       };
+      const fit = () => {
+        map.stop();
+        map.invalidateSize({ animate: false, pan: false });
+        if (applyLimits()) map.setView(centre, fitZ!, { animate: false });
+      };
+      map.setView(centre, 0, { animate: false }); // loads the map even if the container has no size yet
       fit();
-      map.setMaxBounds(L.latLngBounds(bounds).pad(0.25));
 
       if (imageUrl) {
         const overlay = L.imageOverlay(imageUrl, bounds, { alt: "", interactive: false }).addTo(map);
@@ -153,12 +168,17 @@ export function ZoneMapViewer({ size, imageUrl, points, mode, resetKey, label, o
 
       map.on("zoomend", () => { if (live.current.mode === "clusters") render(); });
       map.on("click", () => live.current.onSelect(null));
+      // Container size changes (rotation, mobile browser chrome, layout): recompute from the new size. A view that was
+      // at fit stays at fit; a zoomed-in view keeps its zoom and centre (only clamped to the new limits/bounds).
       const ro = new ResizeObserver(() => {
-        const wasFit = map.getZoom() <= map.getMinZoom() + 0.01;
-        map.invalidateSize({ animate: false });
-        map.setMinZoom(fitZoom());
-        map.setMaxZoom(fitZoom() + MAX_EXTRA_ZOOM);
-        if (wasFit) map.fitBounds(bounds, { animate: false });
+        if (!host.current) return;
+        const wasFit = fitZ == null || map.getZoom() <= fitZ + 0.02;
+        const keep = map.getCenter();
+        map.stop();
+        map.invalidateSize({ animate: false, pan: false });
+        if (!applyLimits()) return;
+        if (wasFit) map.setView(centre, fitZ!, { animate: false });
+        else map.setView(keep, Math.max(map.getZoom(), fitZ!), { animate: false });
       });
       ro.observe(host.current);
 
