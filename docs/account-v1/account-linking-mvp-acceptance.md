@@ -1,10 +1,10 @@
 # Account linking MVP acceptance record
 
-Date: 2026-10-20
+Date: 2026-10-20; updated 2026-10-21 after owner Windows acceptance and merge
 
 Target: October 30, 2026
 
-Branch: `feature/account-linking-mvp`
+Merged PR: [#73](https://github.com/Imemoth/wow-foreverdb/pull/73), merge commit `c9a86d6dd984169ba9f221a088c33559827f05ef` (2026-10-21). PR #62 remains Draft and unmerged.
 
 ## Release behavior
 
@@ -57,7 +57,15 @@ Local verification on the feature branch completed with:
 - [x] Exact-head pull-request CI is green after the standard-package gate change.
 - [x] Windows runner executes all DPAPI and cross-process tests without skips.
 - [x] Normal `ForeverDB-Companion-win-x64` workflow artifact is produced.
-- [ ] Owner acceptance on the Windows build.
+- [x] **Owner acceptance on the normal Windows build — PASS (2026-10-21).** New, disposable schema-9 header-only SavedVariables installation ID (`81966b...`); anonymous manual sync and ownership establishment; successful registered account login; **Connect this installation** changed status to `Owned by your account` and `Registered device`; final manual sync succeeded at 09:35 (0 sources, 0 Guildbook members, `Last error None`); AutoSync Disabled. Evidence supplied by owner as Companion screenshots in the acceptance conversation.
 - [ ] Separate authorization before any production deployment, hosted Supabase change, public activation or installer publication.
 
-The unfinished browser-pairing/trusted-ingress work in PR #62 remains Draft and unmerged until this replacement passes its acceptance gates.
+## Remaining follow-ups (not retroactive blockers for the merged MVP)
+
+- A zero-row fixture proves the ownership/authentication/manual-ingest path only. Real non-empty WoW loot/Guildbook upload and data-preservation acceptance are still pending.
+- Status displayed `Auth pending` even though the account was linked and manual sync succeeded. Confirm whether this is a stale/non-authoritative UI indicator and correct it if needed.
+- AutoSync remained **OFF** during this acceptance. Owner approved implementation and controlled testing of opt-in AutoSync on 2026-10-21; success of watcher/reload/logout/exit, retry and non-empty ingestion has **not** yet been demonstrated.
+- WoW root Browse/auto-detect: [#79](https://github.com/Imemoth/wow-foreverdb/issues/79). Account sign-out/switch/local identity recovery: [#76](https://github.com/Imemoth/wow-foreverdb/issues/76). Final visual polish follows these functional tasks.
+- Hosted migration/configuration changes, public installer release and production rollout are not covered by the owner merge approval.
+
+The unfinished browser-pairing/trusted-ingress work in PR #62 remains Draft and unmerged; PR #73 is already merged and is the selected MVP architecture.
