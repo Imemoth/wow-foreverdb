@@ -8,7 +8,7 @@ ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
-- automatic WoW Forever path detection
+- bounded WoW Forever path detection, detected-installation selection and a native Windows folder picker
 - SavedVariables watcher and automatic authenticated sync
 - Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
   the existing anonymous identity keeps working after the upgrade and is never replaced
