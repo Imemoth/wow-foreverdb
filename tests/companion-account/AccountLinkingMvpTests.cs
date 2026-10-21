@@ -37,11 +37,11 @@ public sealed class AccountLinkingMvpTests
         var manual = await runtime.Device.Sync.SyncNowAsync(
             $"{{\"p_snapshot\":{{\"installationId\":\"{InstallationId}\"}}}}");
 
-        Assert.Equal(DeviceSyncOutcome.AutoSyncOff, automatic.Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, automatic.Outcome);
         Assert.Equal(DeviceSyncOutcome.Synced, manual.Outcome);
-        Assert.Single(server.RequestsTo("/rest/v1/rpc/fdb_device_ingest"));
+        Assert.Equal(2, server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
         Assert.False(AccountFeatureGate.ZeroTouchAvailable(gate));
-        Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
+        Assert.True(AccountFeatureGate.DeviceAutoSyncApproved);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public sealed class AccountLinkingMvpTests
     }
 
     [Fact]
-    public async Task Manual_sync_after_connection_uses_the_device_identity_and_auto_sync_stays_off()
+    public async Task Manual_and_automatic_sync_after_connection_use_the_device_identity()
     {
         using var rig = new Rig();
         var anonymous = rig.SeedAnonymous();
@@ -169,12 +169,16 @@ public sealed class AccountLinkingMvpTests
         var manual = await rig.Runtime.Device.Sync.SyncNowAsync(
             $"{{\"p_snapshot\":{{\"installationId\":\"{InstallationId}\"}}}}", default);
 
-        Assert.Equal(DeviceSyncOutcome.AutoSyncOff, automatic.Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, automatic.Outcome);
         Assert.Equal(DeviceSyncOutcome.Synced, manual.Outcome);
-        var ingest = Assert.Single(rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Skip(before));
-        Assert.NotEqual(account.Id, JwtInspector.TryDecode(ingest.Bearer)!.Subject);
-        Assert.DoesNotContain("access_token", ingest.Body, StringComparison.OrdinalIgnoreCase);
-        Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
+        var ingests = rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Skip(before).ToArray();
+        Assert.Equal(2, ingests.Length);
+        Assert.All(ingests, ingest =>
+        {
+            Assert.NotEqual(account.Id, JwtInspector.TryDecode(ingest.Bearer)!.Subject);
+            Assert.DoesNotContain("access_token", ingest.Body, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.True(AccountFeatureGate.DeviceAutoSyncApproved);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace ForeverDB.Companion.Account.Tests;
 
 /// <summary>
 /// The wired path: AccountRuntime (staging gate) + the real linked SyncService and SavedVariables parser. Registered devices
-/// upload only on Sync now; every other trigger and every non-device installation behaves exactly as before.
+/// upload through the device identity; every non-device installation behaves exactly as before.
 /// </summary>
 public class DeviceIntegrationTests
 {
@@ -90,13 +90,9 @@ public class DeviceIntegrationTests
         // Enrolled and discovered, but nothing server-verified yet: the row must not claim ownership.
         Assert.Equal(InstallationOwnership.Unchecked, w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation).Ownership);
 
-        // Automatic triggers upload nothing, so they cannot change the display either.
-        await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Auto);
-        Assert.Equal(InstallationOwnership.Unchecked, w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation).Ownership);
-
         var changed = new List<InstallationRecord>();
         w.Runtime.Sync.InstallationChanged += changed.Add;
-        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual))!.Outcome);
+        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: SyncTrigger.Auto))!.Outcome);
 
         var record = w.Runtime.Sync.Installations.Single(r => r.InstallationId == w.Installation);
         Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, record.Ownership);
@@ -128,25 +124,73 @@ public class DeviceIntegrationTests
     [Theory]
     [InlineData(SyncTrigger.Auto)]
     [InlineData(SyncTrigger.Startup)]
-    public async Task Automatic_triggers_never_upload_for_a_registered_device_but_local_processing_continues(SyncTrigger trigger)
+    public async Task Automatic_triggers_upload_non_empty_snapshots_for_a_registered_device_and_update_local_data(SyncTrigger trigger)
     {
         using var w = new Wiring();
         await w.Enroll();
 
-        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: trigger);
-        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Equal(BlockReason.DeviceAutoSyncOff, attempt.Reason);
-        Assert.Equal(0, w.Backend.DeviceIngests);
+        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: trigger);
+        Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
+        Assert.Equal(BlockReason.None, attempt.Reason);
+        Assert.Equal(1, w.Backend.DeviceIngests);
         Assert.Equal(0, AnonymousIngests(w));
-        Assert.Equal(0, w.Backend.Count("fdb_device_ingest"));
-        Assert.Empty(w.Events);
-        Assert.Empty(w.Blocks);                    // by design, not an error message on every save
-        Assert.Equal(1, w.GuildbookCalls);         // the local Guildbook still updates
-        Assert.Contains("Sync now", AccountMessages.Describe(BlockReason.DeviceAutoSyncOff));
+        Assert.Equal(1, w.Backend.Count("fdb_device_ingest"));
+        Assert.Equal(new[] { "auth", $"synced:{trigger}" }, w.Events);
+        Assert.Empty(w.Blocks);
+        Assert.Equal(1, w.GuildbookCalls);
     }
 
     [Fact]
-    public async Task A_revoked_device_never_falls_back_to_the_anonymous_ingest_even_with_a_legacy_session_present()
+    public async Task Repeated_automatic_snapshot_is_deduplicated_but_manual_sync_still_uploads()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+
+        var first = await w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: SyncTrigger.Auto);
+        var duplicate = await w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: SyncTrigger.Auto);
+        var manual = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Synced, first!.Outcome);
+        Assert.Equal(SyncOutcome.UpToDate, duplicate!.Outcome);
+        Assert.Equal(SyncOutcome.Synced, manual!.Outcome);
+        Assert.Equal(2, w.Backend.DeviceIngests);
+    }
+
+    [Fact]
+    public async Task Concurrent_automatic_events_produce_one_device_upload()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var firstIngest = 0;
+        w.Backend.OnCall = (rpc, _) =>
+        {
+            if (rpc == "fdb_device_ingest" && Interlocked.Increment(ref firstIngest) == 1)
+            {
+                entered.Set();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(5)), "test did not release the first ingest");
+            }
+        };
+
+        var first = Task.Run(() => w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: SyncTrigger.Auto));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)), "first ingest did not start");
+        var second = Task.Run(() => w.Sync.SyncFileAsync(w.SavedVariables, force: false, trigger: SyncTrigger.Auto));
+
+        await Task.Delay(100);
+        Assert.Equal(1, w.Backend.Count("fdb_device_ingest"));
+        release.Set();
+
+        var attempts = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains(attempts, attempt => attempt!.Outcome == SyncOutcome.Synced);
+        Assert.Contains(attempts, attempt => attempt!.Outcome == SyncOutcome.UpToDate);
+        Assert.Equal(1, w.Backend.DeviceIngests);
+    }
+
+    [Theory]
+    [InlineData(SyncTrigger.Manual)]
+    [InlineData(SyncTrigger.Auto)]
+    public async Task A_revoked_device_never_falls_back_to_the_anonymous_ingest_even_with_a_legacy_session_present(SyncTrigger trigger)
     {
         using var w = new Wiring();
         await w.Enroll();
@@ -157,7 +201,7 @@ public class DeviceIntegrationTests
         await w.Runtime.Sessions.InitializeAsync();
         w.Backend.RevokeDevice(w.Backend.Devices.Single().Id);
 
-        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: trigger == SyncTrigger.Manual, trigger: trigger);
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
         Assert.Equal(BlockReason.DeviceSyncNotCompleted, attempt.Reason);
         Assert.Equal(0, w.Server.IngestCount);
@@ -176,7 +220,7 @@ public class DeviceIntegrationTests
         var manual = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
         var auto = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Auto);
         Assert.Equal(SyncOutcome.Blocked, manual!.Outcome);
-        Assert.Equal(BlockReason.DeviceAutoSyncOff, auto!.Reason);
+        Assert.Equal(BlockReason.DeviceSyncNotCompleted, auto!.Reason);
         Assert.Equal(0, w.Server.IngestCount);
         Assert.Empty(w.Server.Requests);   // not even a token request
     }

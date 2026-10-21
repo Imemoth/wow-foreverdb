@@ -24,8 +24,7 @@ public sealed record DeviceSyncResult(DeviceSyncOutcome Outcome, DeviceStatus St
 }
 
 /// <summary>
-/// Registered-device upload. Manual only: <see cref="SyncNowAsync"/> is the one entry point that sends data;
-/// <see cref="SyncAutomaticAsync"/> sends nothing while <see cref="AccountFeatureGate.DeviceAutoSyncApproved"/> is false.
+/// Registered-device upload. Manual and owner-enabled automatic calls use the same authenticated path.
 ///
 /// Every call: device session token (its own anonymous identity) + stored device secret -> <c>fdb_device_ingest</c>. A refused
 /// ingest is never retried under another identity or credential, and an installation owned by a device never falls back to the
