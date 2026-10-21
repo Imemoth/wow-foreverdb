@@ -31,7 +31,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      FOREVERDB_DEPLOYMENT: "local", AZERDEX_ZONE_MAPS: "1", AZERDEX_POC_MAPS: "1", AZERDEX_ATLAS_CATALOG: "snapshot",
+      FOREVERDB_DEPLOYMENT: "local", E2E_FIXTURES_ENABLED: "1", AZERDEX_ZONE_MAPS: "1", AZERDEX_POC_MAPS: "1", AZERDEX_ATLAS_CATALOG: "snapshot",
       FOREVERDB_DATA_SOURCE: "fixture", AZERDEX_READ_DB_URL: "", SITE_URL: `http://localhost:${PORT}`, RATE_LIMIT_BACKEND: "memory",
       TRUSTED_IP_HEADER: "x-forwarded-for", NEXT_TELEMETRY_DISABLED: "1",
       // These specs make far more page requests from one client than any person would: lift the page rule (the suite is not about rate limiting).

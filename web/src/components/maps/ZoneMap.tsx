@@ -55,6 +55,8 @@ export interface ZoneMapProps {
   /** Defer Leaflet and the manifest/image requests until the map is near the viewport. */
   lazy?: boolean;
   notice?: React.ReactNode;
+  /** false: the page owns level selection (creature pages), so the min/max level inputs are not offered. Default true. */
+  levelFilter?: boolean;
 }
 
 type Load = { state: "loading" } | { state: "ready"; manifest: MapManifest; imageUrl: string } | { state: "fallback"; reason: string };
@@ -76,7 +78,7 @@ function useNearViewport(enabled: boolean) {
 }
 
 export function ZoneMap({
-  variant = "zone", uiMapId, zoneName, version, assetBase, points, catalogSize, initialFilter, initialMode, emptyMessage, sourceLabel, zoneHref, lazy = false, notice,
+  variant = "zone", uiMapId, zoneName, version, assetBase, points, catalogSize, initialFilter, initialMode, emptyMessage, sourceLabel, zoneHref, lazy = false, notice, levelFilter = true,
 }: ZoneMapProps) {
   const compact = variant === "source";
   const { ref: sentinel, near } = useNearViewport(lazy);
@@ -85,7 +87,7 @@ export function ZoneMap({
   const load: Load = assetBase === null ? { state: "fallback", reason: "No map artwork origin is configured for this deployment." } : loaded;
   const [filter, setFilter] = useState<MapFilterState>(initialFilter ?? NO_FILTER);
   const [mode, setMode] = useState<MapMode>(initialMode ?? (compact ? "markers" : suggestMode(points.length)));
-  const [selected, setSelected] = useState<Selection | null>(null);
+  const [picked, setSelected] = useState<Selection | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const [expanded, setExpanded] = useState(false);
 
@@ -114,6 +116,8 @@ export function ZoneMap({
   const levels = useMemo(() => levelRange(points), [points]);
   const distinctLevels = useMemo(() => new Set(points.filter((p) => p.lootKind === "mob" || p.lootKind === "skinning").map((p) => p.level)).size, [points]);
   const shown = useMemo(() => filterPoints(points, filter), [points, filter]);
+  // Derived, never an effect: a marker that is no longer shown (another filter or page-level selection changed `points`) cannot keep its details.
+  const selected = picked && (picked.kind === "point" ? shown.includes(picked.point) : picked.cluster.points.every((p) => shown.includes(p))) ? picked : null;
   const imageFailed = () => setLoad({ state: "fallback", reason: "The map image could not be loaded." });
   const size: MapSize = load.state === "ready" ? load.manifest.image : (catalogSize ?? DEFAULT_SIZE);
   const noPoints = points.length === 0;
@@ -129,7 +133,7 @@ export function ZoneMap({
     <div className="space-y-4" data-map-variant={variant} data-map-id={uiMapId}>
       {notice}
       {showFilters && (
-        <MapFilters available={available} filter={filter} levels={compact && distinctLevels < 2 ? null : levels} mode={mode} compact={compact} sourceLabel={sourceLabel}
+        <MapFilters available={available} filter={filter} levels={!levelFilter || (compact && distinctLevels < 2) ? null : levels} mode={mode} compact={compact} sourceLabel={sourceLabel}
           onFilter={(f) => { setFilter(f); setSelected(null); }} onMode={setMode} onReset={() => setResetKey((k) => k + 1)} />
       )}
       {noPoints ? (

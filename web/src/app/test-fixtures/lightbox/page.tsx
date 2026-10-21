@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { MediaSlotGallery } from "@/components/download/MediaSlotGallery";
 import type { MediaSlot } from "@/lib/download/media-slots";
 
@@ -12,9 +13,10 @@ import type { MediaSlot } from "@/lib/download/media-slots";
  * - a striped warning pattern reading "TEST FIXTURE / NOT A REAL SCREENSHOT") that could
  * never be mistaken for Addon or Companion UI.
  *
- * Fail-closed by default: this page 404s unless E2E_FIXTURES_ENABLED=1 is set, which is
- * only ever set in playwright.config.ts's webServer env - never in the real app, beta, or
- * production configuration. Always noindex regardless, as a second layer.
+ * Fail-closed by default: the proxy refuses /test-fixtures and this page 404s unless
+ * `e2eFixturesAllowed()` holds (E2E_FIXTURES_ENABLED=1 AND an explicit local fixture
+ * configuration, see lib/e2e-fixtures.ts) - the flag alone never exposes it on the beta or
+ * production. Always noindex regardless, as a second layer.
  */
 export const metadata = { robots: { index: false, follow: false } };
 
@@ -28,7 +30,7 @@ const TEST_SLOT: MediaSlot = {
 };
 
 export default function LightboxTestFixturePage() {
-  if (process.env.E2E_FIXTURES_ENABLED !== "1") notFound();
+  if (!e2eFixturesAllowed()) notFound();
   return (
     <div className="mx-auto max-w-4xl py-10">
       <h1 className="panel-title text-xl">Lightbox test fixture</h1>

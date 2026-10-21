@@ -66,6 +66,19 @@ test.describe("synthetic preview is labelled and not indexable", () => {
   });
 });
 
+test.describe("synthetic e2e harness pages never exist on a hosted deployment", () => {
+  // playwright.config.ts starts this server WITH E2E_FIXTURES_ENABLED=1 (the accidental misconfiguration): the flag alone must not expose anything.
+  for (const path of ["/test-fixtures/creature-map/multi-level", "/test-fixtures/creature-map/no-locations", "/test-fixtures/creature-map/nope", "/test-fixtures/lightbox", "/test-fixtures/lightbox-test-image.webp"]) {
+    test(`${path} is a 404 with E2E_FIXTURES_ENABLED=1`, async ({ request }) => {
+      const r = await request.get(path, { headers: client() });
+      expect(r.status()).toBe(404);
+      const body = await r.text();
+      for (const leak of [/Harness Boar/, /synthetic/i, /Test Grove/, /TEST FIXTURE/]) expect(body).not.toMatch(leak);
+      expect(r.headers()["x-robots-tag"]).toMatch(/noindex/);
+    });
+  }
+});
+
 test.describe("security headers, cookies and caching (HTTP level)", () => {
   test("HTML response headers", async ({ request }) => {
     const r = await request.get("/database?q=copper", { headers: client() });
