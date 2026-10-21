@@ -364,7 +364,7 @@ public partial class MainWindow
                     : "";
 
         var ownershipText = enabled
-            ? _account?.Device?.IsBoundTo(record.InstallationId) == true &&
+            ? _account?.Device?.Sync.IsBoundTo(record.InstallationId) == true &&
               ownership == InstallationOwnership.OwnedByRegisteredAccount
                 ? "Owned by this registered device"
                 : AccountMessages.Describe(ownership)
