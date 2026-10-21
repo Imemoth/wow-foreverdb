@@ -76,7 +76,15 @@ async function withServer(port: number, env: Record<string, string>, run: (base:
 const BETA_HOST = "beta.azerdex.com";
 const VERCEL_ALIAS = "wow-foreverdb-git-web-azerdex-beta-imemoths-projects.vercel.app";
 
-/** A VALID, fully-authorized public-beta Preview deployment of the web/azerdex-beta branch. */
+/**
+ * A published public read model reachable from this test process (the CI job that provisions one sets BETA_SEO_DATABASE_URL to a
+ * foreverdb_web_reader URL). The positive tests need a genuine active publication, so they run only where one exists; every negative
+ * test runs everywhere. (Its content is whatever that database holds: the policy under test is host/branch/path/publication, not data.)
+ */
+const DB_URL = process.env.BETA_SEO_DATABASE_URL;
+const UNREACHABLE_DB = "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres";
+
+/** A VALID, fully-authorized public-beta Preview deployment of the web/azerdex-beta branch (data source: the public PostgreSQL read model). */
 const authorizedBeta: Record<string, string> = {
   VERCEL: "1",
   VERCEL_ENV: "preview",
@@ -85,18 +93,26 @@ const authorizedBeta: Record<string, string> = {
   VERCEL_GIT_COMMIT_REF: "web/azerdex-beta",
   BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta",
   FOREVERDB_DEPLOYMENT: "preview",
-  FOREVERDB_DATA_SOURCE: "fixture",
+  FOREVERDB_DATA_SOURCE: "postgres",
+  PUBLIC_READ_DATABASE_URL: UNREACHABLE_DB,
   TRUSTED_IP_HEADER: "x-forwarded-for",
 };
+
+/** The same deployment but with a reachable database. A local test database cannot satisfy the hosted-address rule, so VERCEL is omitted here. */
+const { VERCEL: _v, VERCEL_ENV: _ve, ...authorizedBetaNoPlatform } = authorizedBeta;
+void _v; void _ve;
+const betaWithPublication: Record<string, string> = { ...authorizedBetaNoPlatform, PUBLIC_READ_DATABASE_URL: DB_URL ?? UNREACHABLE_DB };
 
 let n = 0;
 const client = () => ({ "x-forwarded-for": `198.51.100.${(n += 1) % 250}` });
 
 test.describe.configure({ timeout: 90_000 });
 
-test.describe("eligible public-beta homepage (all five conditions hold)", () => {
+test.describe("eligible public-beta homepage (every condition holds, including a genuine active publication)", () => {
+  test.skip(!DB_URL, "needs BETA_SEO_DATABASE_URL (a published public read model)");
+
   test("indexable homepage: meta robots, canonical, OG, JSON-LD and X-Robots-Tag all agree", async () => {
-    await withServer(3220, authorizedBeta, async (base) => {
+    await withServer(3220, betaWithPublication, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
       expect(r.status).toBe(200);
       expect(r.headers["x-robots-tag"]).toBeUndefined();
@@ -109,19 +125,24 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
     });
   });
 
-  test("no synthetic content misrepresentation: identifies as public beta, never claims real observations on that page", async () => {
-    await withServer(3221, authorizedBeta, async (base) => {
+  test("published data only: identifies as public beta, no synthetic wording or banner anywhere on the page", async () => {
+    await withServer(3221, betaWithPublication, async (base) => {
       const { body } = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
       expect(body).toMatch(/Public beta/);
-      expect(body).toMatch(/synthetic demo data/);
-      expect(body).not.toMatch(/built from real in-game observations/);
-      // the sitewide honesty banner must still be present too
-      expect(body).toContain("Preview with synthetic sample data");
+      expect(body).not.toMatch(/synthetic/i);
+      expect(body).toMatch(/Observed data · publication #/);
+      const api = await curlGet(`${base}/api/v1/meta`, { Host: BETA_HOST, ...client() });
+      const m = JSON.parse(api.body);
+      expect(m.mode).toBe("published");
+      expect(m.publicationId).toBeGreaterThan(0);
+      const mp = JSON.parse((await curlGet(`${base}/api/v1/zones/1420/map-points`, { Host: BETA_HOST, ...client() })).body);
+      expect(mp.dataset).toBe("published");
+      expect(mp.publicationId).toBe(m.publicationId);
     });
   });
 
   test("non-indexable beta data pages: Database, Zones, entity, API, verify, Account all stay noindex", async () => {
-    await withServer(3222, authorizedBeta, async (base) => {
+    await withServer(3222, betaWithPublication, async (base) => {
       for (const path of ["/database", "/zones", "/zone/1420", "/item/2770", "/download"]) {
         const r = await curlGet(`${base}${path}`, { Host: BETA_HOST, ...client() });
         expect(r.headers["x-robots-tag"], path).toBe("noindex, nofollow");
@@ -137,7 +158,7 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
   });
 
   test("non-indexable generated Preview alias: the same build, same branch, no Host override stays noindex", async () => {
-    await withServer(3223, authorizedBeta, async (base) => {
+    await withServer(3223, betaWithPublication, async (base) => {
       const r = await curlGet(`${base}/`, client()); // Host defaults to 127.0.0.1:PORT, never beta.azerdex.com
       expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
       expect(r.body).toMatch(/<meta name="robots" content="noindex, nofollow"/);
@@ -145,7 +166,7 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
   });
 
   test("robots.txt / sitemap.xml consistency: crawlable data pages, no disallow hiding their noindex, single approved URL", async () => {
-    await withServer(3224, authorizedBeta, async (base) => {
+    await withServer(3224, betaWithPublication, async (base) => {
       const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
       expect(robotsTxt).toMatch(/Allow: \//);
       expect(robotsTxt).toMatch(/Disallow: \/api\//);
@@ -160,7 +181,7 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
       const sitemapXml = (await curlGet(`${base}/sitemap.xml`, { Host: BETA_HOST })).body;
       const locs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
       expect(locs).toEqual([`https://${BETA_HOST}/`]);
-      // Never advertises synthetic entities or sample articles.
+      // Never advertises entity pages or sample articles.
       expect(sitemapXml).not.toMatch(/\/item\/|\/creature\/|\/object\/|\/fishing\/|\/zone\/|\/news\/|\/blog\//);
 
       // Without the Host override (the generated alias), both surfaces revert to fully non-indexable.
@@ -173,7 +194,7 @@ test.describe("eligible public-beta homepage (all five conditions hold)", () => 
   });
 });
 
-test.describe("every one of the five conditions is independently required", () => {
+test.describe("every condition is independently required", () => {
   test("non-indexable development branch: same host, env config copied to the wrong branch stays noindex", async () => {
     await withServer(3225, { ...authorizedBeta, VERCEL_GIT_COMMIT_REF: "feature/unrelated-branch" }, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
@@ -184,15 +205,31 @@ test.describe("every one of the five conditions is independently required", () =
     });
   });
 
-  test("not indexable without FOREVERDB_DATA_SOURCE=fixture (a real/postgres-backed preview, hypothetically)", async () => {
-    await withServer(
-      3226,
-      { ...authorizedBeta, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres" },
-      async (base) => {
-        const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
-        expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
-      },
-    );
+  test("not indexable on the synthetic fixture data source, even with host, branch and path all correct", async () => {
+    const fixtureBeta: Record<string, string> = { ...authorizedBeta, FOREVERDB_DATA_SOURCE: "fixture" };
+    delete fixtureBeta.PUBLIC_READ_DATABASE_URL;
+    await withServer(3226, fixtureBeta, async (base) => {
+      const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
+      expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
+      expect(r.body).toMatch(/<meta name="robots" content="noindex, nofollow"/);
+      const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
+      expect(robotsTxt).toMatch(/Disallow: \/\s*$/m);
+      expect((await curlGet(`${base}/sitemap.xml`, { Host: BETA_HOST })).body).not.toContain("<loc>");
+    });
+  });
+
+  test("not indexable while the public database has no reachable genuine publication (fails closed, no fixture substitution)", async () => {
+    await withServer(3229, authorizedBeta, async (base) => {
+      const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
+      expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
+      expect(r.body).not.toMatch(/<meta name="robots" content="index/);
+      expect(r.body).not.toMatch(/synthetic|invented/i);
+      const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
+      expect(robotsTxt).toMatch(/Disallow: \/\s*$/m);
+      const api = await curlGet(`${base}/api/v1/meta`, { Host: BETA_HOST, ...client() });
+      expect(api.status).toBe(503);
+      expect(api.body).not.toMatch(/example\.com|postgres|password|pw/i);
+    });
   });
 
   test("protected Production: the env.ts guard refuses to even boot with the beta flag set in production", async () => {

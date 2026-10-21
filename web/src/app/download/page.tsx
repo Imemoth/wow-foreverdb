@@ -136,8 +136,8 @@ export default async function DownloadPage() {
         <p className="max-w-3xl text-sm text-mist">
           The addon collects observations locally. The Companion synchronizes permitted observations to a private
           backend. Private records stay in that protected backend - a separate publication process validates and
-          aggregates approved public statistics before anything reaches this website. The current public beta
-          continues to use clearly labeled synthetic sample data while that pipeline is finished.
+          aggregates approved public statistics before anything reaches this website. The public beta shows
+          only that published data, refreshed automatically every 15 minutes.
         </p>
         <HowItWorksPipeline />
         <p className="text-sm text-mist">

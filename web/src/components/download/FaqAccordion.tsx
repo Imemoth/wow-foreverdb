@@ -25,7 +25,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "What does the public beta currently contain?",
-    a: <>Every figure on this build is synthetic sample data from the publication pipeline, not real AzerDex observations yet - see <Link href="/about/data#preview">how the data works</Link> for the full explanation.</>,
+    a: <>The public beta shows only sanitized, aggregated observations that the publication pipeline has published (refreshed automatically every 15 minutes). Coverage is partial and still growing; local test builds use a separate, clearly bannered synthetic dataset. See <Link href="/about/data#preview">how the data works</Link> for the full explanation.</>,
   },
   {
     q: "How can I troubleshoot installation or syncing?",

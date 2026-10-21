@@ -126,7 +126,7 @@ test.describe("Download page: FAQ, Discord placeholder and support", () => {
   test("public beta contents are described honestly in the FAQ", async ({ page }) => {
     await page.goto("/download");
     await page.locator("#faq details", { hasText: "What does the public beta currently contain?" }).locator("summary").click();
-    await expect(page.getByText(/synthetic sample data from the publication pipeline/)).toBeVisible();
+    await expect(page.getByText(/sanitized, aggregated observations that the publication pipeline has published/)).toBeVisible();
   });
 });
 

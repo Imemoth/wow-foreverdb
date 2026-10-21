@@ -12,21 +12,21 @@ import { serverEnv } from "@/lib/env";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { entityPath, searchPath, zonePath } from "@/lib/routes";
-import { BETA_SEO_HOSTNAME, isPublicBetaHomepage, requestHostname } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage, requestHostname } from "@/lib/seo";
 
 /**
- * Narrowly-scoped public-beta exception: ONLY on beta.azerdex.com, in preview mode, serving
- * fixture data, with this exact branch explicitly authorized, is "/" indexable - see
- * isPublicBetaHomepage in lib/seo.ts. Every other hostname (including generated *.vercel.app
+ * Narrowly-scoped public-beta exception: ONLY on beta.azerdex.com, in preview mode, reading the
+ * real public database with a genuine active publication, with this exact branch explicitly
+ * authorized, is "/" indexable - see isIndexablePublicBetaHomepage in lib/seo.ts. Every other hostname (including generated *.vercel.app
  * Preview aliases) and every other branch keeps the static noindex fallback below.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
   const hostname = await requestHostname();
-  if (!isPublicBetaHomepage(env, hostname, "/")) return { alternates: { canonical: "/" } };
+  if (!(await isIndexablePublicBetaHomepage(env, hostname, "/"))) return { alternates: { canonical: "/" } };
   const url = `https://${BETA_SEO_HOSTNAME}/`;
   const description =
-    "AzerDex public beta: a live preview of our WoW: Forever loot, gathering and zone database, running on synthetic demo data while the real player-observation pipeline is finished.";
+    "AzerDex public beta: the WoW: Forever loot, gathering and zone database built from sanitized, aggregated player observations collected by the ForeverDB Companion, with interactive zone maps. Beta data, still growing.";
   return {
     title: "AzerDex Public Beta — Preview the WoW: Forever loot & gathering database",
     description,
@@ -90,7 +90,7 @@ const FEATURE_CARDS: FeatureCardData[] = [
 
 export default async function HomePage() {
   const { db, nonce, env } = await pageContext();
-  const betaHomepage = isPublicBetaHomepage(env, await requestHostname(), "/");
+  const betaHomepage = await isIndexablePublicBetaHomepage(env, await requestHostname(), "/");
   const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(5), db.zones()]);
   const articles = visibleArticles();
   const news = articles.filter((a) => a.section === "news").slice(0, 3);
@@ -123,12 +123,12 @@ export default async function HomePage() {
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-mist sm:mt-4 sm:text-base">
             {betaHomepage
-              ? "A community-powered database for World of Warcraft: Forever — this public beta runs on synthetic demo data while the real observation pipeline is finished."
+              ? "A community-powered database for World of Warcraft: Forever, built from real in-game observations. This public beta covers only what players have observed so far."
               : "A community-powered database for World of Warcraft: Forever, built from real in-game observations."}
           </p>
           {betaHomepage && (
             <p role="note" className="mx-auto mt-2 max-w-2xl text-xs font-semibold text-[#ffd9b8]">
-              Public beta — every figure below is synthetic demo data, not a real player observation.
+              Public beta — figures are sanitized, aggregated player observations from the ForeverDB Companion. Coverage is partial and still growing.
             </p>
           )}
           <form action="/database" method="get" role="search" className="mx-auto mt-6 flex max-w-2xl flex-col gap-2 sm:mt-8 sm:flex-row">

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
 import { assetOrigin } from "@/lib/maps/asset-url";
 import { zoneMapsEnabled, isZoneMapRoute } from "@/lib/maps/zone-maps-gate";
-import { isPublicBetaHomepage } from "@/lib/seo";
+import { isIndexablePublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
@@ -98,7 +98,7 @@ export async function proxy(request: NextRequest) {
   // itself (as Vercel's own edge routing sets it for the domain actually requested) is the only
   // reliable signal here, exactly like requestHostname() in lib/seo.ts uses for every other surface.
   const requestHost = (request.headers.get("host") ?? "").split(":")[0]!.toLowerCase();
-  const publicBetaHomepage = isPublicBetaHomepage(env, requestHost, pathname);
+  const publicBetaHomepage = await isIndexablePublicBetaHomepage(env, requestHost, pathname);
   // The __Host- prefix (and Secure) follows the real origin: never a Secure-less cookie on an https site.
   const sidCookie = https ? "__Host-fdb_sid" : "fdb_sid";
 
