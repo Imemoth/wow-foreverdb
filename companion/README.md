@@ -8,14 +8,14 @@ ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
-- automatic WoW Forever path detection
+- bounded WoW Forever path detection, detected-installation selection and a native Windows folder picker
 - SavedVariables watcher and automatic authenticated sync
 - Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
   the existing anonymous identity keeps working after the upgrade and is never replaced
   silently; the normal package supports existing-account sign-in, direct installation linking
-  and revocable manual device sync, including explicit sign-out, account switching and return
-  to anonymous mode. Activation-file enrollment and registered-device AutoSync
-  remain independently disabled for production
+  and revocable manual or user-controlled automatic device sync, including explicit sign-out,
+  account switching and return to anonymous mode. Activation-file enrollment remains independently
+  disabled for production
   ([Account Linking MVP](../docs/account-v1/account-linking-mvp.md))
 - item and source search
 - item/source detail navigation with Back / Forward / breadcrumb history

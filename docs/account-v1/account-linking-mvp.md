@@ -1,6 +1,6 @@
 # Companion account linking MVP
 
-Status: implemented in the normal Companion package for owner acceptance. Standard production account sign-in and direct linking are approved in this unmerged PR; activation-file enrollment, registered-device AutoSync, web production activation and temporary pilot modes remain off. No new migration or hosted infrastructure is required.
+Status: implemented in the normal Companion package. Standard production account sign-in, direct linking and user-controlled registered-device AutoSync are approved; activation-file enrollment, web production activation and temporary pilot modes remain off. No new migration or hosted infrastructure is required.
 
 ## Chosen flow
 
@@ -9,7 +9,7 @@ Status: implemented in the normal Companion package for owner acceptance. Standa
 3. On **Connect this installation**, `AccountLinkService` checks the registered session and asks the existing anonymous owner to start a one-time 0012 claim. The database verifies the live anonymous session and current installation owner; knowing an installation ID is insufficient.
 4. The signed-in account redeems the server-generated claim through `fdb_account_claim_redeem`. Migration 0012 performs the single-use ownership transfer under the installation lock and preserves all installation, observation and Guildbook rows.
 5. The same registered session issues a 0014 enrollment ticket. A separate anonymous device session redeems it for the same installation. The resulting device secret is stored by the existing `DeviceCredentialStore` under Windows DPAPI.
-6. Manual sync uses `fdb_device_ingest` and the revocable device credential. `DeviceAutoSyncApproved` remains `false`.
+6. Manual and user-enabled automatic sync use `fdb_device_ingest` and the same revocable device credential. Automatic events are serialized per installation and deduplicated by snapshot timestamp; **Sync now** remains forced.
 
 The normal package validates the exact built-in production Supabase HTTPS origin and a modern publishable key before it enables sign-in. An explicit process-level `FOREVERDB_ACCOUNT_MODE=disabled` remains a kill switch. Alternate origins, paths, ports and secret/service-role keys fail closed.
 
@@ -54,4 +54,4 @@ No PR #62 migration, pairing endpoint, raw-header ingress, HMAC attestation, bro
 - Release WPF build and the normal self-contained `ForeverDB-Companion-win-x64` workflow artifact.
 - One scoped security review of the final diff and exact-head CI.
 
-Public rollout, hosted Supabase migration/configuration changes, deployment, installer publication, activation-file enrollment and AutoSync require separate owner approval.
+Public rollout, hosted Supabase migration/configuration changes, deployment, installer publication and activation-file enrollment require separate owner approval.

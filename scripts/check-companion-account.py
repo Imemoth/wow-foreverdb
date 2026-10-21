@@ -126,7 +126,7 @@ for p in companion_files:
 gate = read("companion/ForeverDB.Companion.Account/AccountFeatureGate.cs")
 check("public static readonly bool ProductionAccountAuthApproved = true;" in gate, "standard Account Linking approval must stay enabled")
 check("public const bool ZeroTouchEnrollmentApproved = false;" in gate, "ZeroTouchEnrollmentApproved must stay false")
-check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSyncApproved must stay false")
+check("public const bool DeviceAutoSyncApproved = true;" in gate, "owner-approved DeviceAutoSync must stay enabled")
 
 # Owner acceptance uses the repository's normal self-contained package, never an account-linking-only build.
 account_workflow = read(".github/workflows/companion-account-auth.yml")
