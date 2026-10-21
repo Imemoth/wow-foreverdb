@@ -57,6 +57,12 @@ public sealed class DeviceSyncService
         _enabled &&
         (string.Equals(_ctx.InstallationId, installationId, StringComparison.Ordinal) || _ctx.Status.State == DeviceState.PendingActivation);
 
+    /// <summary>True when an active local registered-device path is bound to this installation.</summary>
+    public bool IsBoundTo(string installationId) =>
+        _enabled &&
+        _ctx.Status.State == DeviceState.Registered &&
+        string.Equals(_ctx.InstallationId, installationId, StringComparison.Ordinal);
+
     public Task<DeviceSyncResult> SyncNowAsync(string snapshotJson, CancellationToken ct = default) =>
         RunAsync(snapshotJson, ct);
 

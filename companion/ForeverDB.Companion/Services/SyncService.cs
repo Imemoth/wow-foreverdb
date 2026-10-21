@@ -114,6 +114,28 @@ public sealed class SyncService
         // Only the explicit Sync now uploads; the watcher and startup sync send nothing for it.
         if (_device is { } device && device.Handles(snapshot.InstallationId))
         {
+            if (device.IsBoundTo(snapshot.InstallationId))
+            {
+                var accountAuthorization = await _coordinator.AuthorizeDeviceForCurrentAccountAsync(
+                    snapshot.InstallationId,
+                    cancellationToken);
+                if (accountAuthorization is not null)
+                {
+                    if (accountAuthorization.Outcome != SyncOutcome.StaleDiscarded)
+                    {
+                        SyncBlocked?.Invoke(
+                            this,
+                            new SyncBlockedEventArgs(
+                                snapshot.InstallationId,
+                                accountAuthorization.Reason,
+                                false,
+                                AccountMessages.Describe(accountAuthorization.Reason)));
+                    }
+
+                    return accountAuthorization;
+                }
+            }
+
             return await SyncRegisteredDeviceAsync(device, snapshot, json, trigger, cancellationToken);
         }
 

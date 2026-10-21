@@ -66,6 +66,60 @@ public sealed class InstallationSyncCoordinator
         Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = reason });
     }
 
+    /// <summary>
+    /// When a human account is currently signed in, a registered-device upload must also be owned by that account. The device
+    /// credential remains independently authoritative server-side, but it may not be used behind a different signed-in account.
+    /// Anonymous/logged-out mode has no human account to bind and therefore keeps the existing device behavior.
+    /// </summary>
+    public async Task<SyncAttempt?> AuthorizeDeviceForCurrentAccountAsync(
+        string installationId,
+        CancellationToken ct)
+    {
+        NoteLocalInstallation(installationId);
+        var status = _manager.Status;
+        if (status.State is not (SessionState.Registered or SessionState.ReauthRequired))
+        {
+            return null;
+        }
+
+        var generation = _manager.Generation;
+        var route = await _router.ResolveAsync(installationId, forceRefresh: false, ct).ConfigureAwait(false);
+        if (_manager.Generation != generation)
+        {
+            return Stale();
+        }
+
+        if (route.Ownership == InstallationOwnership.OwnedByRegisteredAccount &&
+            route.Kind == SessionKind.Registered &&
+            route.Generation == generation)
+        {
+            return null;
+        }
+
+        if (route.Ownership is InstallationOwnership.Unavailable or
+            InstallationOwnership.ReauthRequired or
+            InstallationOwnership.Conflict)
+        {
+            Update(installationId, record => record with
+            {
+                Ownership = route.Ownership,
+                OwnerRole = null,
+                LastBlock = route.Block
+            });
+            return SyncAttempt.Blocked(route.Block, route.Ownership);
+        }
+
+        Update(installationId, record => record with
+        {
+            Ownership = InstallationOwnership.OwnedByDifferentAccount,
+            OwnerRole = null,
+            LastBlock = BlockReason.OwnedByDifferentAccount
+        });
+        return SyncAttempt.Blocked(
+            BlockReason.OwnedByDifferentAccount,
+            InstallationOwnership.OwnedByDifferentAccount);
+    }
+
     public void MarkClaimPending(string installationId, bool pending)
     {
         Update(installationId, r => r with { ClaimPending = pending });

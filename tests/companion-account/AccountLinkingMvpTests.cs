@@ -1,3 +1,4 @@
+using ForeverDB.Companion.Services;
 using Xunit;
 
 namespace ForeverDB.Companion.Account.Tests;
@@ -197,5 +198,95 @@ public sealed class AccountLinkingMvpTests
         Assert.False(result.OwnershipLinked);
         Assert.Equal(anonymous.UserId, rig.Server.OwnerOf(secondInstallation));
         Assert.Equal(claimsBefore, rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count);
+    }
+
+    [Fact]
+    public async Task Switching_to_an_account_that_does_not_own_the_registered_installation_blocks_device_sync()
+    {
+        using var rig = new Rig();
+        var anonymous = rig.SeedAnonymous();
+        var firstAccount = rig.Server.AddRegisteredUser("first@example.test", "a-long-password-1");
+        rig.Server.AddRegisteredUser("second@example.test", "a-long-password-2");
+        rig.Server.SetOwner(InstallationId, anonymous.UserId);
+        await rig.Sessions.InitializeAsync();
+        Assert.Equal(SignInOutcome.Success,
+            await rig.Sessions.SignInRegisteredAsync("first@example.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(AccountLinkOutcome.Connected,
+            (await rig.Runtime.Linking.ConnectAsync(InstallationId, "This PC", default)).Outcome);
+        Assert.Equal(firstAccount.Id, rig.Server.OwnerOf(InstallationId));
+        var deviceCredentialBefore = File.ReadAllBytes(rig.Runtime.Device!.Context.Store.BlobPath);
+
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+        Assert.Equal(SignInOutcome.Success,
+            await rig.Sessions.SignInRegisteredAsync("second@example.test", "a-long-password-2".ToCharArray()));
+
+        var claimsBefore = rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count;
+        var relink = await rig.Runtime.Linking.ConnectAsync(InstallationId, "This PC", default);
+        Assert.Equal(AccountLinkOutcome.DeviceRegistrationRequired, relink.Outcome);
+        Assert.False(relink.OwnershipLinked);
+        Assert.Equal(claimsBefore, rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count);
+        Assert.Equal(firstAccount.Id, rig.Server.OwnerOf(InstallationId));
+
+        var path = Path.Combine(rig.Directory, "ForeverDB.lua");
+        File.WriteAllText(path,
+            $"ForeverDB_Export = \"H|9|0.5.0-alpha|{InstallationId}|100\\nS|creature|1|1|Wolf\"");
+        var sync = new ForeverDB.Companion.Services.SyncService(
+            rig.Runtime.Sync,
+            device: rig.Runtime.Device!.Sync);
+        var before = rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count;
+
+        var attempt = await sync.SyncFileAsync(
+            path,
+            force: true,
+            trigger: ForeverDB.Companion.Services.SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
+        Assert.Equal(BlockReason.OwnedByDifferentAccount, attempt.Reason);
+        Assert.Equal(InstallationOwnership.OwnedByDifferentAccount, attempt.Ownership);
+        Assert.Equal(before, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
+        Assert.Equal(firstAccount.Id, rig.Server.OwnerOf(InstallationId));
+        Assert.Equal(InstallationId, rig.Runtime.Device.Context.Store.Read().Credential!.InstallationId);
+        Assert.Equal(deviceCredentialBefore, File.ReadAllBytes(rig.Runtime.Device.Context.Store.BlobPath));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task Device_sync_fails_closed_when_current_account_ownership_cannot_be_verified()
+    {
+        using var rig = new Rig();
+        var anonymous = rig.SeedAnonymous();
+        rig.Server.AddRegisteredUser("owner@example.test", "a-long-password-1");
+        rig.Server.SetOwner(InstallationId, anonymous.UserId);
+        await rig.Sessions.InitializeAsync();
+        Assert.Equal(SignInOutcome.Success,
+            await rig.Sessions.SignInRegisteredAsync("owner@example.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(AccountLinkOutcome.Connected,
+            (await rig.Runtime.Linking.ConnectAsync(InstallationId, "This PC", default)).Outcome);
+
+        var path = Path.Combine(rig.Directory, "ForeverDB.lua");
+        File.WriteAllText(path,
+            $"ForeverDB_Export = \"H|9|0.5.0-alpha|{InstallationId}|100\\nS|creature|1|1|Wolf\"");
+        var sync = new ForeverDB.Companion.Services.SyncService(
+            rig.Runtime.Sync,
+            device: rig.Runtime.Device!.Sync);
+        var blocks = new List<SyncBlockedEventArgs>();
+        sync.SyncBlocked += (_, blocked) => blocks.Add(blocked);
+        var before = rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count;
+        rig.Server.Interceptor = request =>
+            request.Path == "/rest/v1/rpc/fdb_installation_link_status"
+                ? new FakeResponse(503, "{}")
+                : null;
+        rig.Runtime.Router.Invalidate(InstallationId);
+
+        var attempt = await sync.SyncFileAsync(
+            path,
+            force: true,
+            trigger: ForeverDB.Companion.Services.SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
+        Assert.Equal(BlockReason.OwnershipUnavailable, attempt.Reason);
+        Assert.Equal(before, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
+        Assert.Single(blocks);
+        Assert.Contains("could not be verified", blocks[0].Message, StringComparison.OrdinalIgnoreCase);
     }
 }

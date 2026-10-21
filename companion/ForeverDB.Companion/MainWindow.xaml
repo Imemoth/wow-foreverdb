@@ -803,12 +803,24 @@
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Height="38"
                                             Click="AccountSignOut_Click"
-                                            Content="Sign out of this computer" />
+                                            Content="Sign out" />
+                                    <Button x:Name="AccountSwitchAccountButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountSwitchAccount_Click"
+                                            Content="Switch account…" />
+                                    <Button x:Name="AccountReturnAnonymousButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountReturnAnonymous_Click"
+                                            Content="Return to anonymous mode" />
                                     <TextBlock Foreground="{StaticResource MutedTextBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
                                                Margin="0,6,0,0"
-                                               Text="Signing out here does not sign you out of the website." />
+                                               Text="These actions preserve local WoW data, installation IDs and the registered-device credential. Signing out here does not sign you out of the website." />
                                 </StackPanel>
 
                                 <StackPanel x:Name="AccountLostPanel"

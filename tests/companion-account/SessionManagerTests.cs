@@ -733,6 +733,27 @@ public class SessionManagerTests
     }
 
     [Fact]
+    public async Task Explicit_sign_out_allows_another_account_to_sign_in_without_replacing_the_preserved_anonymous_identity()
+    {
+        using var rig = new Rig();
+        var anonymous = rig.SeedAnonymous();
+        rig.Server.AddRegisteredUser("first@example.test", "a-long-password-1");
+        var second = rig.Server.AddRegisteredUser("second@example.test", "a-long-password-2");
+        await rig.Sessions.InitializeAsync();
+
+        Assert.Equal(SignInOutcome.Success,
+            await rig.Sessions.SignInRegisteredAsync("first@example.test", "a-long-password-1".ToCharArray()));
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+        Assert.Equal(SignInOutcome.Success,
+            await rig.Sessions.SignInRegisteredAsync("second@example.test", "a-long-password-2".ToCharArray()));
+
+        Assert.Equal(SessionState.Registered, rig.Sessions.Status.State);
+        Assert.Equal(second.Id, (await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).UserId);
+        Assert.Equal(anonymous.UserId, rig.Vault().LegacyOwner.Read().Session!.UserId);
+        Assert.True(rig.Server.SessionAlive(anonymous.AccessToken));
+    }
+
+    [Fact]
     public async Task Lock_timeout_is_reported_without_touching_credentials()
     {
         using var rig = new Rig();
