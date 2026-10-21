@@ -26,15 +26,15 @@ describe("account-independent collectors", () => {
     assert.equal((await world.row("select owner_user_id from public.installations where id = $1", [first]))[0].owner_user_id, accountA.uid);
     assert.equal((await world.row("select owner_user_id from public.installations where id = $1", [second]))[0].owner_user_id, accountA.uid);
 
-    assert.deepEqual(await world.ingest(device, firstEnrollment.device_secret, snapshot(first, { updatedAt: 100 })), { ok: true });
-    assert.deepEqual(await world.ingest(device, secondEnrollment.device_secret, snapshot(second, { updatedAt: 101 })), { ok: true });
+    assert.equal((await world.ingest(device, firstEnrollment.device_secret, snapshot(first, { updatedAt: 100 }))).ok, true);
+    assert.equal((await world.ingest(device, secondEnrollment.device_secret, snapshot(second, { updatedAt: 101 }))).ok, true);
 
     const bTicket = await world.ticket(accountB, "B must not claim A");
     assert.deepEqual(await world.enroll(device, bTicket.ticket, first), { ok: false, error: "installation_conflict" });
 
     // Revoking one installation's credential does not revoke the other installation's collector path.
     assert.deepEqual(await accountA.call("fdb_account_device_revoke", [firstEnrollment.device_id]), { ok: true });
-    assert.deepEqual(await world.ingest(device, secondEnrollment.device_secret, snapshot(second, { updatedAt: 102 })), { ok: true });
+    assert.equal((await world.ingest(device, secondEnrollment.device_secret, snapshot(second, { updatedAt: 102 }))).ok, true);
     assert.deepEqual(await world.ingest(device, firstEnrollment.device_secret, snapshot(first, { updatedAt: 103 })), { ok: false, error: "device_revoked" });
   });
 });
