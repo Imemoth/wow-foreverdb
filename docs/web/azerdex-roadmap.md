@@ -105,6 +105,22 @@ public installer release.
   installer, which is itself gated on Browser Pairing Stage C and the owner's own
   release process — entirely out of this document's and this round's scope.
 
+## P2-Z — Atlas, public-data pipeline and real-data public beta
+
+- **P2-Z1 — Unified zone atlas & observation maps** ([#78](https://github.com/Imemoth/wow-foreverdb/pull/78), integrated into the beta through #85):
+  catalog-driven `/zones`, the shared Leaflet map engine on `/zone/[id]` and source pages, behind `AZERDEX_ZONE_MAPS=1`. `IMPLEMENTED` · `CI VERIFIED`.
+- **P2-Z2 — Supabase-native publication pipeline** ([#84](https://github.com/Imemoth/wow-foreverdb/pull/84), integrated through #85): private aggregate export →
+  Edge Function `publish-observations` → public Postgres, `pg_cron` every 15 minutes, map-point APIs. Verdict `SUPABASE_NATIVE_PUBLISHER_PASS_WITH_LIMITS`
+  (2 s Edge CPU limit at ~25–27× the measured volume). `COMPLETE` for the current data volume.
+- **P2-Z3 — Public beta on real published data** (#85, #86, #87, #89; runbook and evidence: [public-beta-release.md](public-beta-release.md)):
+  **`COMPLETE` (2026-10-21).** `beta.azerdex.com` serves the genuine published Companion data (publication id advancing through Cron), no synthetic
+  fallback, `AZERDEX_READ_DB_URL` server-only/Sensitive, TLS root cause fixed (Supabase Root 2021 CA for pooler hosts only, verification on), CSP fixed for
+  Next.js soft navigation, beta homepage SEO policy requires a genuine active publication, owner browser acceptance of artwork/markers/soft navigation.
+  - **Non-blocking items carried forward:** map calibration stays `provisional`; artwork licensing review pending (see P2-D); Vercel Git auto-deployment
+    anomaly after the #89 merge (cause not established); dashboard-only housekeeping (retired `diag-db-host` function, Data API).
+  - **Not closed by this milestone:** P2-D licensing, Production activation (`FOREVERDB_DEPLOYMENT=production`), the Account/Companion work (e.g. #88), and
+    the stacked Draft PRs #70/#72/#77/#78/#84 (intentionally left open).
+
 ## P3 — Site-wide release polish and future scope
 
 - **Scope:** not yet defined. Candidates noted informally across prior rounds include a

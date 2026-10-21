@@ -170,3 +170,5 @@ Supersedes the "synthetic-fixture demonstration" wording of §10 for the beta tr
 `foreverdb_web_reader` role through the Supavisor transaction pooler) and never serves fixtures. The homepage-only indexing exception now requires
 `postgres` (not `fixture`) **and** a genuine active publication, checked per request. Variables, verification and rollback:
 [public-beta-release.md](public-beta-release.md). Production, `azerdex.com`, DNS, Cloudflare and other Preview branches are unchanged.
+
+Status (2026-10-21): the beta is live on this configuration and P2-Z3 is closed; see the final status, root causes and remaining limitations in [public-beta-release.md](public-beta-release.md).
