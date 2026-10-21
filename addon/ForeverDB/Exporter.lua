@@ -48,14 +48,29 @@ function FDB:BuildExportSnapshot()
 
     self:EnsureInstallationId()
 
+    local header = {
+        "H",
+        tostring(self.SCHEMA_VERSION),
+        self.VERSION,
+        self.DB.installationId,
+        tostring(self.DB.updatedAt or 0),
+    }
+
+    local capture = self.DB.guildbookCapture
+
+    if type(capture) == "table"
+        and type(capture.captureId) == "string"
+        and capture.captureId ~= ""
+        and capture.capturedAt ~= nil then
+        header[#header + 1] = encode(capture.captureId)
+        header[#header + 1] = tostring(capture.capturedAt)
+        header[#header + 1] = encode(capture.sourceCharacterGuid)
+        header[#header + 1] = encode(capture.sourceCharacterName)
+        header[#header + 1] = encode(capture.sourceCharacterRealm)
+    end
+
     local lines = {
-        table.concat({
-            "H",
-            tostring(self.SCHEMA_VERSION),
-            self.VERSION,
-            self.DB.installationId,
-            tostring(self.DB.updatedAt or 0),
-        }, "|")
+        table.concat(header, "|")
     }
 
     for _, mapKey in ipairs(sortedKeys(self.DB.maps or {})) do
