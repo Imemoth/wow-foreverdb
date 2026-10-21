@@ -1,5 +1,14 @@
 # ForeverDB Roadmap
 
+## Current delivery snapshot — 2026-10-21
+
+- **Account Linking MVP (#73): MERGED into `main`** on 2026-10-21, merge commit `c9a86d6dd984169ba9f221a088c33559827f05ef`. The replacement for the abandoned browser-pairing ingress design uses existing Supabase Auth, anonymous installation ownership proof (0012), and revocable registered-device enrollment (0014). PR #62 remains Draft and unmerged as archived R&D, not a release prerequisite.
+- **Owner Windows acceptance: PASS** on the normal `ForeverDB-Companion-win-x64` build. With a fresh header-only SavedVariables fixture under the owner's disposable Windows test profile: anonymous installation established, anonymous manual sync succeeded; existing account signed in; **Connect this installation** transferred ownership and registered the device; registered-device manual sync succeeded at **2026-10-21 09:35**, **0 sources / 0 Guildbook members**, no last error, AutoSync OFF. This verifies a zero-row identity/sync path, **not** non-empty WoW data ingestion, data preservation, or production publication. See [acceptance](account-v1/account-linking-mvp-acceptance.md).
+- **Next approved Companion scope:** implement and test user-controlled **AutoSync** (existing-user default OFF until explicitly enabled), WoW folder **Browse + candidate auto-detection** ([#79](https://github.com/Imemoth/wow-foreverdb/issues/79)), and **sign-out/account switching/local identity recovery** ([#76](https://github.com/Imemoth/wow-foreverdb/issues/76)); UI/UX visual polish **after** these functional steps. Owner approved development and controlled testing, not automatic public rollout, installer publication, or live infrastructure/migration changes.
+- **Open acceptance:** non-empty SavedVariables / real WoW upload, correct device/session status labels (`Auth pending` observed on Status despite successful registered manual sync), AutoSync watcher/reload/logout/exit and retry behavior, folder discovery, switching between owners without unauthorized sync. Use existing CI plus focused end-to-end testing; no per-task blanket security-review requirement.
+- Historical sections below document earlier proposals and private pilots; they are **not** authoritative statements of current merge/release status where they conflict with this dated snapshot.
+
+
 ForeverDB is developed in small, testable milestones. The roadmap is intentionally
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
