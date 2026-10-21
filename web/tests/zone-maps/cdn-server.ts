@@ -64,8 +64,9 @@ function synthetic(path: string): { body: Buffer; type: string } | null {
   if (!map || !map.image) return null;
   const { width, height, variant } = map.image;
   // The catalog-declared default image (what the zone hero's map layer requests) is served too, as it is on the real CDN.
-  if (m[3].endsWith(".webp") && m[3] !== map.image.path.split("/").pop()) return null;
-  if (m[3] !== "manifest.json") return { body: pngFor(width, height), type: "image/png" };
+  const file = m[3]!;
+  if (file.endsWith(".webp") && file !== map.image.path.split("/").pop()) return null;
+  if (file !== "manifest.json") return { body: pngFor(width, height), type: "image/png" };
   const manifest = {
     schemaVersion: 1, zoneId: map.uiMapId, slug: map.slug, zoneName: map.name, version: m[2],
     image: { file: "map.png", format: "png", width, height, variant: `synthetic-${variant}` },
