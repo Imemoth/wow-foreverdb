@@ -1,6 +1,6 @@
 # Account-scoped Guildbook integration report
 
-Status: implementation prepared for owner acceptance on `feature/account-scoped-guildbook-integration` (`ac64aeb`). PRs #81, #82, and #83 remain unchanged.
+Status: implementation prepared for owner acceptance on `feature/account-scoped-guildbook-integration`. The final verified commit SHA is reported with the handoff; PRs #81, #82, and #83 remain unchanged.
 
 Implemented:
 
