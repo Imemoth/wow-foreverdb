@@ -50,8 +50,20 @@ public sealed class DeviceEnrollmentService
             return _ctx.Status;
         }
 
-        var read = _ctx.Store.Read();
-        _ctx.NoteInstallation(read.Credential?.InstallationId ?? read.MarkerInstallationId);
+        var installationIds = _ctx.Store.InstallationIds();
+        _ctx.NoteInstallations(installationIds);
+        var reads = installationIds
+            .Select(id => (Id: id, Read: _ctx.Store.Read(id)))
+            .ToArray();
+        DeviceCredentialRead? read = reads
+            .Where(pair => pair.Read.Status == DeviceCredentialStatus.Ok)
+            .Select(pair => pair.Read)
+            .FirstOrDefault();
+        if (read is null)
+        {
+            read = _ctx.Store.Read();
+        }
+
         switch (read.Status)
         {
             case DeviceCredentialStatus.Ok:
@@ -92,7 +104,16 @@ public sealed class DeviceEnrollmentService
             return _ctx.Status;
         }
 
-        var read = _ctx.Store.Read();
+        var installationIds = _installations()
+            .Concat(_ctx.Store.InstallationIds())
+            .Where(id => DeviceContract.InstallationIdPattern.IsMatch(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        _ctx.NoteInstallations(installationIds);
+        var read = installationIds
+            .Select(id => _ctx.Store.Read(id))
+            .FirstOrDefault(candidate => candidate.Status == DeviceCredentialStatus.Ok)
+            ?? _ctx.Store.Read();
         _ctx.NoteInstallation(read.Credential?.InstallationId ?? read.MarkerInstallationId);
 
         switch (read.Status)
@@ -191,7 +212,7 @@ public sealed class DeviceEnrollmentService
             return _ctx.Status;
         }
 
-        var read = _ctx.Store.Read();
+        var read = _ctx.Store.Read(installationId);
         if (read.Status == DeviceCredentialStatus.IoError)
         {
             _ctx.Set(_ctx.Status.State, DeviceDetail.StorageFailure);
@@ -384,7 +405,7 @@ public sealed class DeviceEnrollmentService
     {
         try
         {
-            _ctx.Store.Write(credential);
+            _ctx.Store.WriteForInstallation(credential);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

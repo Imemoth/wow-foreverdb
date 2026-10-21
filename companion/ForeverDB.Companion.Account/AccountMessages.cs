@@ -94,6 +94,7 @@ public static class AccountMessages
         BlockReason.InvalidRequest => "The server rejected the upload.",
         BlockReason.DeviceAutoSyncOff => "This computer is a registered device: automatic upload is off. Use Sync now to upload.",
         BlockReason.DeviceSyncNotCompleted => "The registered device did not upload. See the Registered device line on the Account tab.",
+        BlockReason.CollectorEnrollmentRequired => "This installation needs initial collector enrollment. Sign in as its current owner and connect it once; ownership and historical observations will not change.",
         _ => "Sync is paused."
     };
 
@@ -120,14 +121,14 @@ public static class AccountMessages
             DeviceState.PendingActivation => status.Detail switch
             {
                 DeviceDetail.NoInstallation => "An activation file was found, but no ForeverDB installation is known yet. Start World of Warcraft with the ForeverDB addon once, then reopen the Companion. The file was kept.",
-                DeviceDetail.MultipleInstallations => "An activation file was found, but more than one installation was detected. A computer can be activated for one installation only. The file was kept.",
+                DeviceDetail.MultipleInstallations => "An activation file was found, but more than one installation was detected. Choose the installation to enroll; the other local collector credentials are kept. The file was kept.",
                 DeviceDetail.InvalidInstallation => "The server did not accept this computer's installation identifier. The activation file was kept; nothing was changed.",
                 DeviceDetail.StorageFailure => "The device credential could not be stored safely just now. The Companion will try again; do not delete the activation file.",
                 _ => "An activation file was found but has not been redeemed yet. It was kept and the Companion will try again when ForeverDB can be reached."
             },
             DeviceState.Registered => status.Detail == DeviceDetail.Synced
                 ? "Uploaded with this computer's registered device. No sign-in was needed."
-                : "This computer is registered to your ForeverDB account. Use Sync now to upload; automatic upload is off for registered devices.",
+                : "This computer has an independent collector credential. Public observations upload even when you sign out; use Sync now to send immediately. Account Guildbook data remains private to the signed-in account.",
             DeviceState.ActivationExpired =>
                 "This activation file has expired. Download a new activation file from your ForeverDB account > Devices; you do not need to reinstall. Your local data was not changed.",
             DeviceState.ActivationRejected => status.Detail switch
