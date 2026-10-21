@@ -279,7 +279,7 @@ function checkLiveSession(def: Definition, parts: { declare: string; exec: strin
 const GUARDS = Object.keys(ACCOUNT_GUARD_FUNCTIONS) as AccountGuard[];
 const RPCS = Object.keys(ACCOUNT_RPC_GUARDS) as AccountRpcName[];
 
-export function lintAccountMigration(sql: string): Violation[] {
+export function lintAccountMigration(sql: string, options: { skipRpcNames?: readonly AccountRpcName[] } = {}): Violation[] {
   const out: Violation[] = [];
   const add = (rule: string, target: string, message: string) => out.push({ rule, target, message });
   const top = scanSql(sql);
@@ -287,8 +287,9 @@ export function lintAccountMigration(sql: string): Violation[] {
 
   const guardNames = new Map(GUARDS.map((g) => [ACCOUNT_GUARD_FUNCTIONS[g].toLowerCase(), g]));
   const rpcNames = new Map(RPCS.map((r) => [`public.${r}`.toLowerCase(), r]));
+  const skipped = new Set(options.skipRpcNames ?? []);
   const helpers = new Set(ACCOUNT_HELPER_FUNCTIONS.map((h) => h.toLowerCase()));
-  const known = new Set<string>([...guardNames.keys(), ...rpcNames.keys()]);
+  const known = new Set<string>([...guardNames.keys(), ...RPCS.filter((r) => !skipped.has(r)).map((r) => `public.${r}`.toLowerCase())]);
   const allowedNames = new Set<string>([...known, ...helpers]);
 
   // --- global bans ---------------------------------------------------------------------------------------------

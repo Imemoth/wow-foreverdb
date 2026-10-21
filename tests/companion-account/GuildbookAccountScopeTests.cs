@@ -93,7 +93,8 @@ public sealed class GuildbookAccountScopeTests
             ServerGuilds = new[] { Guild("server-a") }
         };
         using var service = new AccountGuildbookSync(rig.Sessions, rpc);
-        var a = Snapshot("capture-a", 100, "Character-A");
+        var captureBase = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
+        var a = Snapshot("capture-a", captureBase, "Character-A");
 
         await service.SyncAsync(a);
         Assert.Single(rpc.Captures);
@@ -115,7 +116,7 @@ public sealed class GuildbookAccountScopeTests
         Assert.Equal(1, rpc.Captures.Count);
         Assert.Equal("server-b", Assert.Single(service.CachedGuilds).Name);
 
-        var b = Snapshot("capture-b", 200, "Character-B");
+        var b = Snapshot("capture-b", captureBase + 1, "Character-B");
         var fresh = await service.SyncAsync(b);
         Assert.True(fresh.CaptureAccepted);
         Assert.Equal(2, rpc.Captures.Count);
@@ -175,7 +176,9 @@ public sealed class GuildbookAccountScopeTests
         var request = Assert.Single(rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_guildbook_ingest"));
         Assert.Contains("p_capture_id", request.Body, StringComparison.Ordinal);
         Assert.Contains("p_source_character", request.Body, StringComparison.Ordinal);
-        Assert.Contains("p_guildbook", request.Body, StringComparison.Ordinal);
+        Assert.Contains("p_guilds", request.Body, StringComparison.Ordinal);
+        Assert.Contains("guildKey", request.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("GuildKey", request.Body, StringComparison.Ordinal);
     }
 
     private static ForeverDbSnapshot Snapshot(string? captureId, long capturedAt, string sourceCharacter) => new()

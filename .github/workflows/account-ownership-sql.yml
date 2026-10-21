@@ -84,6 +84,14 @@ jobs:
       - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
         run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
 
+      # Account-scoped Guildbook (migration 0015). Applied only after the existing 0012/0014 suites so their
+      # compatibility assertions continue to exercise the legacy account read family unchanged.
+      - name: Apply 0015 (account-scoped Guildbook; capture provenance and independent public ingest)
+        run: database/tests/account/stack.sh apply15
+
+      - name: Account-scoped Guildbook suite (fresh-capture attribution, replay/staleness and cross-account isolation)
+        run: node --test --test-concurrency=1 database/tests/account/10_account_scoped_guildbook.test.mjs
+
       - name: Mutation check 0014 (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/enrollment/mutation_check.mjs

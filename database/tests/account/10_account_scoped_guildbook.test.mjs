@@ -17,6 +17,7 @@ let b;
 let anonymous;
 let installation;
 let guilds;
+let capturedAt;
 
 before(async () => {
   a = await fx.identity();
@@ -25,6 +26,7 @@ before(async () => {
   installation = uniq("account-guildbook");
   await fx.installation(installation, a.uid);
   guilds = snapshot(installation, { guilds: 1, members: 2, sources: 0 }).guilds;
+  capturedAt = Math.floor(Date.now() / 1000) + 1;
   await fx.resetBudgets();
 });
 
@@ -44,21 +46,21 @@ describe("account-scoped Guildbook", () => {
 
   it("accepts a fresh capture and keeps reads scoped to the registered account", async () => {
     const out = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", 100, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", guilds,
     ]);
     assert.deepEqual(out, {
       ok: true,
       status: "applied",
       installation_id: installation,
       capture_id: "capture-a",
-      captured_at: 100,
+      captured_at: capturedAt,
     });
 
-    const owned = await rpc(client, a.claims, "fdb_account_guildbook_guilds", [installation]);
+    const owned = await rpc(client, a.claims, "fdb_account_guildbook_guilds_scoped", [installation]);
     assert.equal(owned.length, 1);
     assert.equal(owned[0].guild_key, guilds[0].guildKey);
-    assert.deepEqual(await rpc(client, b.claims, "fdb_account_guildbook_guilds", [installation]), []);
-    await expectCode(rpc(client, anonymous.claims, "fdb_account_guildbook_guilds", [installation]), "PT403");
+    assert.deepEqual(await rpc(client, b.claims, "fdb_account_guildbook_guilds_scoped", [installation]), []);
+    await expectCode(rpc(client, anonymous.claims, "fdb_account_guildbook_guilds_scoped", [installation]), "PT403");
   });
 
   it("does not let an anonymous collector session call the account Guildbook ingest", async () => {
@@ -72,33 +74,33 @@ describe("account-scoped Guildbook", () => {
 
   it("rejects capture replay and older provenance without changing stored rows", async () => {
     const replay = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", 100, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", guilds,
     ]);
     assert.deepEqual(replay, { ok: false, error: "capture_replayed" });
 
     const crossAccountReplay = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", 100, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", guilds,
     ]);
     assert.deepEqual(crossAccountReplay, { ok: false, error: "capture_replayed" });
 
     const older = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-older", 99, "A:Main", [],
+      installation, "capture-older", capturedAt - 1, "A:Main", [],
     ]);
     assert.deepEqual(older, { ok: false, error: "capture_stale" });
     const crossAccountOlder = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-older-b", 99, "A:Main", guilds,
+      installation, "capture-older-b", capturedAt - 1, "A:Main", guilds,
     ]);
     assert.deepEqual(crossAccountOlder, { ok: false, error: "capture_stale" });
-    assert.equal((await rpc(client, a.claims, "fdb_account_guildbook_guilds", [installation])).length, 1);
+    assert.equal((await rpc(client, a.claims, "fdb_account_guildbook_guilds_scoped", [installation])).length, 1);
   });
 
   it("attributes a new capture to B without transferring installation ownership", async () => {
     const out = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-b", 101, "B:Main", guilds,
+      installation, "capture-b", capturedAt + 1, "B:Main", guilds,
     ]);
     assert.equal(out.ok, true);
     assert.equal(await fx.owner(installation), a.uid);
-    assert.deepEqual(await rpc(client, a.claims, "fdb_account_guildbook_guilds", [installation]).then((r) => r), [
+    assert.deepEqual(await rpc(client, a.claims, "fdb_account_guildbook_guilds_scoped", [installation]).then((r) => r), [
       {
         guild_key: guilds[0].guildKey,
         guild_name: guilds[0].name,
@@ -107,6 +109,6 @@ describe("account-scoped Guildbook", () => {
         member_count: 2,
       },
     ]);
-    assert.equal((await rpc(client, b.claims, "fdb_account_guildbook_guilds", [installation])).length, 1);
+    assert.equal((await rpc(client, b.claims, "fdb_account_guildbook_guilds_scoped", [installation])).length, 1);
   });
 });

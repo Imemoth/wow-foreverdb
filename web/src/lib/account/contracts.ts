@@ -176,6 +176,24 @@ export const ACCOUNT_RPCS = {
     input: z.object({ p_installation_id: installationIdSchema }).strict(),
     output: z.object({ state: z.enum(["owned", "transferred", "unknown"]) }).strict(),
   },
+  /** Caller: a REGISTERED user with a live session. Attributes only a newly captured local Guildbook snapshot. */
+  fdb_account_guildbook_ingest: {
+    input: z
+      .object({
+        p_installation_id: installationIdSchema,
+        p_capture_id: z.string().min(1).max(200),
+        p_captured_at: z.number().int().min(0),
+        p_source_character: z.string().min(1).max(200),
+        p_guilds: z.array(z.record(z.unknown())).max(100),
+      })
+      .strict(),
+    output: z.discriminatedUnion("ok", [
+      z
+        .object({ ok: z.literal(true), status: z.literal("applied"), installation_id: installationIdSchema, capture_id: z.string(), captured_at: z.number().int().min(0) })
+        .strict(),
+      z.object({ ok: z.literal(false), error: z.enum(["installation_unknown", "capture_replayed", "capture_stale"]) }).strict(),
+    ]),
+  },
   /** Caller: a REGISTERED user. Lists the installations the caller OWNS (ownership is installations.owner_user_id). */
   fdb_account_installations: {
     input: z.object({}).strict(),
@@ -230,6 +248,58 @@ export const ACCOUNT_RPCS = {
       )
       .max(200),
   },
+  /** Account-scoped Guildbook reads use a distinct RPC family so the legacy installation-owned reads remain unchanged. */
+  fdb_account_guildbook_guilds_scoped: {
+    input: z.object({ p_installation_id: installationIdSchema }).strict(),
+    output: z
+      .array(
+        z
+          .object({
+            guild_key: guildKeySchema,
+            guild_name: z.string().max(200),
+            realm_name: z.string().max(200),
+            captured_at: z.number().int().min(0),
+            member_count: z.number().int().min(0),
+          })
+          .strict(),
+      )
+      .max(100),
+  },
+  fdb_account_guildbook_members_scoped: {
+    input: z
+      .object({ p_installation_id: installationIdSchema, p_guild_key: guildKeySchema, p_limit: pageLimit, p_offset: pageOffset })
+      .strict(),
+    output: z
+      .array(
+        z
+          .object({
+            member_guid: z.string().max(200),
+            member_name: z.string().max(200),
+            class_name: z.string().max(100),
+            class_file: z.string().max(100),
+            level: z.number().int().min(0),
+            rank_name: z.string().max(100),
+            rank_index: z.number().int(),
+            online: z.boolean(),
+            zone_name: z.string().max(200),
+            last_online_hours: z.number().int().min(0),
+            professions: z.array(
+              z
+                .object({
+                  skill_line_id: z.number().int(),
+                  name: z.string().max(200),
+                  skill: z.number().int().min(0),
+                  max_skill: z.number().int().min(0),
+                  source: z.string().max(100),
+                  is_secondary: z.boolean(),
+                })
+                .strict(),
+            ),
+          })
+          .strict(),
+      )
+      .max(200),
+  },
 } as const;
 
 export type AccountRpcName = keyof typeof ACCOUNT_RPCS;
@@ -246,9 +316,12 @@ export type AccountGuard = "any_live_session" | "anonymous_owner_live_session" |
 export const ACCOUNT_RPC_GUARDS: Readonly<Record<AccountRpcName, AccountGuard>> = {
   fdb_account_claim_start: "anonymous_owner_live_session",
   fdb_account_claim_redeem: "registered_live_session",
+  fdb_account_guildbook_ingest: "registered_live_session",
   fdb_account_installations: "registered_live_session",
   fdb_account_guildbook_guilds: "registered_live_session",
   fdb_account_guildbook_members: "registered_live_session",
+  fdb_account_guildbook_guilds_scoped: "registered_live_session",
+  fdb_account_guildbook_members_scoped: "registered_live_session",
   fdb_installation_link_status: "any_live_session",
 };
 
@@ -256,7 +329,10 @@ export const ACCOUNT_RPC_GUARDS: Readonly<Record<AccountRpcName, AccountGuard>> 
  * Helper functions the account migration may define besides the registered RPCs and guards. Empty today: adding one is a
  * reviewed change to this list (and its test), so a migration cannot smuggle in an unreviewed callable function.
  */
-export const ACCOUNT_HELPER_FUNCTIONS: readonly string[] = [];
+export const ACCOUNT_HELPER_FUNCTIONS: readonly string[] = [
+  "private.fdb_public_snapshot",
+  "private.foreverdb_ingest_snapshot_impl_v1",
+];
 
 /** The private (client-unreachable) function that implements each guard. */
 export const ACCOUNT_GUARD_FUNCTIONS: Readonly<Record<AccountGuard, string>> = {

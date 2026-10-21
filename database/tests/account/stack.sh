@@ -95,5 +95,5 @@ case "${1:-}" in
     gotrue_stop
     su_psql postgres -c "drop database if exists $DB with (force)"
     ;;
-  *) echo "usage: $0 up|apply|apply14|down" >&2; exit 64 ;;
+  *) echo "usage: $0 up|apply|apply14|apply15|down" >&2; exit 64 ;;
 esac

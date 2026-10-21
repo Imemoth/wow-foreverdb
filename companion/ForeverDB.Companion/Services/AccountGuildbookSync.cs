@@ -59,6 +59,7 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
     private readonly Dictionary<(string Installation, long Generation, long UpdatedAt), bool> _lastLoaded = new();
     private readonly Dictionary<string, ForeverDbGuild> _cache = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource _identityCancellation = new();
+    private long _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private bool _disposed;
 
     public AccountGuildbookSync(AccountSessionManager sessions, IAccountGuildbookRpc rpc)
@@ -237,6 +238,7 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         CancellationTokenSource previous;
         lock (_gate)
         {
+            _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             _identityFloor.Clear();
             foreach (var pair in _lastObserved)
             {
@@ -266,6 +268,14 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
             if (_identityFloor.TryGetValue(installationId, out var floor) &&
                 (string.Equals(floor.CaptureId, candidate.CaptureId, StringComparison.Ordinal) ||
                  candidate.CapturedAt <= floor.CapturedAt))
+            {
+                return false;
+            }
+
+            // A Companion restart has no in-memory observation floor. A
+            // capture predating the current account session is still a local
+            // snapshot of unknown ownership and must not be attributed to it.
+            if (candidate.CapturedAt <= _identityEnteredAt)
             {
                 return false;
             }
@@ -320,9 +330,14 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
 /// </summary>
 public sealed class AccountGuildbookRpcAdapter : IAccountGuildbookRpc
 {
+    private static readonly JsonSerializerOptions GuildbookJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private const string IngestRpc = "fdb_account_guildbook_ingest";
-    private const string GuildsRpc = "fdb_account_guildbook_guilds";
-    private const string MembersRpc = "fdb_account_guildbook_members";
+    private const string GuildsRpc = "fdb_account_guildbook_guilds_scoped";
+    private const string MembersRpc = "fdb_account_guildbook_members_scoped";
     private readonly OwnershipRpcClient _rpc;
 
     public AccountGuildbookRpcAdapter(OwnershipRpcClient rpc) => _rpc = rpc;
@@ -338,8 +353,8 @@ public sealed class AccountGuildbookRpcAdapter : IAccountGuildbookRpc
             p_capture_id = capture.CaptureId,
             p_captured_at = capture.CapturedAt,
             p_source_character = capture.SourceCharacter,
-            p_guildbook = capture.Guilds
-        });
+            p_guilds = capture.Guilds
+        }, GuildbookJson);
 
         var result = await _rpc.CallAsync(
             IngestRpc,
@@ -407,64 +422,78 @@ public sealed class AccountGuildbookRpcAdapter : IAccountGuildbookRpc
                     CapturedAt = Long(row, "captured_at")
                 };
 
-                var membersBody = JsonSerializer.Serialize(new
+                const int pageSize = 200;
+                var offset = 0;
+                while (true)
                 {
-                    p_installation_id = installationId,
-                    p_guild_key = guild.GuildKey,
-                    p_limit = 200,
-                    p_offset = 0
-                });
-                var members = await _rpc.CallAsync(
-                    MembersRpc,
-                    membersBody,
-                    accessToken,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (!members.Ok)
-                {
-                    return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(members.Failure, members.HttpStatus);
-                }
-
-                using var memberDocument = JsonDocument.Parse(members.Value!);
-                if (memberDocument.RootElement.ValueKind != JsonValueKind.Array)
-                {
-                    return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(RpcFailure.MalformedResponse, members.HttpStatus);
-                }
-
-                foreach (var member in memberDocument.RootElement.EnumerateArray())
-                {
-                    var parsedMember = new ForeverDbGuildMember
+                    var membersBody = JsonSerializer.Serialize(new
                     {
-                        Guid = String(member, "member_guid"),
-                        Name = String(member, "member_name"),
-                        ClassName = String(member, "class_name"),
-                        ClassFile = String(member, "class_file"),
-                        Level = (int)Long(member, "level"),
-                        RankName = String(member, "rank_name"),
-                        RankIndex = (int)Long(member, "rank_index"),
-                        Online = Bool(member, "online"),
-                        Zone = String(member, "zone_name"),
-                        LastOnlineHours = Long(member, "last_online_hours")
-                    };
+                        p_installation_id = installationId,
+                        p_guild_key = guild.GuildKey,
+                        p_limit = pageSize,
+                        p_offset = offset
+                    });
+                    var members = await _rpc.CallAsync(
+                        MembersRpc,
+                        membersBody,
+                        accessToken,
+                        cancellationToken).ConfigureAwait(false);
 
-                    if (member.TryGetProperty("professions", out var professions) &&
-                        professions.ValueKind == JsonValueKind.Array)
+                    if (!members.Ok)
                     {
-                        foreach (var profession in professions.EnumerateArray())
-                        {
-                            parsedMember.Professions.Add(new ForeverDbGuildProfession
-                            {
-                                SkillLineId = (int)Long(profession, "skill_line_id"),
-                                Name = String(profession, "name"),
-                                Skill = (int)Long(profession, "skill"),
-                                MaxSkill = (int)Long(profession, "max_skill"),
-                                Source = String(profession, "source"),
-                                IsSecondary = Bool(profession, "is_secondary")
-                            });
-                        }
+                        return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(members.Failure, members.HttpStatus);
                     }
 
-                    guild.Members.Add(parsedMember);
+                    using var memberDocument = JsonDocument.Parse(members.Value!);
+                    if (memberDocument.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(RpcFailure.MalformedResponse, members.HttpStatus);
+                    }
+
+                    var count = 0;
+                    foreach (var member in memberDocument.RootElement.EnumerateArray())
+                    {
+                        count++;
+                        var parsedMember = new ForeverDbGuildMember
+                        {
+                            Guid = String(member, "member_guid"),
+                            Name = String(member, "member_name"),
+                            ClassName = String(member, "class_name"),
+                            ClassFile = String(member, "class_file"),
+                            Level = (int)Long(member, "level"),
+                            RankName = String(member, "rank_name"),
+                            RankIndex = (int)Long(member, "rank_index"),
+                            Online = Bool(member, "online"),
+                            Zone = String(member, "zone_name"),
+                            LastOnlineHours = Long(member, "last_online_hours")
+                        };
+
+                        if (member.TryGetProperty("professions", out var professions) &&
+                            professions.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var profession in professions.EnumerateArray())
+                            {
+                                parsedMember.Professions.Add(new ForeverDbGuildProfession
+                                {
+                                    SkillLineId = (int)Long(profession, "skill_line_id"),
+                                    Name = String(profession, "name"),
+                                    Skill = (int)Long(profession, "skill"),
+                                    MaxSkill = (int)Long(profession, "max_skill"),
+                                    Source = String(profession, "source"),
+                                    IsSecondary = Bool(profession, "is_secondary")
+                                });
+                            }
+                        }
+
+                        guild.Members.Add(parsedMember);
+                    }
+
+                    if (count < pageSize)
+                    {
+                        break;
+                    }
+
+                    offset += count;
                 }
 
                 result.Add(guild);

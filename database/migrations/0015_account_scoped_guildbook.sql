@@ -33,7 +33,6 @@ begin
         'private.foreverdb_api_gate(text)',
         'public.ingest_foreverdb_snapshot_auth(jsonb)',
         'public.fdb_device_ingest(text,jsonb)',
-        'public.fdb_account_installations()',
         'public.fdb_account_guildbook_guilds(text)',
         'public.fdb_account_guildbook_members(text,text,integer,integer)'
     ] loop
@@ -70,9 +69,6 @@ where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
   and p.proname not in (
       'foreverdb_ingest_snapshot_impl_v1',
       'fdb_public_snapshot',
-      'fdb_account_installations',
-      'fdb_account_guildbook_guilds',
-      'fdb_account_guildbook_members',
       'fdb_account_guildbook_ingest'
   );
 
@@ -267,6 +263,7 @@ as $$
 declare
     v_uid uuid;
     v_sid uuid;
+    v_session_created_at bigint;
     v_latest bigint;
     v_guild jsonb;
     v_member jsonb;
@@ -293,7 +290,8 @@ begin
 
     -- Re-check the exact live session after taking the installation lock so a
     -- concurrent sign-out cannot authorize a write that commits afterward.
-    perform 1
+    select extract(epoch from s.created_at)::bigint
+    into v_session_created_at
     from auth.sessions s
     join auth.users u on u.id = s.user_id
     where s.id = v_sid and s.user_id = v_uid
@@ -304,6 +302,12 @@ begin
     for share of s;
     if not found then
         raise sqlstate 'PT401' using message = 'ForeverDB authenticated session required';
+    end if;
+
+    -- A capture made before this registered session began is local history of
+    -- unknown account ownership and cannot be attributed after a switch.
+    if p_captured_at < v_session_created_at then
+        return jsonb_build_object('ok', false, 'error', 'capture_stale');
     end if;
 
     if not exists (select 1 from public.installations i where i.id = p_installation_id) then
@@ -390,38 +394,7 @@ begin
 end;
 $$;
 
-create or replace function public.fdb_account_installations()
-returns table (installation_id text, linked_at timestamptz, last_seen_at timestamptz, guild_count integer)
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-    v_uid uuid;
-begin
-    v_uid := private.fdb_registered_caller();
-    perform private.foreverdb_api_gate('detail');
-
-    return query
-    select i.id,
-           coalesce(l.linked_at, i.first_seen_at),
-           i.last_seen_at,
-           case when exists (select 1 from private.account_guildbook_captures c
-                              where c.account_uid = v_uid and c.installation_id = i.id)
-                then (select count(*) from private.account_guildbook_guilds g
-                      where g.account_uid = v_uid and g.installation_id = i.id)::integer
-                else (select count(*) from public.installation_guilds g
-                      where g.installation_id = i.id)::integer
-           end
-    from public.installations i
-    left join private.account_installations l on l.installation_id = i.id and l.account_uid = v_uid
-    where i.owner_user_id = v_uid
-    order by i.last_seen_at desc nulls last, i.id
-    limit 50;
-end;
-$$;
-
-create or replace function public.fdb_account_guildbook_guilds(p_installation_id text)
+create or replace function public.fdb_account_guildbook_guilds_scoped(p_installation_id text)
 returns table (guild_key text, guild_name text, realm_name text, captured_at bigint, member_count integer)
 language plpgsql
 security definer
@@ -459,15 +432,15 @@ begin
 end;
 $$;
 
-create or replace function public.fdb_account_guildbook_members(
+create or replace function public.fdb_account_guildbook_members_scoped(
     p_installation_id text,
     p_guild_key text,
     p_limit integer default 100,
     p_offset integer default 0
 )
 returns table (
-    member_name text, class_name text, class_file text, level integer, rank_name text,
-    rank_index integer, online boolean, zone_name text, last_online_hours integer
+    member_guid text, member_name text, class_name text, class_file text, level integer, rank_name text,
+    rank_index integer, online boolean, zone_name text, last_online_hours integer, professions jsonb
 )
 language plpgsql
 security definer
@@ -490,13 +463,20 @@ begin
     v_offset := greatest(0, least(coalesce(p_offset, 0), 100000));
 
     return query
-    select m.member_name, m.class_name, m.class_file, m.level, m.rank_name, m.rank_index, m.online, m.zone_name,
-           least(m.last_online_hours, 2147483647)::integer
+    select m.member_guid, m.member_name, m.class_name, m.class_file, m.level, m.rank_name, m.rank_index, m.online, m.zone_name,
+           least(m.last_online_hours, 2147483647)::integer,
+           coalesce((select jsonb_agg(jsonb_build_object(
+               'skill_line_id', p.skill_line_id, 'name', p.profession_name, 'skill', p.skill,
+               'max_skill', p.max_skill, 'source', p.source, 'is_secondary', p.is_secondary
+           ) order by p.skill_line_id)
+           from private.account_guildbook_professions p
+           where p.account_uid = m.account_uid and p.installation_id = m.installation_id
+             and p.guild_key = m.guild_key and p.member_guid = m.member_guid), '[]'::jsonb)
     from private.account_guildbook_members m
     where m.account_uid = v_uid and m.installation_id = p_installation_id and m.guild_key = p_guild_key
     union all
-    select m.member_name, m.class_name, m.class_file, m.level, m.rank_name, m.rank_index, m.online, m.zone_name,
-           least(m.last_online_hours, 2147483647)::integer
+    select m.member_guid, m.member_name, m.class_name, m.class_file, m.level, m.rank_name, m.rank_index, m.online, m.zone_name,
+           least(m.last_online_hours, 2147483647)::integer, '[]'::jsonb
     from public.installation_guild_members m
     join public.installations i on i.id = m.installation_id
     where m.installation_id = p_installation_id and m.guild_key = p_guild_key and i.owner_user_id = v_uid
@@ -511,15 +491,18 @@ $$;
 -- 5. Privileges and postconditions.
 -- ---------------------------------------------------------------------------------------------------------------------
 alter function public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb) set lock_timeout = '10s';
-alter function public.fdb_account_installations() set lock_timeout = '5s';
-alter function public.fdb_account_guildbook_guilds(text) set lock_timeout = '5s';
-alter function public.fdb_account_guildbook_members(text,text,integer,integer) set lock_timeout = '5s';
+alter function public.fdb_account_guildbook_guilds_scoped(text) set lock_timeout = '5s';
+alter function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) set lock_timeout = '5s';
 
 revoke all on function private.fdb_public_snapshot(jsonb) from public, anon, authenticated, service_role;
 revoke all on function private.foreverdb_ingest_snapshot_impl_v1(jsonb) from public, anon, authenticated, service_role;
 
 revoke all on function public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb) to authenticated;
+revoke all on function public.fdb_account_guildbook_guilds_scoped(text) from public, anon, authenticated, service_role;
+grant execute on function public.fdb_account_guildbook_guilds_scoped(text) to authenticated;
+revoke all on function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) from public, anon, authenticated, service_role;
+grant execute on function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) to authenticated;
 
 do $verify$
 declare
@@ -531,9 +514,8 @@ begin
         'private.fdb_public_snapshot(jsonb)',
         'private.foreverdb_ingest_snapshot_impl_v1(jsonb)',
         'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)',
-        'public.fdb_account_installations()',
-        'public.fdb_account_guildbook_guilds(text)',
-        'public.fdb_account_guildbook_members(text,text,integer,integer)'
+        'public.fdb_account_guildbook_guilds_scoped(text)',
+        'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)'
     ] loop
         select p.prosecdef, pg_get_userbyid(p.proowner) as owner, coalesce(p.proconfig, '{}') as config, p.provolatile
         into v_after from pg_proc p where p.oid = to_regprocedure(v_sig);
@@ -551,6 +533,16 @@ begin
        or has_function_privilege('service_role', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
        or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute') then
         raise exception '0015 post-condition: account ingest ACL is incorrect';
+    end if;
+    if has_function_privilege('public', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+       or has_function_privilege('anon', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+       or has_function_privilege('service_role', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+       or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+       or has_function_privilege('public', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+       or has_function_privilege('anon', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+       or has_function_privilege('service_role', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+       or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute') then
+        raise exception '0015 post-condition: scoped account read ACL is incorrect';
     end if;
 
     for v_sig in select unnest(array['private.account_guildbook_captures', 'private.account_guildbook_guilds',

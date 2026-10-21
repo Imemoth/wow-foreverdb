@@ -13,7 +13,7 @@ Status: Prompt 0 contract for the #81 → #82 → #83 integration. New work is b
 
 - Schema 9 remains readable. The addon may append optional Guildbook capture metadata to the export header; old headers with no metadata remain valid.
 - A genuine roster/profession observation creates a new opaque `guildbookCaptureId`, `guildbookCapturedAt` (server/Unix seconds), and source-character identity. Re-export, `/reload`, logout, and unchanged snapshots do not create a new capture.
-- The Companion passes all three values plus the Guildbook records to the account ingest RPC. The backend accepts a capture only once for an installation and capture ID, rejects a replay or an older capture timestamp, and never accepts a stale local snapshot merely because a different account signed in.
+- The Companion passes all three values plus the Guildbook records to the account ingest RPC. `guildbookCapturedAt` must be at or after the active account session boundary. The backend accepts a capture only once for an installation and capture ID, rejects a replay or an older capture timestamp, and never accepts a stale local snapshot merely because a different account signed in.
 
 ## Account transitions
 
