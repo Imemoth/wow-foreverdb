@@ -67,10 +67,10 @@ public static class AccountFeatureGate
     public const bool ZeroTouchEnrollmentApproved = false;
 
     /// <summary>
-    /// Automatic (watcher/startup) upload for a registered device. Stays off until a dedicated owner acceptance (spec A4):
-    /// a registered device only ever uploads on an explicit Sync now.
+    /// Automatic (watcher/startup) upload for a registered device. Owner-approved for the release build; the user's persisted
+    /// AutoSync setting remains the runtime control and is never changed by this approval.
     /// </summary>
-    public const bool DeviceAutoSyncApproved = false;
+    public const bool DeviceAutoSyncApproved = true;
 
     public const string ProductionProjectRef = "klxhikdlfwgxurdyexdi";
 
@@ -248,7 +248,7 @@ public static class AccountFeatureGate
             true,
             new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), endpoint.PublishableKey, "production"),
             "",
-            "Standard account linking and manual device sync are available; zero-touch enrollment and AutoSync remain off.");
+            "Standard account linking and user-controlled device AutoSync are available; zero-touch enrollment remains off.");
     }
 
     private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals, bool claimPilot)

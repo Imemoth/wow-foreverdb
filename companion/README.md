@@ -13,8 +13,8 @@ ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
 - Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
   the existing anonymous identity keeps working after the upgrade and is never replaced
   silently; the normal package supports existing-account sign-in, direct installation linking
-  and revocable manual device sync. Activation-file enrollment and registered-device AutoSync
-  remain independently disabled for production
+  and revocable manual or user-controlled automatic device sync. Activation-file enrollment
+  remains independently disabled for production
   ([Account Linking MVP](../docs/account-v1/account-linking-mvp.md))
 - item and source search
 - item/source detail navigation with Back / Forward / breadcrumb history

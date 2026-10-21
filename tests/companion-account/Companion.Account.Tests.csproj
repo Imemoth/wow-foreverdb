@@ -39,6 +39,7 @@
     <Compile Include="../../companion/ForeverDB.Companion/Services/SyncHealthState.cs" Link="Linked/SyncHealthState.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SearchRequestEpoch.cs" Link="Linked/SearchRequestEpoch.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/WowInstallationLocator.cs" Link="Linked/WowInstallationLocator.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/WowSavedVariablesWatcher.cs" Link="Linked/WowSavedVariablesWatcher.cs" />
   </ItemGroup>
 
 </Project>

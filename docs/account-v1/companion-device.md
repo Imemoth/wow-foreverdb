@@ -1,15 +1,14 @@
 # Companion — zero-touch device enrollment and registered sync (as built)
 
 Windows-Companion half of [ADR-017](adr-017-zero-touch-enrollment.md) against the RPC contract in
-[zero-touch-rpc-contract.md](zero-touch-rpc-contract.md). Status: implemented on the DRAFT branch, **off in every shipped mode**.
-Not executed on Windows: real DPAPI, WPF rendering, the installer. Everything below that is tested ran on Linux with in-process fakes.
+[zero-touch-rpc-contract.md](zero-touch-rpc-contract.md). Direct account linking and registered-device sync are part of the normal Companion package; activation-file discovery remains gated off.
 
 ## Gating
 
 | Constant (`AccountFeatureGate`) | Value | Meaning |
 | --- | --- | --- |
 | `ZeroTouchEnrollmentApproved` | `false` (const) | Lets the private pilot gates (`PrivatePilot`, `PrivateClaimPilot`) use the feature. Not flipped here. |
-| `DeviceAutoSyncApproved` | `false` (const) | Automatic upload for a registered device. Off: only an explicit **Sync now** uploads. |
+| `DeviceAutoSyncApproved` | `true` (const) | Allows the persisted user AutoSync setting to drive registered-device uploads. It does not change that setting. |
 
 `AccountFeatureGate.ZeroTouchAvailable(gate)` = gate open AND (`Local`/`Staging` with the existing isolated-endpoint validation, OR a private
 pilot AND `ZeroTouchEnrollmentApproved`). In the default production mode `AccountRuntime.Device` is `null`: no activation-file scan, no
@@ -25,11 +24,11 @@ network, no directory, no UI. `PrivateProjectPilotApproved` / `PrivateProjectCla
 | `DeviceRpcClient.cs` | The four device RPCs, closed name set, strict reply validation, errors mapped to enums, no body/secret ever returned as text. |
 | `DeviceContext.cs` | `DeviceSessionProvider` (the device's OWN anonymous Auth session), `DeviceContext` (directory, machine-wide gate, store, RPC client, observable `DeviceStatus`, status probe). |
 | `DeviceEnrollmentService.cs` | `LoadLocalState()` (local only) and `InitializeAsync()` (discover, redeem, persist, delete file). |
-| `DeviceSyncService.cs` | `CheckStatusAsync()`, `SyncNowAsync()`, `SyncAutomaticAsync()` (sends nothing while the flag is false), `Handles(installationId)`. |
+| `DeviceSyncService.cs` | `CheckStatusAsync()`, `SyncNowAsync()`, `SyncAutomaticAsync()` and `Handles(installationId)`. Manual and automatic calls share the same credential, ownership and failure path. |
 | `AccountMessages.cs`, `Redaction.cs` | Wording for every state/outcome; `fdba1_` / `fdbd1_` patterns added to the scrubber. |
 
 UI: `MainWindow.Account.cs` / `MainWindow.xaml` add a "Registered device" panel (state + message, a Retry button while pending);
-`SyncService` routes an installation the device owns to `DeviceSyncService` (manual only). `installer/ForeverDB.iss` copies
+`SyncService` routes an installation the device owns to `DeviceSyncService`, serializes automatic events and skips an already accepted snapshot. `installer/ForeverDB.iss` copies
 `{src}\foreverdb-activation*.fdbact` into `{localappdata}\ForeverDB\activation` (`external skipifsourcedoesntexist uninsneveruninstall`).
 
 ## Storage layout (per gate directory; the production directory is never used with the gate closed)
@@ -63,6 +62,7 @@ Nothing here is written to `settings.json` or SavedVariables; no secret is logge
 * **Sync:** device token + stored secret -> `fdb_device_ingest`. `device_revoked` stops (no further calls); `ownership_conflict`,
   `account_unavailable`, `device_credential_stale` (retry once later, then damaged), `device_unauthorized` (classified with `fdb_device_status`),
   HTTP 401 (refresh once, retry once), 429/5xx/network (retry later, state unchanged). Never another identity, never the anonymous ingest.
+* **AutoSync:** the existing user setting controls watcher/startup sync. The watcher waits for a stable readable SavedVariables file; successful snapshots are deduplicated per installation and simultaneous automatic/manual attempts cannot overlap. A failed attempt is not cached, so the next event can retry.
 * **Rotation:** when status says `needs_rotation` the new secret is stored durably before its first use; if it cannot be stored the old (still
   valid) secret is used and rotation is retried later.
 * **Anonymous path stays closed** for an installation the device owns (any state) and, while an activation is pending, for every installation.
@@ -74,8 +74,9 @@ Nothing here is written to `settings.json` or SavedVariables; no secret is logge
 | `DeviceActivationFileTests` | parser strictness, limits, extra fields, discovery order/patterns/links/removal |
 | `DeviceCredentialStoreTests` | durability, `.bak`/temp recovery, damage, quarantine, `Real_DPAPI_device_credential_...` (Windows only) |
 | `DeviceEnrollmentTests` | A1/A2/A3, every ticket answer and file rule, interruption, lost reply, concurrency, conflicts, identity safety, legacy bytes untouched |
-| `DeviceSyncTests` | every ingest answer, revocation, rotation (persisted-before-use, crash points), stale, 401, AutoSync off |
-| `DeviceIntegrationTests` | real `SyncService` + parser: manual vs Auto/Startup, no anonymous fallback |
+| `DeviceSyncTests` | every ingest answer, revocation, rotation (persisted-before-use, crash points), stale, 401, automatic device upload |
+| `DeviceIntegrationTests` | real `SyncService` + non-empty parser fixture: manual/Auto/Startup, serialization, deduplication, no anonymous fallback |
+| `WowSavedVariablesWatcherTests` | in-progress locked SavedVariables writes are not dispatched until complete and readable |
 | `DeviceGateTests` | flags, gate matrix, default mode does nothing (no HTTP, no files) |
 | `DeviceMessagesTests` | wording for every state/detail, redaction, no logging in the new files |
 | `DeviceCrossProcessTests` | three real processes enroll once |

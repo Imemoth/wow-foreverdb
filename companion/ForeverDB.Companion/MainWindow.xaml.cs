@@ -206,7 +206,7 @@ public partial class MainWindow : Window
                             await _syncService.SyncFileAsync(
                                 path,
                                 cancellationToken,
-                                force: true,
+                                force: false,
                                 trigger: SyncTrigger.Auto);
                         }
                         catch (OperationCanceledException)
@@ -217,7 +217,8 @@ public partial class MainWindow : Window
                             Dispatcher.Invoke(
                                 () => RecordSyncError(ex.Message));
                         }
-                    });
+                    },
+                    ex => Dispatcher.Invoke(() => RecordSyncError(ex.Message)));
 
                 _watcher.Start();
                 _syncHealth.SetWatcherReady(true);

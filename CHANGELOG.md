@@ -14,7 +14,9 @@ version contract and release checklist are documented in
 
 ## 0.9.0-alpha — 2026-10-12 (Account System V1 authentication, PR D)
 
-The Account Linking MVP now enables existing-account sign-in, direct installation linking and manual registered-device sync in the normal Companion package. Activation-file enrollment, registered-device AutoSync, temporary pilots and web production activation remain off. Full flow: [docs/account-v1/account-linking-mvp.md](docs/account-v1/account-linking-mvp.md).
+The Account Linking MVP enables existing-account sign-in, direct installation linking and registered-device sync in the normal Companion package. Activation-file enrollment, temporary pilots and web production activation remain off. Full flow: [docs/account-v1/account-linking-mvp.md](docs/account-v1/account-linking-mvp.md).
+
+- **User-controlled registered-device AutoSync.** Automatic and startup sync now use the same revocable device credential and fail-closed ownership path as **Sync now**. The persisted AutoSync setting remains authoritative. SavedVariables events wait for a stable, readable completed write; repeated and concurrent events for one snapshot produce one upload, while manual sync remains forced. Transient failures remain retryable and appear in Companion Status.
 
 - **Standard first-install linking.** A fresh Companion can start anonymously, sign in to an existing ForeverDB account, prove its current anonymous installation through the existing Account V1 claim RPCs, register a revocable device credential under DPAPI and perform an explicit manual sync. The normal package validates the exact approved Supabase HTTPS origin and publishable key; alternate endpoints and secret keys fail closed.
 - **WoW folder selection.** Settings now has a native Windows folder picker and a bounded list of detected WoW client installations. A selected folder is validated before saving, client installs without SavedVariables explain that WoW must be run once, and detection never silently replaces the saved root or an installation ID.

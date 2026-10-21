@@ -55,7 +55,7 @@ public class CompanionRegressionTests
     }
 
     [Fact]
-    public async Task Startup_sync_skips_an_unchanged_snapshot_and_auto_sync_reuploads_after_a_reload()
+    public async Task Startup_and_auto_sync_skip_an_unchanged_snapshot_and_upload_a_new_completed_snapshot()
     {
         using var rig = new Rig(accountsEnabled: false);
         rig.SeedAnonymous();
@@ -66,13 +66,13 @@ public class CompanionRegressionTests
         Assert.Equal(SyncOutcome.UpToDate, (await service.SyncFileAsync(path, trigger: SyncTrigger.Startup))!.Outcome);
         Assert.Equal(1, rig.Server.IngestCount);
 
-        // The watcher (AutoSync) passes force:true after /reload, logout or exit.
-        Assert.Equal(SyncOutcome.Synced, (await service.SyncFileAsync(path, force: true, trigger: SyncTrigger.Auto))!.Outcome);
-        Assert.Contains(events, e => e.StartsWith("synced:Auto", StringComparison.Ordinal));
+        Assert.Equal(SyncOutcome.UpToDate, (await service.SyncFileAsync(path, force: false, trigger: SyncTrigger.Auto))!.Outcome);
 
         WriteSavedVariables(rig.Directory, "inst-1", 101);
-        Assert.Equal(SyncOutcome.Synced, (await service.SyncFileAsync(path, trigger: SyncTrigger.Startup))!.Outcome);
-        Assert.Equal(3, rig.Server.IngestCount);
+        Assert.Equal(SyncOutcome.Synced, (await service.SyncFileAsync(path, force: false, trigger: SyncTrigger.Auto))!.Outcome);
+        Assert.Contains(events, e => e.StartsWith("synced:Auto", StringComparison.Ordinal));
+        Assert.Equal(SyncOutcome.UpToDate, (await service.SyncFileAsync(path, trigger: SyncTrigger.Startup))!.Outcome);
+        Assert.Equal(2, rig.Server.IngestCount);
     }
 
     [Fact]
