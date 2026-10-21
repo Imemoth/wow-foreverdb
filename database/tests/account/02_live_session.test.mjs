@@ -1,5 +1,6 @@
-// LS-1 .. LS-8 (and the guard-kind checks): every account function enforces a LIVE Auth session, against the REAL GoTrue
-// auth.users / auth.sessions tables. LS-8 is derived from the contract registry so a new function cannot be forgotten.
+// LS-1 .. LS-8 (and the guard-kind checks): every account function installed by migration 0012 enforces a LIVE Auth
+// session, against the REAL GoTrue auth.users / auth.sessions tables. Later account RPC families are exercised by the
+// migration-specific suites after their migrations have been applied.
 import { after, before, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -18,9 +19,21 @@ beforeEach(() => fx.resetBudgets());
 // --- registry, parsed from the PR A contract (single source of truth) ---------------------------------------------------
 const contracts = fs.readFileSync(path.join(repoRoot, "web/src/lib/account/contracts.ts"), "utf8");
 const guardBlock = /export const ACCOUNT_RPC_GUARDS[^=]*=\s*\{([\s\S]*?)\};/.exec(contracts)?.[1] ?? "";
-const REGISTRY = Object.fromEntries([...guardBlock.matchAll(/(\w+):\s*"(\w+)"/g)].map((m) => [m[1], m[2]]));
+const MIGRATION_0012_RPCS = new Set([
+  "fdb_account_claim_start",
+  "fdb_account_claim_redeem",
+  "fdb_installation_link_status",
+  "fdb_account_installations",
+  "fdb_account_guildbook_guilds",
+  "fdb_account_guildbook_members",
+]);
+const REGISTRY = Object.fromEntries(
+  [...guardBlock.matchAll(/(\w+):\s*"(\w+)"/g)]
+    .filter((m) => MIGRATION_0012_RPCS.has(m[1]))
+    .map((m) => [m[1], m[2]]),
+);
 
-// Call shape per function. The keys are asserted equal to the registry, so a new registry entry fails this suite until covered.
+// Call shape for the migration-0012 function family. The keys are asserted equal to the filtered registry.
 const CALLS = {
   fdb_account_claim_start: (inst) => [inst],
   fdb_account_claim_redeem: () => ["A".repeat(32)],
