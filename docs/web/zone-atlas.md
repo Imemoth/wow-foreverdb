@@ -106,6 +106,16 @@ Every map stays `calibration.status = provisional`. Evidence available and its l
 
 **Real-data calibration was NOT performed.** The authoring environment had no access to genuine published located observations (the only data in the repository is a synthetic fixture, whose coordinates are invented) and no independent landmark list. Per the brief nothing is marked validated and no PASS is claimed. Procedure to run when real data is reachable: pick ≥3 zones with dense published cells of different kinds (e.g. Tirisfal, Mulgore, Durotar); for each, plot with this page, compare ≥6 verifiable in-game positions (flight masters, inns, zone-edge towns) to the plotted cells, record per-landmark offsets, look for a constant shift / axis flip / scale; only a documented pass moves a map to `validated` (a new immutable atlas version).
 
+## Creature pages: levels and zones
+
+`/creature/<id>` uses the same `ZoneMap` engine with two independent selectors (zone and level):
+
+* **Level selector** (`CreatureLevelView`): "All levels" plus one button per level actually present in the published source detail (variants and located cells, `lib/maps/creature-levels.ts`); nothing is invented, and it is not shown for a single level. Picking a level filters the map markers and the coordinate grid to that level and shows only that level's loot/skinning statistics section; each level keeps its own sample (counts are never summed, "All levels" shows none). The selection lives in the URL (`?level=N`, or the existing `#level-N` anchor) and is applied with `history.replaceState`, so it survives reloads, works with Next.js soft navigation and adds no history entries. Unobserved or malformed values are ignored.
+* **Zones**: a creature observed in several zones gets the existing zone buttons; changing zone keeps the level and vice versa.
+* **No published cells**: an observed zone with atlas artwork now shows the real map plus a "No published locations yet" notice (publication threshold: >= 2 observations per approximate 1% cell), never an invented marker. When only the selected level has no cells, the notice offers "Show all levels". Thresholds, 1% aggregation and privacy rules are unchanged; this applies to creatures only (objects, fishing and item pages are unchanged; items never get coordinates).
+
+Tests: `tests/unit/creature-levels.test.ts`; `tests/zone-maps/creature-levels.spec.ts` (desktop + mobile; the real fixture creature plus the e2e-only `/test-fixtures/creature-map/<scenario>` harness, which feeds synthetic multi-zone / no-location / empty-level details into the same `SourceDetailView` and 404s unless `E2E_FIXTURES_ENABLED=1`).
+
 ## Tests
 
 * Unit (vitest): `atlas-catalog.test.ts` (inventory, schema rejections, loader fallbacks/timeout/back-off/size cap, zone catalog), `zone-map-data.test.ts` (privacy invariants, fixture adapter, identity bridge, adapters, URL focus, gate/CSP scope, architecture guards: one Leaflet module, one conversion module, no synthetic selector outside the POC).
