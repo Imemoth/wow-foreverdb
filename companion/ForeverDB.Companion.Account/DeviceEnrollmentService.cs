@@ -104,8 +104,16 @@ public sealed class DeviceEnrollmentService
             return _ctx.Status;
         }
 
-        var read = _ctx.Store.Read();
-        _ctx.NoteInstallations(_ctx.Store.InstallationIds());
+        var installationIds = _installations()
+            .Concat(_ctx.Store.InstallationIds())
+            .Where(id => DeviceContract.InstallationIdPattern.IsMatch(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        _ctx.NoteInstallations(installationIds);
+        var read = installationIds
+            .Select(id => _ctx.Store.Read(id))
+            .FirstOrDefault(candidate => candidate.Status == DeviceCredentialStatus.Ok)
+            ?? _ctx.Store.Read();
         _ctx.NoteInstallation(read.Credential?.InstallationId ?? read.MarkerInstallationId);
 
         switch (read.Status)

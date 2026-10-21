@@ -612,7 +612,7 @@ public class DeviceEnrollmentTests
         Assert.Equal(DeviceState.Registered, (await Enroll(rig)).State);
         Assert.Equal(1, rig.Server.SignupCount);
         Assert.Equal(rig.Backend.Devices.Last().Current, rig.Context.Store.Read(rig.Installation).Credential!.DeviceSecret);
-        Assert.Equal("damaged", File.ReadAllText(blob + ".bak"));        // the damaged blob is kept aside
+        Assert.Equal("damaged", File.ReadAllText(blob));                 // the damaged legacy blob is preserved
     }
 
     [Fact]
