@@ -35,6 +35,71 @@ import {
  */
 
 type Row = Record<string, unknown>;
+
+/**
+ * Operator diagnostic for a failed database call. It logs ONLY values proven safe by construction: a SQLSTATE / Node error code
+ * that matches a strict token pattern, an allow-listed syscall, a bounded error-class name, and a category from a fixed vocabulary
+ * derived by pattern-matching the driver message. The driver message itself is never logged (it can embed hosts, role names,
+ * parameters or server hints). Visitors only ever see the generic "public_data_unavailable".
+ */
+const SYSCALLS = new Set(["getaddrinfo", "connect", "read", "write", "secureConnect", "socket", "lookup"]);
+const CATEGORY_PATTERNS: [string, RegExp][] = [
+  ["tenant_not_found", /tenant\/user|tenant or user not found/i],
+  ["auth_failed", /password authentication failed|authentication failed|no pg_hba|SASL|SCRAM/i],
+  ["startup_parameter", /unsupported startup parameter|startup parameter/i],
+  ["tls_verification", /certificate|self[- ]signed|unable to verify|hostname\/ip does not match|altnames/i],
+  ["tls_protocol", /ssl|tls|handshake/i],
+  ["dns", /getaddrinfo|ENOTFOUND|EAI_AGAIN/i],
+  ["network_unreachable", /ENETUNREACH|EHOSTUNREACH|network is unreachable/i],
+  ["timeout", /timeout|timed out|ETIMEDOUT/i],
+  ["connection_refused", /ECONNREFUSED|refused/i],
+  ["connection_reset", /ECONNRESET|terminated|ended unexpectedly|EPIPE/i],
+  ["privilege", /permission denied/i],
+  ["pool_exhausted", /too many clients|remaining connection slots|max client|pool/i],
+  ["invalid_url", /invalid url|invalid connection|ERR_INVALID_URL/i],
+];
+
+export function describeDbError(e: unknown): Record<string, string | null> {
+  const x = (e ?? {}) as { code?: unknown; syscall?: unknown; name?: unknown; message?: unknown };
+  const token = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : null);
+  const raw = typeof x.message === "string" ? x.message : "";
+  const hit = CATEGORY_PATTERNS.find(([, re]) => re.test(raw));
+  return {
+    category: hit ? hit[0] : "other",
+    code: token(x.code, /^[A-Za-z0-9_]{2,40}$/),
+    syscall: typeof x.syscall === "string" && SYSCALLS.has(x.syscall) ? x.syscall : null,
+    name: token(x.name, /^[A-Za-z]{2,40}$/),
+  };
+}
+
+/**
+ * Non-secret shape of the configured connection, for diagnosing a mis-set variable without ever revealing it: host kind (exact host
+ * only when it is a public Supabase pooler name), port, user pattern, and whether a conflicting `sslmode`/`options` parameter or a
+ * password is present. No credential, path or query value is returned.
+ */
+export function describeConnectionTarget(connectionString: string): Record<string, string | number | boolean | null> {
+  try {
+    const u = new URL(connectionString);
+    const host = u.hostname.toLowerCase();
+    const pooler = /^aws-\d{1,2}-[a-z0-9-]{3,30}\.pooler\.supabase\.com$/.test(host);
+    const direct = /^db\.[a-z0-9]{20}\.supabase\.co$/.test(host);
+    const user = decodeURIComponent(u.username);
+    return {
+      protocol: u.protocol.replace(":", ""),
+      hostKind: pooler ? "supabase_pooler" : direct ? "supabase_direct_ipv6_only" : "other",
+      host: pooler ? host : null,
+      port: u.port ? Number(u.port) : null,
+      userPattern: user === "foreverdb_web_reader" ? "role" : /^foreverdb_web_reader\.[a-z0-9]{20}$/.test(user) ? "role.projectref" : "other",
+      database: /^\/(postgres)?$/.test(u.pathname) ? "postgres" : "other",
+      hasPassword: u.password.length > 0,
+      hasQuery: u.search.length > 0,
+      sslmodeParam: u.searchParams.has("sslmode"),
+    };
+  } catch {
+    return { parse: "invalid_url" };
+  }
+}
+
 const num = (v: unknown) => (v == null ? null : Number(v));
 
 function toSearchRow(r: Row): SearchRow {
@@ -52,8 +117,10 @@ function toSearchRow(r: Row): SearchRow {
 export class PostgresAdapter implements PublicDataAdapter {
   readonly mode = "published" as const;
   private pool: pg.Pool;
+  private target: Record<string, string | number | boolean | null>;
 
   constructor(connectionString: string) {
+    this.target = describeConnectionTarget(connectionString);
     this.pool = new pg.Pool({
       connectionString,
       max: 5,
@@ -75,6 +142,8 @@ export class PostgresAdapter implements PublicDataAdapter {
     } catch (e) {
       // 22023 = invalid_parameter_value raised by web_api bounds checks.
       if ((e as { code?: string }).code === "22023") throw new InvalidQueryError((e as Error).message);
+      const op = /web_api\.([a-z_]{1,40})/.exec(sql)?.[1] ?? null;
+      console.error(JSON.stringify({ at: new Date().toISOString(), event: "public_db_error", op, ...describeDbError(e), target: this.target }));
       throw new Error("public_data_unavailable");
     }
   }
