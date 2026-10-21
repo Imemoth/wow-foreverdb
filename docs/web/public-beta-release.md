@@ -60,9 +60,11 @@ Beta-specific changes on top (this branch only):
 | `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL` | `https://azerdex-assets.pages.dev` | no | already set (per owner) |
 | `FOREVERDB_DEPLOYMENT` | `preview` | no | **owner action** (was `preview` already; confirm) |
 | `FOREVERDB_DATA_SOURCE` | `postgres` (currently `fixture`) | no | **owner action** |
-| `PUBLIC_READ_DATABASE_URL` | `postgresql://foreverdb_web_reader.chcoypkjzxfznsqmmbrq:<password>@aws-0-eu-west-1.pooler.supabase.com:6543/postgres` | **yes, mark Sensitive** | **owner action** |
+| `AZERDEX_READ_DB_URL` | `postgresql://foreverdb_web_reader.chcoypkjzxfznsqmmbrq:<password>@aws-0-eu-west-1.pooler.supabase.com:6543/postgres` | **yes, mark Sensitive** | **owner action** |
 | `BETA_SEO_AUTHORIZED_BRANCH` | `web/azerdex-beta` | no | already set earlier (confirm it still exists) |
 | `RATE_LIMIT_BACKEND`, Upstash REST vars, `RATE_LIMIT_SALT` | as configured 2026-10-20 | yes | confirm unchanged |
+
+**Naming:** the connection string variable is `AZERDEX_READ_DB_URL` (formerly `PUBLIC_READ_DATABASE_URL`). Vercel classifies the `PUBLIC_` prefix as public and refuses to store it as a Secret/Sensitive value; the new name is server-only, is never `NEXT_PUBLIC_*`, is still scanned for the private project reference at startup, and the old name is ignored (the site then fails closed).
 
 The Vercel connector available to the authoring session returns HTTP 403 on both reading and writing project environment variables and the
 sandbox has no Vercel CLI credentials, so the three variables above could **not** be set by the authoring session. Do not touch the shared
@@ -72,7 +74,7 @@ Preview defaults, Production, `azerdex.com` or other branches: create each varia
 # password for the URL (Supabase SQL editor on azerdex-public-read, owner only):
 select decrypted_secret from vault.decrypted_secrets where name like 'web_reader_password_%' order by created_at desc limit 1;
 # or, from a terminal with the Vercel CLI, paste via stdin so it never lands in shell history:
-vercel env add PUBLIC_READ_DATABASE_URL preview web/azerdex-beta --sensitive
+vercel env add AZERDEX_READ_DB_URL preview web/azerdex-beta --sensitive
 vercel env add FOREVERDB_DATA_SOURCE preview web/azerdex-beta          # postgres
 vercel env add FOREVERDB_DEPLOYMENT preview web/azerdex-beta           # preview
 ```

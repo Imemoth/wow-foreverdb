@@ -42,7 +42,7 @@ async function curlGet(url: string, headers: Record<string, string> = {}): Promi
   return { status, headers: respHeaders, body };
 }
 
-const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_|BETA_SEO_)/;
+const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|AZERDEX_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_|BETA_SEO_)/;
 
 async function withServer(port: number, env: Record<string, string>, run: (base: string) => Promise<void>) {
   const clean: Record<string, string | undefined> = {};
@@ -94,14 +94,14 @@ const authorizedBeta: Record<string, string> = {
   BETA_SEO_AUTHORIZED_BRANCH: "web/azerdex-beta",
   FOREVERDB_DEPLOYMENT: "preview",
   FOREVERDB_DATA_SOURCE: "postgres",
-  PUBLIC_READ_DATABASE_URL: UNREACHABLE_DB,
+  AZERDEX_READ_DB_URL: UNREACHABLE_DB,
   TRUSTED_IP_HEADER: "x-forwarded-for",
 };
 
 /** The same deployment but with a reachable database. A local test database cannot satisfy the hosted-address rule, so VERCEL is omitted here. */
 const { VERCEL: _v, VERCEL_ENV: _ve, ...authorizedBetaNoPlatform } = authorizedBeta;
 void _v; void _ve;
-const betaWithPublication: Record<string, string> = { ...authorizedBetaNoPlatform, PUBLIC_READ_DATABASE_URL: DB_URL ?? UNREACHABLE_DB };
+const betaWithPublication: Record<string, string> = { ...authorizedBetaNoPlatform, AZERDEX_READ_DB_URL: DB_URL ?? UNREACHABLE_DB };
 
 let n = 0;
 const client = () => ({ "x-forwarded-for": `198.51.100.${(n += 1) % 250}` });
@@ -207,7 +207,7 @@ test.describe("every condition is independently required", () => {
 
   test("not indexable on the synthetic fixture data source, even with host, branch and path all correct", async () => {
     const fixtureBeta: Record<string, string> = { ...authorizedBeta, FOREVERDB_DATA_SOURCE: "fixture" };
-    delete fixtureBeta.PUBLIC_READ_DATABASE_URL;
+    delete fixtureBeta.AZERDEX_READ_DB_URL;
     await withServer(3226, fixtureBeta, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
       expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
@@ -243,7 +243,7 @@ test.describe("every condition is independently required", () => {
         BETA_SEO_AUTHORIZED_BRANCH: "main",
         FOREVERDB_DEPLOYMENT: "production",
         FOREVERDB_DATA_SOURCE: "postgres",
-        PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
+        AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
         SITE_URL: "https://foreverdb.example",
         RATE_LIMIT_BACKEND: "upstash",
         UPSTASH_REDIS_REST_URL: "https://fake-upstash.invalid",
@@ -274,7 +274,7 @@ test.describe("every condition is independently required", () => {
         VERCEL_PROJECT_PRODUCTION_URL: "foreverdb.example",
         FOREVERDB_DEPLOYMENT: "production",
         FOREVERDB_DATA_SOURCE: "postgres",
-        PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
+        AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
         SITE_URL: "https://foreverdb.example",
         RATE_LIMIT_BACKEND: "upstash",
         UPSTASH_REDIS_REST_URL: "https://fake-upstash.invalid",

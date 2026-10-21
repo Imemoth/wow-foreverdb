@@ -154,7 +154,7 @@ test.describe("security headers, cookies and caching (HTTP level)", () => {
  * from env.ts therefore makes its case fail (the server would start serving).
  */
 
-const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_)/;
+const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|AZERDEX_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_)/;
 
 async function withServer(port: number, env: Record<string, string>, run: (base: string, log: () => string) => Promise<void>) {
   const clean: Record<string, string | undefined> = {};
@@ -207,7 +207,7 @@ const validProductionShape: Record<string, string> = {
   VERCEL_PROJECT_PRODUCTION_URL: "foreverdb.example",
   FOREVERDB_DEPLOYMENT: "production",
   FOREVERDB_DATA_SOURCE: "postgres",
-  PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
+  AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
   SITE_URL: "https://foreverdb.example",
   RATE_LIMIT_BACKEND: "upstash",
   UPSTASH_REDIS_REST_URL: "https://fake-upstash.invalid",
@@ -234,7 +234,7 @@ const cases: Array<{ name: string; port: number; env: Record<string, string>; re
   {
     name: "public database URL that references the private Supabase project",
     port: 3214,
-    env: { ...validDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
+    env: { ...validDemo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
     reason: /PRIVATE production/,
     mustNotMention: /must use the least-privilege|not a valid URL/,
   },

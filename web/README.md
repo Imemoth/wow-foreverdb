@@ -13,7 +13,7 @@ npm ci
 npm run dev            # http://localhost:3000, fixture data, memory rate limiter
 ```
 Against a local public read DB: set `FOREVERDB_DATA_SOURCE=postgres` and
-`PUBLIC_READ_DATABASE_URL=postgresql://foreverdb_web_reader:...@localhost:5432/<db>` (see `scripts/public-pipeline-integration.sh`).
+`AZERDEX_READ_DB_URL=postgresql://foreverdb_web_reader:...@localhost:5432/<db>` (see `scripts/public-pipeline-integration.sh`).
 
 ## Checks
 ```bash

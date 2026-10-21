@@ -51,7 +51,7 @@ export function data(): PublicDataAdapter {
   if (adapter) return adapter;
   const env = serverEnv();
   const inner = env.FOREVERDB_DATA_SOURCE === "postgres"
-    ? new PostgresAdapter(env.PUBLIC_READ_DATABASE_URL!)
+    ? new PostgresAdapter(env.AZERDEX_READ_DB_URL!)
     : new FixtureAdapter();
   adapter = cached(inner);
   return adapter;

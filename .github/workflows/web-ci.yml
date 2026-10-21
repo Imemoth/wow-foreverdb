@@ -53,13 +53,13 @@ jobs:
         run: npx vitest run tests/unit/env.test.ts tests/unit/env-matrix.test.ts
       - name: Production build (canary secrets present in the build environment)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run build
       - name: Bundle-secret scan (no canaries, DB URLs, private project reference or source maps in browser bundles)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run check:bundle-secrets
@@ -145,7 +145,7 @@ jobs:
         working-directory: web
         env:
           FOREVERDB_DATA_SOURCE: postgres
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
         run: |
           npm ci
           npm run build

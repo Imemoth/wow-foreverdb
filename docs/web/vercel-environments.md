@@ -1,6 +1,6 @@
 # ForeverDB Web — Vercel environments, deployment protection and release controls
 
-> **2026-10-12 draft Account V1 candidate only:** A separate server-side Account Auth/RPC boundary may **eventually** use the existing private Supabase HTTPS gateway in a protected owner-only pilot or separately approved production release. This is **not** a public-data connection and does not relax the `PUBLIC_READ_DATABASE_URL` or `NEXT_PUBLIC_*` isolation rules. Both code approval flags remain OFF and no Vercel/production activation has occurred. See [the Account V1 single-project runbook](../account-v1/single-project-candidate.md). The public-site architecture below remains binding.
+> **2026-10-12 draft Account V1 candidate only:** A separate server-side Account Auth/RPC boundary may **eventually** use the existing private Supabase HTTPS gateway in a protected owner-only pilot or separately approved production release. This is **not** a public-data connection and does not relax the `AZERDEX_READ_DB_URL` or `NEXT_PUBLIC_*` isolation rules. Both code approval flags remain OFF and no Vercel/production activation has occurred. See [the Account V1 single-project runbook](../account-v1/single-project-candidate.md). The public-site architecture below remains binding.
 
 
 Status of this document: **PREVIEW HARDENED (code) / production still BLOCKED.** Written for the PR `web/vercel-preview-hardening`. Nothing here enables production mode, provisions the public database, or publishes real observations.
@@ -49,7 +49,7 @@ Only the first two are required for the temporary demonstration; both are **non-
 | `RATE_LIMIT_SALT` | optional | recommended (32+ random bytes) | recommended | **required** |
 | `RATE_LIMIT_BACKEND` | `memory` | `memory` | `memory` | `upstash` |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | unset | unset | unset | **unset until Upstash is provisioned and reviewed** |
-| `PUBLIC_READ_DATABASE_URL` | unset | unset | unset | **unset until the public DB exists** |
+| `AZERDEX_READ_DB_URL` | unset | unset | unset | **unset until the public DB exists** |
 | `TURNSTILE_*`, `CHALLENGE_COOKIE_SECRET`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | unset | unset | unset | optional, after review |
 | Any `SUPABASE*`, `*SERVICE_ROLE*`, `DATABASE_URL`, `POSTGRES_URL*` | never | never | never | never |
 
@@ -166,7 +166,7 @@ Everything above (sections 1–9) describes the state as of the 2026-10-10..12 h
 ## 11. Addendum (2026-10-21): `beta.azerdex.com` on real published data (P2-Z3)
 
 Supersedes the "synthetic-fixture demonstration" wording of §10 for the beta track once the integration PR is deployed: the beta then runs
-`FOREVERDB_DEPLOYMENT=preview` + `FOREVERDB_DATA_SOURCE=postgres` with `PUBLIC_READ_DATABASE_URL` (a *sensitive*, branch-scoped variable using the
+`FOREVERDB_DEPLOYMENT=preview` + `FOREVERDB_DATA_SOURCE=postgres` with `AZERDEX_READ_DB_URL` (a *sensitive*, branch-scoped variable using the
 `foreverdb_web_reader` role through the Supavisor transaction pooler) and never serves fixtures. The homepage-only indexing exception now requires
 `postgres` (not `fixture`) **and** a genuine active publication, checked per request. Variables, verification and rollback:
 [public-beta-release.md](public-beta-release.md). Production, `azerdex.com`, DNS, Cloudflare and other Preview branches are unchanged.

@@ -6,7 +6,7 @@ Most of the steps below are reserved for a future, separately approved real-data
 | --- | --- | --- | --- |
 | 1 | Create a **new, separate** Supabase project (or managed Postgres) for the public read model, e.g. `foreverdb-public`, EU region. **Disable the Data API** (Settings → API) | Owner/admin credentials | Owner only (password manager) |
 | 2 | Apply `database/public-read/migrations/0001_public_read_model.sql` as the project owner. Run `database/public-read/tests/public_read_model_security.sql` after the first publication | — | — |
-| 3 | `alter role foreverdb_web_reader login password '<random 32+>';` | `PUBLIC_READ_DATABASE_URL` (pooler, port 6543, `sslmode=require`) | **Website runtime only** |
+| 3 | `alter role foreverdb_web_reader login password '<random 32+>';` | `AZERDEX_READ_DB_URL` (pooler, port 6543, `sslmode=require`) | **Website runtime only** |
 | 4 | `alter role foreverdb_publisher login password '<random 32+>';` | `PUBLIC_PUBLISHER_DATABASE_URL` | **Worker only** |
 | 5 | **Production approval gate.** Apply `database/private-export/0010_public_projection_export.sql` to production in a low-traffic window, then `alter role foreverdb_projection_reader login password '<random>';` | `PRIVATE_EXPORT_DATABASE_URL` | **Worker only** |
 | 6 | Create a protected GitHub environment `publication` with required reviewers. Add the two worker URLs as environment secrets. Add a scheduled workflow (hourly) running `publisher` `publish` | — | — |

@@ -23,7 +23,7 @@ The Node CLI (`publisher/src/cli.ts`) and the Edge Function run the same `runPub
 | `publish_gateway_jwt` | public Vault (the project's public anon JWT) | — |
 | `private_export_database_url` (login `foreverdb_projection_reader`) | public Vault, read only by `foreverdb_publisher` via `pub_ops.private_export_url()` | Git, logs |
 | `SUPABASE_DB_URL` | injected by Supabase into the Edge runtime | — |
-| `PUBLIC_READ_DATABASE_URL` (web reader) | Vercel Preview/Production env (sensitive) | Git, browser bundle |
+| `AZERDEX_READ_DB_URL` (web reader) | Vercel Preview/Production env (sensitive) | Git, browser bundle |
 
 Setting/rotating the export credential: `select pub_ops.set_private_export_url('<url>');` — it accepts only a URL for the
 `foreverdb_projection_reader` user. Rotating the invoke token: `select pub_ops.configure(...)` (see 0004) and re-run `set_schedule`.
@@ -100,6 +100,6 @@ Emergency stop, restore and full rollback: `database/rollback/0010_public_projec
 
 - Disable the Data API (PostgREST) for the public project in the Supabase dashboard (Settings → Data API); the site uses direct SQL only.
 - Delete the retired `diag-db-host` Edge function in the dashboard (it is already inert: HTTP 410).
-- Give `foreverdb_web_reader` a login password and set Vercel Preview `PUBLIC_READ_DATABASE_URL` (see `docs/web/vercel-environments.md`;
+- Give `foreverdb_web_reader` a login password and set Vercel Preview `AZERDEX_READ_DB_URL` (see `docs/web/vercel-environments.md`;
   use the Supavisor pooler host shown in the Supabase "Connect" dialog, user `foreverdb_web_reader.chcoypkjzxfznsqmmbrq`; Vercel is IPv4-only).
 - `supabase_read_only_user` has SELECT through Supabase's own default; it is not used by AzerDex.

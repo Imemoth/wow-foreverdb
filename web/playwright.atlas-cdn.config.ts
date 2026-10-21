@@ -31,7 +31,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      FOREVERDB_DEPLOYMENT: "local", AZERDEX_POC_MAPS: "1", FOREVERDB_DATA_SOURCE: "fixture", PUBLIC_READ_DATABASE_URL: "",
+      FOREVERDB_DEPLOYMENT: "local", AZERDEX_POC_MAPS: "1", FOREVERDB_DATA_SOURCE: "fixture", AZERDEX_READ_DB_URL: "",
       SITE_URL: `http://localhost:${PORT}`, RATE_LIMIT_BACKEND: "memory", TRUSTED_IP_HEADER: "x-forwarded-for", NEXT_TELEMETRY_DISABLED: "1",
       NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: BASE,
     },
