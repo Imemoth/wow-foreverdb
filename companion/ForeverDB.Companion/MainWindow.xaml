@@ -905,7 +905,7 @@
                                                                     Padding="12,5"
                                                                     Click="InstallationClaim_Click"
                                                                     Visibility="{Binding ClaimVisibility}"
-                                                                    Content="Link to my account…" />
+                                                                    Content="{Binding ClaimActionText}" />
                                                             <Button Style="{StaticResource SecondaryButtonStyle}"
                                                                     Padding="12,5"
                                                                     Margin="8,0,0,0"

@@ -19,9 +19,9 @@ concurrency:
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  # No account feature is activated and nothing in this job talks to Supabase: the tests use an in-process fake
-  # (and a loopback fake for the multi-process cases). These must stay unset so the gate cannot be opened by CI.
-  FOREVERDB_ACCOUNT_MODE: ""
+  # The standard binary supports account linking, but this test process stays explicitly offline: tests use an in-process fake
+  # (and a loopback fake for the multi-process cases) and never contact hosted Supabase.
+  FOREVERDB_ACCOUNT_MODE: "disabled"
 
 jobs:
   windows:

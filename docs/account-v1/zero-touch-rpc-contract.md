@@ -5,7 +5,11 @@ access token (`Authorization: Bearer`) and the publishable key (`apikey`). Busin
 HTTP 401 = no live session (PT401), 403 = wrong identity kind (PT403: a registered caller on a device function, an anonymous caller on an
 account function), 429 = budget exhausted (PT429), 400 = bad snapshot identity (PT400), 413 = payload bounds (PT413).
 
-## Account functions (caller: registered, email-confirmed, live web session; website BFF only)
+## Account functions (caller: registered, email-confirmed, live account session)
+
+The website BFF uses all five functions. The signed-in Companion MVP additionally uses only
+`fdb_account_enrollment_ticket_issue` through its closed native RPC client, immediately handing the one-time ticket to its local device
+enrollment service. Both paths use the caller's own JWT; neither has a service credential or generic RPC forwarding.
 
 | Function | Input | Output |
 | --- | --- | --- |

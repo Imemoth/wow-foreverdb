@@ -26,6 +26,7 @@ public partial class MainWindow
         public string InstallationId { get; init; } = "";
         public string OwnershipText { get; init; } = "";
         public string DetailText { get; init; } = "";
+        public string ClaimActionText { get; init; } = "Link to my account…";
         public Visibility DetailVisibility { get; init; } = Visibility.Collapsed;
         public Visibility ClaimVisibility { get; init; } = Visibility.Collapsed;
         public Visibility CheckVisibility { get; init; } = Visibility.Collapsed;
@@ -383,6 +384,9 @@ public partial class MainWindow
                 detail.Length == 0
                     ? Visibility.Collapsed
                     : Visibility.Visible,
+            ClaimActionText = status.State == SessionState.Registered
+                ? "Connect this installation"
+                : "Create link code…",
             ClaimVisibility =
                 enabled && (!privatePilot || permittedClaim) && anonymousOwned
                     ? Visibility.Visible
@@ -941,12 +945,16 @@ public partial class MainWindow
             return;
         }
 
+        var direct = account.Sessions.Status.State == SessionState.Registered && account.Device is not null;
         var confirmed =
             MessageBox.Show(
                 this,
-                "A one-time link code will be shown. Anyone who gets the code while it is valid can move this " +
-                "installation to their ForeverDB account. Show the code only when you are about to use it, and " +
-                "keep it private.\n\nCreate a link code?",
+                direct
+                    ? "ForeverDB will prove this installation with its existing anonymous identity, move it to the signed-in account, " +
+                      "and register this computer for revocable manual sync. The installation ID, history and Guildbook data stay the same.\n\nConnect this installation?"
+                    : "A one-time link code will be shown. Anyone who gets the code while it is valid can move this " +
+                      "installation to their ForeverDB account. Show the code only when you are about to use it, and " +
+                      "keep it private.\n\nCreate a link code?",
                 "Link installation to your account",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning,
@@ -962,6 +970,21 @@ public partial class MainWindow
 
         try
         {
+            if (direct)
+            {
+                var linked = await account.Linking.ConnectAsync(id, Environment.MachineName, CancellationToken.None);
+                if (account.Sessions.Generation != generation || _account != account)
+                {
+                    return;
+                }
+
+                HideClaimCard();
+                ShowAccountMessage(AccountMessages.Describe(linked));
+                RefreshDeviceUi();
+                RefreshAccountUi();
+                return;
+            }
+
             var result = await account.Claims.StartClaimAsync(
                 id,
                 CancellationToken.None);

@@ -14,8 +14,9 @@ public class FeatureGateTests
     }
 
     [Fact]
-    public void Compiled_approvals_are_off_and_the_private_pilot_stays_closed_without_an_owner_approved_code_change()
+    public void Standard_account_linking_is_approved_but_temporary_private_pilots_stay_closed()
     {
+        Assert.True(AccountFeatureGate.ProductionAccountAuthApproved);
         Assert.False(AccountFeatureGate.PrivateProjectPilotApproved);
         Assert.False(AccountFeatureGate.CompiledApprovals.PrivatePilot);
         Assert.False(AccountFeatureGate.PrivateProjectClaimPilotApproved);
@@ -50,24 +51,37 @@ public class FeatureGateTests
         };
 
     [Fact]
-    public void Default_configuration_keeps_account_features_off()
+    public void Default_runtime_configuration_enables_standard_account_linking_on_the_exact_production_endpoint()
     {
-        var d = Eval();
-        Assert.False(d.AccountsEnabled);
-        Assert.Equal(AccountEnvironment.ProductionAnonymousOnly, d.Environment);
-        Assert.Null(d.Endpoint);
-        Assert.Equal(AccountFeatureGate.ProductionAccountAuthApproved, false);
+        var d = AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
+
+        Assert.True(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.ProductionAccountLinking, d.Environment);
+        Assert.Equal(TestEnv.ProductionEndpoint, d.Endpoint);
+        Assert.Equal("", d.CredentialSubdirectory);
+        Assert.True(AccountFeatureGate.DirectAccountLinkingAvailable(d));
+        Assert.False(AccountFeatureGate.ZeroTouchAvailable(d));
+    }
+
+    [Fact]
+    public void Shipped_companion_defaults_open_the_standard_linking_gate_without_environment_configuration()
+    {
+        var settings = new ForeverDB.Companion.Models.CompanionSettings();
+        var d = AccountFeatureGate.EvaluateForRuntime(
+            _ => null,
+            new AccountEndpoint(settings.SupabaseUrl, settings.SupabaseKey, "production"));
+
+        Assert.True(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.ProductionAccountLinking, d.Environment);
+        Assert.Equal(settings.SupabaseUrl, d.Endpoint!.BaseUrl);
     }
 
     [Theory]
-    [InlineData("production")]
-    [InlineData("PRODUCTION")]
     [InlineData("prod")]
     [InlineData("true")]
     [InlineData("1")]
     [InlineData("enabled")]
-    [InlineData("")]
-    public void Production_and_unknown_modes_never_enable_accounts_whatever_else_is_set(string mode)
+    public void Unknown_modes_never_enable_accounts_whatever_else_is_set(string mode)
     {
         var d = Eval(
             (AccountFeatureGate.ModeVariable, mode),
@@ -75,6 +89,49 @@ public class FeatureGateTests
             (AccountFeatureGate.KeyVariable, Key),
             (AccountFeatureGate.ProjectRefVariable, Ref));
         Assert.False(d.AccountsEnabled);
+    }
+
+    [Fact]
+    public void Explicit_disabled_mode_keeps_the_standard_build_anonymous_only()
+    {
+        var d = AccountFeatureGate.EvaluateForRuntime(
+            name => name == AccountFeatureGate.ModeVariable ? "disabled" : null,
+            TestEnv.ProductionEndpoint);
+
+        Assert.False(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.ProductionAnonymousOnly, d.Environment);
+        Assert.Null(d.Endpoint);
+    }
+
+    [Theory]
+    [InlineData("production")]
+    [InlineData("PRODUCTION")]
+    [InlineData("")]
+    public void Empty_or_production_mode_uses_the_validated_standard_endpoint(string mode)
+    {
+        var d = AccountFeatureGate.EvaluateForRuntime(
+            name => name == AccountFeatureGate.ModeVariable ? mode : null,
+            TestEnv.ProductionEndpoint);
+
+        Assert.True(d.AccountsEnabled);
+        Assert.Equal(AccountEnvironment.ProductionAccountLinking, d.Environment);
+        Assert.Equal(TestEnv.ProductionEndpoint, d.Endpoint);
+    }
+
+    [Theory]
+    [InlineData("http://klxhikdlfwgxurdyexdi.supabase.co", "sb_publishable_productiontestkey123456")]
+    [InlineData("https://example.supabase.co", "sb_publishable_productiontestkey123456")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co/rest/v1", "sb_publishable_productiontestkey123456")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co", "sb_secret_do-not-use")]
+    [InlineData("https://klxhikdlfwgxurdyexdi.supabase.co", "not-a-key")]
+    public void Standard_runtime_rejects_an_alternate_origin_path_or_non_publishable_key(string url, string key)
+    {
+        var d = AccountFeatureGate.EvaluateForRuntime(
+            _ => null,
+            new AccountEndpoint(url, key, "production"));
+
+        Assert.False(d.AccountsEnabled);
+        Assert.Null(d.Endpoint);
     }
 
     [Fact]
@@ -194,7 +251,7 @@ public class FeatureGateTests
     {
         var handler = new FakeHandler(new FakeSupabase());
         using var client = new HttpClient(new ProductionHostGuardHandler(
-            handler, enforce: true, privatePilotOrigin: new Uri(PrivateUrl)));
+            handler, enforce: true, approvedOrigin: new Uri(PrivateUrl)));
         var ok = await client.PostAsync(PrivateUrl + "/auth/v1/token?grant_type=password", new StringContent("{}"));
         Assert.NotNull(ok);
         Assert.Single(handler.RequestUris);

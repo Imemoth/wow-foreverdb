@@ -6,6 +6,8 @@ public enum AccountEnvironment
 {
     /// <summary>Production behaviour of 0.8.x: anonymous sessions only. Account System V1 is OFF.</summary>
     ProductionAnonymousOnly,
+    /// <summary>The normal Companion package: anonymous use, account sign-in, direct installation linking and manual device sync.</summary>
+    ProductionAccountLinking,
     Local,
     Staging,
     PrivatePilot,
@@ -30,16 +32,16 @@ public sealed record AccountGateDecision(
 /// <summary>
 /// Fail-closed capability gate for Account System V1 (registered login, claims, ownership routing).
 ///
-/// The Companion ships the private production Supabase URL, but production account activation is a
-/// reviewed owner decision that has not been taken: <see cref="ProductionAccountAuthApproved"/> is a
-/// compile-time constant that no setting, file or environment variable can flip. Activation for
-/// development/test needs an explicit process environment variable (never settings.json) AND an endpoint
-/// that validates as an isolated local or staging project that is provably not the production project.
+/// The normal Companion ships one approved production Supabase origin and publishable key. The standard
+/// package may use Account Auth and direct linking only after <see cref="ProductionAccountAuthApproved"/>
+/// is approved in source. Zero-touch activation-file enrollment and automatic device sync have separate
+/// compile-time approvals and remain unavailable. Local/staging overrides still require explicit process
+/// environment variables and validated isolated endpoints.
 /// </summary>
 public static class AccountFeatureGate
 {
-    /// <summary>Flipping this is a reviewed code change after owner approval (docs/account-v1).</summary>
-    public const bool ProductionAccountAuthApproved = false;
+    /// <summary>Owner-approved for the standard Account Linking MVP package; public rollout still requires owner acceptance.</summary>
+    public static readonly bool ProductionAccountAuthApproved = true;
 
     // Owner-approved single-project pilot, NOT a public release flag. OFF on the release line (reverted before the merge to
     // main, 2026-10-16). Re-enabling is a separate owner-approved code change; no variable, file or setting can flip it.
@@ -81,6 +83,27 @@ public static class AccountFeatureGate
 
     public static AccountGateDecision Evaluate(Func<string, string?> getVariable) =>
         EvaluateWithApprovals(getVariable, CompiledApprovals);
+
+    /// <summary>
+    /// Runtime entry point. With no override (or an explicit <c>production</c> mode), validates the Companion's configured
+    /// standard endpoint and enables only the approved account-linking surface. <c>disabled</c> remains an emergency off switch.
+    /// Other modes retain the existing isolated local/staging and closed private-pilot rules.
+    /// </summary>
+    public static AccountGateDecision EvaluateForRuntime(Func<string, string?> getVariable, AccountEndpoint productionEndpoint)
+    {
+        var mode = (getVariable(ModeVariable) ?? "").Trim().ToLowerInvariant();
+        if (mode.Length == 0 || mode == "production")
+        {
+            return EvaluateStandardProduction(productionEndpoint);
+        }
+
+        if (mode == "disabled")
+        {
+            return Off("Account features were explicitly disabled for this process.");
+        }
+
+        return EvaluateWithApprovals(getVariable, CompiledApprovals);
+    }
 
     public static AccountGateDecision EvaluateWithApprovals(Func<string, string?> getVariable, GateApprovals approvals)
     {
@@ -187,8 +210,46 @@ public static class AccountFeatureGate
         (gate.Environment is AccountEnvironment.Local or AccountEnvironment.Staging ||
          (gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot && ZeroTouchEnrollmentApproved));
 
-    public static AccountGateDecision EvaluateFromEnvironment() =>
-        Evaluate(name => Environment.GetEnvironmentVariable(name));
+    /// <summary>Direct in-process claim + device-ticket enrollment used by the standard Account Linking flow.</summary>
+    public static bool DirectAccountLinkingAvailable(AccountGateDecision gate) =>
+        gate.AccountsEnabled &&
+        gate.Environment is AccountEnvironment.ProductionAccountLinking or AccountEnvironment.Local or AccountEnvironment.Staging;
+
+    public static AccountGateDecision EvaluateFromEnvironment(AccountEndpoint productionEndpoint) =>
+        EvaluateForRuntime(name => Environment.GetEnvironmentVariable(name), productionEndpoint);
+
+    private static AccountGateDecision EvaluateStandardProduction(AccountEndpoint endpoint)
+    {
+        if (!ProductionAccountAuthApproved)
+        {
+            return Off("Production account activation is not approved; account features stay off.");
+        }
+
+        if (!Uri.TryCreate(endpoint.BaseUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !uri.IsDefaultPort ||
+            !string.Equals(uri.IdnHost, $"{ProductionProjectRef}.supabase.co", StringComparison.Ordinal) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            (uri.AbsolutePath != "/" && uri.AbsolutePath.Length != 0))
+        {
+            return Off("The standard account endpoint is not the approved production origin; account features stay off.");
+        }
+
+        if (!Regex.IsMatch(endpoint.PublishableKey, "^sb_publishable_[A-Za-z0-9_-]{20,}$", RegexOptions.CultureInvariant) ||
+            ContainsProductionReference(endpoint.PublishableKey))
+        {
+            return Off("The standard account endpoint requires a modern publishable key; account features stay off.");
+        }
+
+        return new AccountGateDecision(
+            AccountEnvironment.ProductionAccountLinking,
+            true,
+            new AccountEndpoint(uri.GetLeftPart(UriPartial.Authority), endpoint.PublishableKey, "production"),
+            "",
+            "Standard account linking and manual device sync are available; zero-touch enrollment and AutoSync remain off.");
+    }
 
     private static AccountGateDecision EvaluatePrivatePilot(Func<string, string?> getVariable, GateApprovals approvals, bool claimPilot)
     {
@@ -301,22 +362,21 @@ internal static class JwtInspectorRole
 public sealed class ProductionHostGuardHandler : DelegatingHandler
 {
     private readonly bool _enforce;
-    private readonly Uri? _privatePilotOrigin;
+    private readonly Uri? _approvedOrigin;
 
-    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce, Uri? privatePilotOrigin = null) : base(inner)
+    public ProductionHostGuardHandler(HttpMessageHandler inner, bool enforce, Uri? approvedOrigin = null) : base(inner)
     {
         _enforce = enforce;
-        _privatePilotOrigin = privatePilotOrigin;
+        _approvedOrigin = approvedOrigin;
     }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (_enforce && request.RequestUri is { } uri)
         {
-            if (_privatePilotOrigin is { } approved)
+            if (_approvedOrigin is { } approved)
             {
-                // A private pilot cannot be redirected off its exact allowlisted
-                // project, even to another HTTPS host or a different port.
+                // Standard production linking and private pilots cannot be redirected off their exact allowlisted origin.
                 if (uri.Scheme != Uri.UriSchemeHttps ||
                     uri.IdnHost != approved.IdnHost ||
                     uri.Port != approved.Port ||
