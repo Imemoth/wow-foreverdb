@@ -8,7 +8,7 @@
  * The Supabase MCP/API deploy takes a flat list of files, so shared code is copied into the function directory
  * instead of imported across directories. publisher/src/core stays the ONLY place the business logic is edited.
  */
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,7 +30,13 @@ expected.set(
 let drift = [];
 for (const [rel, content] of expected) {
   const target = join(outDir, rel);
-  const current = existsSync(target) ? readFileSync(target, "utf8") : null;
+  // Read directly and treat ENOENT as "missing": no separate existence check between check and use.
+  let current = null;
+  try {
+    current = readFileSync(target, "utf8");
+  } catch (e) {
+    if (e?.code !== "ENOENT") throw e;
+  }
   if (current === content) continue;
   drift.push(rel);
   if (!check) {

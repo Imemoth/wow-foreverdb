@@ -7,7 +7,8 @@ cd "$(dirname "$0")/.."
 : "${PGHOST:?}" "${PGPORT:?}" "${PGUSER:?}"
 case "${PGHOST}" in localhost|127.0.0.1|/tmp|/var/run/postgresql) ;; *) echo "Refusing non-local PGHOST=${PGHOST}"; exit 2;; esac
 DB=${HOSTED_DB:-az_hosted_pub}
-OWNER="psql -X -At -v ON_ERROR_STOP=1 -h $PGHOST -p $PGPORT -U sbadmin -d $DB"
+ADMIN_PW=${ADMIN_PW:-it-only-admin}
+OWNER="env PGPASSWORD=$ADMIN_PW psql -X -At -v ON_ERROR_STOP=1 -h $PGHOST -p $PGPORT -U sbadmin -d $DB"
 H=${PGHOST}; [ "${H#/}" != "$H" ] && H=localhost
 export PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${DB}"
 pass() { echo "PASS: $*"; }

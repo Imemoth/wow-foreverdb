@@ -13,7 +13,10 @@ DB=${HOSTED_DB:-az_hosted_pub}
 S="psql -X -q -v ON_ERROR_STOP=1 -d postgres"
 $S -c "drop database if exists $DB" >/dev/null
 for r in anon authenticated service_role; do psql -X -q -d postgres -c "create role $r nologin" 2>/dev/null || true; done
+# The admin authenticates with a password (CI's server uses scram over TCP; a local socket may be trust). Ephemeral server only.
+ADMIN_PW=${ADMIN_PW:-it-only-admin}
 psql -X -q -d postgres -c "create role sbadmin login createrole createdb bypassrls inherit" 2>/dev/null || true
+psql -X -q -v ON_ERROR_STOP=1 -d postgres -c "alter role sbadmin password '$ADMIN_PW'"
 $S -c "create database $DB owner sbadmin" >/dev/null
 SU="psql -X -q -v ON_ERROR_STOP=1 -d $DB"
 $SU -f database/public-read/tests/hosted-stubs/supabase_stubs.sql >/dev/null
@@ -24,7 +27,7 @@ $SU -c "alter schema extensions owner to sbadmin" \
     -c "grant select, insert, update, delete on all tables in schema cron to sbadmin" \
     -c "grant select, insert on all tables in schema net to sbadmin" \
     -c "grant usage on all sequences in schema cron, net to sbadmin" >/dev/null
-A="psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
+A="env PGPASSWORD=$ADMIN_PW psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
 $A -c "select 'admin is superuser: ' || rolsuper from pg_roles where rolname = current_user" -t | grep -q "false" || { echo "FAIL: admin must not be superuser"; exit 1; }
 $A -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
 $A -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null

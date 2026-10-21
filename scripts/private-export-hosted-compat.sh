@@ -11,7 +11,9 @@ DB=${PRIVATE_COMPAT_DB:-az_private_probe}
 S="psql -X -q -v ON_ERROR_STOP=1 -d postgres"
 $S -c "drop database if exists $DB" >/dev/null
 for r in anon authenticated service_role; do psql -X -q -d postgres -c "create role $r nologin" 2>/dev/null || true; done
+ADMIN_PW=${ADMIN_PW:-it-only-admin}
 psql -X -q -d postgres -c "create role sbadmin login createrole createdb bypassrls inherit" 2>/dev/null || true
+psql -X -q -v ON_ERROR_STOP=1 -d postgres -c "alter role sbadmin password '$ADMIN_PW'"
 $S -c "create database $DB owner sbadmin" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -d $DB >/dev/null <<'SQL'
 -- stand-ins with the column layout read from the real private project on 2026-10-21 (no data)
@@ -31,7 +33,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d $DB -c "alter schema public owner to sbadmin" -
 for t in sources items installation_source_stats installation_item_stats installation_location_stats installation_guilds installation_guild_members installation_guild_professions map_asset_diagnostics; do
   psql -X -q -d $DB -c "alter table public.$t owner to sbadmin" >/dev/null; done
 psql -X -q -d $DB -c "alter schema private owner to sbadmin" >/dev/null
-A="psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
+A="env PGPASSWORD=$ADMIN_PW psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
 $A -c "select rolsuper from pg_roles where rolname = current_user" -At | grep -q f || { echo "FAIL: admin must not be superuser"; exit 1; }
 $A -f database/private-export/0010_public_projection_export.sql >/dev/null
 echo "PASS: 0010 applied as a non-superuser admin (boundary assertions inside the migration passed)"
