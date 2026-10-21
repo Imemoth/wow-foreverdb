@@ -55,12 +55,12 @@ Two ticks at :00: pg_cron reported "succeeded" in 32 ms and 4 ms (it only enqueu
 
 pg_cron reported `succeeded` after 17 ms (it only enqueues the pg_net call); the HTTP response was 200.
 
-**Honest limit of benchmark F:** the real export has not changed since publication 10 was activated manually (run 19), so the first
-scheduled tick was necessarily a no-change run. A *scheduled* run that activates new real content will occur on the first tick after
-Companion data changes the aggregate export; it was not forced, because that would require editing private production data.
-The scheduled full write path was exercised by the rehearsal-only Cron job above (real Cron → Edge → full staging write, finalize and
-activation, then ROLLBACK), and a real activation by the manual run 19 (same code path, `trigger: manual`).
-Follow-up check after the next data change: `select * from pub_ops.cron_status(5);` should show `outcome: activated, trigger: cron`.
+**Scheduled activations of new real content (observed 2026-10-21):** after genuine Companion uploads changed the aggregate export, Cron produced
+real publications on its own: run 24 (10:45 UTC) activated **publication 11** (source data freshness 2026-10-21 10:42, 1,397 ms wall) and run 25
+(11:00 UTC) activated **publication 12** (freshness 10:50, 1,115 ms); run 26 (11:15 UTC) was a `duplicate` no-change run (1,218 ms) leaving 12 active.
+Six consecutive Cron ticks (10:00–11:15) all `succeeded` with no `failed` run; publications 10 and 11 are retained for rollback. Counts were unchanged
+(132 sources / 138 items / 157 cells) because the new observations did not cross the publication thresholds yet. No data was inserted to force any of this.
+The full write path was additionally exercised by the rehearsal-only Cron job above.
 
 ## What is not proven
 
