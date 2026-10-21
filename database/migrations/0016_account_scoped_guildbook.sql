@@ -1,4 +1,4 @@
--- ForeverDB 0015: account-scoped Guildbook storage and independent public ingest.
+-- ForeverDB 0016: account-scoped Guildbook storage and independent public ingest.
 --
 -- Public observation ingest keeps its existing signatures and credentials, but
 -- strips private Guildbook fields before the legacy collector implementation.
@@ -22,7 +22,7 @@ declare
 begin
     if to_regclass('supabase_migrations.schema_migrations') is not null then
         if exists (select 1 from supabase_migrations.schema_migrations where name = 'account_scoped_guildbook') then
-            raise exception '0015 pre-flight: ledger already shows account_scoped_guildbook';
+            raise exception '0016 pre-flight: ledger already shows account_scoped_guildbook';
         end if;
     end if;
 
@@ -37,32 +37,32 @@ begin
         'public.fdb_account_guildbook_members(text,text,integer,integer)'
     ] loop
         if to_regprocedure(v_sig) is null then
-            raise exception '0015 pre-flight: % is missing (apply 0009, 0012 and 0014 first)', v_sig;
+            raise exception '0016 pre-flight: % is missing (apply 0009, 0012 and 0014 first)', v_sig;
         end if;
     end loop;
 
     if to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)') is not null then
-        raise exception '0015 pre-flight: legacy ingest compatibility name is already occupied';
+        raise exception '0016 pre-flight: legacy ingest compatibility name is already occupied';
     end if;
 
     if to_regclass('public.installations') is null
        or to_regclass('public.installation_guilds') is null
        or to_regclass('public.installation_guild_members') is null
        or to_regclass('public.installation_guild_professions') is null then
-        raise exception '0015 pre-flight: installation/Guildbook tables are missing';
+        raise exception '0016 pre-flight: installation/Guildbook tables are missing';
     end if;
 
     if not has_table_privilege(current_user, 'auth.sessions', 'SELECT')
        or not has_table_privilege(current_user, 'auth.sessions', 'UPDATE')
        or not has_table_privilege(current_user, 'auth.users', 'SELECT') then
-        raise exception '0015 pre-flight: role % lacks SELECT/UPDATE on auth.sessions or SELECT on auth.users', current_user;
+        raise exception '0016 pre-flight: role % lacks SELECT/UPDATE on auth.sessions or SELECT on auth.users', current_user;
     end if;
 end $preflight$;
 
--- The migration is allowed to replace only the old Guildbook account reads,
--- the collector wrapper, and the device wrapper. All other functions retain a
+-- The migration is allowed to replace only the collector wrapper, device wrapper,
+-- and the new account Guildbook RPC family. All other functions retain a
 -- prosrc/ACL fingerprint through the postcondition below.
-create temporary table _fdb0015_before on commit drop as
+create temporary table _fdb0016_before on commit drop as
 select p.oid::regprocedure::text as sig, md5(p.prosrc) as src_md5, coalesce(p.proacl::text, '') as acl
 from pg_proc p
 where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
@@ -519,12 +519,12 @@ begin
     ] loop
         select p.prosecdef, pg_get_userbyid(p.proowner) as owner, coalesce(p.proconfig, '{}') as config, p.provolatile
         into v_after from pg_proc p where p.oid = to_regprocedure(v_sig);
-        if not found then raise exception '0015 post-condition: % is missing', v_sig; end if;
+        if not found then raise exception '0016 post-condition: % is missing', v_sig; end if;
         if not v_after.prosecdef or v_after.owner <> current_user or v_after.provolatile <> 'v' then
-            raise exception '0015 post-condition: % security/owner/volatility contract failed', v_sig;
+            raise exception '0016 post-condition: % security/owner/volatility contract failed', v_sig;
         end if;
         if not ('search_path=""' = any (v_after.config)) then
-            raise exception '0015 post-condition: % lacks search_path = empty', v_sig;
+            raise exception '0016 post-condition: % lacks search_path = empty', v_sig;
         end if;
     end loop;
 
@@ -532,7 +532,7 @@ begin
        or has_function_privilege('anon', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
        or has_function_privilege('service_role', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
        or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute') then
-        raise exception '0015 post-condition: account ingest ACL is incorrect';
+        raise exception '0016 post-condition: account ingest ACL is incorrect';
     end if;
     if has_function_privilege('public', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
        or has_function_privilege('anon', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
@@ -542,32 +542,32 @@ begin
        or has_function_privilege('anon', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
        or has_function_privilege('service_role', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
        or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute') then
-        raise exception '0015 post-condition: scoped account read ACL is incorrect';
+        raise exception '0016 post-condition: scoped account read ACL is incorrect';
     end if;
 
     for v_sig in select unnest(array['private.account_guildbook_captures', 'private.account_guildbook_guilds',
                                      'private.account_guildbook_members', 'private.account_guildbook_professions']) loop
         if not (select c.relrowsecurity from pg_class c where c.oid = v_sig::regclass) then
-            raise exception '0015 post-condition: RLS is not enabled on %', v_sig;
+            raise exception '0016 post-condition: RLS is not enabled on %', v_sig;
         end if;
         if has_table_privilege('public', v_sig, 'select,insert,update,delete,truncate,references,trigger')
            or has_table_privilege('anon', v_sig, 'select,insert,update,delete,truncate,references,trigger')
            or has_table_privilege('authenticated', v_sig, 'select,insert,update,delete,truncate,references,trigger')
            or has_table_privilege('service_role', v_sig, 'select,insert,update,delete,truncate,references,trigger') then
-            raise exception '0015 post-condition: a client role has a privilege on %', v_sig;
+            raise exception '0016 post-condition: a client role has a privilege on %', v_sig;
         end if;
     end loop;
 
-    for r in select * from _fdb0015_before loop
+    for r in select * from _fdb0016_before loop
         select md5(p.prosrc) as src_md5, coalesce(p.proacl::text, '') as acl
         into v_after from pg_proc p where p.oid = to_regprocedure(r.sig);
         if not found or v_after.src_md5 is distinct from r.src_md5 or v_after.acl is distinct from r.acl then
-            raise exception '0015 post-condition: existing function % changed', r.sig;
+            raise exception '0016 post-condition: existing function % changed', r.sig;
         end if;
     end loop;
 
     if to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)') is null then
-        raise exception '0015 post-condition: legacy ingest implementation was not retained';
+        raise exception '0016 post-condition: legacy ingest implementation was not retained';
     end if;
 end $verify$;
 

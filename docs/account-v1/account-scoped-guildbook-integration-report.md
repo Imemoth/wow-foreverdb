@@ -5,10 +5,10 @@ Status: implementation prepared for owner acceptance on `feature/account-scoped-
 Implemented:
 
 - Prompt 0 contract and integration plan.
-- Migration 0015 with account-owned Guildbook tables, capture ledger, verified-session ingest, scoped reads, replay/staleness checks, and public-payload stripping.
+- Migration 0016 with account-owned Guildbook tables, capture ledger, verified-session ingest, scoped reads, replay/staleness checks, and public-payload stripping. Migration number 0015 was already reserved by pending PR #58 (`0015_azerdex_welcome_outbox.sql`), so the collision was resolved before publication.
 - Addon schema-9-compatible capture provenance and `/fdb guildbook refresh`.
 - Companion separation of public collector sync from private Guildbook sync, account cache invalidation, session-bound freshness, camelCase payloads, and complete member pagination.
-- Disposable CI workflow coverage for migration 0015 and cross-account isolation.
+- Disposable CI workflow coverage for migration 0016 and cross-account isolation.
 
 Verification:
 
