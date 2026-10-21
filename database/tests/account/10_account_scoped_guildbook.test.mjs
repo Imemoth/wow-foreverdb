@@ -46,7 +46,7 @@ describe("account-scoped Guildbook", () => {
 
   it("accepts a fresh capture and keeps reads scoped to the registered account", async () => {
     const out = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", capturedAt, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", JSON.stringify(guilds),
     ]);
     assert.deepEqual(out, {
       ok: true,
@@ -66,7 +66,7 @@ describe("account-scoped Guildbook", () => {
   it("does not let an anonymous collector session call the account Guildbook ingest", async () => {
     await expectCode(
       rpc(client, anonymous.claims, "fdb_account_guildbook_ingest", [
-        installation, "anonymous-capture", 200, "Anonymous:Main", guilds,
+        installation, "anonymous-capture", 200, "Anonymous:Main", JSON.stringify(guilds),
       ]),
       "PT403",
     );
@@ -74,21 +74,21 @@ describe("account-scoped Guildbook", () => {
 
   it("rejects capture replay and older provenance without changing stored rows", async () => {
     const replay = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", capturedAt, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", JSON.stringify(guilds),
     ]);
     assert.deepEqual(replay, { ok: false, error: "capture_replayed" });
 
     const crossAccountReplay = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-a", capturedAt, "A:Main", guilds,
+      installation, "capture-a", capturedAt, "A:Main", JSON.stringify(guilds),
     ]);
     assert.deepEqual(crossAccountReplay, { ok: false, error: "capture_replayed" });
 
     const older = await rpc(client, a.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-older", capturedAt - 1, "A:Main", [],
+      installation, "capture-older", capturedAt - 1, "A:Main", JSON.stringify([]),
     ]);
     assert.deepEqual(older, { ok: false, error: "capture_stale" });
     const crossAccountOlder = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-older-b", capturedAt - 1, "A:Main", guilds,
+      installation, "capture-older-b", capturedAt - 1, "A:Main", JSON.stringify(guilds),
     ]);
     assert.deepEqual(crossAccountOlder, { ok: false, error: "capture_stale" });
     assert.equal((await rpc(client, a.claims, "fdb_account_guildbook_guilds_scoped", [installation])).length, 1);
@@ -96,7 +96,7 @@ describe("account-scoped Guildbook", () => {
 
   it("attributes a new capture to B without transferring installation ownership", async () => {
     const out = await rpc(client, b.claims, "fdb_account_guildbook_ingest", [
-      installation, "capture-b", capturedAt + 1, "B:Main", guilds,
+      installation, "capture-b", capturedAt + 1, "B:Main", JSON.stringify(guilds),
     ]);
     assert.equal(out.ok, true);
     assert.equal(await fx.owner(installation), a.uid);
