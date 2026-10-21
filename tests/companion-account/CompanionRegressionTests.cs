@@ -99,8 +99,7 @@ public class CompanionRegressionTests
 
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
         Assert.Equal(BlockReason.NoCredential, attempt.Reason);
-        Assert.Single(guilds);                              // the local Guildbook still received the roster
-        Assert.Equal(2, guilds[0].Single().Members.Count);
+        Assert.Empty(guilds);                               // private Guildbook is unavailable anonymously/offline
         Assert.Equal(new[] { 1 }, maps);                    // map metadata merged
         Assert.Empty(events);                               // no "synced"/"auth" claims
         Assert.Equal(new[] { BlockReason.NoCredential }, blocks);
@@ -119,7 +118,7 @@ public class CompanionRegressionTests
 
         var attempt = await service.SyncFileAsync(path, force: true);
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Single(guilds);
+        Assert.Empty(guilds);
         Assert.Empty(events);
         Assert.Single(blocks);
         Assert.Equal(0, rig.Server.SignupCount);

@@ -71,7 +71,14 @@ jobs:
         run: npx vitest run tests/unit/account-migration-conformance.test.ts
 
       - name: Integration suite (LS-1..LS-9, LS-11, claims, concurrency, preservation, rollback/recovery rehearsal, existing regressions)
-        run: node --test --test-concurrency=1 database/tests/account/*.test.mjs
+        run: |
+          tests=()
+          for test in database/tests/account/*.test.mjs; do
+            # The account-scoped Guildbook suite requires migration 0016 and runs below.
+            [[ "$test" == "database/tests/account/10_account_scoped_guildbook.test.mjs" ]] && continue
+            tests+=("$test")
+          done
+          node --test --test-concurrency=1 "${tests[@]}"
 
       # Zero-touch enrollment (migration 0014, ADR-017). Applied AFTER the 0012 suite on purpose: that suite asserts that exactly the 0012
       # functions exist. Nothing here touches a real Supabase project.
@@ -83,6 +90,14 @@ jobs:
 
       - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
         run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
+
+      # Account-scoped Guildbook (migration 0016). Applied only after the existing 0012/0014 suites so their
+      # compatibility assertions continue to exercise the legacy account read family unchanged.
+      - name: Apply 0016 (account-scoped Guildbook; capture provenance and independent public ingest)
+        run: database/tests/account/stack.sh apply16
+
+      - name: Account-scoped Guildbook suite (fresh-capture attribution, replay/staleness and cross-account isolation)
+        run: node --test --test-concurrency=1 database/tests/account/10_account_scoped_guildbook.test.mjs
 
       - name: Mutation check 0014 (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}

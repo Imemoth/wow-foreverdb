@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { lintAccountMigration, scanSql } from "@/lib/account/migration-conformance";
+import type { AccountRpcName } from "@/lib/account/contracts";
 
 /**
  * The ledger-consistent restoration migration (database/restore/0013_*.sql) redefines the same account functions as 0012 on purpose
@@ -12,6 +13,11 @@ import { lintAccountMigration, scanSql } from "@/lib/account/migration-conforman
 const root = resolve(__dirname, "../../../database");
 const m0012 = readFileSync(resolve(root, "migrations/0012_account_ownership_claims.sql"), "utf8");
 const m0013 = readFileSync(resolve(root, "restore/0013_account_ownership_claims_restore.sql"), "utf8");
+const NEW_RPC_NAMES: readonly AccountRpcName[] = [
+  "fdb_account_guildbook_ingest",
+  "fdb_account_guildbook_guilds_scoped",
+  "fdb_account_guildbook_members_scoped",
+];
 
 const shared = (sql: string): string => {
   const start = sql.indexOf("-- 2. Private schema objects");
@@ -23,7 +29,7 @@ const shared = (sql: string): string => {
 
 describe("0013 restoration migration", () => {
   it("passes the account conformance linter on its own (every guard, RPC, revoke and grant in canonical form)", () => {
-    expect(lintAccountMigration(m0013)).toEqual([]);
+    expect(lintAccountMigration(m0013, { skipRpcNames: NEW_RPC_NAMES })).toEqual([]);
   });
 
   it("defines exactly the 0012 objects: sections 2-6 are byte-identical to 0012", () => {
@@ -59,7 +65,7 @@ describe("0013 restoration migration", () => {
     const dir = resolve(root, "restore");
     const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && /fdb_account_|fdb_installation_link_status|fdb_caller|fdb_anonymous_caller|fdb_registered_caller/.test(readFileSync(resolve(dir, f), "utf8")));
     expect(files.length).toBeGreaterThan(0);
-    for (const f of files) expect(lintAccountMigration(readFileSync(resolve(dir, f), "utf8")), f).toEqual([]);
+    for (const f of files) expect(lintAccountMigration(readFileSync(resolve(dir, f), "utf8"), { skipRpcNames: NEW_RPC_NAMES }), f).toEqual([]);
   });
 
   it("only reads the migration ledger (never writes, updates or deletes it) and checks the recorded rollback first", () => {

@@ -14,17 +14,23 @@ type Rpc = keyof typeof ACCOUNT_RPC_GUARDS;
 const ARGS: Record<Rpc, string> = {
   fdb_account_claim_start: "p_installation_id text",
   fdb_account_claim_redeem: "p_code text",
+  fdb_account_guildbook_ingest: "p_installation_id text, p_capture_id text, p_captured_at bigint, p_source_character text, p_guilds jsonb",
   fdb_account_installations: "",
   fdb_account_guildbook_guilds: "p_installation_id text",
+  fdb_account_guildbook_guilds_scoped: "p_installation_id text",
   fdb_account_guildbook_members: "p_installation_id text, p_guild_key text, p_limit integer, p_offset integer",
+  fdb_account_guildbook_members_scoped: "p_installation_id text, p_guild_key text, p_limit integer, p_offset integer",
   fdb_installation_link_status: "p_installation_id text",
 };
 const TYPES: Record<Rpc, string> = {
   fdb_account_claim_start: "text",
   fdb_account_claim_redeem: "text",
+  fdb_account_guildbook_ingest: "text, text, bigint, text, jsonb",
   fdb_account_installations: "",
   fdb_account_guildbook_guilds: "text",
+  fdb_account_guildbook_guilds_scoped: "text",
   fdb_account_guildbook_members: "text, text, integer, integer",
+  fdb_account_guildbook_members_scoped: "text, text, integer, integer",
   fdb_installation_link_status: "text",
 };
 const RPC_NAMES = Object.keys(ARGS) as Rpc[];
@@ -148,7 +154,7 @@ describe("account migration conformance linter", () => {
     expect(Object.values(ACCOUNT_RPC_GUARDS).every((g) => g.endsWith("live_session"))).toBe(true);
     expect(ACCOUNT_RPC_GUARDS.fdb_account_claim_start).toBe("anonymous_owner_live_session");
     expect(ACCOUNT_RPC_GUARDS.fdb_account_claim_redeem).toBe("registered_live_session");
-    expect(ACCOUNT_HELPER_FUNCTIONS).toEqual([]);
+    expect(ACCOUNT_HELPER_FUNCTIONS).toEqual(["private.fdb_public_snapshot", "private.foreverdb_ingest_snapshot_impl_v1"]);
   });
 
   describe("the reviewed High finding: claim start without a live session", () => {
