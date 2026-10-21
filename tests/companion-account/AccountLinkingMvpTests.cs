@@ -205,7 +205,7 @@ public sealed class AccountLinkingMvpTests
     }
 
     [Fact]
-    public async Task Switching_to_an_account_that_does_not_own_the_registered_installation_blocks_device_sync()
+    public async Task Switching_to_an_account_that_does_not_own_the_registered_installation_keeps_public_device_sync_independent()
     {
         using var rig = new Rig();
         var anonymous = rig.SeedAnonymous();
@@ -244,10 +244,9 @@ public sealed class AccountLinkingMvpTests
             force: true,
             trigger: ForeverDB.Companion.Services.SyncTrigger.Manual);
 
-        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Equal(BlockReason.OwnedByDifferentAccount, attempt.Reason);
-        Assert.Equal(InstallationOwnership.OwnedByDifferentAccount, attempt.Ownership);
-        Assert.Equal(before, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
+        Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
+        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, attempt.Ownership);
+        Assert.Equal(before + 1, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
         Assert.Equal(firstAccount.Id, rig.Server.OwnerOf(InstallationId));
         Assert.Equal(InstallationId, rig.Runtime.Device.Context.Store.Read().Credential!.InstallationId);
         Assert.Equal(deviceCredentialBefore, File.ReadAllBytes(rig.Runtime.Device.Context.Store.BlobPath));
@@ -255,7 +254,7 @@ public sealed class AccountLinkingMvpTests
     }
 
     [Fact]
-    public async Task Device_sync_fails_closed_when_current_account_ownership_cannot_be_verified()
+    public async Task Device_sync_does_not_depend_on_interactive_account_ownership_verification()
     {
         using var rig = new Rig();
         var anonymous = rig.SeedAnonymous();
@@ -287,10 +286,8 @@ public sealed class AccountLinkingMvpTests
             force: true,
             trigger: ForeverDB.Companion.Services.SyncTrigger.Manual);
 
-        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Equal(BlockReason.OwnershipUnavailable, attempt.Reason);
-        Assert.Equal(before, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
-        Assert.Single(blocks);
-        Assert.Contains("could not be verified", blocks[0].Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
+        Assert.Equal(before + 1, rig.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest").Count);
+        Assert.Empty(blocks);
     }
 }
