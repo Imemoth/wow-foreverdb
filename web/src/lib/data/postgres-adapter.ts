@@ -35,6 +35,28 @@ import {
  */
 
 type Row = Record<string, unknown>;
+
+/**
+ * Operator diagnostic for a failed database call: error class only (SQLSTATE / Node error code, syscall, a short message
+ * with any connection string, host-and-credential URL or quoted value removed). Never the URL, password or row data; visitors
+ * only ever see the generic "public_data_unavailable".
+ */
+export function describeDbError(e: unknown): Record<string, string | number | null> {
+  const x = (e ?? {}) as { code?: unknown; errno?: unknown; syscall?: unknown; name?: unknown; message?: unknown };
+  const raw = typeof x.message === "string" ? x.message : "";
+  const message = raw
+    .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]")
+    .replace(/"[^"]*"/g, '"[value]"')
+    .replace(/\s+/g, " ")
+    .slice(0, 160);
+  return {
+    code: typeof x.code === "string" || typeof x.code === "number" ? String(x.code).slice(0, 40) : null,
+    name: typeof x.name === "string" ? x.name.slice(0, 40) : null,
+    syscall: typeof x.syscall === "string" ? x.syscall.slice(0, 40) : null,
+    message,
+  };
+}
+
 const num = (v: unknown) => (v == null ? null : Number(v));
 
 function toSearchRow(r: Row): SearchRow {
@@ -75,6 +97,7 @@ export class PostgresAdapter implements PublicDataAdapter {
     } catch (e) {
       // 22023 = invalid_parameter_value raised by web_api bounds checks.
       if ((e as { code?: string }).code === "22023") throw new InvalidQueryError((e as Error).message);
+      console.error(JSON.stringify({ at: new Date().toISOString(), event: "public_db_error", ...describeDbError(e) }));
       throw new Error("public_data_unavailable");
     }
   }
