@@ -1,6 +1,6 @@
 # ForeverDB Web — Vercel environments, deployment protection and release controls
 
-> **2026-10-12 draft Account V1 candidate only:** A separate server-side Account Auth/RPC boundary may **eventually** use the existing private Supabase HTTPS gateway in a protected owner-only pilot or separately approved production release. This is **not** a public-data connection and does not relax the `PUBLIC_READ_DATABASE_URL` or `NEXT_PUBLIC_*` isolation rules. Both code approval flags remain OFF and no Vercel/production activation has occurred. See [the Account V1 single-project runbook](../account-v1/single-project-candidate.md). The public-site architecture below remains binding.
+> **2026-10-12 draft Account V1 candidate only:** A separate server-side Account Auth/RPC boundary may **eventually** use the existing private Supabase HTTPS gateway in a protected owner-only pilot or separately approved production release. This is **not** a public-data connection and does not relax the `AZERDEX_READ_DB_URL` or `NEXT_PUBLIC_*` isolation rules. Both code approval flags remain OFF and no Vercel/production activation has occurred. See [the Account V1 single-project runbook](../account-v1/single-project-candidate.md). The public-site architecture below remains binding.
 
 
 Status of this document: **PREVIEW HARDENED (code) / production still BLOCKED.** Written for the PR `web/vercel-preview-hardening`. Nothing here enables production mode, provisions the public database, or publishes real observations.
@@ -49,7 +49,7 @@ Only the first two are required for the temporary demonstration; both are **non-
 | `RATE_LIMIT_SALT` | optional | recommended (32+ random bytes) | recommended | **required** |
 | `RATE_LIMIT_BACKEND` | `memory` | `memory` | `memory` | `upstash` |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | unset | unset | unset | **unset until Upstash is provisioned and reviewed** |
-| `PUBLIC_READ_DATABASE_URL` | unset | unset | unset | **unset until the public DB exists** |
+| `AZERDEX_READ_DB_URL` | unset | unset | unset | **unset until the public DB exists** |
 | `TURNSTILE_*`, `CHALLENGE_COOKIE_SECRET`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | unset | unset | unset | optional, after review |
 | Any `SUPABASE*`, `*SERVICE_ROLE*`, `DATABASE_URL`, `POSTGRES_URL*` | never | never | never | never |
 
@@ -162,3 +162,11 @@ Everything above (sections 1–9) describes the state as of the 2026-10-10..12 h
 - **Narrow homepage-only indexing exception**, implemented in `web/src/lib/seo.ts` (`isPublicBetaHomepage`) and gated by `web/src/lib/env.ts`'s `BETA_SEO_AUTHORIZED_BRANCH` (must equal the exact git branch serving the deployment, so a value copied to another branch's environment stays inert there): **only** `https://beta.azerdex.com/` — the bare homepage path, nothing else — is indexable (`index, follow`) when the deployment is simultaneously on the authorized branch, in `preview` mode, on `fixture` data, and exactly that hostname. Every other route on `beta.azerdex.com` (`/database`, `/zones`, `/guides`, `/news`, `/blog`, `/download`, `/account/*`, every entity/API path) stays `noindex, nofollow` exactly as §2's matrix already states for "Protected preview." `robots.txt` and `sitemap.xml` are adjusted to match (sitemap lists exactly the one authorized homepage URL; `robots.txt` otherwise disallows `/api/` and `/verify`). Verified live (public, unauthenticated smoke test, 2026-10-20): homepage served `meta name="robots" content="index, follow"` and canonical `https://beta.azerdex.com`; `/database`, `/zones`, `/guides`, `/news`, `/blog`, `/download`, `/account` all served `X-Robots-Tag: noindex, nofollow` and the matching meta tag.
 - **Beta rate limiting (read-only Vercel verification, 2026-10-20):** unlike the older generic Preview default in §2/§3 (`memory`), the branch-scoped `web/azerdex-beta` Preview setting is `RATE_LIMIT_BACKEND=upstash`. Upstash Marketplace REST API variables and `RATE_LIMIT_SALT` are configured in the Preview environment; `env.ts` supports those aliases and fails closed on missing REST credentials. These settings confirm configuration, not a separately witnessed Redis request or completed Production rate-limiter acceptance. Other developer Preview branches have independent settings.
 - **Production activation and real-data publication remain entirely separate, unapproved release operations** — this addendum changes nothing about §6's production-promotion control, the go-live checklist, or `FOREVERDB_DEPLOYMENT=production` staying blocked. The public beta is, and remains, a synthetic-fixture demonstration on the `preview` designation; see `docs/web/azerdex-roadmap.md` for the milestone ledger of what has shipped on this track (P1 through P2-E) versus what is still gated.
+
+## 11. Addendum (2026-10-21): `beta.azerdex.com` on real published data (P2-Z3)
+
+Supersedes the "synthetic-fixture demonstration" wording of §10 for the beta track once the integration PR is deployed: the beta then runs
+`FOREVERDB_DEPLOYMENT=preview` + `FOREVERDB_DATA_SOURCE=postgres` with `AZERDEX_READ_DB_URL` (a *sensitive*, branch-scoped variable using the
+`foreverdb_web_reader` role through the Supavisor transaction pooler) and never serves fixtures. The homepage-only indexing exception now requires
+`postgres` (not `fixture`) **and** a genuine active publication, checked per request. Variables, verification and rollback:
+[public-beta-release.md](public-beta-release.md). Production, `azerdex.com`, DNS, Cloudflare and other Preview branches are unchanged.

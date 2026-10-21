@@ -15,7 +15,7 @@ const production: RawEnv = {
   VERCEL_PROJECT_PRODUCTION_URL: "foreverdb.example",
   FOREVERDB_DEPLOYMENT: "production",
   FOREVERDB_DATA_SOURCE: "postgres",
-  PUBLIC_READ_DATABASE_URL: PUBLIC_DB,
+  AZERDEX_READ_DB_URL: PUBLIC_DB,
   SITE_URL: "https://foreverdb.example",
   RATE_LIMIT_BACKEND: "upstash",
   UPSTASH_REDIS_REST_URL: "https://x.upstash.io",
@@ -146,11 +146,11 @@ describe("future production", () => {
     expect(issues({ ...production, SITE_URL: "https://wow-foreverdb.vercel.app" })).toMatch(/production domain/);
   });
   it("is only valid with the separate PUBLIC database, never the private Supabase project", () => {
-    expect(issues({ ...production, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" })).toMatch(/PRIVATE production/);
-    expect(issues({ ...production, PUBLIC_READ_DATABASE_URL: "postgresql://postgres:pw@db.otherproject.supabase.co:5432/postgres" })).toMatch(/foreverdb_web_reader/);
-    expect(issues({ ...production, PUBLIC_READ_DATABASE_URL: "postgresql://service_role:pw@host.example/db" })).toMatch(/foreverdb_web_reader/);
-    expect(issues({ ...production, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@localhost:5432/db" })).toMatch(/local address/);
-    expect(issues({ ...production, PUBLIC_READ_DATABASE_URL: undefined })).toMatch(/PUBLIC_READ_DATABASE_URL is required/);
+    expect(issues({ ...production, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" })).toMatch(/PRIVATE production/);
+    expect(issues({ ...production, AZERDEX_READ_DB_URL: "postgresql://postgres:pw@db.otherproject.supabase.co:5432/postgres" })).toMatch(/foreverdb_web_reader/);
+    expect(issues({ ...production, AZERDEX_READ_DB_URL: "postgresql://service_role:pw@host.example/db" })).toMatch(/foreverdb_web_reader/);
+    expect(issues({ ...production, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@localhost:5432/db" })).toMatch(/local address/);
+    expect(issues({ ...production, AZERDEX_READ_DB_URL: undefined })).toMatch(/AZERDEX_READ_DB_URL is required/);
   });
 });
 
@@ -163,7 +163,7 @@ describe("private backend credentials never reach the public website", () => {
     expect(issues({ ...previewDemo, POSTGRES_URL: "postgresql://x" })).toMatch(/POSTGRES_URL/);
   });
   it("rejects any application variable that references the private project", () => {
-    expect(issues({ ...previewDemo, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co/db", FOREVERDB_DATA_SOURCE: "postgres" })).toMatch(/PRIVATE production/);
+    expect(issues({ ...previewDemo, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co/db", FOREVERDB_DATA_SOURCE: "postgres" })).toMatch(/PRIVATE production/);
     expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://klxhikdlfwgxurdyexdi.supabase.co" })).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
     // double percent-encoding and fullwidth spellings fold to the same reference
     expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://%256bl%2578hikdlfwgxurdyexdi.example" })).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
@@ -181,7 +181,7 @@ describe("error messages never echo secret values", () => {
   it("names variables only", () => {
     const secrets = ["SuperSecret123", "tok_live_ABCDEFGHIJKLMNOPQRSTUV", "salt-salt-salt-salt-salt-salt-salt-salt-1"];
     const all = [
-      issues({ ...production, PUBLIC_READ_DATABASE_URL: "postgresql://postgres:SuperSecret123@db.x.example/postgres" }),
+      issues({ ...production, AZERDEX_READ_DB_URL: "postgresql://postgres:SuperSecret123@db.x.example/postgres" }),
       issues({ ...production, UPSTASH_REDIS_REST_TOKEN: "tok_live_ABCDEFGHIJKLMNOPQRSTUV", RATE_LIMIT_BACKEND: "memory", FOREVERDB_DATA_SOURCE: "fixture" }),
       issues({ ...previewDemo, SUPABASE_SERVICE_ROLE_KEY: "salt-salt-salt-salt-salt-salt-salt-salt-1" }),
     ].join(" ");
@@ -198,20 +198,20 @@ describe("review hardening: normalisation, value-free messages, trusted IP", () 
     expect(issues({ ...previewDemo, RATE_LIMIT_BACKEND: "SECRET" })).not.toContain("SECRET");
   });
   it("detects the private project reference case-insensitively and percent-encoded", () => {
-    const db = (host: string, q = "") => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@${host}/db${q}` });
+    const db = (host: string, q = "") => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: `postgresql://foreverdb_web_reader:pw@${host}/db${q}` });
     expect(issues(db("db.KLXHIKDLFWGXURDYEXDI.supabase.co"))).toMatch(/PRIVATE production/);
     expect(issues(db("db.example.com", "?options=%6Clx&application_name=%4BLXHIKDLFWGXURDYEXDI"))).toMatch(/PRIVATE production/);
     expect(issues({ ...previewDemo, NEXT_PUBLIC_API_BASE: "https://KlxHikDlFwGxUrDyExDi.supabase.co" })).toMatch(/references the PRIVATE/);
   });
   it("treats loopback/private/unspecified spellings as local addresses", () => {
-    const db = (host: string) => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@${host}/db` });
+    const db = (host: string) => ({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: `postgresql://foreverdb_web_reader:pw@${host}/db` });
     for (const h of ["localhost.", "LOCALHOST", "0x7f.1", "127.1", "[::ffff:7f00:1]", "[::1]", "[::]", "[fd00::1]", "10.0.0.5", "169.254.1.1", "metadata.internal"]) {
       expect(issues(db(h)), h).toMatch(/local address/);
     }
     for (const u of ["https://localhost.", "https://[::ffff:7f00:1]", "https://[::]", "https://LOCALHOST", "https://0x7f.1", "https://[fe80::1]"]) {
       expect(issues({ ...previewDemo, SITE_URL: u }), u).toMatch(/local address/);
     }
-    expect(ok({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.example.com:6543/db" }).FOREVERDB_DATA_SOURCE).toBe("postgres");
+    expect(ok({ ...previewDemo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.example.com:6543/db" }).FOREVERDB_DATA_SOURCE).toBe("postgres");
   });
   it("falls through empty-string Vercel metadata when deriving SITE_URL", () => {
     const e = ok({ VERCEL: "1", VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "", VERCEL_URL: "wow-foreverdb-abc.vercel.app", FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture" });
@@ -271,7 +271,7 @@ describe("indexing surfaces follow the designation (robots.txt, sitemap)", () =>
   afterEach(() => vi.resetModules());
   async function surfaces(env: RawEnv) {
     vi.resetModules();
-    for (const k of Object.keys(process.env)) if (/^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP)/.test(k)) delete process.env[k];
+    for (const k of Object.keys(process.env)) if (/^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|AZERDEX_READ|TRUSTED_IP)/.test(k)) delete process.env[k];
     Object.assign(process.env, env);
     const robots = await (await import("@/app/robots")).default();
     const sitemap = await (await import("@/app/sitemap")).default();

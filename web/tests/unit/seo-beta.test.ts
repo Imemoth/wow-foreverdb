@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const meta = vi.fn();
+vi.mock("@/lib/data", () => ({ data: () => ({ meta }) }));
+
+import { hasGenuinePublication, isIndexablePublicBetaHomepage, isIndexablePublicBetaHost, isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
 
 /**
  * Pure allow-list logic for the narrowly-scoped public-beta homepage SEO exception (see
- * isPublicBetaHomepage in lib/seo.ts). Every one of the five conditions is independently
+ * isPublicBetaHomepage in lib/seo.ts). Every condition is independently
  * required: flipping any single one to false must make the whole check false.
  */
 
-const eligible = { FOREVERDB_DEPLOYMENT: "preview" as const, FOREVERDB_DATA_SOURCE: "fixture" as const, betaSeoBranchAuthorized: true };
+const eligible = { FOREVERDB_DEPLOYMENT: "preview" as const, FOREVERDB_DATA_SOURCE: "postgres" as const, betaSeoBranchAuthorized: true };
 const HOST = "beta.azerdex.com";
 
 describe("isPublicBetaHost: hostname/mode/data-source/branch, independently required", () => {
@@ -27,8 +31,8 @@ describe("isPublicBetaHost: hostname/mode/data-source/branch, independently requ
     expect(isPublicBetaHost({ ...eligible, FOREVERDB_DEPLOYMENT: "production" }, HOST)).toBe(false);
     expect(isPublicBetaHost({ ...eligible, FOREVERDB_DEPLOYMENT: "local" }, HOST)).toBe(false);
   });
-  it("rejects a non-fixture (postgres) data source", () => {
-    expect(isPublicBetaHost({ ...eligible, FOREVERDB_DATA_SOURCE: "postgres" }, HOST)).toBe(false);
+  it("rejects the synthetic fixture data source", () => {
+    expect(isPublicBetaHost({ ...eligible, FOREVERDB_DATA_SOURCE: "fixture" }, HOST)).toBe(false);
   });
   it("rejects an unauthorized (or wrong-branch) deployment", () => {
     expect(isPublicBetaHost({ ...eligible, betaSeoBranchAuthorized: false }, HOST)).toBe(false);
@@ -55,5 +59,40 @@ describe("robotsFor: the beta override short-circuits before the thin-content po
   it("indexes whenever the betaHomepage flag is explicitly passed, regardless of the indexable arg", () => {
     expect(robotsFor(false, true)).toEqual({ index: true, follow: true });
     expect(robotsFor(true, true)).toEqual({ index: true, follow: true });
+  });
+});
+
+describe("genuine active publication requirement (async)", () => {
+  beforeEach(() => { meta.mockReset(); });
+  const published = { mode: "published", publicationId: 10, publishedAt: "2026-10-21T09:45:00Z" };
+
+  it("is true only for a published dataset with an id and a publication time", async () => {
+    meta.mockResolvedValue(published);
+    expect(await hasGenuinePublication()).toBe(true);
+  });
+  it("is false for the synthetic sample, a missing publication id/time, and any database failure", async () => {
+    meta.mockResolvedValue({ ...published, mode: "synthetic-sample" });
+    expect(await hasGenuinePublication()).toBe(false);
+    meta.mockResolvedValue({ ...published, publicationId: null });
+    expect(await hasGenuinePublication()).toBe(false);
+    meta.mockResolvedValue({ ...published, publishedAt: null });
+    expect(await hasGenuinePublication()).toBe(false);
+    meta.mockImplementation(async () => { throw new Error("public_data_unavailable"); });
+    expect(await hasGenuinePublication()).toBe(false);
+  });
+  it("the indexable host/homepage checks need BOTH the static allow-list and the publication", async () => {
+    meta.mockResolvedValue(published);
+    expect(await isIndexablePublicBetaHost(eligible, HOST)).toBe(true);
+    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/")).toBe(true);
+    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/zones")).toBe(false);
+    expect(await isIndexablePublicBetaHomepage(eligible, "x.vercel.app", "/")).toBe(false);
+    meta.mockImplementation(async () => { throw new Error("down"); });
+    expect(await isIndexablePublicBetaHost(eligible, HOST)).toBe(false);
+    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/")).toBe(false);
+  });
+  it("does not even query the database when the static allow-list already fails", async () => {
+    await isIndexablePublicBetaHomepage({ ...eligible, betaSeoBranchAuthorized: false }, HOST, "/");
+    await isIndexablePublicBetaHost({ ...eligible, FOREVERDB_DATA_SOURCE: "fixture" }, HOST);
+    expect(meta).not.toHaveBeenCalled();
   });
 });

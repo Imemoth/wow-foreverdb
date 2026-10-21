@@ -10,7 +10,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
-import { BETA_SEO_HOSTNAME, isPublicBetaHomepage } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const h = await headers();
   const hostname = (h.get("host") ?? "").split(":")[0]!.toLowerCase();
   const pathname = h.get("x-request-pathname") ?? "";
-  const jsonLdBase = isPublicBetaHomepage(env, hostname, pathname) ? `https://${BETA_SEO_HOSTNAME}` : baseUrl;
+  const jsonLdBase = (await isIndexablePublicBetaHomepage(env, hostname, pathname)) ? `https://${BETA_SEO_HOSTNAME}` : baseUrl;
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">

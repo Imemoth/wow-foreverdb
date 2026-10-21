@@ -25,8 +25,8 @@ export function SiteFooter() {
         </nav>
         <p className="leading-relaxed">
           AzerDex is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment.
-          World of Warcraft and related names are trademarks of Blizzard Entertainment, Inc. No Blizzard artwork is
-          redistributed by this site.
+          World of Warcraft and related names are trademarks of Blizzard Entertainment, Inc. Zone map images are taken
+          from the game client and remain Blizzard&apos;s property; AzerDex claims no rights to them.
         </p>
       </div>
     </footer>

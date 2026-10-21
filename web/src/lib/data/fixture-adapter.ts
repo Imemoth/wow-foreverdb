@@ -1,4 +1,5 @@
 import "server-only";
+import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
 import {
   InvalidQueryError,
@@ -18,6 +19,9 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type SourceMapPoints,
+  type SourceMapPointsQuery,
+  type ZoneMapPoints,
   type ZoneSummary,
 } from "./types";
 
@@ -182,6 +186,25 @@ export class FixtureAdapter implements PublicDataAdapter {
       if (e.entity_kind === "source") for (const k of e.loot_kinds) lootKinds[k] = (lootKinds[k] ?? 0) + 1;
     }
     return { mapId, zoneName: z.zone_name, observations: z.observations, sourceCount: z.source_count, itemCount: z.item_count, displayKinds, lootKinds };
+  }
+
+  async zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints> {
+    if (!Number.isInteger(mapId) || mapId < 1 || mapId > 999_999 || !Number.isInteger(limit) || limit < 1 || limit > 3000 || lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateZoneMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), mapId, lootKind, limit);
+  }
+
+  async sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints> {
+    if (!["creature", "gameobject", "fishing"].includes(q.sourceType) || !Number.isInteger(q.sourceId) || q.sourceId < -2_147_483_648 || q.sourceId > 999_999_999
+        || (q.mapId != null && (!Number.isInteger(q.mapId) || q.mapId < 1 || q.mapId > 999_999))
+        || (q.sourceLevel != null && (!Number.isInteger(q.sourceLevel) || q.sourceLevel < 0 || q.sourceLevel > 255))
+        || !Number.isInteger(q.limit) || q.limit < 1 || q.limit > 3000 || q.lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateSourceMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), q);
   }
 
   async zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>> {

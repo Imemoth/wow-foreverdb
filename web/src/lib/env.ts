@@ -46,7 +46,7 @@ export type RawEnv = Record<string, string | undefined>;
 const Base = z.object({
   FOREVERDB_DEPLOYMENT: z.enum(["local", "preview", "production"]).optional(),
   FOREVERDB_DATA_SOURCE: z.enum(["fixture", "postgres"]).optional(),
-  PUBLIC_READ_DATABASE_URL: z.string().optional(),
+  AZERDEX_READ_DB_URL: z.string().optional(),
   SITE_URL: z.string().optional(),
   RATE_LIMIT_BACKEND: z.enum(["memory", "upstash"]).default("memory"),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
@@ -69,7 +69,7 @@ const Base = z.object({
 export interface ServerEnv {
   FOREVERDB_DEPLOYMENT: DeploymentKind;
   FOREVERDB_DATA_SOURCE: "fixture" | "postgres";
-  PUBLIC_READ_DATABASE_URL?: string;
+  AZERDEX_READ_DB_URL?: string;
   /** Resolved, normalised origin (no path). Always https on hosted deployments. */
   SITE_URL: string;
   RATE_LIMIT_BACKEND: "memory" | "upstash";
@@ -222,22 +222,22 @@ export function evaluateEnv(
 
   // 3. Public read database --------------------------------------------------
   if (dataSource === "postgres") {
-    const url = b.PUBLIC_READ_DATABASE_URL;
-    if (!url) fail("PUBLIC_READ_DATABASE_URL is required for the postgres data source");
+    const url = b.AZERDEX_READ_DB_URL;
+    if (!url) fail("AZERDEX_READ_DB_URL is required for the postgres data source");
     else if (referencesPrivateProject(url)) {
-      fail("PUBLIC_READ_DATABASE_URL points at the PRIVATE production database; refusing to start");
+      fail("AZERDEX_READ_DB_URL points at the PRIVATE production database; refusing to start");
     } else {
       let user = "";
       try {
         user = decodeURIComponent(new URL(url).username);
       } catch {
-        fail("PUBLIC_READ_DATABASE_URL is not a valid URL");
+        fail("AZERDEX_READ_DB_URL is not a valid URL");
       }
       // Plain role name, or Supavisor pooler form "<role>.<project-ref>".
       if (user !== "foreverdb_web_reader" && !user.startsWith("foreverdb_web_reader.")) {
-        fail("PUBLIC_READ_DATABASE_URL must use the least-privilege foreverdb_web_reader role");
+        fail("AZERDEX_READ_DB_URL must use the least-privilege foreverdb_web_reader role");
       }
-      if (host.hosted && isLocalHost(hostOf(url))) fail("PUBLIC_READ_DATABASE_URL must not point at a local address on a hosted deployment");
+      if (host.hosted && isLocalHost(hostOf(url))) fail("AZERDEX_READ_DB_URL must not point at a local address on a hosted deployment");
     }
   }
 

@@ -3,16 +3,16 @@ import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { data } from "@/lib/data";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { itemPath, sourcePath, zonePath } from "@/lib/routes";
-import { BETA_SEO_HOSTNAME, isPublicBetaHost, requestHostname } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHost, requestHostname } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 /** Only indexable entities (thin-content policy) and published, non-sample articles. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const env = serverEnv();
-  if (isPublicBetaHost(env, await requestHostname())) {
-    // The public beta is never allowed to advertise synthetic entities or sample articles - only
-    // the one approved, indexable homepage.
+  if (await isIndexablePublicBetaHost(env, await requestHostname())) {
+    // The public beta advertises only the one approved, indexable homepage (zone, source and item pages
+    // are noindex by the thin-content policy until the beta is promoted).
     return [{ url: `https://${BETA_SEO_HOSTNAME}/`, changeFrequency: "daily", priority: 1 }];
   }
   if (!isIndexable(env)) return [];

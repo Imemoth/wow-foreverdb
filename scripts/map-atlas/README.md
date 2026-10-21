@@ -1,0 +1,26 @@
+# AzerDex map atlas pipeline
+
+Turns the WoW: Forever client's map metadata + BLP textures into a versioned, CDN-ready WebP atlas
+(`dist/forever/{uiMapID}/{version}/…`, `dist/atlas/*.json`, `dist/_headers`). Full guide: [`docs/web/map-atlas.md`](../../docs/web/map-atlas.md).
+
+```
+pip install -r scripts/map-atlas/requirements.txt
+python scripts/map-atlas/atlas.py identity   --wow-root <WoW or _classic_beta_ folder> --bundle map-atlas-bundle
+python scripts/map-atlas/atlas.py fetch-db2  --bundle map-atlas-bundle            # exact-build DB2 CSVs (wago.tools)
+python scripts/map-atlas/atlas.py extract    --wow-root <...> --bundle map-atlas-bundle   # BLPs by FileDataID (Windows, CascLib.dll)
+python scripts/map-atlas/atlas.py build      --bundle map-atlas-bundle --out map-atlas-out [--previous-dist <last published dist>]
+python scripts/map-atlas/atlas.py verify-dist --dist map-atlas-out/dist --ledger map-atlas-out/ledger.next.json
+```
+
+Tests (synthetic client, no network): `cd scripts/map-atlas && python -m unittest discover -s tests`.
+
+| Module | Role |
+| --- | --- |
+| `identity.py` | Client build from `.build.info` (product, version, build key) — never assumed |
+| `csvtables.py`, `fetch.py` | DB2 CSVs read by column **name**; exact-build download (same source/shape as the Companion) |
+| `inventory.py` | Every UiMap, art variants, layers, tiles, hierarchy, floors, instance types; drawable vs. no-artwork |
+| `casc.py` | CascLib.dll FileDataID → BLP extraction (mirrors `NativeCascMapReader.cs`) |
+| `assemble.py`, `validate.py` | Tile placement identical to the Companion; blank/transparent/seam/aspect/WebP checks |
+| `versioning.py`, `packaging.py` | Append-only ledger, Pages limits, deterministic zip, superset (no-drop) guarantee |
+| `reference.py` | Evidence-only comparison with an accepted reference image (Tirisfal) |
+| `report.py`, `gallery.py` | Coverage report (discovery ≠ extraction) and offline preview gallery |
