@@ -232,3 +232,13 @@ been asserted).
   this site") — both concern actual Blizzard-sourced assets (e.g. CASC-extracted map
   textures); they are unaffected by this review's conclusion that these three images
   are not Blizzard-sourced.
+
+## Zone cinematic hero artwork (Hillsbrad Foothills, uiMapID 1424)
+
+`web/public/zones/hero/1424-hillsbrad-foothills-{1280,2000,mobile-600,mobile-900}.webp` are renditions of one owner-supplied
+panorama (2000x667, no baked-in text or UI), supplied to this session on 2026-10-21 for the Cinematic Zone Hero. Same status as
+the entries above: owner-supplied and approved for the project, subject to normal IP review; this record is the owner's attestation,
+not an independent verification of origin. Open points for that review: the image shows generic heraldic banners (lion crest) and a
+castle/bridge vista; confirm it is not a reproduction of a specific Blizzard location or mark. No AzerDex watermark has been embedded
+yet (the hero README's step 2 applies to the homepage hero set; decide whether this set needs it). The unmodified original is not
+stored in the repository. The existing atlas map artwork for the zone is untouched.

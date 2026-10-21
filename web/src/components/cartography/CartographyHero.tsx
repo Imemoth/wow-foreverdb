@@ -14,9 +14,8 @@ import { ArcaneSurveyBanner } from "./ArcaneSurveyBanner";
  * Unlike the content hubs, Database and Zones are functional pages, not landing/reading pages -
  * `compact` (Database) keeps the hero shallow so the search form stays close to the fold; Zones
  * (the default, taller) serves primarily as an exploration directory and can afford more scale.
- * zone/[id] detail pages intentionally do NOT use this component - they keep the existing
- * contained CartographyBanner, per the explicit "restrained, not another tall hero on every
- * data-heavy page" requirement.
+ * zone/[id] detail pages do NOT use this component - they use ZoneCinematicHero (components/zones); the old
+ * contained CartographyBanner is no longer used there (the detail page is data-heavy, so its hero stays contained).
  */
 export function CartographyHero({
   variant, compact, eyebrow, eyebrowIcon, children,

@@ -52,7 +52,9 @@ test.describe("zone detail page cartography", () => {
       await assertNoOverflow(page);
 
       await expect(page.getByRole("heading", { level: 1, name: "Tirisfal Glades" })).toBeVisible();
-      await expect(page.getByText("uiMapID 1420")).toBeVisible();
+      // the internal uiMapID is routing/data plumbing only: never shown in the hero
+      await expect(page.getByTestId("zone-hero")).toBeVisible();
+      await expect(page.getByTestId("zone-hero")).not.toContainText(/uiMapID|1420/);
       // 1. identity/summary stat tiles
       await expect(page.getByText("Sources", { exact: true })).toBeVisible();
       await expect(page.getByText("Located obs.", { exact: true })).toBeVisible();
