@@ -1,6 +1,6 @@
 # Account-scoped Guildbook integration report
 
-Status: implementation prepared for owner acceptance on `feature/account-scoped-guildbook-integration`. The final verified commit SHA is reported with the handoff; PRs #81, #82, and #83 remain unchanged.
+Status: implementation prepared for owner acceptance on `feature/account-scoped-guildbook-integration`. Final verified head before this report update: `6366eb28aa3fde776cfc89f2f7cd8eb847fae130`. PR [#88](https://github.com/Imemoth/wow-foreverdb/pull/88) is stacked on #83; PRs #81, #82, and #83 remain unchanged.
 
 Implemented:
 
@@ -15,7 +15,9 @@ Verification:
 - Web: 397 tests passed; typecheck, lint, production build, bundle-secret scan passed.
 - Addon: capture, collector, session, UI, and quest smoke suites passed.
 - Companion static/account checks passed; Windows Release build and .NET tests are wired in `.github/workflows/companion-account-auth.yml`.
-- Real PostgreSQL/GoTrue and Windows/.NET execution were not available in this workspace; no live migration or deployment was performed.
+- Exact-head GitHub CI passed: all 9 workflows, including disposable PostgreSQL/real GoTrue, GoTrue/PostgREST end-to-end, Windows/.NET Release, Companion account tests, web, API, and addon checks.
+- Normal Windows artifact: [ForeverDB-Companion-win-x64.zip](https://github.com/Imemoth/wow-foreverdb/actions/runs/39609128342/artifacts/12348714170), SHA-256 `a1edb48fe59c218a9e1a4386c8860255f895cf0bc5aca35380b3811c37d2fa06`.
+- No live migration or deployment was performed.
 
 Owner acceptance checklist:
 
