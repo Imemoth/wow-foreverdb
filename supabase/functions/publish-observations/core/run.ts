@@ -236,7 +236,7 @@ export async function runPublication(deps: RunDeps, req: RunRequest): Promise<Ru
     sample();
     metrics.totalMs = round1(now() - startedAt);
     const cpu1 = deps.cpuMs?.() ?? null;
-    metrics.cpuMs = cpu0 != null && cpu1 != null ? round1(cpu1 - cpu0) : null;
+    if (cpu0 != null && cpu1 != null) metrics.cpuMs = round1(cpu1 - cpu0); // only where the runtime really exposes it (Node); never invented
     metrics.peakRssMB = peakRss || null;
     metrics.peakHeapMB = peakHeap || null;
     if (priv) await priv.close().catch(() => undefined);

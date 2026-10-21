@@ -387,20 +387,55 @@ export function countsOf(p: Projection): Record<string, number> {
   };
 }
 
-/** Deterministic hash over the published content (canonical JSON, sorted keys), streamed in ~64 KB pieces. */
+/**
+ * Deterministic hash over the published content: the canonical JSON (sorted keys, no whitespace) fed to SHA-256 in pieces.
+ * Uses the engine's native JSON.stringify with an ARRAY replacer, which both allow-lists and ORDERS property names; the sorted
+ * union of all property names therefore yields exactly the per-object sorted-key text of `canonicalJson`, at a fraction of
+ * the CPU of a JS-level writer. (test/golden-hash.test.ts proves the two agree.)
+ */
 export function contentHash(p: Projection): string {
+  const keys = sortedKeyUnion(p);
   const h = createHash("sha256");
-  let buf = "";
-  const flush = () => {
-    if (buf) h.update(buf);
-    buf = "";
-  };
-  writeCanonical(p, (piece) => {
-    buf += piece;
-    if (buf.length >= 65_536) flush();
+  const top = Object.keys(p).sort();
+  h.update("{");
+  top.forEach((k, i) => {
+    h.update(`${i > 0 ? "," : ""}${JSON.stringify(k)}:`);
+    const v = (p as unknown as Record<string, unknown>)[k];
+    if (!Array.isArray(v)) {
+      h.update(JSON.stringify(v, keys));
+      return;
+    }
+    h.update("[");
+    for (let at = 0; at < v.length; at += 2000) {
+      const piece = JSON.stringify(v.slice(at, at + 2000), keys);
+      h.update(`${at > 0 ? "," : ""}${piece.slice(1, -1)}`);
+    }
+    h.update("]");
   });
-  flush();
+  h.update("}");
   return h.digest("hex");
+}
+
+/** Every property name that occurs anywhere in the projection (rows of one table share their shape), sorted. */
+function sortedKeyUnion(p: Projection): string[] {
+  const names = new Set<string>(Object.keys(p));
+  const visit = (v: unknown): void => {
+    if (v === null || typeof v !== "object") return;
+    if (Array.isArray(v)) {
+      for (const e of v) visit(e);
+      return;
+    }
+    for (const k of Object.keys(v as object)) {
+      names.add(k);
+      visit((v as Record<string, unknown>)[k]);
+    }
+  };
+  for (const k of Object.keys(p)) {
+    const v = (p as unknown as Record<string, unknown>)[k];
+    if (!Array.isArray(v)) visit(v);
+    else for (const row of v) visit(row);
+  }
+  return [...names].sort();
 }
 
 export function canonicalJson(v: unknown): string {

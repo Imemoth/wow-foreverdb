@@ -35,6 +35,9 @@ begin
     v_id := pub_admin.record_run('manual', 'rehearse', 'rehearsal_ok', null, null, null, 'test-0', now(), now(), repeat('b', 64),
                                  '{"totalMs": 123.4}'::jsonb);
     if v_id is null then raise exception 'FAIL: record_run returned nothing'; end if;
+    if pub_admin.record_run('cron', 'publish', 'duplicate', null, null, null, 'test-0', now(), null, null, '{}'::jsonb) <= v_id then
+        raise exception 'FAIL: run ids not increasing';
+    end if;
     foreach stmt in array array[
         'select pub_admin.record_run(''cron'', ''publish'', ''exploded'', null, null, null, ''t'', now(), null, null, ''{}''::jsonb)',
         'select pub_admin.record_run(''cron'', ''publish'', ''failed'', null, repeat(''x'', 81), null, ''t'', now(), null, null, ''{}''::jsonb)',
@@ -62,6 +65,9 @@ begin
     if (v_status->>'activePublicationId') is null or v_status->'counts' is null
        or v_status->'lastRun' is not null and false then
         raise exception 'FAIL: ops_status incomplete: %', v_status;
+    end if;
+    if (v_status->'lease'->>'abandoned') is null or (v_status->'lease'->>'heldNow') is null then
+        raise exception 'FAIL: ops_status lease section missing: %', v_status;
     end if;
     if jsonb_typeof(v_status->'previousAvailableForRollback') <> 'boolean' or jsonb_typeof(v_status->'stale') <> 'boolean' then
         raise exception 'FAIL: ops_status flags missing: %', v_status;

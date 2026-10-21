@@ -37,3 +37,37 @@ describe.skipIf(!url)("zone map points: fixture <-> PostgreSQL parity", () => {
     }
   });
 });
+
+describe.skipIf(!url)("source map points: fixture <-> PostgreSQL parity (web_api.source_map_points, migration 0005)", () => {
+  const q = (o: Partial<Parameters<PublicDataAdapter["sourceMapPoints"]>[0]> = {}) =>
+    ({ sourceType: "creature", sourceId: 9001, mapId: null, lootKind: null, sourceLevel: null, limit: 3000, ...o }) as Parameters<PublicDataAdapter["sourceMapPoints"]>[0];
+  it("serves the expected dataset (guards against comparing two empty answers)", async () => {
+    const r = await pg!.sourceMapPoints(q());
+    expect(r.points.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(r.points.map((p) => p.mapId))).toEqual(new Set([1420, 1421]));
+  });
+  it.each([null, 1420, 1421, 999])("zone filter %s: identical rows, order and totals", async (mapId) => {
+    expect(await pg!.sourceMapPoints(q({ mapId }))).toEqual(await fixture.sourceMapPoints(q({ mapId })));
+  });
+  it.each([["creature", 9002], ["gameobject", 9201], ["fishing", 9301], ["creature", 1]] as const)("%s %i", async (sourceType, sourceId) => {
+    expect(await pg!.sourceMapPoints(q({ sourceType, sourceId }))).toEqual(await fixture.sourceMapPoints(q({ sourceType, sourceId })));
+  });
+  it.each(LOCATED_LOOT_KINDS.map((k) => [k]))("kind filter %s", async (k) => {
+    expect(await pg!.sourceMapPoints(q({ lootKind: k }))).toEqual(await fixture.sourceMapPoints(q({ lootKind: k })));
+  });
+  it("level filter and truncation flag", async () => {
+    expect(await pg!.sourceMapPoints(q({ sourceLevel: 10 }))).toEqual(await fixture.sourceMapPoints(q({ sourceLevel: 10 })));
+    expect(await pg!.sourceMapPoints(q({ limit: 1 }))).toEqual(await fixture.sourceMapPoints(q({ limit: 1 })));
+  });
+  it("the zone overview and the source read return the same cells for the same source and zone", async () => {
+    const zoneRows = (await pg!.zoneMapPoints(1420, null, 3000)).points.filter((p) => p.sourceType === "creature" && p.sourceId === 9001);
+    const srcRows = (await pg!.sourceMapPoints(q({ mapId: 1420 }))).points.map(({ mapId: _m, ...rest }) => rest);
+    expect(srcRows).toEqual(zoneRows);
+  });
+  it("both reject the same invalid parameters", async () => {
+    for (const bad of [{ sourceType: "item" }, { limit: 0 }, { limit: 3001 }, { mapId: 0 }, { mapId: 1_000_000 }, { sourceLevel: 256 }, { lootKind: "disenchant" }] as const) {
+      await expect(pg!.sourceMapPoints(q(bad as never))).rejects.toThrow();
+      await expect(fixture.sourceMapPoints(q(bad as never))).rejects.toThrow();
+    }
+  });
+});

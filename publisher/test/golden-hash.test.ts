@@ -32,3 +32,18 @@ describe("projection output is stable", () => {
     expect(canonicalJson({ b: [1, { z: null, a: "x" }], a: true })).toBe('{"a":true,"b":[1,{"a":"x","z":null}]}');
   });
 });
+
+describe("fast content hash equals the canonical-JSON hash", () => {
+  it.each([1, 3])("synthetic scale %i", async (scale) => {
+    const { createHash } = await import("node:crypto");
+    const { projection, report } = buildProjection(syntheticExport(scale), config);
+    expect(report.contentSha256).toBe(createHash("sha256").update(canonicalJson(projection)).digest("hex"));
+  });
+  it("fixture export", () => {
+    const fixture = JSON.parse(readFileSync(resolve(__dirname, "../../database/tests/fixtures/zone_semantics_export.json"), "utf8"));
+    const { projection, report } = buildProjection(fixture, config);
+    return import("node:crypto").then(({ createHash }) => {
+      expect(report.contentSha256).toBe(createHash("sha256").update(canonicalJson(projection)).digest("hex"));
+    });
+  });
+});

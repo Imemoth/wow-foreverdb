@@ -36,7 +36,9 @@ $PSQL -d $PRIV -f database/tests/public_projection_export_smoke.sql 2>&1 | grep 
 
 $PSQL -d $PUB -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
 $PSQL -d $PUB -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
-pass "public read model applied (0001 + 0002)"
+$PSQL -d $PUB -f database/public-read/migrations/0003_publication_operations.sql >/dev/null 2>&1
+$PSQL -d $PUB -f database/public-read/migrations/0005_source_map_points.sql >/dev/null 2>&1
+pass "public read model applied (0001 + 0002 + 0003 + 0005; 0004 needs Supabase and is covered by scripts/public-hosted-compat.sh)"
 
 # Test-only logins (never reused anywhere real).
 $PSQL -d postgres -c "alter role foreverdb_projection_reader login password 'it-only'" \
@@ -86,6 +88,8 @@ PUB2=fdb_it_zone
 $PSQL -d postgres -c "drop database if exists $PUB2" -c "create database $PUB2" >/dev/null
 $PSQL -d $PUB2 -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
 $PSQL -d $PUB2 -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
+$PSQL -d $PUB2 -f database/public-read/migrations/0003_publication_operations.sql >/dev/null 2>&1
+$PSQL -d $PUB2 -f database/public-read/migrations/0005_source_map_points.sql >/dev/null 2>&1
 out=$(cd publisher && PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${PUB2}" \
       npx tsx src/cli.ts publish --from-export ../database/tests/fixtures/zone_semantics_export.json)
 echo "$out" | grep -q '"outcome":"activated"' || fail "zone-semantics publish: $out"
@@ -101,6 +105,8 @@ PUB3=fdb_it_zonemap
 $PSQL -d postgres -c "drop database if exists $PUB3" -c "create database $PUB3" >/dev/null
 $PSQL -d $PUB3 -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
 $PSQL -d $PUB3 -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null 2>&1
+$PSQL -d $PUB3 -f database/public-read/migrations/0003_publication_operations.sql >/dev/null 2>&1
+$PSQL -d $PUB3 -f database/public-read/migrations/0005_source_map_points.sql >/dev/null 2>&1
 out=$(cd publisher && PUBLIC_PUBLISHER_DATABASE_URL="postgresql://foreverdb_publisher:it-only@${H}:${PGPORT}/${PUB3}" \
       npx tsx src/cli.ts publish --from-export ../database/tests/fixtures/zone_semantics_export.json)
 echo "$out" | grep -q '"outcome":"activated"' || fail "zone-map publish: $out"
@@ -109,6 +115,13 @@ echo "$zm" | grep -E "PASS|FAIL"
 echo "$zm" | grep -q FAIL && fail "zone map points SQL reported FAIL"
 [ "$(echo "$zm" | grep -c PASS)" = 7 ] || fail "zone map points SQL: expected 7 PASS lines"
 pass "zone-map points: privacy floor, quantization, bounds and access verified (PUB3=$PUB3)"
+
+# 0005: per-source map points, same privacy rules, consistent with the zone read (same throwaway database, after the zone test planted its rows).
+sm=$($PSQL -d $PUB3 -f database/public-read/tests/public_read_source_map_points.sql 2>&1) || { echo "$sm"; fail "source map points SQL"; }
+echo "$sm" | grep -E "PASS|FAIL"
+echo "$sm" | grep -q FAIL && fail "source map points SQL reported FAIL"
+[ "$(echo "$sm" | grep -c PASS)" = 6 ] || fail "source map points SQL: expected 7 PASS lines"
+pass "source map points: consistent with the zone read; floor, bounds and access verified"
 echo "ALL PIPELINE CHECKS PASSED"
 echo "PUBLIC_READ_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB}"
 echo "PARITY_DATABASE_URL=postgresql://foreverdb_web_reader:it-only@${H}:${PGPORT}/${PUB2}"

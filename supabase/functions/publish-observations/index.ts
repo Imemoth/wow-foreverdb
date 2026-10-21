@@ -11,7 +11,6 @@
 // the public database uses the project's own SUPABASE_DB_URL and assumes `foreverdb_publisher` with SET LOCAL ROLE in every
 // transaction, so RLS and the publisher's grants apply. Neither value is ever logged or returned.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import process from "node:process";
 import postgres from "postgres";
 import { z } from "zod";
 import config from "./publication-config.generated.ts";
@@ -55,16 +54,6 @@ async function open(url: string, appName: string): Promise<ClosableSqlClient> {
     query: async (text, params) => ({ rows: (await sql.unsafe(text, (params ?? []) as never[])) as unknown as Record<string, unknown>[] }),
     close: () => sql.end({ timeout: 5 }),
   };
-}
-
-function cpuMs(): number | null {
-  try {
-    const u = process.cpuUsage();
-    const ms = (u.user + u.system) / 1000;
-    return Number.isFinite(ms) && ms > 0 ? ms : null;
-  } catch {
-    return null;
-  }
 }
 
 function memory() {
@@ -122,7 +111,8 @@ Deno.serve(async (req) => {
       openPublic: () => open(dbUrl, "publish-observations-write"),
       publicRole: PUBLISHER_ROLE,
       log,
-      cpuMs,
+      // No cpuMs hook: process.cpuUsage() is "Not implemented" in the Edge runtime. Real CPU time per execution is in the
+      // platform's own Shutdown log record (cpu_time_used); see docs/web/public-publication-operations.md.
       memory,
     },
     body,

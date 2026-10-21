@@ -15,6 +15,8 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type SourceMapPoints,
+  type SourceMapPointsQuery,
   type ZoneMapPoints,
   type LootKind,
   type ZoneSummary,
@@ -144,6 +146,21 @@ export class PostgresAdapter implements PublicDataAdapter {
       points: rows.map((r) => ({
         sourceType: r.source_type as SourceType, sourceId: Number(r.source_id), sourceLevel: Number(r.source_level), name: String(r.name),
         lootKind: r.loot_kind as LootKind, subzone: String(r.subzone_name ?? ""), x: Number(r.x), y: Number(r.y), observations: Number(r.observations),
+      })),
+      totalCells: rows.length ? Number(rows[0]!.total_count) : 0,
+      truncated: rows.length ? Number(rows[0]!.total_count) > rows.length : false,
+    };
+  }
+
+  async sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints> {
+    const rows = await this.q("select * from web_api.source_map_points($1, $2, $3, $4, $5, $6)",
+      [q.sourceType, q.sourceId, q.mapId, q.lootKind, q.sourceLevel, q.limit]);
+    return {
+      sourceType: q.sourceType, sourceId: q.sourceId,
+      points: rows.map((r) => ({
+        sourceType: r.source_type as SourceType, sourceId: Number(r.source_id), sourceLevel: Number(r.source_level), name: String(r.name),
+        lootKind: r.loot_kind as LootKind, mapId: Number(r.map_id), subzone: String(r.subzone_name ?? ""), x: Number(r.x), y: Number(r.y),
+        observations: Number(r.observations),
       })),
       totalCells: rows.length ? Number(rows[0]!.total_count) : 0,
       truncated: rows.length ? Number(rows[0]!.total_count) > rows.length : false,
