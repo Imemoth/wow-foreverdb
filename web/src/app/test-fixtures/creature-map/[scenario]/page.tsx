@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { SourceDetailView } from "@/components/SourcePage";
+import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { pageContext } from "@/lib/page";
 import type { DropRow, LocationPoint, SourceDetail, SourceVariant } from "@/lib/data/types";
 
@@ -8,8 +9,9 @@ import type { DropRow, LocationPoint, SourceDetail, SourceVariant } from "@/lib/
  * zones, in zones without published cells, or at a level that is missing from one zone, so those states are fed here as SYNTHETIC
  * `SourceDetail`s into the SAME `SourceDetailView` the real /creature/[id] page renders (same builder, selector and map engine).
  *
- * Fail-closed: 404 unless E2E_FIXTURES_ENABLED=1 (set only by playwright.zone-maps.config.ts's webServer env, never in the real
- * app, beta or production). Always noindex.
+ * Fail-closed in depth: the proxy refuses the path and this page 404s unless `e2eFixturesAllowed()` holds, i.e. E2E_FIXTURES_ENABLED=1
+ * AND an explicit local fixture configuration (no Vercel signal, FOREVERDB_DEPLOYMENT=local, fixture data, no database URL, localhost
+ * SITE_URL). The flag alone never exposes it on the beta or Production. Always noindex.
  */
 export const metadata = { robots: { index: false, follow: false } };
 
@@ -52,7 +54,7 @@ const SCENARIOS: Record<string, SourceDetail> = {
 };
 
 export default async function CreatureMapHarness({ params, searchParams }: { params: Promise<{ scenario: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if (process.env.E2E_FIXTURES_ENABLED !== "1") notFound();
+  if (!e2eFixturesAllowed()) notFound();
   const s = SCENARIOS[(await params).scenario];
   if (!s) notFound();
   const { nonce, baseUrl } = await pageContext();

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
 import { assetOriginForPage } from "@/lib/maps/zone-maps-gate";
 import { isIndexablePublicBetaHomepage } from "@/lib/seo";
@@ -73,6 +74,10 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   const { pathname } = request.nextUrl;
+  // Synthetic e2e harness pages: refused before any page code runs unless the strict local-fixture gate holds (see lib/e2e-fixtures.ts).
+  if ((pathname === E2E_FIXTURE_PATH_PREFIX || pathname.startsWith(`${E2E_FIXTURE_PATH_PREFIX}/`)) && !e2eFixturesAllowed()) {
+    return new NextResponse("Not found", { status: 404, headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "text/plain; charset=utf-8" } });
+  }
   const isAccountApi = isAccountApiPath(pathname);
   const isApi = pathname.startsWith("/api/") || isAccountApi;
   // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every

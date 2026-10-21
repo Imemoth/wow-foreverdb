@@ -28,12 +28,39 @@ interface Props {
 
 // The selected level lives in the URL (`?level=N`, or the `#level-N` anchor the rest of the site links to): one source of truth that
 // survives reloads and shares, and that needs no effect to synchronize. Changes are made with replaceState (no history entry per click).
+//
+// Next.js navigates within a page (a next/link or router.push to `/creature/<id>#level-N`) with history.pushState, which fires neither
+// `hashchange` nor `popstate`. While anyone is subscribed, pushState/replaceState are therefore wrapped to notify (and restored afterwards),
+// so same-page client-side transitions update the level exactly like native anchors, back/forward and the selector do.
 const listeners = new Set<() => void>();
+const notify = () => { for (const l of [...listeners]) l(); };
+
+function watchHistory(): () => void {
+  const { pushState, replaceState } = window.history;
+  const wrap = (orig: History["pushState"]): History["pushState"] =>
+    function (this: History, ...args) { const r = orig.apply(this, args); notify(); return r; };
+  const push = wrap(pushState);
+  const replace = wrap(replaceState);
+  window.history.pushState = push;
+  window.history.replaceState = replace;
+  return () => {
+    if (window.history.pushState === push) window.history.pushState = pushState;
+    if (window.history.replaceState === replace) window.history.replaceState = replaceState;
+  };
+}
+
+let stopWatching: (() => void) | null = null;
 const subscribe = (cb: () => void) => {
+  if (listeners.size === 0) stopWatching = watchHistory();
   listeners.add(cb);
   window.addEventListener("hashchange", cb);
   window.addEventListener("popstate", cb);
-  return () => { listeners.delete(cb); window.removeEventListener("hashchange", cb); window.removeEventListener("popstate", cb); };
+  return () => {
+    listeners.delete(cb);
+    window.removeEventListener("hashchange", cb);
+    window.removeEventListener("popstate", cb);
+    if (listeners.size === 0) { stopWatching?.(); stopWatching = null; }
+  };
 };
 const urlSnapshot = () => window.location.search + window.location.hash;
 
@@ -41,8 +68,7 @@ function writeLevel(level: number | null) {
   const url = new URL(window.location.href);
   if (level == null) url.searchParams.delete("level"); else url.searchParams.set("level", String(level));
   url.hash = "";
-  window.history.replaceState(window.history.state, "", url.pathname + url.search);
-  for (const l of listeners) l();
+  window.history.replaceState(window.history.state, "", url.pathname + url.search); // notifies subscribers
 }
 
 export function CreatureLevelView({ sourceName, assetBase, options, initialLevel, sections, zones, plainZones, zoneLinks }: Props) {

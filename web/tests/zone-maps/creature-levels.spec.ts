@@ -104,6 +104,61 @@ test.describe("real creature page (fixture 1547: levels 5 and 6)", () => {
   });
 });
 
+test.describe("#level-N navigation selects the level (same page, client-side, history)", () => {
+  const nav = (page: Page, href: string) =>
+    page.evaluate((h) => (window as unknown as { next: { router: { push: (h: string) => void } } }).next.router.push(h), href);
+
+  test("a marker's source link (next/link to /creature/<id>#level-N) selects that level on the same page", async ({ page }) => {
+    await page.goto("/creature/1547");
+    await mapReady(page);
+    await levelButton(page, 6).click();
+    await levelButton(page, "all").click();
+    await markers(page).first().click({ force: true });
+    const link = page.getByTestId("detail-source-link").first();
+    const href = (await link.getAttribute("href")) ?? "";
+    const level = Number(/#level-(\d+)$/.exec(href)?.[1]);
+    expect([5, 6]).toContain(level);
+    await link.click();
+    await expect(levelButton(page, level)).toHaveAttribute("aria-pressed", "true");
+    await expect(sectionVisible(page, level === 5 ? 6 : 5)).toBeHidden();
+    await expect(sectionVisible(page, level)).toBeVisible();
+    await expect.poll(() => page.url()).toContain(`#level-${level}`);
+  });
+
+  test("router.push of a #level-N URL on the same page, then another level, then browser back/forward", async ({ page }) => {
+    await page.goto("/creature/1547");
+    await page.waitForFunction(() => Boolean((window as unknown as { next?: { router?: unknown } }).next?.router));
+    await nav(page, "/creature/1547#level-6");
+    await expect(levelButton(page, 6)).toHaveAttribute("aria-pressed", "true");
+    await expect(sectionVisible(page, 5)).toBeHidden();
+    await nav(page, "/creature/1547#level-5");
+    await expect(levelButton(page, 5)).toHaveAttribute("aria-pressed", "true");
+    await expect(sectionVisible(page, 6)).toBeHidden();
+    await page.goBack();
+    await expect(levelButton(page, 6)).toHaveAttribute("aria-pressed", "true");
+    await page.goForward();
+    await expect(levelButton(page, 5)).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a plain in-page #level-N anchor and a selector pick keep each other consistent", async ({ page }) => {
+    await page.goto("/creature/1547");
+    await levelButton(page, 5).click();
+    await page.evaluate(() => { window.location.hash = "#level-6"; });
+    await expect(levelButton(page, 6)).toHaveAttribute("aria-pressed", "true");
+    await levelButton(page, "all").click();
+    await expect(levelButton(page, "all")).toHaveAttribute("aria-pressed", "true");
+    expect(page.url()).not.toContain("#level-");
+  });
+
+  test("soft navigation from another page to /creature/<id>#level-N selects the level and loads the map", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => Boolean((window as unknown as { next?: { router?: unknown } }).next?.router));
+    await nav(page, "/creature/1547#level-6");
+    await expect(levelButton(page, 6)).toHaveAttribute("aria-pressed", "true");
+    await mapReady(page);
+  });
+});
+
 test.describe("creature without published locations (reference: Chakuyak, levels 5 and 6, Mulgore)", () => {
   test("shows the real zone artwork, an explicit notice, no invented marker; level stats remain reachable", async ({ page }) => {
     await page.goto(harness("no-locations"));
