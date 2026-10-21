@@ -116,14 +116,30 @@ function toSearchRow(r: Row): SearchRow {
   };
 }
 
+/** Hostnames of the Supabase connection pooler (Supavisor), e.g. aws-0-eu-west-1.pooler.supabase.com. Nothing else gets the extra CA. */
+const SUPABASE_POOLER_HOST = /^aws-\d{1,2}-[a-z0-9-]{3,30}\.pooler\.supabase\.com$/;
+
+function hostnameOf(connectionString: string): string | null {
+  try {
+    return new URL(connectionString).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return null;
+  }
+}
+
 /**
- * TLS options for the pool. Remote connections ALWAYS verify the server certificate and host name. The trust store is Node's built-in
- * roots plus the Supabase Root 2021 CA (the Supabase pooler's chain ends in that private root, see supabase-ca.ts); nothing else is
- * trusted and verification is never relaxed. A localhost URL (developer machine / CI) is plain TCP.
+ * TLS options for the pool. Remote connections ALWAYS verify the server certificate and host name (rejectUnauthorized stays true, no
+ * checkServerIdentity override). Only a connection to a Supabase pooler host additionally trusts the Supabase Root 2021 CA (that pooler's
+ * chain ends in this private root, see supabase-ca.ts), added to Node's built-in roots; every other remote database uses Node's default
+ * trust store unchanged. A localhost URL (developer machine / CI) is plain TCP.
  */
 export function buildSslOptions(connectionString: string): pg.ClientConfig["ssl"] {
   if (/@(localhost|127\.0\.0\.1)[:/]/.test(connectionString)) return undefined;
-  return { rejectUnauthorized: true, ca: [...tls.rootCertificates, SUPABASE_ROOT_2021_CA] };
+  const host = hostnameOf(connectionString);
+  if (host !== null && SUPABASE_POOLER_HOST.test(host)) {
+    return { rejectUnauthorized: true, ca: [...tls.rootCertificates, SUPABASE_ROOT_2021_CA] };
+  }
+  return { rejectUnauthorized: true };
 }
 
 export class PostgresAdapter implements PublicDataAdapter {
