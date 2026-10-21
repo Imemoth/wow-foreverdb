@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env";
-import { assetOrigin } from "@/lib/maps/asset-url";
-import { zoneMapsEnabled, isZoneMapRoute } from "@/lib/maps/zone-maps-gate";
+import { assetOriginForPage } from "@/lib/maps/zone-maps-gate";
 import { isIndexablePublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
@@ -174,10 +173,9 @@ export async function proxy(request: NextRequest) {
     dev: process.env.NODE_ENV !== "production",
     turnstile: Boolean(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
     https,
-    // Narrowest possible: only the POC map route, and (when AZERDEX_ZONE_MAPS=1) the zone/source detail routes that embed the
-    // map, may load assets from the (allow-listed) asset host. Every other route keeps the strict policy.
-    assetOrigin: pathname.startsWith("/poc/maps/") || (zoneMapsEnabled() && isZoneMapRoute(pathname))
-      ? assetOrigin(process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL) : null,
+    // The validated asset origin (img-src + connect-src only) is on EVERY HTML document while the zone-map experience is on, because a
+    // client-side navigation keeps the CSP of the page the visitor first loaded (see assetOriginForPage). Off => strict policy everywhere.
+    assetOrigin: assetOriginForPage(pathname, process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

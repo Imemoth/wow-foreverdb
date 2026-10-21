@@ -11,7 +11,7 @@ import { parseMapFocus, zoneMapHref } from "@/lib/maps/focus";
 import { resolveObservedMap } from "@/lib/maps/identity";
 import { pointsFromSource, pointsFromZoneRows, sourceZonesWithPoints } from "@/lib/maps/observation-adapters";
 import { NO_FILTER, filterPoints } from "@/lib/maps/observations";
-import { isZoneMapRoute, zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
+import { assetOriginForPage, isZoneMapRoute, zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
 import { buildPageCsp } from "@/lib/security/headers";
 
 const db = new FixtureAdapter();
@@ -217,6 +217,27 @@ describe("feature gate and CSP scope", () => {
   it("only the zone and source-detail routes are map routes", () => {
     for (const ok of ["/zone/1420", "/creature/1508", "/object/1731", "/object/-5", "/fishing/12"]) expect(isZoneMapRoute(ok)).toBe(true);
     for (const no of ["/", "/zones", "/item/2770", "/database", "/account/devices", "/zone/1420/extra", "/zone/abc", "/api/zone/1", "/poc/maps/tirisfal", "/zone/"]) expect(isZoneMapRoute(no)).toBe(false);
+  });
+  it("assetOriginForPage: every HTML document gets the validated origin while the experience is on (soft navigation keeps the first document's CSP)", () => {
+    const base = "https://azerdex-assets.pages.dev";
+    const on = { AZERDEX_ZONE_MAPS: "1" };
+    for (const p of ["/", "/zones", "/database", "/item/2770", "/about/data", "/download", "/zone/1420", "/object/1731", "/account/login", "/verify"]) {
+      expect(assetOriginForPage(p, base, on), p).toBe("https://azerdex-assets.pages.dev");
+    }
+  });
+  it("assetOriginForPage: gate off keeps the strict policy everywhere (Production today), except the separate POC rule", () => {
+    const base = "https://azerdex-assets.pages.dev";
+    for (const p of ["/", "/zones", "/zone/1420", "/object/1731", "/database"]) expect(assetOriginForPage(p, base, {}), p).toBeNull();
+    expect(assetOriginForPage("/zone/1420", base, { AZERDEX_ZONE_MAPS: "0" })).toBeNull();
+    expect(assetOriginForPage("/poc/maps/tirisfal", base, {})).toBe("https://azerdex-assets.pages.dev");
+  });
+  it("assetOriginForPage: only an allow-listed https origin is ever emitted (never wildcard, http, other hosts, userinfo, ports)", () => {
+    const on = { AZERDEX_ZONE_MAPS: "1" };
+    for (const bad of ["https://evil.example", "http://azerdex-assets.pages.dev", "https://azerdex-assets.pages.dev:8443", "https://u:p@azerdex-assets.pages.dev", "*", "https:", "//azerdex-assets.pages.dev"]) {
+      expect(assetOriginForPage("/", bad, on), bad).toBeNull();
+    }
+    expect(assetOriginForPage("/", undefined, on)).toBeNull(); // unset base = same-origin assets, nothing to allow
+    expect(assetOriginForPage("/", "/maps", on)).toBeNull();
   });
   it("the asset origin widens ONLY img-src and connect-src, and only when passed", () => {
     const base = { dev: false, turnstile: false, https: true };

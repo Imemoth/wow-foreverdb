@@ -196,17 +196,16 @@ test.describe("Z2 zone page: real CDN artwork on every zone", () => {
 });
 
 test.describe("security: CSP, CORS, resilience", () => {
-  test("CSP gains the CDN origin ONLY on the zone/source routes (img-src + connect-src), nowhere else", async ({ request }) => {
+  test("CSP gains the CDN origin on every HTML page (soft navigation keeps the first document's policy), ONLY in img-src + connect-src", async ({ request }) => {
     const csp = async (p: string) => (await request.get(p)).headers()["content-security-policy"]!;
     const dir = (c: string, n: string) => c.split(";").map((x) => x.trim()).find((x) => x.startsWith(n + " "))!;
-    for (const p of ["/zone/1420", "/zone/1426", "/object/1731", "/creature/1508"]) {
+    for (const p of ["/", "/zones", "/database", "/item/2770", "/about", "/zone/1420", "/zone/1426", "/object/1731", "/creature/1508"]) {
       const c = await csp(p);
       expect(dir(c, "img-src"), p).toContain(`https://${CDN_HOST}`);
       expect(dir(c, "connect-src"), p).toContain(`https://${CDN_HOST}`);
-      expect(dir(c, "script-src"), p).not.toContain(CDN_HOST);
-      expect(dir(c, "style-src"), p).not.toContain(CDN_HOST);
+      for (const d of ["script-src", "style-src", "default-src", "font-src", "frame-src", "form-action", "object-src"]) expect(dir(c, d), `${p} ${d}`).not.toContain(CDN_HOST);
+      expect(c, p).not.toMatch(/unsafe-inline|\*|\shttps:(\s|;|$)/);
     }
-    for (const p of ["/", "/zones", "/database", "/item/2770", "/about"]) expect(await csp(p), p).not.toContain(CDN_HOST);
   });
 
   test("the browser enforces CORS: without Access-Control-Allow-Origin the manifest is blocked and the page degrades gracefully", async ({ page }) => {
