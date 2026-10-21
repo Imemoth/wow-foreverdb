@@ -1,5 +1,7 @@
 import "server-only";
+import tls from "node:tls";
 import pg from "pg";
+import { SUPABASE_ROOT_2021_CA } from "./supabase-ca";
 import {
   InvalidQueryError,
   type DatasetMeta,
@@ -114,6 +116,16 @@ function toSearchRow(r: Row): SearchRow {
   };
 }
 
+/**
+ * TLS options for the pool. Remote connections ALWAYS verify the server certificate and host name. The trust store is Node's built-in
+ * roots plus the Supabase Root 2021 CA (the Supabase pooler's chain ends in that private root, see supabase-ca.ts); nothing else is
+ * trusted and verification is never relaxed. A localhost URL (developer machine / CI) is plain TCP.
+ */
+export function buildSslOptions(connectionString: string): pg.ClientConfig["ssl"] {
+  if (/@(localhost|127\.0\.0\.1)[:/]/.test(connectionString)) return undefined;
+  return { rejectUnauthorized: true, ca: [...tls.rootCertificates, SUPABASE_ROOT_2021_CA] };
+}
+
 export class PostgresAdapter implements PublicDataAdapter {
   readonly mode = "published" as const;
   private pool: pg.Pool;
@@ -129,7 +141,7 @@ export class PostgresAdapter implements PublicDataAdapter {
       statement_timeout: 3_000,
       query_timeout: 4_000,
       application_name: "foreverdb-web",
-      ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(connectionString) ? undefined : { rejectUnauthorized: true },
+      ssl: buildSslOptions(connectionString),
     });
     this.pool.on("error", () => {
       /* idle client errors are logged by the caller path; never crash the process */
