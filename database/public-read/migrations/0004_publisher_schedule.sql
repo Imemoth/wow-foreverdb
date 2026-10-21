@@ -83,7 +83,7 @@ begin
     select net.http_post(
         url => v_url || '/functions/v1/publish-observations',
         headers => jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_jwt, 'x-publish-token', v_tok),
-        body => jsonb_build_object('mode', p_mode, 'trigger', p_trigger, 'source', p_source, 'scale', p_scale),
+        body => jsonb_strip_nulls(jsonb_build_object('mode', p_mode, 'trigger', p_trigger, 'source', p_source, 'scale', p_scale)),
         timeout_milliseconds => 150000) into v_id;
     return v_id;
 end;

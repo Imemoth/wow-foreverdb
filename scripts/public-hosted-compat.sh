@@ -29,10 +29,11 @@ $A -c "select 'admin is superuser: ' || rolsuper from pg_roles where rolname = c
 $A -f database/public-read/migrations/0001_public_read_model.sql >/dev/null
 $A -f database/public-read/migrations/0002_zone_map_points.sql >/dev/null
 $A -f database/public-read/migrations/0003_publication_operations.sql >/dev/null
+$A -f database/public-read/migrations/0005_source_map_points.sql >/dev/null
 # pg_cron / pg_net are real extensions on Supabase; here their schemas are stubs.
 sed -e '/^create extension if not exists pg_cron;/d' -e '/^create extension if not exists pg_net/d' \
     database/public-read/migrations/0004_publisher_schedule.sql | $A >/dev/null
-echo "PASS: migrations 0001-0004 applied as a non-superuser admin"
+echo "PASS: migrations 0001-0005 applied as a non-superuser admin"
 # One real publication (synthetic fixture export) through the shared core + Node CLI as the dedicated login role.
 # (the admin may SET ROLE to the web reader only for tests: the migrations never grant that)
 $A -c "grant foreverdb_web_reader to current_user with set true, inherit false"

@@ -7,7 +7,8 @@
 // Authentication: the gateway verifies a project JWT (verify_jwt = true) AND the caller must present the Vault-held
 // `x-publish-token`, which is validated inside the database (pub_ops.verify_invoke_token). Failures answer 401 with no detail.
 //
-// Credentials: PRIVATE_EXPORT_DATABASE_URL (secret, role foreverdb_projection_reader) for the private read;
+// Credentials: the private read uses the connection of role foreverdb_projection_reader, taken from the PRIVATE_EXPORT_DATABASE_URL
+// secret when set, otherwise from this project's encrypted Vault (pub_ops.private_export_url, migration 0006);
 // the public database uses the project's own SUPABASE_DB_URL and assumes `foreverdb_publisher` with SET LOCAL ROLE in every
 // transaction, so RLS and the publisher's grants apply. Neither value is ever logged or returned.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -15,6 +16,7 @@ import postgres from "postgres";
 import { z } from "zod";
 import config from "./publication-config.generated.ts";
 import { PublicationConfig } from "./core/contract.ts";
+import { PublicationError } from "./core/project.ts";
 import { runPublication } from "./core/run.ts";
 import { verifyInvokeToken, type ClosableSqlClient } from "./core/sql.ts";
 
@@ -54,6 +56,25 @@ async function open(url: string, appName: string): Promise<ClosableSqlClient> {
     query: async (text, params) => ({ rows: (await sql.unsafe(text, (params ?? []) as never[])) as unknown as Record<string, unknown>[] }),
     close: () => sql.end({ timeout: 5 }),
   };
+}
+
+/** The export identity's connection URL from this project's Vault, read as the publisher role (never logged, never returned). */
+async function vaultPrivateUrl(dbUrl: string): Promise<string | null> {
+  const c = await open(dbUrl, "publish-observations-credential");
+  try {
+    await c.query("begin");
+    try {
+      await c.query(`set local role ${PUBLISHER_ROLE}`);
+      const rows = (await c.query("select pub_ops.private_export_url() as u")).rows;
+      await c.query("commit");
+      return typeof rows[0]?.u === "string" ? (rows[0].u as string) : null;
+    } catch (e) {
+      await c.query("rollback").catch(() => undefined);
+      throw e;
+    }
+  } finally {
+    await c.close().catch(() => undefined);
+  }
 }
 
 function memory() {
@@ -101,13 +122,17 @@ Deno.serve(async (req) => {
   const body = parsed.data;
   if (body.source === "synthetic" && body.mode === "publish") return json(400, { error: "synthetic_publish_refused" });
 
-  const privateUrl = Deno.env.get("PRIVATE_EXPORT_DATABASE_URL");
+  const envPrivateUrl = Deno.env.get("PRIVATE_EXPORT_DATABASE_URL");
   const summary = await runPublication(
     {
       config: PublicationConfig.parse(config),
       workerVersion: WORKER_VERSION,
       runtime: "supabase-edge",
-      openPrivate: privateUrl ? () => open(privateUrl, "publish-observations-export") : null,
+      openPrivate: async () => {
+        const url = envPrivateUrl ?? (await vaultPrivateUrl(dbUrl));
+        if (!url) throw new PublicationError("private_export_not_configured");
+        return open(url, "publish-observations-export");
+      },
       openPublic: () => open(dbUrl, "publish-observations-write"),
       publicRole: PUBLISHER_ROLE,
       log,
