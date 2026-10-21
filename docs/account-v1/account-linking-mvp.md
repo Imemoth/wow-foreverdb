@@ -33,6 +33,8 @@ The claim code and enrollment ticket live only in process memory during the exch
 - A damaged existing device credential is preserved and never silently replaced. The user can recover through the existing activation-file flow.
 - A readable credential for a different local installation, or an unreadable device credential, is detected before claim creation; no ownership transfer occurs when this computer cannot accept the resulting device registration.
 - Sign-out continues to revoke only the human Companion session. Registered device revocation remains independent and effective on the next device call.
+- **Switch account** signs out the current human session with the same local-scope revocation, then shows the existing sign-in form. **Return to anonymous mode** restores the preserved anonymous identity when available. Neither action deletes SavedVariables, changes installation IDs, transfers ownership or clears the registered-device credential.
+- While a human account is signed in, every registered-device upload first verifies through `fdb_installation_link_status` that the current account owns that installation. A different account or an unavailable ownership check blocks before `fdb_device_ingest` and appears in Companion Status. Anonymous/logged-out mode continues to rely on the independently revocable device credential and its server-side ownership check.
 
 ## Reused implementation
 

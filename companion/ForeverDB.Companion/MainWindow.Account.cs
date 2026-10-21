@@ -338,6 +338,11 @@ public partial class MainWindow
         var buttonsEnabled = !_accountBusy;
         AccountSignInButton.IsEnabled = buttonsEnabled;
         AccountSignOutButton.IsEnabled = buttonsEnabled;
+        AccountSwitchAccountButton.IsEnabled = buttonsEnabled;
+        AccountReturnAnonymousButton.IsEnabled = buttonsEnabled;
+        AccountSignOutButton.Content = reauth
+            ? "Clear obsolete local sign-in"
+            : "Sign out";
     }
 
     private InstallationRow BuildInstallationRow(
@@ -627,6 +632,32 @@ public partial class MainWindow
         object sender,
         RoutedEventArgs e)
     {
+        await LeaveRegisteredModeAsync(LeaveRegisteredAction.SignOut);
+    }
+
+    private async void AccountSwitchAccount_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await LeaveRegisteredModeAsync(LeaveRegisteredAction.SwitchAccount);
+    }
+
+    private async void AccountReturnAnonymous_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await LeaveRegisteredModeAsync(LeaveRegisteredAction.ReturnAnonymous);
+    }
+
+    private enum LeaveRegisteredAction
+    {
+        SignOut,
+        SwitchAccount,
+        ReturnAnonymous
+    }
+
+    private async Task LeaveRegisteredModeAsync(LeaveRegisteredAction action)
+    {
         var account = _account;
 
         if (account is null ||
@@ -640,8 +671,38 @@ public partial class MainWindow
         try
         {
             var outcome = await account.Sessions.SignOutRegisteredAsync();
-            ShowAccountMessage(
-                AccountMessages.Describe(outcome));
+            if (outcome is not (SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending))
+            {
+                ShowAccountMessage(AccountMessages.Describe(outcome));
+                return;
+            }
+
+            if (action == LeaveRegisteredAction.SwitchAccount)
+            {
+                _signInRequested = true;
+                AccountEmailBox.Clear();
+                AccountPasswordBox.Clear();
+                ShowAccountMessage(outcome == SignOutOutcome.Confirmed
+                    ? "Signed out. Enter the other ForeverDB account. Existing installation ownership will be checked before sync."
+                    : "Signed out locally. Server revocation will be retried; enter the other ForeverDB account. Existing installation ownership will be checked before sync.");
+                RefreshAccountUi();
+                AccountEmailBox.Focus();
+                return;
+            }
+
+            if (action == LeaveRegisteredAction.ReturnAnonymous)
+            {
+                var anonymous = await account.Sessions.StartAnonymousAsync(confirmReplaceLostIdentity: false);
+                _signInRequested = false;
+                ShowAccountMessage(AccountMessages.Describe(anonymous));
+                if (anonymous is StartAnonymousOutcome.Created or StartAnonymousOutcome.RestoredLegacyIdentity or StartAnonymousOutcome.AlreadyAnonymous)
+                {
+                    await ResyncAfterIdentityChangeAsync();
+                }
+                return;
+            }
+
+            ShowAccountMessage(AccountMessages.Describe(outcome));
         }
         finally
         {

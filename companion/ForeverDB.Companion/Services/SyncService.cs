@@ -116,6 +116,28 @@ public sealed class SyncService
         // An installation owned by this computer's registered device (or about to be) never takes the anonymous path.
         if (_device is { } device && device.Handles(snapshot.InstallationId))
         {
+            if (device.IsBoundTo(snapshot.InstallationId))
+            {
+                var accountAuthorization = await _coordinator.AuthorizeDeviceForCurrentAccountAsync(
+                    snapshot.InstallationId,
+                    cancellationToken);
+                if (accountAuthorization is not null)
+                {
+                    if (accountAuthorization.Outcome != SyncOutcome.StaleDiscarded)
+                    {
+                        SyncBlocked?.Invoke(
+                            this,
+                            new SyncBlockedEventArgs(
+                                snapshot.InstallationId,
+                                accountAuthorization.Reason,
+                                false,
+                                AccountMessages.Describe(accountAuthorization.Reason)));
+                    }
+
+                    return accountAuthorization;
+                }
+            }
+
             return await SyncRegisteredDeviceAsync(device, snapshot, json, force, trigger, cancellationToken);
         }
 
