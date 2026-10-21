@@ -89,7 +89,14 @@ jobs:
         run: database/tests/account/stack.sh apply14
 
       - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
-        run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
+        run: |
+          tests=()
+          for test in database/tests/enrollment/*.test.mjs; do
+            # The multi-installation collector suite requires migration 0017 and runs below.
+            [[ "$test" == "database/tests/enrollment/11_independent_collectors.test.mjs" ]] && continue
+            tests+=("$test")
+          done
+          node --test --test-concurrency=1 "${tests[@]}"
 
       # Account-scoped Guildbook (migration 0016). Applied only after the existing 0012/0014 suites so their
       # compatibility assertions continue to exercise the legacy account read family unchanged.
