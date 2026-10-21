@@ -69,6 +69,26 @@ public class DeviceEnrollmentTests
     }
 
     [Fact]
+    public async Task One_device_session_can_enroll_two_installations_without_transferring_either_owner()
+    {
+        using var rig = new DeviceRig();
+        var first = rig.Installation;
+        var second = "inst-second-0123456789abcde";
+
+        var firstTicket = new ActivationTicket(rig.NewTicket(), null, null);
+        Assert.Equal(DeviceState.Registered, (await rig.Enrollment.EnrollTicketAsync(firstTicket, first)).State);
+        var secondTicket = new ActivationTicket(rig.NewTicket(), null, null);
+        Assert.Equal(DeviceState.Registered, (await rig.Enrollment.EnrollTicketAsync(secondTicket, second)).State);
+
+        Assert.Equal(rig.Account.Id, rig.Server.OwnerOf(first));
+        Assert.Equal(rig.Account.Id, rig.Server.OwnerOf(second));
+        Assert.Equal(2, rig.Context.Store.InstallationIds().Count);
+        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncNowAsync(rig.Snapshot(first))).Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncNowAsync(rig.Snapshot(second))).Outcome);
+        Assert.Equal(2, rig.Backend.DeviceIngests);
+    }
+
+    [Fact]
     public async Task A3_after_a_restart_the_registration_persists_without_an_activation_file_or_a_new_identity()
     {
         using var rig = new DeviceRig();

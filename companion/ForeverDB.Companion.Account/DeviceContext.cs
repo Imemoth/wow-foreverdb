@@ -194,6 +194,7 @@ public sealed class DeviceContext
     private readonly object _statusLock = new();
     private DeviceStatus _status = DeviceStatus.Initial;
     private string? _installationId;
+    private readonly HashSet<string> _installationIds = new(StringComparer.Ordinal);
 
     public DeviceContext(
         string directory,
@@ -238,10 +239,28 @@ public sealed class DeviceContext
         get { lock (_statusLock) { return _installationId; } }
     }
 
+    /// <summary>All installation ids observed locally, including credentials migrated from the legacy single slot.</summary>
+    public IReadOnlyCollection<string> InstallationIds
+    {
+        get { lock (_statusLock) { return _installationIds.ToArray(); } }
+    }
+
     internal void NoteInstallation(string? installationId)
     {
         if (installationId is null) return;
-        lock (_statusLock) { _installationId = installationId; }
+        lock (_statusLock)
+        {
+            _installationId = installationId;
+            _installationIds.Add(installationId);
+        }
+    }
+
+    internal void NoteInstallations(IEnumerable<string> installationIds)
+    {
+        foreach (var installationId in installationIds)
+        {
+            NoteInstallation(installationId);
+        }
     }
 
     /// <summary>A readable device credential exists: the local state is Registered unless a more specific state is already known.</summary>

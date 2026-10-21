@@ -54,6 +54,8 @@ public sealed class GuildbookAccountScopeTests
             "ForeverDB_Export = \"H|9|0.5.0-alpha|inst-1|100|capture-a|100|Character-A\\nG|gk|Private%20Guild|Realm|100\\nC|gk|guid|Member|Rogue|ROGUE|60|Officer|1|1|Zone|0\\nS|creature|1|1|Wolf\"");
 
         var service = new SyncService(rig.Runtime.Sync, guildbook: privateSync);
+        AccountGuildbookSyncResult? privateOutcome = null;
+        service.GuildbookSyncCompleted += (_, e) => privateOutcome = e.Result;
         var result = await service.SyncFileAsync(path, force: true, trigger: SyncTrigger.Manual);
 
         Assert.Equal(SyncOutcome.Synced, result!.Outcome);
@@ -64,6 +66,9 @@ public sealed class GuildbookAccountScopeTests
         Assert.Empty(snapshot.GetProperty("guilds").EnumerateArray());
         Assert.Equal(anonymous.UserId, rig.Server.OwnerOf("inst-1"));
         Assert.Empty(privateRpc.Captures);
+        Assert.NotNull(privateOutcome);
+        Assert.False(privateOutcome!.Loaded);
+        Assert.False(privateOutcome.CaptureAccepted);
     }
 
     [Fact]

@@ -30,6 +30,7 @@ public sealed class SyncService
 
     public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
+    public event EventHandler<GuildbookSyncCompletedEventArgs>? GuildbookSyncCompleted;
     public event Action<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
     public event EventHandler<SyncBlockedEventArgs>? SyncBlocked;
 
@@ -151,6 +152,12 @@ public sealed class SyncService
             force,
             cancellationToken);
 
+        if (_device is { } registeredDevice && registeredDevice.NeedsEnrollment(snapshot.InstallationId) &&
+            attempt.Outcome is not (SyncOutcome.Synced or SyncOutcome.UpToDate))
+        {
+            attempt = SyncAttempt.Blocked(BlockReason.CollectorEnrollmentRequired, attempt.Ownership);
+        }
+
         await SyncGuildbookAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         switch (attempt.Outcome)
@@ -190,22 +197,27 @@ public sealed class SyncService
         return attempt;
     }
 
-    private async Task SyncGuildbookAsync(
+    private async Task<AccountGuildbookSyncResult?> SyncGuildbookAsync(
         ForeverDbSnapshot snapshot,
         CancellationToken cancellationToken)
     {
         if (_guildbook is null)
         {
-            return;
+            return null;
         }
 
         try
         {
-            await _guildbook.SyncAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            var result = await _guildbook.SyncAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            GuildbookSyncCompleted?.Invoke(this, new GuildbookSyncCompletedEventArgs(snapshot.InstallationId, result));
+            return result;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // Account identity cancellation is an expected stale-work result.
+            var result = new AccountGuildbookSyncResult(false, false, true);
+            GuildbookSyncCompleted?.Invoke(this, new GuildbookSyncCompletedEventArgs(snapshot.InstallationId, result));
+            return result;
         }
     }
 
@@ -285,6 +297,10 @@ public sealed record SyncCompletedEventArgs(
     int SourceCount,
     int GuildMemberCount,
     SyncTrigger Trigger);
+
+public sealed record GuildbookSyncCompletedEventArgs(
+    string InstallationId,
+    AccountGuildbookSyncResult Result);
 
 public sealed record SyncBlockedEventArgs(
     string InstallationId,

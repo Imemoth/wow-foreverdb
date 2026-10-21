@@ -34,9 +34,10 @@ public sealed class DeviceSyncService
 {
     private readonly DeviceContext _ctx;
     private readonly bool _enabled;
-    private bool _checked;
-    private bool _needsRotation;
-    private int _staleStrikes;
+    private readonly HashSet<string> _checked = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _needsRotation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _staleStrikes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DeviceCredential> _lastCredential = new(StringComparer.Ordinal);
 
     public DeviceSyncService(DeviceContext context, bool enabled = true)
     {
@@ -54,13 +55,17 @@ public sealed class DeviceSyncService
     /// </summary>
     public bool Handles(string installationId) =>
         _enabled &&
-        (string.Equals(_ctx.InstallationId, installationId, StringComparison.Ordinal) || _ctx.Status.State == DeviceState.PendingActivation);
+        (_ctx.Store.Read(installationId).Status == DeviceCredentialStatus.Ok || _ctx.Status.State == DeviceState.PendingActivation);
+
+    /// <summary>True when this installation has not yet been enrolled in the independent collector path.</summary>
+    public bool NeedsEnrollment(string installationId) =>
+        _enabled && _ctx.Store.Read(installationId).Status == DeviceCredentialStatus.Missing;
 
     /// <summary>True when an active local registered-device path is bound to this installation.</summary>
     public bool IsBoundTo(string installationId) =>
         _enabled &&
         _ctx.Status.State == DeviceState.Registered &&
-        string.Equals(_ctx.InstallationId, installationId, StringComparison.Ordinal);
+        _ctx.Store.Read(installationId).Status == DeviceCredentialStatus.Ok;
 
     public Task<DeviceSyncResult> SyncNowAsync(string snapshotJson, CancellationToken ct = default) =>
         RunAsync(snapshotJson, ct);
@@ -72,6 +77,12 @@ public sealed class DeviceSyncService
 
     /// <summary>Startup classification: <c>fdb_device_status</c>, plus a credential rotation when the server asks for it.</summary>
     public async Task<DeviceStatus> CheckStatusAsync(CancellationToken ct = default)
+    {
+        var installation = _ctx.InstallationIds.FirstOrDefault() ?? _ctx.Store.InstallationIds().FirstOrDefault();
+        return installation is null ? _ctx.Status : await CheckStatusAsync(installation, ct).ConfigureAwait(false);
+    }
+
+    public async Task<DeviceStatus> CheckStatusAsync(string installationId, CancellationToken ct = default)
     {
         if (!_enabled)
         {
@@ -85,7 +96,7 @@ public sealed class DeviceSyncService
             return _ctx.Status;
         }
 
-        var read = _ctx.Store.Read();
+        var read = _ctx.Store.Read(installationId);
         if (read.Status != DeviceCredentialStatus.Ok)
         {
             ApplyReadFailure(read);
@@ -93,7 +104,7 @@ public sealed class DeviceSyncService
         }
 
         var credential = read.Credential!;
-        if (await PrepareAsync(credential, ct).ConfigureAwait(false) is { } stop)
+        if (await PrepareAsync(credential, installationId, ct).ConfigureAwait(false) is { } stop)
         {
             return stop.Status;
         }
@@ -121,7 +132,7 @@ public sealed class DeviceSyncService
             return Result(DeviceSyncOutcome.RetryLater);
         }
 
-        var read = _ctx.Store.Read();
+        var read = _ctx.Store.Read(installationId);
         if (read.Status != DeviceCredentialStatus.Ok)
         {
             if (read.Status == DeviceCredentialStatus.Missing)
@@ -150,12 +161,12 @@ public sealed class DeviceSyncService
             return Result(DeviceSyncOutcome.Blocked);
         }
 
-        if (await PrepareAsync(credential, ct).ConfigureAwait(false) is { } stop)
+        if (await PrepareAsync(credential, installationId, ct).ConfigureAwait(false) is { } stop)
         {
             return stop;
         }
 
-        credential = _lastCredential ?? credential;
+        credential = _lastCredential.TryGetValue(installationId, out var rotatedCredential) ? rotatedCredential : credential;
         var token = await _ctx.Session.GetTokenAsync(allowCreate: false, ct).ConfigureAwait(false);
         if (!token.Ok)
         {
@@ -189,7 +200,7 @@ public sealed class DeviceSyncService
         var call = reply.Value!;
         if (call.Ok)
         {
-            _staleStrikes = 0;
+            _staleStrikes[installationId] = 0;
             _ctx.Set(DeviceState.Registered, DeviceDetail.Synced);
             return new DeviceSyncResult(DeviceSyncOutcome.Synced, _ctx.Status);
         }
@@ -197,13 +208,11 @@ public sealed class DeviceSyncService
         return await RefusedAsync(call.Error, credential, ct).ConfigureAwait(false);
     }
 
-    private DeviceCredential? _lastCredential;
-
     /// <summary>Classifies the device with the server and rotates the credential when asked. A non-null result stops the caller.</summary>
-    private async Task<DeviceSyncResult?> PrepareAsync(DeviceCredential credential, CancellationToken ct)
+    private async Task<DeviceSyncResult?> PrepareAsync(DeviceCredential credential, string installationId, CancellationToken ct)
     {
-        _lastCredential = null;
-        if (!_checked)
+        _lastCredential.Remove(installationId);
+        if (!_checked.Contains(installationId))
         {
             var probe = await _ctx.ProbeAsync(credential, ct).ConfigureAwait(false);
             if (probe.Token != DeviceTokenStatus.Ok)
@@ -222,11 +231,11 @@ public sealed class DeviceSyncService
                 return Result(DeviceSyncOutcome.Blocked);
             }
 
-            _checked = true;
-            _needsRotation = probe.NeedsRotation;
+            _checked.Add(installationId);
+            _needsRotation[installationId] = probe.NeedsRotation;
         }
 
-        if (!_needsRotation)
+        if (!_needsRotation.GetValueOrDefault(installationId))
         {
             return null;
         }
@@ -261,7 +270,7 @@ public sealed class DeviceSyncService
         try
         {
             // Durable BEFORE first use. The server accepts the current and the next secret, so a crash anywhere in here loses nothing.
-            _ctx.Store.Write(next);
+            _ctx.Store.WriteForInstallation(next);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -270,8 +279,8 @@ public sealed class DeviceSyncService
             return null;
         }
 
-        _needsRotation = false;
-        _lastCredential = next;
+        _needsRotation[installationId] = false;
+        _lastCredential[installationId] = next;
         return null;
     }
 
@@ -295,7 +304,9 @@ public sealed class DeviceSyncService
             case DeviceCallError.DeviceCredentialStale:
                 // The server holds a newer credential than the one presented. Retry once on a later call; if it is still stale the
                 // local credential is not the current one and only a new activation recovers it. Never loops, never swaps identity.
-                if (++_staleStrikes >= 2)
+                var strikes = _staleStrikes.GetValueOrDefault(credential.InstallationId) + 1;
+                _staleStrikes[credential.InstallationId] = strikes;
+                if (strikes >= 2)
                 {
                     _ctx.Set(DeviceState.CredentialDamaged, DeviceDetail.StaleCredential);
                     return Result(DeviceSyncOutcome.Blocked);
@@ -305,7 +316,7 @@ public sealed class DeviceSyncService
 
             default:
                 // device_unauthorized: classify with the server instead of guessing between revoked and damaged.
-                _checked = false;
+                _checked.Remove(credential.InstallationId);
                 var probe = await _ctx.ProbeAsync(credential, ct).ConfigureAwait(false);
                 if (probe.Token != DeviceTokenStatus.Ok)
                 {

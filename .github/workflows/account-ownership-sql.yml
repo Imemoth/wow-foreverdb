@@ -99,6 +99,12 @@ jobs:
       - name: Account-scoped Guildbook suite (fresh-capture attribution, replay/staleness and cross-account isolation)
         run: node --test --test-concurrency=1 database/tests/account/10_account_scoped_guildbook.test.mjs
 
+      - name: Apply 0017 (account-independent collectors; preserve ownership and installation-bound checks)
+        run: database/tests/account/stack.sh apply17
+
+      - name: Account-independent collector suite (one device identity, multiple installations, revocation and cross-account isolation)
+        run: node --test --test-concurrency=1 database/tests/enrollment/11_independent_collectors.test.mjs
+
       - name: Mutation check 0014 (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/enrollment/mutation_check.mjs

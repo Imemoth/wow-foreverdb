@@ -169,9 +169,6 @@ public sealed class FakeDeviceBackend
         if (ticket.Expires <= DateTimeOffset.UtcNow) return Err("ticket_expired");
         if (AccountUnavailable) return Err("account_unavailable");
 
-        var activeOfCaller = _devices.FirstOrDefault(d => d.AuthUid == caller && d.Status == "active");
-        if (activeOfCaller is not null && activeOfCaller.Installation != installation) return Err("identity_in_use");
-
         var owner = Server.OwnerOf(installation);
         var existing = _devices.FirstOrDefault(d => d.Installation == installation && d.Status == "active");
         if (owner is null)

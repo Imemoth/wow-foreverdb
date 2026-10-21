@@ -39,6 +39,39 @@ public class DeviceCredentialStoreTests
     }
 
     [Fact]
+    public void Credentials_are_durable_and_independently_readable_per_installation()
+    {
+        var dir = TestEnv.NewDirectory();
+        var first = Credential("inst-first-0123456789abcdef");
+        var second = Credential("inst-second-0123456789abcde");
+        var store = new DeviceCredentialStore(dir, TestEnv.Protector());
+
+        store.WriteForInstallation(first);
+        store.WriteForInstallation(second);
+
+        var reopened = new DeviceCredentialStore(dir, TestEnv.Protector());
+        Assert.Equal(first.DeviceSecret, reopened.Read(first.InstallationId).Credential!.DeviceSecret);
+        Assert.Equal(second.DeviceSecret, reopened.Read(second.InstallationId).Credential!.DeviceSecret);
+        Assert.Equal(DeviceCredentialStatus.Missing, reopened.Read("inst-missing-0123456789abcde").Status);
+        Assert.Equal(
+            new[] { first.InstallationId, second.InstallationId }.OrderBy(x => x),
+            reopened.InstallationIds().OrderBy(x => x));
+    }
+
+    [Fact]
+    public void A_legacy_single_slot_credential_is_available_to_its_installation_without_claiming_other_installations()
+    {
+        var dir = TestEnv.NewDirectory();
+        var credential = Credential("inst-legacy-0123456789abcd");
+        var store = new DeviceCredentialStore(dir, TestEnv.Protector());
+        store.Write(credential);
+
+        Assert.Equal(credential.DeviceId, store.Read(credential.InstallationId).Credential!.DeviceId);
+        Assert.Equal(DeviceCredentialStatus.Missing, store.Read("inst-other-0123456789ab").Status);
+        Assert.Contains(credential.InstallationId, store.InstallationIds());
+    }
+
+    [Fact]
     public void Nothing_stored_is_missing_and_no_file_is_created_by_reading()
     {
         var dir = Path.Combine(TestEnv.NewDirectory(), "device");

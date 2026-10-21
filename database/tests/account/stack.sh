@@ -7,6 +7,7 @@
 #   stack.sh apply     apply 0012 as the migration role
 #   stack.sh apply14   apply 0014 (zero-touch enrollment) as the migration role; requires `apply` first
 #   stack.sh apply16   apply 0016 (account-scoped Guildbook) as the migration role; requires `apply14` first
+#   stack.sh apply17   apply 0017 (account-independent collectors) as the migration role; requires `apply16` first
 #   stack.sh down      stop GoTrue and drop the database
 #
 # Required env: PGHOST PGPORT PGUSER PGPASSWORD of a SUPERUSER on a disposable cluster; GOTRUE_BIN = built GoTrue binary.
@@ -90,6 +91,9 @@ case "${1:-}" in
     ;;
   apply16)
     as_migrator -f "$REPO/database/migrations/0016_account_scoped_guildbook.sql"
+    ;;
+  apply17)
+    as_migrator -f "$REPO/database/migrations/0017_account_independent_collectors.sql"
     ;;
   down)
     gotrue_stop
