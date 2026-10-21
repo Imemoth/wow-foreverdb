@@ -503,7 +503,7 @@ public class DeviceEnrollmentTests
     }
 
     [Fact]
-    public async Task A_device_identity_already_registered_for_another_installation_is_a_conflict()
+    public async Task A_device_identity_can_register_another_installation_without_creating_a_new_identity()
     {
         using var rig = new DeviceRig();
         rig.Activate();
@@ -515,8 +515,9 @@ public class DeviceEnrollmentTests
         rig.Activate();
         rig.Build();
 
-        Assert.Equal(new DeviceStatus(DeviceState.OwnershipConflict, DeviceDetail.IdentityInUse), await Enroll(rig));
+        Assert.Equal(DeviceState.Registered, (await Enroll(rig)).State);
         Assert.Equal(1, rig.Server.SignupCount);
+        Assert.Equal(2, rig.Backend.Devices.Count);
     }
 
     [Fact]
@@ -570,7 +571,7 @@ public class DeviceEnrollmentTests
     }
 
     [Fact]
-    public async Task A_damaged_device_credential_is_CredentialDamaged_and_no_new_identity_is_created()
+    public async Task A_damaged_legacy_slot_does_not_disrupt_the_per_installation_credential()
     {
         using var rig = new DeviceRig();
         rig.Activate();
@@ -582,16 +583,15 @@ public class DeviceEnrollmentTests
         rig.Build();
         var requests = rig.Server.Requests.Count;
 
-        Assert.Equal(DeviceState.CredentialDamaged, rig.Enrollment.LoadLocalState().State);
-        Assert.Equal(DeviceState.CredentialDamaged, (await Enroll(rig)).State);
-        Assert.Equal(DeviceState.CredentialDamaged, (await rig.Sync.CheckStatusAsync()).State);
+        Assert.Equal(DeviceState.Registered, rig.Enrollment.LoadLocalState().State);
+        Assert.Equal(DeviceState.Registered, (await Enroll(rig)).State);
+        Assert.Equal(DeviceState.Registered, (await rig.Sync.CheckStatusAsync()).State);
         var sync = await rig.Sync.SyncNowAsync(rig.Snapshot());
-        Assert.Equal(DeviceSyncOutcome.Blocked, sync.Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, sync.Outcome);
         Assert.Equal(signups, rig.Server.SignupCount);
-        Assert.Equal(requests, rig.Server.Requests.Count);              // not even a network call
-        Assert.Equal("damaged", File.ReadAllText(blob));               // not replaced, not deleted
-        Assert.True(rig.Sync.Handles(rig.Installation));               // and the anonymous path stays closed for it
-        Assert.Contains("no new identity", rig.Enrollment.Status.Message);
+        Assert.True(rig.Server.Requests.Count > requests);
+        Assert.Equal("damaged", File.ReadAllText(blob));               // the legacy slot is preserved
+        Assert.True(rig.Sync.Handles(rig.Installation));
     }
 
     [Fact]
@@ -601,14 +601,17 @@ public class DeviceEnrollmentTests
         rig.Activate();
         await Enroll(rig);
         var blob = rig.Context.Store.BlobPath;
+        var perInstallationBlob = rig.Context.Store.BlobPathFor(rig.Installation);
         File.WriteAllText(blob, "damaged");
         File.Delete(blob + ".bak");
+        File.WriteAllText(perInstallationBlob, "damaged");
+        File.Delete(perInstallationBlob + ".bak");
         rig.Build();
         rig.Activate();
 
         Assert.Equal(DeviceState.Registered, (await Enroll(rig)).State);
         Assert.Equal(1, rig.Server.SignupCount);
-        Assert.Equal(rig.Backend.Devices.Last().Current, rig.StoredCredential().DeviceSecret);
+        Assert.Equal(rig.Backend.Devices.Last().Current, rig.Context.Store.Read(rig.Installation).Credential!.DeviceSecret);
         Assert.Equal("damaged", File.ReadAllText(blob + ".bak"));        // the damaged blob is kept aside
     }
 

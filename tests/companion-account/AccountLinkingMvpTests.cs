@@ -183,14 +183,14 @@ public sealed class AccountLinkingMvpTests
     }
 
     [Fact]
-    public async Task Existing_device_for_another_installation_blocks_before_any_second_ownership_transfer()
+    public async Task Existing_device_session_can_enroll_another_installation_without_a_second_identity()
     {
         const string secondInstallation = "fedcba9876543210fedcba9876543210";
         using var rig = new Rig();
         var anonymous = rig.SeedAnonymous();
-        rig.Server.AddRegisteredUser("elara@example.test", "a-long-password-1");
+        var account = rig.Server.AddRegisteredUser("elara@example.test", "a-long-password-1");
         rig.Server.SetOwner(InstallationId, anonymous.UserId);
-        rig.Server.SetOwner(secondInstallation, anonymous.UserId);
+        rig.Server.SetOwner(secondInstallation, account.Id);
         await rig.Sessions.InitializeAsync();
         Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync("elara@example.test", "a-long-password-1".ToCharArray()));
         Assert.Equal(AccountLinkOutcome.Connected, (await rig.Runtime.Linking.ConnectAsync(InstallationId, "This PC", default)).Outcome);
@@ -198,9 +198,9 @@ public sealed class AccountLinkingMvpTests
 
         var result = await rig.Runtime.Linking.ConnectAsync(secondInstallation, "This PC", default);
 
-        Assert.Equal(AccountLinkOutcome.DeviceRegistrationRequired, result.Outcome);
-        Assert.False(result.OwnershipLinked);
-        Assert.Equal(anonymous.UserId, rig.Server.OwnerOf(secondInstallation));
+        Assert.Equal(AccountLinkOutcome.Connected, result.Outcome);
+        Assert.True(result.OwnershipLinked);
+        Assert.Equal(account.Id, rig.Server.OwnerOf(secondInstallation));
         Assert.Equal(claimsBefore, rig.Server.RequestsTo("/rest/v1/rpc/fdb_account_claim_start").Count);
     }
 
