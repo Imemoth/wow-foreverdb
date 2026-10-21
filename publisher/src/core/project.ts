@@ -8,9 +8,9 @@ import {
   type LootKind,
   type PublicationConfig,
   type SourceType,
-} from "./contract.js";
-import { sanitizeName, sanitizeOptionalName } from "./sanitize.js";
-import { confidenceFor, round6, wilson, type Confidence } from "./stats.js";
+} from "./contract.ts";
+import { sanitizeName, sanitizeOptionalName } from "./sanitize.ts";
+import { confidenceFor, round6, wilson, type Confidence } from "./stats.ts";
 
 export class PublicationError extends Error {
   constructor(message: string, readonly detail: Record<string, unknown> = {}) {
@@ -291,39 +291,59 @@ export function buildProjection(rawExport: unknown, config: PublicationConfig): 
       zoneEntities.set(iKey, ie);
     }
   }
+  // Single-pass indexes (the original per-zone / per-item / per-source filters over every entity were O(n^2): 10x the
+  // measured volume already cost ~1.5 s of CPU, 100x would not fit an Edge Function's 2 s CPU budget).
+  const zoneSourceCount = new Map<number, number>();
+  const zoneItemCount = new Map<number, number>();
+  const sourceMaps = new Map<string, Set<number>>(); // source key -> maps where the source entity exists
+  const itemMaps = new Map<number, Set<number>>(); // item id -> maps where the item entity exists
+  for (const e of zoneEntities.values()) {
+    if (e.entity_kind === "source") {
+      zoneSourceCount.set(e.map_id, (zoneSourceCount.get(e.map_id) ?? 0) + 1);
+      const k = sk(e.source_type!, e.source_id!, e.source_level!);
+      (sourceMaps.get(k) ?? sourceMaps.set(k, new Set()).get(k)!).add(e.map_id);
+    } else {
+      zoneItemCount.set(e.map_id, (zoneItemCount.get(e.map_id) ?? 0) + 1);
+      (itemMaps.get(e.item_id!) ?? itemMaps.set(e.item_id!, new Set()).get(e.item_id!)!).add(e.map_id);
+    }
+  }
   const zones: PubZone[] = [...zoneNames.entries()].map(([mapId, names]) => {
     const [name] = [...names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]!;
-    const ents = [...zoneEntities.values()].filter((e) => e.map_id === mapId);
     return {
       map_id: mapId, zone_name: name,
       observations: [...names.values()].reduce((a, b) => a + b, 0),
-      source_count: ents.filter((e) => e.entity_kind === "source").length,
-      item_count: ents.filter((e) => e.entity_kind === "item").length,
+      source_count: zoneSourceCount.get(mapId) ?? 0,
+      item_count: zoneItemCount.get(mapId) ?? 0,
     };
   });
 
   // ---- Search index ----------------------------------------------------
+  const itemKinds = new Map<number, Set<LootKind>>();
+  for (const d of drops) (itemKinds.get(d.item_id) ?? itemKinds.set(d.item_id, new Set()).get(d.item_id)!).add(d.loot_kind);
+  const sourceKinds = new Map<string, Set<LootKind>>();
+  for (const b of buckets.values()) {
+    const k = sk(b.source_type, b.source_id, b.source_level);
+    (sourceKinds.get(k) ?? sourceKinds.set(k, new Set()).get(k)!).add(b.loot_kind);
+  }
   const search: PubSearchEntry[] = [];
-  const entsBy = (pred: (e: PubZoneEntity) => boolean) => [...zoneEntities.values()].filter(pred);
+  const NONE = new Set<never>();
   for (const it of items) {
-    const kinds = new Set<LootKind>(drops.filter((d) => d.item_id === it.item_id).map((d) => d.loot_kind));
-    const maps = new Set(entsBy((e) => e.entity_kind === "item" && e.item_id === it.item_id).map((e) => e.map_id));
     search.push({
       entity_kind: "item", display_kind: "item", item_id: it.item_id, source_type: null, source_id: null,
-      source_level: null, name: it.name, name_norm: it.name_norm, loot_kinds: sorted(kinds), map_ids: sortedNum(maps),
+      source_level: null, name: it.name, name_norm: it.name_norm,
+      loot_kinds: sorted(itemKinds.get(it.item_id) ?? (NONE as Set<LootKind>)),
+      map_ids: sortedNum(itemMaps.get(it.item_id) ?? NONE as Set<number>),
       observations: it.total_drops,
     });
   }
   for (const s of sources.values()) {
-    const kinds = new Set<LootKind>([...buckets.values()]
-      .filter((b) => b.source_type === s.source_type && b.source_id === s.source_id && b.source_level === s.source_level)
-      .map((b) => b.loot_kind));
-    const maps = new Set(entsBy((e) => e.entity_kind === "source" && e.source_type === s.source_type
-      && e.source_id === s.source_id && e.source_level === s.source_level).map((e) => e.map_id));
+    const key = sk(s.source_type, s.source_id, s.source_level);
     search.push({
       entity_kind: "source", display_kind: s.display_kind, item_id: null, source_type: s.source_type,
       source_id: s.source_id, source_level: s.source_level, name: s.name, name_norm: s.name_norm,
-      loot_kinds: sorted(kinds), map_ids: sortedNum(maps), observations: s.total_observations,
+      loot_kinds: sorted(sourceKinds.get(key) ?? (NONE as Set<LootKind>)),
+      map_ids: sortedNum(sourceMaps.get(key) ?? NONE as Set<number>),
+      observations: s.total_observations,
     });
   }
 
@@ -367,16 +387,69 @@ export function countsOf(p: Projection): Record<string, number> {
   };
 }
 
-/** Deterministic hash over the published content (canonical JSON, sorted keys). */
+/** Deterministic hash over the published content (canonical JSON, sorted keys), streamed in ~64 KB pieces. */
 export function contentHash(p: Projection): string {
-  return createHash("sha256").update(canonicalJson(p)).digest("hex");
+  const h = createHash("sha256");
+  let buf = "";
+  const flush = () => {
+    if (buf) h.update(buf);
+    buf = "";
+  };
+  writeCanonical(p, (piece) => {
+    buf += piece;
+    if (buf.length >= 65_536) flush();
+  });
+  flush();
+  return h.digest("hex");
 }
 
 export function canonicalJson(v: unknown): string {
-  if (v === null || typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  let out = "";
+  writeCanonical(v, (piece) => {
+    out += piece;
+  });
+  return out;
+}
+
+// Rows of one table share a key order; remember the sorted order per distinct (unsorted) key sequence.
+const SORTED_KEYS = new Map<string, string[]>();
+function sortedKeysOf(o: Record<string, unknown>): string[] {
+  const keys = Object.keys(o);
+  const sig = keys.join("\u0000");
+  let sorted = SORTED_KEYS.get(sig);
+  if (!sorted) {
+    sorted = [...keys].sort();
+    if (SORTED_KEYS.size < 256) SORTED_KEYS.set(sig, sorted);
+  }
+  return sorted;
+}
+
+/** Writes exactly the text `{"k":v,...}` / `[a,b]` / JSON scalars that the previous recursive string concatenation produced. */
+function writeCanonical(v: unknown, emit: (s: string) => void): void {
+  if (v === null || typeof v !== "object") {
+    emit(JSON.stringify(v));
+    return;
+  }
+  if (Array.isArray(v)) {
+    emit("[");
+    for (let i = 0; i < v.length; i += 1) {
+      if (i > 0) emit(",");
+      writeCanonical(v[i], emit);
+    }
+    emit("]");
+    return;
+  }
   const o = v as Record<string, unknown>;
-  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(",")}}`;
+  emit("{");
+  const keys = sortedKeysOf(o);
+  for (let i = 0; i < keys.length; i += 1) {
+    const k = keys[i]!;
+    if (i > 0) emit(",");
+    emit(JSON.stringify(k));
+    emit(":");
+    writeCanonical(o[k], emit);
+  }
+  emit("}");
 }
 
 function cmpSource(
