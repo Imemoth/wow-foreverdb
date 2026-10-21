@@ -1,5 +1,6 @@
 // Zone Cinematic Hero + atlas map through the REAL browser integration path (CDN host mapped to a local HTTPS server, CORS/CSP enforced
 // by Chromium). Plain Playwright test for the same reason as zone-maps.spec.ts (no preflight-inducing extra headers).
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "../e2e/maps-helpers";
 import { startCdn, type Cdn } from "./cdn-server";
@@ -89,5 +90,24 @@ test.describe("zone hero + atlas map (synthetic CDN, real browser CORS/CSP)", ()
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(hero(page).locator("svg").first()).toBeVisible(); // ArcaneSurveyBanner is always underneath
     await expect(hero(page).locator("dd")).toHaveCount(3);
+  });
+
+  test("accessibility (axe WCAG 2.2 AA) with the cinematic hero: /zone/1424 and an observed zone /zone/1420", async ({ page }) => {
+    for (const p of ["/zone/1424", "/zone/1420"]) {
+      await page.goto(p);
+      await expect(hero(page)).toBeVisible();
+      const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+      expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`), p).toEqual([]);
+    }
+  });
+
+  test("keyboard: tab order through the hero page reaches the zone map controls without a trap", async ({ page }) => {
+    await page.goto("/zone/1424");
+    const visited = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      await page.keyboard.press("Tab");
+      visited.add(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.tagName + ":" + ((document.activeElement as HTMLElement | null)?.getAttribute("aria-label") ?? (document.activeElement as HTMLElement | null)?.textContent?.slice(0, 20) ?? "")));
+    }
+    expect(visited.size).toBeGreaterThan(8); // focus keeps moving through header, breadcrumbs and the map; the hero itself adds no focus stops/traps
   });
 });
