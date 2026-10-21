@@ -1,5 +1,7 @@
 import "server-only";
+import tls from "node:tls";
 import pg from "pg";
+import { SUPABASE_ROOT_2021_CA } from "./supabase-ca";
 import {
   InvalidQueryError,
   type DatasetMeta,
@@ -114,6 +116,32 @@ function toSearchRow(r: Row): SearchRow {
   };
 }
 
+/** Hostnames of the Supabase connection pooler (Supavisor), e.g. aws-0-eu-west-1.pooler.supabase.com. Nothing else gets the extra CA. */
+const SUPABASE_POOLER_HOST = /^aws-\d{1,2}-[a-z0-9-]{3,30}\.pooler\.supabase\.com$/;
+
+function hostnameOf(connectionString: string): string | null {
+  try {
+    return new URL(connectionString).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * TLS options for the pool. Remote connections ALWAYS verify the server certificate and host name (rejectUnauthorized stays true, no
+ * checkServerIdentity override). Only a connection to a Supabase pooler host additionally trusts the Supabase Root 2021 CA (that pooler's
+ * chain ends in this private root, see supabase-ca.ts), added to Node's built-in roots; every other remote database uses Node's default
+ * trust store unchanged. A localhost URL (developer machine / CI) is plain TCP.
+ */
+export function buildSslOptions(connectionString: string): pg.ClientConfig["ssl"] {
+  if (/@(localhost|127\.0\.0\.1)[:/]/.test(connectionString)) return undefined;
+  const host = hostnameOf(connectionString);
+  if (host !== null && SUPABASE_POOLER_HOST.test(host)) {
+    return { rejectUnauthorized: true, ca: [...tls.rootCertificates, SUPABASE_ROOT_2021_CA] };
+  }
+  return { rejectUnauthorized: true };
+}
+
 export class PostgresAdapter implements PublicDataAdapter {
   readonly mode = "published" as const;
   private pool: pg.Pool;
@@ -129,7 +157,7 @@ export class PostgresAdapter implements PublicDataAdapter {
       statement_timeout: 3_000,
       query_timeout: 4_000,
       application_name: "foreverdb-web",
-      ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(connectionString) ? undefined : { rejectUnauthorized: true },
+      ssl: buildSslOptions(connectionString),
     });
     this.pool.on("error", () => {
       /* idle client errors are logged by the caller path; never crash the process */
