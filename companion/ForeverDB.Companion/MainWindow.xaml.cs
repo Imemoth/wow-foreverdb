@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Controls;
 using ForeverDB.Companion.Models;
@@ -1456,7 +1457,20 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        _settings.WowRoot = WowRootBox.Text.Trim();
+        var wowRoot = WowRootBox.Text.Trim();
+        var validation = WowInstallationLocator.Validate(wowRoot);
+        ShowWowRootStatus(validation);
+        if (!validation.IsValid)
+        {
+            SettingsSaveStatusText.Text = "Choose a valid WoW Forever folder before saving.";
+            SettingsSaveStatusText.Foreground = Brushes.IndianRed;
+            SettingsSaveStatusText.Visibility = Visibility.Visible;
+            WowRootBox.Focus();
+            return;
+        }
+
+        _settings.WowRoot = Path.GetFullPath(wowRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         _settings.SupabaseUrl = SupabaseUrlBox.Text.Trim();
         _settings.SupabaseKey = SupabaseKeyBox.Text.Trim();
         _settings.AutoSync = AutoSyncCheck.IsChecked == true;
@@ -1472,7 +1486,9 @@ public partial class MainWindow : Window
 
         await RebuildServicesAsync();
 
-        SettingsSaveStatusText.Text = "Settings saved.";
+        SettingsSaveStatusText.Text = validation.IsSyncReady
+            ? "Settings saved."
+            : "Settings saved. Run WoW with ForeverDB once to create SavedVariables.";
         SettingsSaveStatusText.Foreground =
             (System.Windows.Media.Brush)FindResource("SuccessBrush");
         SettingsSaveStatusText.Visibility =
@@ -1489,6 +1505,74 @@ public partial class MainWindow : Window
             _settings.LaunchWithWindows;
         StartMinimizedCheck.IsChecked =
             _settings.StartMinimized;
+        RefreshDetectedWowRoots();
+        if (!string.IsNullOrWhiteSpace(_settings.WowRoot))
+        {
+            ShowWowRootStatus(WowInstallationLocator.Validate(_settings.WowRoot));
+        }
+    }
+
+    private void BrowseWowRoot_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Choose the WoW Forever game folder",
+            Multiselect = false
+        };
+
+        if (Directory.Exists(WowRootBox.Text.Trim()))
+        {
+            dialog.InitialDirectory = WowRootBox.Text.Trim();
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            WowRootBox.Text = dialog.FolderName;
+            ShowWowRootStatus(WowInstallationLocator.Validate(dialog.FolderName));
+        }
+    }
+
+    private void DetectWowRoots_Click(object sender, RoutedEventArgs e) =>
+        RefreshDetectedWowRoots();
+
+    private void DetectedWowRoots_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DetectedWowRootsBox.SelectedItem is not WowInstallationCandidate candidate)
+        {
+            return;
+        }
+
+        WowRootBox.Text = candidate.Root;
+        ShowWowRootStatus(WowInstallationLocator.Validate(candidate.Root));
+    }
+
+    private void RefreshDetectedWowRoots()
+    {
+        var candidates = WowInstallationLocator.DiscoverDefault();
+        DetectedWowRootsBox.ItemsSource = candidates;
+        DetectedWowRootsBox.SelectedIndex = -1;
+        DetectedWowRootsBox.ToolTip = candidates.Count == 0
+            ? "No likely WoW installations were found. Use Browse or enter the path manually."
+            : "Select a detected installation, then save settings.";
+
+        if (candidates.Count == 0 && string.IsNullOrWhiteSpace(WowRootBox.Text))
+        {
+            WowRootStatusText.Text = "No likely installation was detected. Use Browse or enter the game folder manually.";
+            WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource("MutedTextBrush");
+        }
+        else if (candidates.Count > 0 && string.IsNullOrWhiteSpace(WowRootBox.Text))
+        {
+            WowRootStatusText.Text = "Select a detected installation, or use Browse. The path changes only after you save settings.";
+            WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource("MutedTextBrush");
+        }
+    }
+
+    private void ShowWowRootStatus(WowRootValidation validation)
+    {
+        WowRootStatusText.Text = validation.Message;
+        WowRootStatusText.Foreground = validation.IsValid
+            ? (System.Windows.Media.Brush)FindResource("SuccessBrush")
+            : Brushes.IndianRed;
     }
 
     private void RecordSyncError(string? message)

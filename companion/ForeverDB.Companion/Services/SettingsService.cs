@@ -19,10 +19,7 @@ public static class SettingsService
 
         if (!File.Exists(SettingsPath))
         {
-            var settings = new CompanionSettings
-            {
-                WowRoot = DetectWowRoot()
-            };
+            var settings = new CompanionSettings();
 
             Save(settings);
             return settings;
@@ -36,12 +33,6 @@ public static class SettingsService
                 ?? new CompanionSettings();
 
             var changed = false;
-
-            if (string.IsNullOrWhiteSpace(settings.WowRoot))
-            {
-                settings.WowRoot = DetectWowRoot();
-                changed = true;
-            }
 
             if (string.IsNullOrWhiteSpace(settings.SupabaseUrl))
             {
@@ -66,10 +57,7 @@ public static class SettingsService
         }
         catch
         {
-            return new CompanionSettings
-            {
-                WowRoot = DetectWowRoot()
-            };
+            return new CompanionSettings();
         }
     }
 
@@ -86,22 +74,6 @@ public static class SettingsService
 
     public static string DetectWowRoot()
     {
-        var candidates = new[]
-        {
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "World of Warcraft",
-                "_classic_beta_"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                "World of Warcraft",
-                "_classic_beta_"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "World of Warcraft",
-                "_classic_beta_")
-        };
-
-        return candidates.FirstOrDefault(Directory.Exists) ?? "";
+        return WowInstallationLocator.DiscoverDefault().FirstOrDefault()?.Root ?? "";
     }
 }
