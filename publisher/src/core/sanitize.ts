@@ -10,13 +10,13 @@
 
 const MAX_NAME = 120;
 // Letters/marks/numbers in any script, space, and punctuation seen in WoW names.
-const ALLOWED = /^[\p{L}\p{M}\p{N} '’\-:,.()!&/?"#]+$/u;
+const ALLOWED = /^[\p{L}\p{M}\p{N} '\u2019\-:,.()!&/?"#]+$/u;
 
 export type NameResult = { ok: true; value: string; norm: string } | { ok: false; reason: string };
 
 export function sanitizeName(raw: string | null | undefined): NameResult {
   if (raw == null) return { ok: false, reason: "missing_name" };
-  if (/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩]/u.test(raw)) {
+  if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/u.test(raw)) {
     return { ok: false, reason: "control_or_bidi_character" };
   }
   const value = raw.normalize("NFC").replace(/\s+/gu, " ").trim();

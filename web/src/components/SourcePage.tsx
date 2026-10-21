@@ -14,6 +14,13 @@ import { Breadcrumbs } from "./Breadcrumbs";
 import { DataNote, ObservedRateNote } from "./DataNote";
 import { DropTable } from "./DropTable";
 import { LocationPlot } from "./LocationPlot";
+import { SourceLocationMaps, type SourceZoneView } from "./maps/SourceLocationMaps";
+import { configuredAssetBase } from "./maps/ZoneMapSection";
+import { atlasCatalog } from "@/lib/maps/atlas/catalog";
+import { artworkOf } from "@/lib/maps/atlas/zone-catalog";
+import { zoneMapHref } from "@/lib/maps/focus";
+import { sourceZonesWithPoints } from "@/lib/maps/observation-adapters";
+import { zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
 import { StatTile } from "./StatTile";
 
 const loadSource = cache(async (type: SourceType, raw: string) => {
@@ -61,6 +68,23 @@ export async function SourcePage({ type, rawId }: { type: SourceType; rawId: str
   const byZone = new Map<number, typeof s.locations>();
   for (const p of s.locations) byZone.set(p.mapId, [...(byZone.get(p.mapId) ?? []), p]);
   const zoneName = new Map(s.zones.map((z) => [z.mapId, z.zoneName]));
+
+  // AZERDEX_ZONE_MAPS=1: the same ZoneMap engine as /zone/[id] replaces the default coordinate grid (kept as the fallback view).
+  let mapViews: SourceZoneView[] | null = null;
+  if (zoneMapsEnabled()) {
+    const catalog = await atlasCatalog();
+    const obs = new Map(s.zones.map((z) => [z.mapId, z.observations]));
+    mapViews = sourceZonesWithPoints(s)
+      .map(({ mapId, points }) => {
+        const art = catalog.byId.get(mapId) ? artworkOf(catalog.byId.get(mapId)!) : null;
+        return {
+          mapId, zoneName: zoneName.get(mapId) ?? catalog.byId.get(mapId)?.name ?? `Zone ${mapId}`, zoneObservations: obs.get(mapId) ?? null, points,
+          art: art ? { version: art.version, size: { width: art.image.width, height: art.image.height } } : null,
+          zoneHref: zoneMapHref(mapId, { type, id: s.id, level: null }),
+        };
+      })
+      .sort((a, b) => (b.zoneObservations ?? 0) - (a.zoneObservations ?? 0) || a.mapId - b.mapId);
+  }
 
   return (
     <article className="space-y-8">
@@ -128,13 +152,20 @@ export async function SourcePage({ type, rawId }: { type: SourceType; rawId: str
             <p className="text-xs text-mist">
               Positions are aggregated to an approximate 1% map grid and cells with very few observations are hidden.
               {type === "gameobject" && s.id < 0 && " Fishing-pool positions are projected best-effort estimates."}
-              {" "}Map artwork is not shown — see <Link href="/about/data#maps">why</Link>.
+              {mapViews?.length ? <> Map registration is provisional; see <Link href="/about/data#maps">about the map data</Link>.</> : <>{" "}Map artwork is not shown — see <Link href="/about/data#maps">why</Link>.</>}
             </p>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {[...byZone.entries()].map(([mapId, pts]) => (
-                <LocationPlot key={mapId} mapId={mapId} points={pts} zoneName={zoneName.get(mapId) ?? `Zone ${mapId}`} />
-              ))}
-            </div>
+            {mapViews?.length ? (
+              <SourceLocationMaps
+                sourceName={first.name} assetBase={configuredAssetBase()} zones={mapViews}
+                grids={Object.fromEntries(mapViews.map((v) => [v.mapId, <LocationPlot key={v.mapId} mapId={v.mapId} points={byZone.get(v.mapId) ?? []} zoneName={v.zoneName} />]))}
+              />
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {[...byZone.entries()].map(([mapId, pts]) => (
+                  <LocationPlot key={mapId} mapId={mapId} points={pts} zoneName={zoneName.get(mapId) ?? `Zone ${mapId}`} />
+                ))}
+              </div>
+            )}
           </>
         )}
       </section>

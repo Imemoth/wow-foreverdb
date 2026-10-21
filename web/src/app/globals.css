@@ -414,3 +414,22 @@
     }
   }
 }
+
+/* Interactive map POC: Leaflet tooltips in the AzerDex palette (unlayered so they win over leaflet.css). */
+.leaflet-tooltip.azd-tooltip {
+  background: var(--color-ink-900);
+  color: var(--color-parchment);
+  border: 1px solid var(--color-violet-400);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 14px rgba(7, 9, 28, 0.6);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.leaflet-tooltip-top.azd-tooltip::before { border-top-color: var(--color-violet-400); }
+.azd-tip-title { font-weight: 600; color: var(--color-parchment); }
+.azd-tip-line { color: var(--color-mist); }
+/* Letterbox area around the map image (phones are narrower than the image aspect): AzerDex dark, not Leaflet's #ddd. */
+.azd-map.leaflet-container { background: var(--color-ink-900); }

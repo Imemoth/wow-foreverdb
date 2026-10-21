@@ -19,8 +19,11 @@ finalize: counts · FK integrity · denominator invariant · empty/shrink guard 
 
 Logs are one JSON line per event (`projection_built`, `publication_finished`, `publication_failed_closed`, `publication_error`). They contain counts, rejection reasons and the hash, **never row values or connection strings**.
 
-## Scheduling (proposed)
-Run hourly from a scheduled job that holds the two worker secrets, e.g. a GitHub Actions `schedule` workflow in a protected environment with required reviewers for secret changes, or a small scheduled container. The website runtime must **not** hold these secrets. Concurrency is serialized with a transaction-scoped advisory lock.
+## Scheduling (production design)
+Publication is Supabase-native: `pg_cron` (`*/15 * * * *`) → `pub_ops.invoke_publisher()` → `pg_net` → Edge Function `publish-observations`, secured with Vault.
+The website runtime holds none of the worker secrets. Concurrency is serialized by a lease table plus a transaction-scoped advisory lock (overlapping runs answer `skipped_busy`).
+Operations (status, pause/resume, rollback, telemetry): [public-publication-operations.md](public-publication-operations.md). Measured limits and verdict: [public-publication-benchmarks.md](public-publication-benchmarks.md).
+The GitHub Actions workflow `publish-public-db.yml` remains manual-only (break-glass); it is not the default publisher.
 
 ## Failure handling
 - `publication_failed_closed: export_contract_violation`: the export shape changed. Do not widen `contract.ts` without an allowlist review.

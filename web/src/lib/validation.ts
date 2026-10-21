@@ -2,9 +2,12 @@ import { z } from "zod";
 import {
   DISPLAY_KINDS,
   InvalidQueryError,
+  LOCATED_LOOT_KINDS,
   LOOT_KINDS,
+  ZONE_MAP_POINT_LIMIT,
   SOURCE_TYPES,
   type SearchQuery,
+  type SourceMapPointsQuery,
   type SourceType,
   type ZoneEntityQuery,
 } from "./data/types";
@@ -109,4 +112,39 @@ export function parseEntityId(raw: string, opts: { allowNegative?: boolean } = {
 
 export function parseSourceType(raw: string): SourceType | null {
   return (SOURCE_TYPES as readonly string[]).includes(raw) ? (raw as SourceType) : null;
+}
+
+const ZoneMapPointParams = z
+  .object({ kind: z.enum(LOCATED_LOOT_KINDS as [string, ...string[]]).optional(), limit: intIn(1, ZONE_MAP_POINT_LIMIT).optional() })
+  .strict();
+
+/** `kind` (a located loot kind; disenchant has no location) and `limit` (1..3000, default 3000) of GET /api/v1/zones/{id}/map-points. */
+export function parseZoneMapPointQuery(params: URLSearchParams): { lootKind: (typeof LOCATED_LOOT_KINDS)[number] | null; limit: number } {
+  const rec = toRecord(params, ["kind", "limit"], "strict");
+  const r = ZoneMapPointParams.safeParse(rec);
+  if (!r.success) throw new InvalidQueryError(r.error.issues[0]?.message ?? "invalid_parameters");
+  return { lootKind: (r.data.kind as (typeof LOCATED_LOOT_KINDS)[number] | undefined) ?? null, limit: r.data.limit ?? ZONE_MAP_POINT_LIMIT };
+}
+
+/** Source types that can have a map location (items never do). */
+export const LOCATED_SOURCE_TYPES = ["creature", "gameobject", "fishing"] as const;
+
+const SourceMapPointParams = z
+  .object({
+    zone: intIn(1, 999_999).optional(),
+    kind: z.enum(LOCATED_LOOT_KINDS as [string, ...string[]]).optional(),
+    level: intIn(0, 255).optional(),
+    limit: intIn(1, ZONE_MAP_POINT_LIMIT).optional(),
+  })
+  .strict();
+
+/** Query of GET /api/v1/sources/{type}/{id}/map-points: optional `zone` (UiMapID), `kind`, `level`, `limit`. */
+export function parseSourceMapPointQuery(type: SourceType, id: number, params: URLSearchParams): SourceMapPointsQuery {
+  const rec = toRecord(params, ["zone", "kind", "level", "limit"], "strict");
+  const r = SourceMapPointParams.safeParse(rec);
+  if (!r.success) throw new InvalidQueryError(r.error.issues[0]?.message ?? "invalid_parameters");
+  return {
+    sourceType: type, sourceId: id, mapId: r.data.zone ?? null, lootKind: (r.data.kind as SourceMapPointsQuery["lootKind"] | undefined) ?? null,
+    sourceLevel: r.data.level ?? null, limit: r.data.limit ?? ZONE_MAP_POINT_LIMIT,
+  };
 }

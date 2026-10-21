@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:zone-maps": "playwright test -c playwright.zone-maps.config.ts",
     "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
     "fixture:refresh": "node scripts/refresh-fixture.mjs",
     "test:parity": "vitest run --config vitest.parity.config.ts"
@@ -22,6 +23,7 @@
     "@fontsource-variable/cinzel": "5.3.0",
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
+    "leaflet": "1.9.4",
     "next": "16.4.0",
     "pg": "8.23.1",
     "react": "19.3.0",
@@ -36,6 +38,7 @@
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
+    "@types/leaflet": "1.9.21",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
