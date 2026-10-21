@@ -91,7 +91,7 @@ Windows/Companion beyond CI; Web E2E locally (CI runs it).
 
 ## Owner-run acceptance steps (minimum safe path)
 
-1. **Approve one free staging project** (`azerdex-welcome-staging`, org `Hearth & Byte`, eu-west-1, $0) — [staging-plan.md §3](staging-plan.md).
+1. **Free a staging slot.** The staging project was approved (2026-10-21) but creation was refused: the account is at its limit of 2 active free projects across all organizations ([staging-plan.md §2a](staging-plan.md)). Pause/delete another active free project, or choose the Pro option; nothing was created or changed.
 2. Staging setup and checks ([staging-plan.md §4–5](staging-plan.md)): migrations incl. 0014 → 0015 (switches OFF), `0015_staging_verification.sql`, REST authorization probes, deploy the function, G-2 harness (`exit 0`, S1–S5 and S7 pass with `ANON_KEY`, cleanup restored; S6 informational), hosted G-7: an authorized invocation with the flag on and dispatch OFF answers `state: ok` (`disabled` proves nothing about the emblem).
 3. **A-3/A-4 with an owner-controlled recipient only** (needs your explicit approval and your own `AZERDEX_WELCOME_ENABLED=true`): register → confirm → exactly one welcome; repeat link, login, password reset, e-mail change → none; confirm `Reply-To: support@azerdex.com`; Gmail mobile and Outlook (R-1…R-3); recommended `AZERDEX_WELCOME_MODE=template`.
 4. **A-5 drills:** wrong `RESEND_API_KEY` (expect `provider_auth_failed`, nobody parked), template renamed/unpublished (expect ≤ 3 parked, then recover with `operator_requeue`), kill switch, secret rotation, unauthenticated invocation → 401.

@@ -34,9 +34,19 @@ docs) and are labelled as such. The private/production project `wow-forever` (`k
 **Proposed project:** name `azerdex-welcome-staging`, org `Hearth & Byte`, plan free, region **eu-west-1** (same as `wow-forever`, for platform parity), default Postgres.
 **Expected cost: $0.** Teardown (§7) returns to the current state.
 
-## 3. Owner decision requested (the only one)
+## 2a. Blocker found when creation was attempted (2026-10-21)
 
-> Approve creation of **one free Supabase project** `azerdex-welcome-staging` in org `Hearth & Byte`, region eu-west-1, **$0**, to be deleted after acceptance.
+The owner chose option A and project creation was attempted (org `Hearth & Byte`, `azerdex-welcome-staging`, eu-west-1, quoted cost $0). **Supabase refused:** the `Imemoth` account has reached its limit of **2 active free projects, counted across every organization where it is an owner/administrator** (not only `Hearth & Byte`). Only `wow-forever` is active in this organization, so another active free project exists elsewhere. **No project was created and nothing was changed.** The earlier statement that "one more free project fits" was wrong because it only looked at this organization.
+
+Ways forward (each is the owner's decision; none is done by this work, and the three paused unrelated projects must not be repurposed):
+1. **Pause or delete another active free project** of the account (frees one slot; a paused project can be restored for 90 days).
+2. **Upgrade the organization to Pro** ($25/month) and use a normal project or a Preview branch (branch ≈ $0.01344/h compute, outside the spend cap).
+3. **Do not pause or touch `wow-forever`**: it is the private/production project and must stay active.
+After a slot exists, creation is a one-line retry with the same parameters.
+
+## 3. Owner decision requested
+
+> ~~Approve creation of one free project~~ **Approved 2026-10-21 (owner, in session)**: `azerdex-welcome-staging`, org `Hearth & Byte`, eu-west-1, $0, deleted after acceptance. **Still blocked by the account's active-free-project limit (§2a):** the owner must free a slot (pause/delete another active free project) or choose the Pro option.
 
 Without it nothing else here can proceed. If the owner prefers C (Pro + branch), say so; that is billable and needs explicit cost approval.
 
