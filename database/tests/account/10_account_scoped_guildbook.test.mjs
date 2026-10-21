@@ -105,7 +105,7 @@ describe("account-scoped Guildbook", () => {
         guild_key: guilds[0].guildKey,
         guild_name: guilds[0].name,
         realm_name: guilds[0].realmName,
-        captured_at: guilds[0].capturedAt,
+        captured_at: String(guilds[0].capturedAt),
         member_count: 2,
       },
     ]);
