@@ -364,7 +364,10 @@ public partial class MainWindow
                     : "";
 
         var ownershipText = enabled
-            ? AccountMessages.Describe(ownership)
+            ? _account?.Device?.IsBoundTo(record.InstallationId) == true &&
+              ownership == InstallationOwnership.OwnedByRegisteredAccount
+                ? "Owned by this registered device"
+                : AccountMessages.Describe(ownership)
             : "Anonymous sync (account features off)";
 
         if (record.ClaimPending)

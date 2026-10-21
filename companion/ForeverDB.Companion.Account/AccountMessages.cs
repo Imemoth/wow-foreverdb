@@ -28,7 +28,7 @@ public static class AccountMessages
             SessionState.LoggedOut when status.Fault == SessionFault.LocalCredentialCorrupt =>
                 "A damaged credential file was found. Nothing was replaced. Sign in to a ForeverDB account, or confirm that you want to start a new anonymous identity.",
             SessionState.LoggedOut =>
-                "Choose how to use ForeverDB: sign in to a ForeverDB account, or use ForeverDB anonymously. Local collection and the Guildbook work either way.",
+                "Choose how to use ForeverDB: sign in to a ForeverDB account, or use ForeverDB anonymously. Public observations work either way; account Guildbook data appears after registered sign-in.",
             SessionState.Anonymous =>
                 "Your installations sync with this computer's anonymous ForeverDB identity.",
             SessionState.AnonymousClaiming =>

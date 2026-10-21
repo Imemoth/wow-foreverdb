@@ -297,6 +297,30 @@ public sealed class OwnershipRpcClient
             : RpcResult<bool>.Fail(reply.Failure, reply.Status);
     }
 
+    /// <summary>
+    /// Small integration seam for account-scoped RPCs whose exact Agent A
+    /// signatures may still move. Callers own the request/response adapter;
+    /// this method keeps transport, auth headers, timeouts and failure mapping
+    /// in the one Companion RPC client.
+    /// </summary>
+    public async Task<RpcResult<string>> CallAsync(
+        string function,
+        string json,
+        string accessToken,
+        CancellationToken ct,
+        bool isIngest = false)
+    {
+        if (isIngest && !_allowWrites)
+        {
+            return RpcResult<string>.Fail(RpcFailure.Forbidden);
+        }
+
+        var reply = await PostAsync(function, json, accessToken, ct, isIngest).ConfigureAwait(false);
+        return reply.Failure == RpcFailure.None
+            ? RpcResult<string>.Success(reply.Body, reply.Status)
+            : RpcResult<string>.Fail(reply.Failure, reply.Status);
+    }
+
     private static string Body(string installationId) =>
         JsonSerializer.Serialize(new Dictionary<string, string> { ["p_installation_id"] = installationId });
 

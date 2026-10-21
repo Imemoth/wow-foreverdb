@@ -78,7 +78,7 @@ public class DeviceIntegrationTests
         Assert.Equal(new[] { "auth", "synced:Manual" }, w.Events);
         Assert.Equal(1, w.Backend.DeviceIngests);
         Assert.Equal(0, AnonymousIngests(w));
-        Assert.Equal(1, w.GuildbookCalls);
+        Assert.Equal(0, w.GuildbookCalls); // device/public sync never routes private Guildbook data
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class DeviceIntegrationTests
         Assert.Equal(1, w.Backend.Count("fdb_device_ingest"));
         Assert.Equal(new[] { "auth", $"synced:{trigger}" }, w.Events);
         Assert.Empty(w.Blocks);
-        Assert.Equal(1, w.GuildbookCalls);
+        Assert.Equal(0, w.GuildbookCalls);
     }
 
     [Fact]
@@ -256,5 +256,33 @@ public class DeviceIntegrationTests
         var attempt = await plain.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
         Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
         Assert.Equal(1, w.Server.IngestCount);
+    }
+
+    [Fact]
+    public async Task Public_device_autosync_survives_sign_out_and_account_switch_without_using_anonymous_ingest()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+
+        var vault = new SessionVault(
+            Path.Combine(w.Dir, w.Runtime.Gate.CredentialSubdirectory),
+            TestEnv.Protector());
+        vault.Primary.Write(
+            w.Server.IssueSession(w.Account.Id),
+            SlotMarker.For(SessionKind.Registered));
+        await w.Runtime.Sessions.InitializeAsync();
+
+        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, trigger: SyncTrigger.Auto))!.Outcome);
+        Assert.Equal(SignOutOutcome.Confirmed, await w.Runtime.Sessions.SignOutRegisteredAsync());
+
+        var other = w.Server.AddRegisteredUser("other@example.test", "correct horse battery");
+        Assert.Equal(SignInOutcome.Success, await w.Runtime.Sessions.SignInRegisteredAsync(other.Email!, other.Password!.ToCharArray()));
+        w.Write(200);
+
+        var switched = await w.Sync.SyncFileAsync(w.SavedVariables, trigger: SyncTrigger.Auto);
+
+        Assert.Equal(SyncOutcome.Synced, switched!.Outcome);
+        Assert.Equal(2, w.Backend.DeviceIngests);
+        Assert.Equal(0, AnonymousIngests(w));
     }
 }

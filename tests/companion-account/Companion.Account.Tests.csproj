@@ -36,6 +36,7 @@
     <Compile Include="../../companion/ForeverDB.Companion/Models/ForeverDbSnapshot.cs" Link="Linked/ForeverDbSnapshot.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/ForeverDbExportParser.cs" Link="Linked/ForeverDbExportParser.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SyncService.cs" Link="Linked/SyncService.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/AccountGuildbookSync.cs" Link="Linked/AccountGuildbookSync.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SyncHealthState.cs" Link="Linked/SyncHealthState.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SearchRequestEpoch.cs" Link="Linked/SearchRequestEpoch.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/WowInstallationLocator.cs" Link="Linked/WowInstallationLocator.cs" />

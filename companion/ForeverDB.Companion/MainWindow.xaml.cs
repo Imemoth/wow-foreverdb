@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly HttpClient _httpClient = new();
 
     private SyncService? _syncService;
+    private AccountGuildbookSync? _guildbookSync;
     private SearchService? _searchService;
     private AccountRuntime? _account;
     private string _accountRuntimeKey = "";
@@ -67,6 +68,8 @@ public partial class MainWindow : Window
         _detailRequests.Advance();
         _watcher?.Dispose();
         _watcher = null;
+        _guildbookSync?.Dispose();
+        _guildbookSync = null;
         _syncService = null;
         _searchService = null;
 
@@ -142,7 +145,10 @@ public partial class MainWindow : Window
                 _ = MapPrewarm.RunAsync(
                     effective,
                     snapshot),
-            account.Device?.Sync);
+            account.Device?.Sync,
+            _guildbookSync = new AccountGuildbookSync(
+                account.Sessions,
+                new AccountGuildbookRpcAdapter(account.Rpc)));
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -328,6 +334,11 @@ public partial class MainWindow : Window
         var selectedKey =
             (GuildSelector.SelectedItem as ForeverDbGuild)
                 ?.GuildKey;
+
+        // This event is a complete account-scoped server result, not a local
+        // observation merge. Replacing it prevents account A's private cache
+        // from surviving a sign-out, switch, or reload.
+        _guildbookGuilds.Clear();
 
         foreach (var guild in guilds)
         {
