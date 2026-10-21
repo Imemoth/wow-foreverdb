@@ -423,9 +423,10 @@ describe("account migration conformance linter", () => {
     const files = readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
       .sort()
-      // 0014 (zero-touch enrollment) is deliberately outside this tripwire: it has its own function set and guards (registered AND
-      // anonymous device callers) that are pinned by the SQL integration suite database/tests/enrollment, not by the 0012 registry.
-      .filter((f) => !f.startsWith("0014_"))
+      // 0014 (zero-touch enrollment) and 0017 (account-independent collectors) are deliberately outside this tripwire: they have
+      // their own function set and guards (registered AND anonymous device callers) pinned by the SQL integration suite, not by the
+      // 0012 account registry.
+      .filter((f) => !f.startsWith("0014_") && !f.startsWith("0017_"))
       .filter((f) => mentions.test(readFileSync(resolve(dir, f), "utf8")));
     if (files.length === 0) {
       expect(existsSync(dir)).toBe(true); // no account migration yet (PR A is specification only)
