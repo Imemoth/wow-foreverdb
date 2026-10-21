@@ -1,5 +1,5 @@
 import "server-only";
-import { aggregateZoneMapPoints } from "./zone-map-points";
+import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
 import {
   InvalidQueryError,
@@ -19,6 +19,8 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type SourceMapPoints,
+  type SourceMapPointsQuery,
   type ZoneMapPoints,
   type ZoneSummary,
 } from "./types";
@@ -192,6 +194,17 @@ export class FixtureAdapter implements PublicDataAdapter {
     }
     const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
     return aggregateZoneMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), mapId, lootKind, limit);
+  }
+
+  async sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints> {
+    if (!["creature", "gameobject", "fishing"].includes(q.sourceType) || !Number.isInteger(q.sourceId) || q.sourceId < -2_147_483_648 || q.sourceId > 999_999_999
+        || (q.mapId != null && (!Number.isInteger(q.mapId) || q.mapId < 1 || q.mapId > 999_999))
+        || (q.sourceLevel != null && (!Number.isInteger(q.sourceLevel) || q.sourceLevel < 0 || q.sourceLevel > 255))
+        || !Number.isInteger(q.limit) || q.limit < 1 || q.limit > 3000 || q.lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateSourceMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), q);
   }
 
   async zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>> {

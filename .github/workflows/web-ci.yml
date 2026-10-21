@@ -129,6 +129,16 @@ jobs:
       - name: Publisher unit tests
         working-directory: publisher
         run: npm ci && npm run typecheck && npm test
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.1.4 }  # the Supabase Edge runtime's Deno-compatible version
+      - name: Supabase Edge Function type-check (the function is a thin adapter over publisher/src/core)
+        run: |
+          node scripts/sync-edge-core.mjs --check
+          cd supabase/functions/publish-observations && deno check index.ts
+      - name: Public-read migrations 0001-0005 applied as a NON-superuser admin (hosted-like), publication, ops and security SQL tests
+        run: ./scripts/public-hosted-compat.sh
+      - name: Failure, recovery, idempotency and concurrency of the publication pipeline (isolated, hosted-like database)
+        run: ./scripts/public-failure-recovery-tests.sh
       - name: End-to-end publication pipeline on ephemeral PostgreSQL
         run: ./scripts/public-pipeline-integration.sh
       - name: Website against the published public read model (Postgres adapter)

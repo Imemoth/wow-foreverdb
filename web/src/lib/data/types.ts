@@ -121,6 +121,19 @@ export interface ZoneMapPointRow {
  */
 export interface ZoneMapPoints { mapId: number; points: ZoneMapPointRow[]; totalCells: number; truncated: boolean }
 
+/**
+ * One published, aggregated (1% cell) location of a SOURCE (web_api.source_map_points). Same privacy rules as the zone read; carries
+ * the UiMapID because a source can be observed in several zones.
+ */
+export interface SourceMapPointRow extends ZoneMapPointRow { mapId: number }
+
+export interface SourceMapPointsQuery {
+  sourceType: SourceType; sourceId: number; mapId: number | null; lootKind: LootKind | null; sourceLevel: number | null; limit: number;
+}
+
+/** `totalCells` counts published cells that pass the publication rules for the filter; `truncated` is true when `points` is capped below it. */
+export interface SourceMapPoints { sourceType: SourceType; sourceId: number; points: SourceMapPointRow[]; totalCells: number; truncated: boolean }
+
 export const ZONE_MAP_POINT_LIMIT = 3000;
 /** Loot kinds that have a map location. Disenchant results are never located. */
 export const LOCATED_LOOT_KINDS = LOOT_KINDS.filter((k) => k !== "disenchant");
@@ -162,6 +175,8 @@ export interface PublicDataAdapter {
   zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>>;
   /** Zone-wide published map cells (bounded, deterministic order). */
   zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints>;
+  /** Published map cells of ONE source (bounded, deterministic order, same rules as the zone read). */
+  sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints>;
   recent(limit: number): Promise<RecentRow[]>;
   sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]>;
 }

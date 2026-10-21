@@ -1,5 +1,5 @@
 /**
- * Publication allowlist — the ONLY fields that may cross from the private
+ * Publication allowlist - the ONLY fields that may cross from the private
  * aggregate export into the public projection.
  *
  * Every export row is parsed with a `.strict()` schema: an unexpected column
@@ -48,8 +48,8 @@ export const ExportBucket = z
     source_level: int,
     loot_kind: z.string(),
     observations: bigintLike,
-    installations: int, // threshold input only — NEVER published
-    max_installation_share: share, // threshold input only — NEVER published
+    installations: int, // threshold input only - NEVER published
+    max_installation_share: share, // threshold input only - NEVER published
     last_updated_at: ts,
   })
   .strict();
