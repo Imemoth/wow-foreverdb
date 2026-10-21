@@ -235,10 +235,51 @@ been asserted).
 
 ## Zone cinematic hero artwork (Hillsbrad Foothills, uiMapID 1424)
 
-`web/public/zones/hero/1424-hillsbrad-foothills-{1280,2000,mobile-600,mobile-900}.webp` are renditions of one owner-supplied
-panorama (2000x667, no baked-in text or UI), supplied to this session on 2026-10-21 for the Cinematic Zone Hero. Same status as
-the entries above: owner-supplied and approved for the project, subject to normal IP review; this record is the owner's attestation,
-not an independent verification of origin. Open points for that review: the image shows generic heraldic banners (lion crest) and a
-castle/bridge vista; confirm it is not a reproduction of a specific Blizzard location or mark. No AzerDex watermark has been embedded
-yet (the hero README's step 2 applies to the homepage hero set; decide whether this set needs it). The unmodified original is not
-stored in the repository. The existing atlas map artwork for the zone is untouched.
+**What it is.** One panorama (2000x667, no text/UI), supplied to the project on 2026-10-21 and used for the Cinematic Zone Hero.
+Per the repository owner it is AI-generated, owner-supplied artwork (not Blizzard promotional art, a game screenshot or an extracted
+game asset). **That is the owner's attestation, recorded here; it is not an independent verification of the tool, the date, or the
+absence of third-party material, and it is not legal clearance.** The existing atlas map artwork for the zone is untouched.
+
+**Private master (not in this repository).** The as-received file (WebP, 2000x667) is kept only outside the repository.
+SHA-256 (audit trail only): `a0e6b402237e6ab39cc9b5e7651d8bcda58e543347214aef8af41049d7111504`. The owner should keep the original
+generator output (likely PNG) as the faithful record, as for the three homepage images above.
+
+**Published derivatives (public, watermarked)** - `web/public/zones/hero/`, all produced from the master with the AzerDex watermark
+composited into the pixels *before* any resize/crop (Pillow, WebP q78 method 6, EXIF/XMP not carried over):
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `1424-hillsbrad-foothills-2000.webp` (2000x667) | 103,602 | `fbc70e48...de07` |
+| `1424-hillsbrad-foothills-1280.webp` (1280x427) | 56,890 | `9dc58eb3...e880` |
+| `1424-hillsbrad-foothills-mobile-900.webp` (900x484, crop x760-2000) | 57,650 | `cc87be9a...2e72` |
+| `1424-hillsbrad-foothills-mobile-600.webp` (600x323, same crop) | 30,614 | `50e481ad...91d2` |
+
+**Watermark (same convention as the homepage hero set).** The AzerDex compass/rune emblem from `web/public/icon.svg` (disc fill removed,
+single flat tint `#e8cf8f`), 17% opacity (the approved 12-18% band), 56 px (2.8% of the 2000 px width), centred at (985, 40) of the
+master - a calm dark cloud area above the mountains, away from the headline, the stats and the right-hand focal point (castle). The
+placement was checked on the final hero at desktop (faintly visible top centre-left, not competing with the scene) and the mobile
+crop (the mark is inside the downloadable file; the phone cover-crop of the hero happens to trim it from view). No zone name,
+statistic or other UI is embedded. The first attempt (on the mountain peak) was rejected: too busy a background.
+
+**Exposure that already happened - read this.** The first commit of PR #93 (`f3216e2`) briefly contained UNWATERMARKED derivatives of
+this image (2000 px and 1280 px, plus the phone crops) under `web/public/zones/hero/`, which Vercel served from that PR's preview
+deployments until the watermarked files replaced them. They remain in the git history of the PR branch and, until the preview
+deployments are deleted, at their deployment-specific URLs. Same class of residual exposure as "Residual git-history exposure" above:
+no history rewrite was performed; the recommended mitigation is a **squash merge** (so the base branch never contains them) and
+deleting the superseded preview deployments. The repository is public, so copies may exist outside our control. The earlier
+documentation screenshots (also unwatermarked renders) were replaced by watermarked ones; they too persist in that commit.
+
+**Focused visual review (heraldry / Blizzard-specific elements).** Method: direct inspection of the full image and 2x crops of every
+banner, looking for logos/wordmarks, text, recognisable named-character likenesses and exact reproductions of a specific location.
+- No logo, wordmark, text or character likeness found.
+- **Banners** (left: x~60-260, y~170-440; right edge: x~1860-2000, y~380-600 of the 2000x667 master): a gold lion rampant on a blue
+  heater shield with gold border. A lion rampant is generic, long-standing heraldry and this is not the Stormwind lion-head emblem as
+  far as visual comparison without game assets can tell. **Residual risk:** gold-lion-on-blue is the general colour/charge pairing
+  associated with the Alliance/Stormwind visual identity, and Hillsbrad is an Alliance-contested zone, so a reviewer could read it as
+  evocative of that identity. Not judged to be an identifiable reproduction; not cleared either. Owner decision: keep, or
+  re-generate the banners with a different charge/tincture (it would need a new approved image).
+- **Castle/bridge/waterfall vista** (right third): generic fantasy architecture; no claim is made about resemblance to any specific
+  in-game location (not compared against game assets).
+- Not independently verified: AI-generator terms/output rights, and training-data provenance.
+
+**Status: owner-supplied and visually approved; NOT legally cleared. Open items: heraldry decision above, preview-deployment cleanup.**

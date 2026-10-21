@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AtlasMap } from "@/lib/maps/atlas/schema";
@@ -36,5 +36,14 @@ describe("zone artwork resolution", () => {
 
   it("never matches inherited object keys", () => {
     expect(resolveZoneArtwork(Number("constructor")).kind).toBe("fallback");
+  });
+});
+
+describe("published hero artwork hygiene", () => {
+  it("serves only the registered derivatives: no master/source/original files under public/zones/hero", () => {
+    const files = readdirSync(join(PUBLIC, "zones/hero"));
+    const registered = new Set(Object.values(CINEMATIC_ZONE_ARTWORK).flatMap((a) => [...a.desktop, ...a.mobile].map((s) => s.src.split("/").pop()!)));
+    expect(files.sort()).toEqual([...registered].sort());
+    for (const f of files) expect(f).not.toMatch(/source|master|original|raw/i);
   });
 });
