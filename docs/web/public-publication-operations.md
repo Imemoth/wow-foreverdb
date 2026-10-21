@@ -80,11 +80,12 @@ Fix the cause, then resume as above. A republished unchanged export is recognise
 ## Platform CPU telemetry
 
 `process.cpuUsage()` is not implemented in the Supabase Edge runtime, so the function reports `cpuMs: null` and **does not estimate**.
-Real CPU per execution is in the platform's `Shutdown` log record (`cpu_time_used`, `memory_used`, `reason`; `EarlyDrop` = normal, `CPUTime` = killed):
+Real CPU per execution is in the platform's `Shutdown` log record (`cpu_time_used` in ms, `memory_used.*` in bytes, `reason`; `EarlyDrop` = normal, `CPUTime` = killed):
 
 ```sql
--- Supabase logs explorer / MCP query_logs, source function_logs
-select timestamp, event_message, metadata from function_logs where event_message like 'Shutdown%' order by timestamp desc limit 20
+-- Supabase logs explorer / MCP query_logs (ClickHouse `logs` table)
+select timestamp, log_attributes['cpu_time_used'] as cpu_ms, log_attributes['memory_used.total'] as mem_bytes, log_attributes['reason'] as reason
+from logs where source = 'function_logs' and log_attributes['event_type'] = 'Shutdown' order by timestamp desc limit 20
 ```
 Wall times in run metrics (`totalMs`, `projectBuildMs`, `publicWriteMs`, `activationMs`) are wall-clock, never CPU.
 

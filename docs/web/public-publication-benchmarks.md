@@ -49,7 +49,18 @@ Two ticks at :00: pg_cron reported "succeeded" in 32 ms and 4 ms (it only enqueu
 
 ## Scheduled runs (production schedule `*/15 * * * *`, enabled 2026-10-21 09:50 UTC)
 
-See the "Scheduled run evidence" section at the end of this file, filled from `pub_ops.cron_status()` and the Edge logs.
+| Tick (UTC) | Trigger | Outcome | Platform CPU | Wall (`totalMs`) | Rows written |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-21 10:00:00 | pg_cron (job 2) | `duplicate` (no-change, pre-write detection), publication 10 stays active, run id 21 | 183 ms (`reason: EarlyDrop`, heap 9.8 MB) | 873.5 ms (connect 134 + 307 ms, export query 90 ms, projection 247 ms, precheck 50 ms) | 0 |
+
+pg_cron reported `succeeded` after 17 ms (it only enqueues the pg_net call); the HTTP response was 200.
+
+**Honest limit of benchmark F:** the real export has not changed since publication 10 was activated manually (run 19), so the first
+scheduled tick was necessarily a no-change run. A *scheduled* run that activates new real content will occur on the first tick after
+Companion data changes the aggregate export; it was not forced, because that would require editing private production data.
+The scheduled full write path was exercised by the rehearsal-only Cron job above (real Cron → Edge → full staging write, finalize and
+activation, then ROLLBACK), and a real activation by the manual run 19 (same code path, `trigger: manual`).
+Follow-up check after the next data change: `select * from pub_ops.cron_status(5);` should show `outcome: activated, trigger: cron`.
 
 ## What is not proven
 
