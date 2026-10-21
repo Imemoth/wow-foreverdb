@@ -1,6 +1,6 @@
 # Companion account linking MVP
 
-Status: implemented in the normal Companion package for owner acceptance. Standard production account sign-in and direct linking are approved in this unmerged PR; activation-file enrollment, registered-device AutoSync, web production activation and temporary pilot modes remain off. No new migration or hosted infrastructure is required.
+Status (2026-10-21): **merged into `main` via PR #73** (`c9a86d6dd984169ba9f221a088c33559827f05ef`). Normal Companion package and Windows owner acceptance **PASS** for fresh anonymous install -> anonymous manual sync -> registered sign-in -> ownership transfer + device registration -> registered manual sync (zero-row fixture). No new migration or hosted infrastructure was needed. AutoSync remained OFF during acceptance, while owner has now **approved its implementation and controlled testing as a separate next task**. Activation-file enrollment, web production activation, and temporary pilots are not thereby approved. See [acceptance record](account-linking-mvp-acceptance.md) and [roadmap](../ROADMAP.md).
 
 ## Chosen flow
 
@@ -9,7 +9,7 @@ Status: implemented in the normal Companion package for owner acceptance. Standa
 3. On **Connect this installation**, `AccountLinkService` checks the registered session and asks the existing anonymous owner to start a one-time 0012 claim. The database verifies the live anonymous session and current installation owner; knowing an installation ID is insufficient.
 4. The signed-in account redeems the server-generated claim through `fdb_account_claim_redeem`. Migration 0012 performs the single-use ownership transfer under the installation lock and preserves all installation, observation and Guildbook rows.
 5. The same registered session issues a 0014 enrollment ticket. A separate anonymous device session redeems it for the same installation. The resulting device secret is stored by the existing `DeviceCredentialStore` under Windows DPAPI.
-6. Manual sync uses `fdb_device_ingest` and the revocable device credential. `DeviceAutoSyncApproved` remains `false`.
+6. Manual sync uses `fdb_device_ingest` and the revocable device credential. During PR #73 acceptance, registered-device AutoSync remained disabled. Enabling user-controlled AutoSync with focused real-data tests is the next approved Companion development item; this document does not assert it is already shipped.
 
 The normal package validates the exact built-in production Supabase HTTPS origin and a modern publishable key before it enables sign-in. An explicit process-level `FOREVERDB_ACCOUNT_MODE=disabled` remains a kill switch. Alternate origins, paths, ports and secret/service-role keys fail closed.
 
@@ -44,7 +44,7 @@ The claim code and enrollment ticket live only in process memory during the exch
 
 No PR #62 migration, pairing endpoint, raw-header ingress, HMAC attestation, browser polling state or second ownership model is used.
 
-## Acceptance evidence required before activation
+## Verified acceptance and remaining release gates
 
 - Companion suite on Windows with real DPAPI and multi-process tests, including `AccountLinkingMvpTests`.
 - Disposable PostgreSQL + real GoTrue enrollment suite, including the claim-to-device vertical slice in `database/tests/enrollment/09_gotrue.test.mjs`.
@@ -52,4 +52,4 @@ No PR #62 migration, pairing endpoint, raw-header ingress, HMAC attestation, bro
 - Release WPF build and the normal self-contained `ForeverDB-Companion-win-x64` workflow artifact.
 - One scoped security review of the final diff and exact-head CI.
 
-Public rollout, hosted Supabase migration/configuration changes, deployment, installer publication, activation-file enrollment and AutoSync require separate owner approval.
+Owner Windows functional acceptance for the MVP passed on 2026-10-21; the zero-source/zero-Guildbook fixture does not verify non-empty data ingestion. The owner subsequently authorized AutoSync development and controlled tests, **not** automatic public rollout or default-ON settings. Hosted Supabase changes, deployment, installer publication and activation-file enrollment remain separately gated.
