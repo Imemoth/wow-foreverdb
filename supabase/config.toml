@@ -1,0 +1,7 @@
+# Minimal Supabase CLI config: ONLY the welcome worker's function settings live here. Not applied by the repository; the owner deploys.
+[functions.azerdex-welcome-worker]
+# The caller is the database scheduler, not a Supabase user, so no user JWT exists. Authentication is the dedicated shared secret
+# (x-azerdex-worker-secret, constant-time compared, fail-closed when unset). Never copy this setting to another function.
+verify_jwt = false
+# NOTE: no `static_files`. The CID emblem is embedded as the generated module logo-data.ts (see scripts/embed-azerdex-logo.mjs) because Supabase
+# cannot ship static files with API-based deploys (dashboard / MCP / --use-api); an imported module is bundled by every deploy path.

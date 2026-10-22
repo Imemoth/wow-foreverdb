@@ -18,6 +18,7 @@ One Supabase Auth identity, used by the website and the Windows Companion, with 
 | [integration-and-acceptance-report.md](integration-and-acceptance-report.md) | PR E evidence ledger, scenario map, real-PostgREST observations, independent reviews, pending gates |
 | [staging-runbook.md](staging-runbook.md) / [windows-acceptance-checklist.md](windows-acceptance-checklist.md) | owner-run staging deployment/acceptance and the Windows W1a..W10 evidence template |
 | [web-auth.md](web-auth.md) | PR B as built: routes, session/CSRF/callback design, verified GoTrue behaviour, acceptance mapping, findings, owner actions |
+| [../azerdex-welcome-email/](../azerdex-welcome-email/README.md) | AzerDex welcome e-mail after the first genuine verification (migration `0015`, separate from the account ownership backend; documents why recovery must be distinguished from signup confirmation) |
 | [pr-obligations.md](pr-obligations.md) | Binding obligations for PR B and PR C, including the mandatory live-session negative tests (proof set LS-1..LS-9 and LS-11; LS-10 is the tripwire) |
 
 Related: [ADR-015..018](../web/architecture-decisions.md), [web threat model](../web/threat-model.md), [go-live checklist](../web/go-live-checklist.md), [release gates](../web/release-gates.md), [ROADMAP](../ROADMAP.md).
