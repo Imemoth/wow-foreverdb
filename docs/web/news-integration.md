@@ -16,7 +16,7 @@ Relevance is conservative. A record is published only when its title/excerpt cle
 
 `database/public-read/migrations/0002_news_model.sql` adds independent `pub.news_sources`, `pub.news_entries`, `pub.news_post_versions`, and `pub.news_sync_runs` tables. The collector calls `pub_admin.news_apply_sync(jsonb)`, which is idempotent on `(source_key, source_entry_id)` and stores a version snapshot only when the content hash changes. The web reader can execute only the bounded `web_api.news_list`, `web_api.news_featured`, and `web_api.news_entry` functions; it has no table privileges and no write path.
 
-`database/public-read/migrations/0008_news_ingest_role.sql` creates the separate `azerdex_news_ingest` LOGIN role and `0010_news_ingest_search_path.sql` restricts its session `search_path` to `pub_admin, pg_catalog`. It has `USAGE` only on `pub_admin` and `EXECUTE` only on `pub_admin.news_apply_sync(jsonb)`. It has no direct project table privileges, no `pub` or `web_api` schema usage, and does not replace or alter the existing `foreverdb_publisher` NOLOGIN boundary. The password is provisioned out of band and is never stored in the repository. `database/public-read/tests/news_ingest_role_security.sql` is run over the real ingestion connection after password provisioning; it verifies the authenticated identity, RPC execution, and transactional rollback.
+`database/public-read/migrations/0008_news_ingest_role.sql` creates the separate `azerdex_news_ingest` LOGIN role and `0009_news_ingest_search_path.sql` restricts its session `search_path` to `pub_admin, pg_catalog`. It has `USAGE` only on `pub_admin` and `EXECUTE` only on `pub_admin.news_apply_sync(jsonb)`. It has no direct project table privileges, no `pub` or `web_api` schema usage, and does not replace or alter the existing `foreverdb_publisher` NOLOGIN boundary. The password is provisioned out of band and is never stored in the repository. `database/public-read/tests/news_ingest_role_security.sql` is run over the real ingestion connection after password provisioning; it verifies the authenticated identity, RPC execution, and transactional rollback.
 
 Supabase-owned extension objects are a platform-level exception: this project cannot deny PUBLIC grants on `net` objects to only one login role without changing shared `pg_net` behaviour. The News role has no project ACLs on those objects, and its restricted `search_path` prevents accidental unqualified resolution. The authenticated test and application privilege audit treat project tables/functions as the enforceable boundary and record platform residuals separately.
 
@@ -44,7 +44,7 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
 2. Set only the new role's password through an interactive direct database session. The command below contains no password; `psql` prompts for the existing admin password and `\password` prompts twice for the new role password without putting either value in command history:
 
    ```powershell
-   psql -X "host=db.chcoypkjzxfznsqmmbrq.supabase.co port=5432 dbname=postgres user=postgres sslmode=require"
+   psql -X -W "host=db.chcoypkjzxfznsqmmbrq.supabase.co port=5432 dbname=postgres user=postgres sslmode=require"
    \password azerdex_news_ingest
    \q
    ```
@@ -66,9 +66,64 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
 
    The helper prompts for the admin password through `psql`; the collector secret is read from a masked prompt into the child process environment and is not present in the command line or SQL input history. Use the exact same value that was stored as `AZERDEX_NEWS_COLLECTOR_SECRET`.
 
-5. From the protected environment, run `database/public-read/tests/news_ingest_role_security.sql` through the new `NEWS_DATABASE_URL`. Then call the Edge Function with the matching `x-azerdex-news-secret` header, verify persistence, repeat the same run for idempotency, and only then enable/verify the cron jobs.
+5. From the protected environment, run `database/public-read/tests/news_ingest_role_security.sql` through the new `NEWS_DATABASE_URL`:
+
+   ```powershell
+   psql -X -W "host=aws-0-eu-west-1.pooler.supabase.com port=6543 dbname=postgres user=azerdex_news_ingest.chcoypkjzxfznsqmmbrq sslmode=require" -f .\database\public-read\tests\news_ingest_role_security.sql
+   ```
+
+   The password is entered only at the prompt. Then call the Edge Function twice from the protected terminal with the matching `x-azerdex-news-secret` header and the same `{}` body. Record each response's source/run counts, and after each call run the read-only persistence query below as an administrator connection. The second call must not increase `pub.news_entries` or `pub.news_post_versions` for unchanged content; `pub.news_sync_runs` may increase because each attempt is audited.
+
+   ```powershell
+   $collectorSecret = Read-Host 'Collector secret' -AsSecureString
+   $secretBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($collectorSecret)
+   try {
+       $secret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretBstr)
+       $headers = @{ 'x-azerdex-news-secret' = $secret }
+       Invoke-RestMethod -Method Post -Uri 'https://chcoypkjzxfznsqmmbrq.supabase.co/functions/v1/azerdex-news-collector' -Headers $headers -ContentType 'application/json' -Body '{}'
+   }
+   finally {
+       [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secretBstr)
+       Remove-Variable secret, headers, collectorSecret -ErrorAction SilentlyContinue
+   }
+   ```
+
+   Repeat that block once more with the same protected secret. It keeps the secret out of the command line, PowerShell history, SQL Editor history, GitHub, and chat. Do not redirect the response to a file that is committed or shared.
+
+   For each checkpoint, the administrator-only persistence query is:
+
+   ```sql
+   select
+     (select count(*) from pub.news_sources) as sources,
+     (select count(*) from pub.news_entries) as entries,
+     (select count(*) from pub.news_post_versions) as post_versions,
+     (select count(*) from pub.news_sync_runs) as sync_runs;
+   ```
+
+   Continue only if the role test passes, the collector returns success for the live US/EU/official sources, entries are persisted, and the repeated call is idempotent.
 
 6. After the authenticated role test, manual ingestion, and idempotency check pass, apply `database/ops/0016_schedule_news_collector.sql`. It will find the already-configured private settings and create the three active cron jobs. Verify the next scheduled request in `cron.job_run_details`; do not apply this script earlier.
+
+   ```powershell
+   psql -X -W "host=db.chcoypkjzxfznsqmmbrq.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" -f .\database\ops\0016_schedule_news_collector.sql
+   ```
+
+   Verify all three jobs and their latest execution:
+
+   ```sql
+   select j.jobname, j.schedule, j.active,
+          r.status, r.start_time, r.end_time, r.return_message
+   from cron.job j
+   left join lateral (
+     select status, start_time, end_time, return_message
+     from cron.job_run_details
+     where jobid = j.jobid
+     order by start_time desc
+     limit 1
+   ) r on true
+   where j.jobname in ('azerdex-news-blueposts', 'azerdex-news-official', 'azerdex-news-revisions')
+   order by j.jobname;
+   ```
 
 The schedule is not activated by this PR because the connected Supabase/public-read credentials are not present in the repository environment. Applying the schedule is an operator action and does not require a Vercel redeployment.
 
