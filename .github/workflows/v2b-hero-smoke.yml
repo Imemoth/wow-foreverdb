@@ -19,7 +19,7 @@ on:
       perf_runs:
         description: "Sequential requests per file and origin for the Vercel-vs-Cloudflare probe (0 = skip)"
         default: "5"
-  # also runs (with the defaults: expect local, site https://beta.azerdex.com) when this workflow or its scripts change; this is also what registers the workflow for manual dispatch before it is on the default branch
+  # also runs (with the defaults: expect cdn (the beta's state since the V2-B activation), site https://beta.azerdex.com) when this workflow or its scripts change; this is also what registers the workflow for manual dispatch before it is on the default branch
   pull_request:
     paths:
       - ".github/workflows/v2b-hero-smoke.yml"
@@ -36,11 +36,11 @@ concurrency:
 
 jobs:
   smoke:
-    name: Hero smoke (${{ github.event.inputs.expect || 'local' }})
+    name: Hero smoke (${{ github.event.inputs.expect || 'cdn' }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      EXPECT: ${{ github.event.inputs.expect || 'local' }}
+      EXPECT: ${{ github.event.inputs.expect || 'cdn' }}
       SITE: ${{ github.event.inputs.site || 'https://beta.azerdex.com' }}
       PERF_RUNS: ${{ github.event.inputs.perf_runs || '5' }}
       CDN: https://azerdex-assets.pages.dev
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: v2b-hero-smoke-${{ github.event.inputs.expect || 'local' }}
+          name: v2b-hero-smoke-${{ github.event.inputs.expect || 'cdn' }}
           path: |
             smoke-*.json
             probe-*.json
@@ -64,11 +64,11 @@ jobs:
           retention-days: 90
 
   browser:
-    name: Real-browser hero check (${{ github.event.inputs.expect || 'local' }})
+    name: Real-browser hero check (${{ github.event.inputs.expect || 'cdn' }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      EXPECT: ${{ github.event.inputs.expect || 'local' }}
+      EXPECT: ${{ github.event.inputs.expect || 'cdn' }}
       SITE: ${{ github.event.inputs.site || 'https://beta.azerdex.com' }}
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: v2b-hero-browser-${{ github.event.inputs.expect || 'local' }}
+          name: v2b-hero-browser-${{ github.event.inputs.expect || 'cdn' }}
           path: |
             browser-*.json
             shots/*.png
