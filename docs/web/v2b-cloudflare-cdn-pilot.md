@@ -1,7 +1,7 @@
 # V2-B — Cloudflare CDN pilot for the cinematic zone heroes (Hillsbrad Foothills 1424, Duskwood 1431): preflight and runbook
 
 Verdict: **`V2B_CDN_DEPLOYED_VERIFIED`** — the unified snapshot (atlas baseline + 8 zone-hero derivatives) is live on the Cloudflare Pages project `azerdex-assets` (Production, branch `main`) and passed the Post verification (179/179).
-**CDN-served heroes are NOT activated**: the Vercel beta still serves same-origin heroes; activation is a separate step (§4). Production Vercel, the ledgers and every other system are untouched.
+**Beta activation (2026-10-22): `V2B_BETA_CDN_ACTIVE_VERIFIED`** — `beta.azerdex.com` serves the Hillsbrad/Duskwood heroes from the CDN (§4.1). Vercel Production, the ledgers and every other system are untouched.
 Builds on [`unified-cdn-v2a.md`](unified-cdn-v2a.md) (pipeline), [`map-atlas-cdn-deploy.md`](map-atlas-cdn-deploy.md) and [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md).
 **Neither the audit nor this record is licensing clearance for the artwork** (§6).
 
@@ -88,6 +88,22 @@ Nothing below needs a local checkout: the smoke and performance probe run on a G
    Visual check by the owner (desktop and phone): `https://beta.azerdex.com/zone/1424` and `/zone/1431` — DevTools → Network: hero request on `azerdex-assets.pages.dev/zone-heroes/…` status 200; Console: **no** CSP message; crop as approved; the atlas map below the hero loads.
 5. **Performance comparison** (protocol in [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md) §4): `probe-local.json` (before) vs `probe-cdn.json` (after) from the workflow, repeated at different times; Lighthouse (mobile and desktop, ≥ 5 runs) on both states is the owner/browser-side part. Suggested acceptance: Cloudflare median hero download ≤ same-origin median (warm), LCP not worse than noise (±10 %); otherwise keep `local`. The probe is informational (no thresholds).
 6. If anything is wrong → §5.1 (remove the variable, redeploy; one variable, one redeploy).
+
+### 4.1 Activation record (2026-10-22)
+| Fact | Value |
+| --- | --- |
+| Variable | `AZERDEX_ZONE_HERO_SOURCE=cdn`, Vercel Preview, git branch `web/azerdex-beta` only (set by the owner in the dashboard: this session's Vercel connector has no environment-variable permission, HTTP 403) |
+| Deployment | `dpl_G8RrHLkPZXaLUMm6PX6YdR8bq2Su` (`wow-foreverdb-q9mozz3tw-imemoths-projects.vercel.app`), READY, commit `c199d62` = beta branch HEAD, aliased to `beta.azerdex.com` (`aliasError: null`); previous beta deployment `dpl_29iTXSJFGA6ffwwPEezeZrDuP3z9` (same commit, flag unset) is the rollback candidate |
+| Smoke `expect=cdn` | **PASS 42/42** (Hillsbrad 1424 + Duskwood 1431): `srcset`/`src` on `https://azerdex-assets.pages.dev/zone-heroes/<id>/v1/…`, sizes and intrinsic size unchanged, crop classes `hero-pos-85-50`/`hero-pos-85-45` with no inline style, CSP strict (`style-src` nonce only, `img-src` = `'self' data:` + the one CDN origin), all 8 files = inventory bytes with immutable / `image/webp` / CORS / nosniff / timing headers — [run 39846715478](https://github.com/Imemoth/wow-foreverdb/actions/runs/39846715478) |
+| Real browser (Chrome, desktop 1440×900 and mobile 390×844, both zones) | **PASS 40/40** — [run 39847615750](https://github.com/Imemoth/wow-foreverdb/actions/runs/39847615750): hero decodes; `currentSrc` = `desktop-1280.webp` / `mobile-600.webp` on the CDN; **computed `object-position` `85% 50%` (Hillsbrad) and `85% 45%` (Duskwood)**, `object-fit: cover`, no inline style; all hero requests 200; **no CSP violation event, no console error or failed request**; the atlas map becomes ready (`data-ready=true`, "Artwork: full-reveal · v1 · client 1.60.1.70450") and its 3 CDN requests are all < 400. Note (not a hero/CDN issue): the anonymous Account probe `GET /account/api/me` answers 401, as expected for a logged-out visitor. Screenshots: artifact `v2b-hero-browser-cdn` |
+| Local baseline before activation | smoke `expect=local` **PASS 32/32** — [run 39818568580](https://github.com/Imemoth/wow-foreverdb/actions/runs/39818568580) |
+
+**Performance comparison** (download of the same 8 files from a GitHub runner in US-East; median total time per file; informational, not LCP):
+| | before: same-origin (Vercel), 5 runs, 16:58 UTC | after: Cloudflare CDN, 10 runs, 20:12 UTC | same run as "after": Vercel same-origin, 10 runs |
+| --- | --- | --- | --- |
+| median over the 8 files | **76 ms** (67–96) | **40 ms** (37–65) | 122 ms (104–158) |
+| Cache-Control | `public, max-age=0, must-revalidate` | `public, max-age=31536000, immutable` | `public, max-age=0, must-revalidate` |
+Visitors move from ~76 ms to ~40 ms (≈ 0.5×) on a warm edge, with identical bytes, and repeat views no longer revalidate (immutable vs `max-age=0`). The acceptance rule of §4 step 5 (Cloudflare median ≤ same-origin median) holds in both comparisons. Limits: one network location, ten sequential requests, run-to-run noise (the Vercel numbers differ between the two runs); LCP/Lighthouse was not measured here.
 
 ## 5. Rollback plan
 1. **Website (fast, no data involved)**: remove the variable (`npx vercel env rm AZERDEX_ZONE_HERO_SOURCE preview web/azerdex-beta`, or set it to `local`) and redeploy (or use Vercel's instant rollback to the previous deployment). The same-origin files are still in the repository and the app. Verify: `web/scripts/hero-cdn-smoke.mjs --expect local` → PASS.
