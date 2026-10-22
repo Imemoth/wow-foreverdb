@@ -1,0 +1,3 @@
+[functions.azerdex-news-collector]
+# Invoked by the database scheduler with a dedicated shared secret.
+verify_jwt = false
