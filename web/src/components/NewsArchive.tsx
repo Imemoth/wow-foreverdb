@@ -10,6 +10,7 @@ import { filterNewsByRegion, type NewsRegionFilter } from "@/lib/news/presentati
 import { pageContext } from "@/lib/page";
 
 const PAGE_SIZE = 12;
+const REGION_FILTER_MAX_ROWS = 500;
 const TABS: Array<{ label: string; value: NewsCategory | null }> = [
   { label: "All News", value: null },
   { label: "Blue Posts", value: "bluepost" },
@@ -41,6 +42,7 @@ function queryUrl(category: NewsCategory | null, query: string, page: number, re
 async function loadAllNews(category: NewsCategory | null, query: string) {
   const pageSize = 50;
   const firstPage = await data().newsList({ category, query, page: 1, pageSize });
+  if (firstPage.total > REGION_FILTER_MAX_ROWS) throw new Error("news_region_filter_limit");
   const totalPages = Math.min(Math.ceil(firstPage.total / pageSize), 100);
   const remainingPages = await Promise.all(Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
     data().newsList({ category, query, page: index + 2, pageSize })));

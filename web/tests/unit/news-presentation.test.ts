@@ -33,6 +33,7 @@ describe("news presentation", () => {
   it("normalizes encoded ellipses before truncating an excerpt", () => {
     expect(cleanNewsExcerpt("Read the latest update [important&hellip;] with context", 28)).toBe("Read the latest update […]");
     expect(cleanNewsExcerpt("A short excerpt.", 80)).toBe("A short excerpt.");
+    expect(cleanNewsExcerpt("1234567890 extra", 10).length).toBeLessThanOrEqual(10);
   });
 
   it("filters Bluepost rows by the selected region while keeping the all view intact", () => {

@@ -20,7 +20,6 @@ export function NewsDetail({ entry, nonce, baseUrl }: { entry: NewsEntry; nonce?
           {labels[entry.category]} · {entry.region.toUpperCase()}
         </p>
         <h1 className="news-detail__title font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-gold-300 sm:text-4xl">{entry.title}</h1>
-        <p className="news-detail__dek text-lg text-mist">{excerpt}</p>
         <p className="flex flex-wrap items-center gap-2 text-sm text-mist">
           <time dateTime={entry.publishedAt}>{fmtDate(entry.publishedAt)}</time>
           {entry.author && <><span aria-hidden="true">·</span><span>By {entry.author}</span></>}

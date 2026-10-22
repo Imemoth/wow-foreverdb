@@ -32,20 +32,22 @@ function decodeNewsEntities(value: string): string {
 }
 
 export function cleanNewsExcerpt(value: string, maxLength = 180): string {
+  const limit = Math.max(1, maxLength);
   const normalized = decodeNewsEntities(value)
     .replace(/<[^>]*>/g, " ")
     .replace(/\[[^\]]*…\]/g, "[…]")
     .replace(/\s+/g, " ")
     .trim();
-  if (normalized.length <= maxLength) return normalized;
+  if (normalized.length <= limit) return normalized;
 
   const words = normalized.split(" ");
   let result = "";
   for (const word of words) {
     const candidate = result ? `${result} ${word}` : word;
-    if (candidate.length > maxLength) break;
+    if (candidate.length > limit) break;
     result = candidate;
   }
-  if (result) return /…$|\[…\]$/.test(result) ? result : `${result.replace(/[\s,;:]+$/, "")}…`;
-  return `${normalized.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+  if (result && /…$|\[…\]$/.test(result)) return result;
+  const clipped = result.length < limit ? result : result.slice(0, Math.max(1, limit - 1)).trimEnd();
+  return `${clipped.replace(/[\s,;:]+$/, "")}…`;
 }
