@@ -47,7 +47,7 @@ export function LoginForm({ next }: { next?: string }) {
       <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       <p className="flex flex-wrap justify-between gap-2 text-sm text-mist">
         <Link href="/account/forgot-password">Forgot your password?</Link>
-        <Link href="/account/register">Create an account</Link>
+        <Link href="/account/register">Create account</Link>
       </p>
     </form>
   );

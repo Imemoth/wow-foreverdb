@@ -254,7 +254,7 @@ export function evaluateEnv(
 
   // 4b. Closed, server-only Account Auth boundary (disabled unless a reviewed source flag approves).
   // Nothing in this exception relaxes the PUBLIC read adapter or NEXT_PUBLIC_* protections above.
-  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv }, accountApproval);
+  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv, gitBranch: raw.VERCEL_GIT_COMMIT_REF }, accountApproval);
   for (const issue of account.issues) fail(issue);
   if (account.config?.mode === "pilot") {
     // Preview designation normally permits memory limiting and no CAPTCHA, but the private-project

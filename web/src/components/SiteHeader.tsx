@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderAccount } from "@/app/account/_ui/HeaderAccount";
 import { SUPPORT_URL } from "@/lib/support-link";
 import { LogoMark } from "./Logo";
 import { MobileNav } from "./MobileNav";
@@ -13,15 +14,13 @@ const NAV = [
 ];
 
 export function SiteHeader() {
-  // ADR-015 (account boundary): this file stays outside the account zone and never references
-  // its configuration or session state — enforced by a static test, not just a convention. For
-  // the current public-beta scope, Account Auth is disabled, which made a global, state-agnostic
-  // "/account" link here misleading (it always rendered, 404'd when visited). Since this file
-  // cannot safely check whether sign-in is enabled without crossing the boundary, the fix is to
-  // remove the entry point here rather than make it conditional - the real /account app, its own
-  // authenticated nav (AccountNavLinks.tsx) and its fail-closed 404 gate are all untouched.
+  // ADR-015 (account boundary): this file stays outside the account zone and never references its
+  // configuration or session state - enforced by a static test (account-boundary.test.ts), not just a
+  // convention. The Account entry comes from ONE seam, <HeaderAccount />, which lives in the account zone,
+  // renders nothing unless Account is enabled and ready on this deployment, and resolves the signed-in state
+  // client-side. Deployments where Account is not approved therefore show no entry at all.
   return (
-    <header className="border-b border-ink-700/80 bg-ink-900/80 backdrop-blur supports-[backdrop-filter]:bg-ink-900/60">
+    <header className="relative z-[1100] border-b border-ink-700/80 bg-ink-900/80 backdrop-blur supports-[backdrop-filter]:bg-ink-900/60">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-2.5 sm:py-3">
         <Link href="/" className="flex items-center gap-2.5 no-underline" aria-label="AzerDex home">
           <LogoMark />
@@ -55,6 +54,7 @@ export function SiteHeader() {
             <input id="header-q" name="q" type="search" maxLength={80} minLength={2} autoComplete="off"
               placeholder="Search items, creatures, nodes…" className="field w-full text-sm" />
           </form>
+          <HeaderAccount variant="desktop" />
           {/* Visually secondary to primary navigation and search: smaller, outlined rather than
               filled, and placed last in this top-right cluster. A plain external link - no widget,
               script or tracking. */}
@@ -76,7 +76,7 @@ export function SiteHeader() {
               <path d="m20 20-3.5-3.5" />
             </svg>
           </Link>
-          <MobileNav />
+          <MobileNav accountSlot={<HeaderAccount variant="mobile" />} />
         </div>
       </div>
     </header>

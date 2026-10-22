@@ -43,3 +43,14 @@ export async function postJson(path: string, body: unknown, opts: { retryCsrf?: 
   }
   return { status: 0, data: { ok: false, error: "csrf" } };
 }
+
+/** Same-origin GET of a JSON account endpoint (cookies only; no token in JavaScript). Never throws: status 0 = network failure. */
+export async function getJson(path: string, signal?: AbortSignal): Promise<ApiReply> {
+  try {
+    const res = await fetch(path, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal });
+    const data = (await res.json().catch(() => ({}))) as ApiReply["data"];
+    return { status: res.status, data };
+  } catch {
+    return { status: 0, data: { ok: false, error: "network" } };
+  }
+}

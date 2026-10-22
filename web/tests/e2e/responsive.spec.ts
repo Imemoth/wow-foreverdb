@@ -289,11 +289,12 @@ test.describe("community support link ('Buy Me a Coffee')", () => {
   }
 });
 
-// P1-B regression: the public-beta scope has Account Auth disabled, so a global nav link that
-// always 404s is misleading - removed from both the desktop header and the mobile hamburger menu
-// without SiteHeader/MobileNav ever importing or checking account state (ADR-015 stays intact;
-// see account-boundary.test.ts). The real /account app and its own authenticated nav are untouched.
-test.describe("global nav has no Account entry point (public-beta scope)", () => {
+// Regression: on any deployment where Account is not enabled (this e2e stack, production, unrelated previews) the
+// global nav carries NO Account entry - a link that always 404s would be misleading. The entry is rendered only by the
+// account-zone seam <HeaderAccount /> when Account is enabled and ready (see tests/unit/account-public-beta.test.ts and
+// account-boundary.test.ts); SiteHeader/MobileNav never inspect account state (ADR-015). The real /account app stays
+// fail-closed with 404 here.
+test.describe("global nav has no Account entry point while Account is disabled", () => {
   test("desktop header carries no Account link", async ({ page }) => {
     test.skip(test.info().project.name !== "desktop", "desktop header only renders at sm+");
     await page.goto("/");
