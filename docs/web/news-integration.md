@@ -16,7 +16,9 @@ Relevance is conservative. A record is published only when its title/excerpt cle
 
 `database/public-read/migrations/0002_news_model.sql` adds independent `pub.news_sources`, `pub.news_entries`, `pub.news_post_versions`, and `pub.news_sync_runs` tables. The collector calls `pub_admin.news_apply_sync(jsonb)`, which is idempotent on `(source_key, source_entry_id)` and stores a version snapshot only when the content hash changes. The web reader can execute only the bounded `web_api.news_list`, `web_api.news_featured`, and `web_api.news_entry` functions; it has no table privileges and no write path.
 
-`database/public-read/migrations/0008_news_ingest_role.sql` creates the separate `azerdex_news_ingest` LOGIN role. It has `USAGE` only on `pub_admin` and `EXECUTE` only on `pub_admin.news_apply_sync(jsonb)`. It has no direct table privileges, no `pub` or `web_api` schema usage, and does not replace or alter the existing `foreverdb_publisher` NOLOGIN boundary. The password is provisioned out of band and is never stored in the repository. `database/public-read/tests/news_ingest_role_security.sql` is run over the real ingestion connection after password provisioning; it verifies the authenticated identity, RPC execution, and transactional rollback.
+`database/public-read/migrations/0008_news_ingest_role.sql` creates the separate `azerdex_news_ingest` LOGIN role and `0010_news_ingest_search_path.sql` restricts its session `search_path` to `pub_admin, pg_catalog`. It has `USAGE` only on `pub_admin` and `EXECUTE` only on `pub_admin.news_apply_sync(jsonb)`. It has no direct project table privileges, no `pub` or `web_api` schema usage, and does not replace or alter the existing `foreverdb_publisher` NOLOGIN boundary. The password is provisioned out of band and is never stored in the repository. `database/public-read/tests/news_ingest_role_security.sql` is run over the real ingestion connection after password provisioning; it verifies the authenticated identity, RPC execution, and transactional rollback.
+
+Supabase-owned extension objects are a platform-level exception: this project cannot deny PUBLIC grants on `net` objects to only one login role without changing shared `pg_net` behaviour. The News role has no project ACLs on those objects, and its restricted `search_path` prevents accidental unqualified resolution. The authenticated test and application privilege audit treat project tables/functions as the enforceable boundary and record platform residuals separately.
 
 The existing editorial Markdown system remains the AzerDex-authored archive. Database-backed news uses `/news/entry/<slug>`, leaving the established `/news/<slug>` editorial route unchanged.
 
@@ -36,40 +38,33 @@ Before enabling the schedule, deploy `supabase/functions/azerdex-news-collector`
 
 ### Operator credential procedure
 
-Use the `azerdex-public-read` Supabase Dashboard and an operator password manager. Do not place any generated value in Git, a PR, a chat message, or a shell command that will be retained in history. Do not rotate the existing `foreverdb_web_reader`, `foreverdb_publisher`, or account-system credentials.
+Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session, and an operator password manager. Do not place any generated value in Git, a PR, a chat message, a shell command, or SQL Editor history. Do not rotate the existing `foreverdb_web_reader`, `foreverdb_publisher`, or account-system credentials.
 
 1. Generate one strong database password and one independent collector/scheduler secret (at least 24 characters) in the password manager.
-2. In the public-read project's authenticated SQL Editor, set only the new role's password:
+2. Set only the new role's password through an interactive direct database session. The command below contains no password; `psql` prompts for the existing admin password and `\password` prompts twice for the new role password without putting either value in command history:
 
-   ```sql
-   alter role azerdex_news_ingest password '<paste-the-generated-database-password-here>';
+   ```powershell
+   psql -X "host=db.chcoypkjzxfznsqmmbrq.supabase.co port=5432 dbname=postgres user=postgres sslmode=require"
+   \password azerdex_news_ingest
+   \q
    ```
 
-   Replace the placeholder in the protected editor session; never commit or report the value.
-3. Use the Supabase CLI with an authenticated operator session, or Dashboard Edge Function secrets, to set the two Edge Function secrets from a protected file that is deleted after use:
+   Confirm the password prompt is completed before leaving the terminal. Do not use an `ALTER ROLE ... PASSWORD '...'` statement in SQL Editor.
+3. In Supabase Dashboard → Edge Functions → `azerdex-news-collector` → Secrets, add/update exactly these two server-side secrets. Paste values directly from the password manager; do not put them into chat, GitHub, a repository file, or shell history:
 
    ```text
    NEWS_DATABASE_URL=postgresql://azerdex_news_ingest.chcoypkjzxfznsqmmbrq:<url-encoded-database-password>@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=require
    AZERDEX_NEWS_COLLECTOR_SECRET=<the-same-collector-scheduler-secret>
    ```
 
+   The pooler endpoint is the verified EU Supavisor transaction-pooler endpoint for this project. Keep `sslmode=require`; the Deno PostgreSQL client used by the Edge Function accepts this standard PostgreSQL URL. URL-encode reserved characters in the password. If CLI provisioning is required instead, use `supabase secrets set --project-ref chcoypkjzxfznsqmmbrq --env-file <protected-temporary-file>` and delete the file immediately after confirmation.
+4. After the Edge Function secrets are saved, apply `database/ops/0016_schedule_news_collector.sql` only when the function authentication check and a manual ingestion have passed. Then run the repository-reviewed helper below. It prompts for the scheduler secret without storing it in SQL Editor history or the command line:
+
    ```powershell
-   supabase secrets set --project-ref chcoypkjzxfznsqmmbrq --env-file C:\secure\azerdex-news.env
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\database\ops\configure_news_scheduler_secret.ps1
    ```
 
-   The pooler endpoint is the verified EU Supavisor transaction-pooler endpoint for this project. Keep `sslmode=require`; the Deno PostgreSQL client used by the Edge Function accepts this standard PostgreSQL URL. URL-encode reserved characters in the password.
-4. After the Edge Function secret update, apply `database/ops/0016_schedule_news_collector.sql` only when the function authentication check and a manual ingestion have passed. Then, in the public-read SQL Editor, configure the scheduler with the same function URL and the exact same shared secret:
-
-   ```sql
-   begin;
-   insert into private.azerdex_news_settings(key, value)
-   values
-     ('news_collector_url', 'https://chcoypkjzxfznsqmmbrq.supabase.co/functions/v1/azerdex-news-collector'),
-     ('news_collector_secret', '<paste-the-same-collector-scheduler-secret-here>')
-   on conflict (key) do update
-     set value = excluded.value, updated_at = now();
-   commit;
-   ```
+   The helper prompts for the admin password through `psql`; the collector secret is read from a masked prompt into the child process environment and is not present in the command line or SQL input history. Use the exact same value that was stored as `AZERDEX_NEWS_COLLECTOR_SECRET`.
 
 5. From the protected environment, run `database/public-read/tests/news_ingest_role_security.sql` through the new `NEWS_DATABASE_URL`. Then call the Edge Function with the matching `x-azerdex-news-secret` header, verify persistence, repeat the same run for idempotency, and only then enable/verify the cron jobs.
 
