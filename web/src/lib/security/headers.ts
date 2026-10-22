@@ -4,16 +4,18 @@ export function buildPageCsp(
   nonce: string,
   // assetOrigin: an allow-listed external map-asset origin (see lib/maps/asset-url.ts); only img-src and
   // connect-src (manifest fetch) gain it, and only for the routes whose caller passes it.
-  opts: { dev: boolean; turnstile: boolean; https: boolean; assetOrigin?: string | null },
+  opts: { dev: boolean; turnstile: boolean; https: boolean; assetOrigin?: string | null; heroImgOrigin?: string | null },
 ): string {
   const asset = opts.assetOrigin ? ` ${opts.assetOrigin}` : "";
+  // CDN-served cinematic heroes: img-src only (no fetch), and nothing at all while the heroes are served same-origin.
+  const hero = opts.heroImgOrigin && opts.heroImgOrigin !== opts.assetOrigin ? ` ${opts.heroImgOrigin}` : "";
   const turnstile = opts.turnstile ? " https://challenges.cloudflare.com" : "";
   const directives = [
     "default-src 'self'",
     // 'strict-dynamic': only nonce-bearing scripts (and what they load) execute.
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${turnstile}${opts.dev ? " 'unsafe-eval'" : ""}`,
     `style-src 'self'${opts.dev ? " 'unsafe-inline'" : ` 'nonce-${nonce}'`}`,
-    `img-src 'self' data:${asset}`,
+    `img-src 'self' data:${asset}${hero}`,
     "font-src 'self'",
     `connect-src 'self'${turnstile}${asset}`,
     `frame-src${opts.turnstile ? turnstile : " 'none'"}`,

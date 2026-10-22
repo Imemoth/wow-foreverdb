@@ -12,6 +12,8 @@ from .versioning import VERSION_RE
 PAGES_MAX_FILES = 20_000
 PAGES_MAX_FILE_BYTES = 25 * 1024 * 1024
 ASSET_PATH_RE = re.compile(r"^forever/([1-9]\d{0,5})/(v[1-9]\d{0,3})/([A-Za-z0-9][A-Za-z0-9._-]*)$")
+# Cinematic zone hero renditions: their own namespace, independently versioned, never mixed into forever/ or atlas/.
+HERO_PATH_RE = re.compile(r"^zone-heroes/([1-9]\d{0,5})/(v[1-9]\d{0,3})/((?:desktop|mobile)-[1-9]\d{2,4}\.webp)$")
 
 HEADERS = """/forever/*
   Cache-Control: public, max-age=31536000, immutable
@@ -23,6 +25,16 @@ HEADERS = """/forever/*
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 """
+
+# Appended AFTER the atlas rules (which stay byte-identical, so the existing /forever/* and /atlas/* behaviour cannot change).
+# Timing-Allow-Origin lets the page's Resource Timing report real sizes/durations for the cross-origin hero (performance baseline).
+ZONE_HEROES_HEADERS = """/zone-heroes/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+  Timing-Allow-Origin: *
+"""
+UNIFIED_HEADERS = HEADERS + "\n" + ZONE_HEROES_HEADERS
 
 
 class PackageError(ValueError):
@@ -53,7 +65,7 @@ def check_limits(root: Path) -> dict:
         problems.append(f"{len(files)} files exceeds the {PAGES_MAX_FILES} file limit")
     if over:
         problems.append(f"files over {PAGES_MAX_FILE_BYTES} bytes: {', '.join(over[:5])}")
-    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or (f.startswith("atlas/") and f.count("/") == 1) or f == "_headers")]
+    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or HERO_PATH_RE.match(f) or (f.startswith("atlas/") and f.count("/") == 1) or f == "_headers")]
     if bad_paths:
         problems.append(f"files outside the CDN path convention: {', '.join(bad_paths[:5])}")
     return {"fileCount": len(files), "largestBytes": max(((root / f).stat().st_size for f in files), default=0),

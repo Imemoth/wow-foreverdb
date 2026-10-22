@@ -4,12 +4,16 @@ import { defineConfig, devices } from "@playwright/test";
 //   NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev npx next build
 //   npx playwright test -c playwright.zone-maps.config.ts                                  (synthetic CDN: runs anywhere)
 //   ATLAS_REAL_DIST=<approved dist> npx playwright test -c playwright.zone-maps.config.ts  (real artwork, local acceptance)
+//   E2E_HERO_SOURCE=cdn npx playwright test -c playwright.zone-maps.config.ts              (cinematic heroes from <CDN>/zone-heroes/...)
 // A real local HTTPS server stands in for the CDN host: Chromium resolves azerdex-assets.pages.dev to it, so the BROWSER enforces CORS and
 // CSP. --no-proxy-server keeps a sandbox proxy out of the way. Test-only flags; never used by the normal config.
 const PORT = Number(process.env.E2E_ZONE_PORT ?? 3310);
 const CDN_PORT = Number(process.env.E2E_CDN_ORIGIN_PORT ?? 3443);
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 const BASE = process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL ?? "https://azerdex-assets.pages.dev";
+// Where the cinematic heroes come from: default "local" (same-origin rollback files); E2E_HERO_SOURCE=cdn serves them from the (synthetic or real)
+// CDN host's zone-heroes/ namespace. The whole suite runs in both modes; the CDN-only spec skips itself in local mode.
+const HERO_SOURCE = process.env.E2E_HERO_SOURCE === "cdn" ? "cdn" : "local";
 
 export default defineConfig({
   testDir: "tests/zone-maps",
@@ -36,6 +40,7 @@ export default defineConfig({
       TRUSTED_IP_HEADER: "x-forwarded-for", NEXT_TELEMETRY_DISABLED: "1",
       // These specs make far more page requests from one client than any person would: lift the page rule (the suite is not about rate limiting).
       RATE_LIMITS_JSON: JSON.stringify({ page_db: { perIp: 100000, perSession: 100000, challengeAt: 100000 } }), NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: BASE,
+      AZERDEX_ZONE_HERO_SOURCE: HERO_SOURCE,
     },
   },
 });

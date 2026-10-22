@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { deflateSync } from "node:zlib";
 import snapshot from "../../src/lib/maps/atlas/atlas-index.snapshot.json";
+import heroInventory from "../../../scripts/map-atlas/heroes/zone-heroes.json";
 import { hasFile, readDistFile } from "../e2e/maps-helpers";
 
 /**
@@ -23,7 +24,21 @@ const MIME: Record<string, string> = { ".webp": "image/webp", ".png": "image/png
 const HEADERS = {
   "/forever/": { "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff" },
   "/atlas/": { "Cache-Control": "public, max-age=300, must-revalidate", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff" },
+  // Mirrors the /zone-heroes/* block of the unified `_headers` (scripts/map-atlas/mapatlas/packaging.py ZONE_HEROES_HEADERS).
+  "/zone-heroes/": { "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff", "Timing-Allow-Origin": "*" },
 };
+
+/**
+ * Synthetic mode serves the cinematic heroes exactly as the unified distribution lays them out: `/zone-heroes/<id>/<version>/<role>-<width>.webp`,
+ * with the REAL (public, watermarked) derivative bytes from web/public/zones/hero named by the audited inventory. Unknown paths are 404.
+ */
+function heroAsset(path: string): Buffer | null {
+  const m = /^\/zone-heroes\/(\d+)\/(v\d+)\/((?:desktop|mobile)-\d+\.webp)$/.exec(path);
+  if (!m) return null;
+  const zone = (heroInventory.zones as Record<string, { versions: Record<string, { renditions: { file: string; source: string }[] }> }>)[m[1]!];
+  const r = zone?.versions[m[2]!]?.renditions.find((x) => x.file === m[3]);
+  return r ? readFileSync(join(__dirname, "../../public/zones/hero", r.source)) : null;
+}
 
 function crc32(buf: Buffer): number {
   let c, crc = ~0;
@@ -58,6 +73,8 @@ const pngFor = (w: number, h: number) => png.get(`${w}x${h}`) ?? (png.set(`${w}x
 
 /** Synthetic manifest/image for `forever/<id>/<ver>/...`, derived from the catalog (never invented for unknown maps). */
 function synthetic(path: string): { body: Buffer; type: string } | null {
+  const hero = heroAsset(path);
+  if (hero) return { body: hero, type: "image/webp" };
   const m = /^\/forever\/(\d+)\/(v\d+)\/(manifest\.json|map\.png|[A-Za-z0-9][A-Za-z0-9._-]*\.webp)$/.exec(path);
   if (!m) return null;
   const map = snapshot.maps.find((x) => x.uiMapId === Number(m[1]) && x.latestVersion === m[2]);
