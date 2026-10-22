@@ -283,3 +283,37 @@ banner, looking for logos/wordmarks, text, recognisable named-character likeness
 - Not independently verified: AI-generator terms/output rights, and training-data provenance.
 
 **Status: owner-supplied and visually approved; NOT legally cleared. Open items: heraldry decision above, preview-deployment cleanup.**
+
+## Zone cinematic hero artwork (Duskwood, uiMapID 1431)
+
+**Source.** One panorama (1916x821, no text/UI), supplied by the owner on 2026-10-22; described by the owner as AI-generated, owner-supplied
+artwork (same attestation as above: **not independently verified, not legal clearance**). UiMapID 1431 confirmed from the atlas catalog
+snapshot (`Duskwood`, category `zone`, parent 1415 Eastern Kingdoms, artwork available). No existing atlas map file is touched.
+
+**Private master (not in this repository, not in git history).** As-received WebP, 1916x821, SHA-256
+`61997e34e01be51b74ff5e0e8d9d621dfa19c56f13eec6d1977837fdd28393f5`. Only watermarked derivatives were ever added to the working tree
+(the watermark is applied to the master pixels before any resize/crop).
+
+**Published derivatives** (`web/public/zones/hero/`, Pillow WebP q78 method 6, EXIF/XMP not carried over):
+
+| File | Size | Bytes | SHA-256 |
+| --- | --- | --- | --- |
+| `1431-duskwood-1916.webp` (native width, **not upscaled**; named by width instead of the Hillsbrad "2000") | 1916x821 | 112,782 | `bf118ae7...9080` |
+| `1431-duskwood-1280.webp` | 1280x548 | 63,462 | `0202c685...7299` |
+| `1431-duskwood-mobile-900.webp` (crop x960-1916, full height) | 900x773 | 83,146 | `60652b0d...0985` |
+| `1431-duskwood-mobile-600.webp` (same crop) | 600x515 | 45,462 | `5d27f395...a8e0` |
+
+**Composition.** Subject (moon, chapel, statue, graveyard gate, clock tower and lit village, lantern) is on the right; the left is dark
+forest, so no extra darkening was baked in. Desktop: `objectPosition: 85% 45%` (the 2.33:1 image is cover-cropped vertically in the ~2.8:1
+hero, keeping the moon and lantern in view). Mobile: separate crop from x=960 (keeps moon, chapel, tower and village).
+
+**Watermark** (same convention as the other hero sets): AzerDex emblem from `web/public/icon.svg`, flat `#e8cf8f`, 17% opacity, 54 px
+(2.8% of width), centred at (1215, 62) of the master, an open dark-sky area between branches, inside the mobile crop. Checked on the final
+hero at desktop and phone width: faintly visible, not competing with the scene; no zone name or statistic embedded.
+
+**Visual IP review (method as for Hillsbrad: full image and crops, looking for logos/wordmarks, text, named-character likenesses, exact
+reproductions).** No logo, wordmark, text or character likeness found. Elements: a clock tower with a lit clock face, a lit chapel with a
+bell tower, a hooded statue on a pedestal, wrought-iron graveyard gates, ravens, a moonlit half-timbered village. These are generic gothic
+fantasy motifs; Duskwood is known for a graveyard/village theme and a reviewer could read the composition as evocative of it, but no claim
+of reproduction of a specific in-game location is made (not compared against game assets). Heraldic banners: none. **Status:
+owner-supplied and approved for the beta; NOT legally cleared;** generator terms and training-data provenance not verified.
