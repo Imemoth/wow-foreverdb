@@ -66,7 +66,3 @@ Artwork is `alt=""` + `aria-hidden`; the `<section>` is labelled by the `h1`; st
 - By default the artwork is served from the app (`/zones/hero`). The CDN delivery is prepared (V2-A) but **off**: the unified snapshot (`zone-heroes/` next to the unchanged atlas files) has not been uploaded,
   and `AZERDEX_ZONE_HERO_SOURCE=cdn` is not set anywhere. Hero art never mixes into the atlas export (`forever/`, `atlas/`): it lives in its own, independently versioned `zone-heroes/` namespace.
 - A zone's hero files are registered twice by design: `CINEMATIC_ZONE_ARTWORK` (runtime) and `scripts/map-atlas/heroes/zone-heroes.json` (audited inventory with hashes); `tests/unit/zone-artwork.test.ts` fails if they drift.
-- **Pre-existing, found during V2-A (not changed here):** the hero `<img>` carries an inline `style="object-position:…"`. The site's nonce-based `style-src` has no `unsafe-inline`, so Chromium reports a
-  `style-src-attr` violation and drops that attribute: the art-directed crop (`85% 50%` / `85% 45%`) is not applied in the browser and the class `object-center` wins. It happens with same-origin and CDN
-  heroes alike (`tests/zone-maps/zone-hero-cdn.spec.ts` documents it and asserts that nothing else is reported). Fixing it (e.g. a per-zone utility class or a `<style nonce>`) would change the visual
-  composition, so it is left to its own change.
