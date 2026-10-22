@@ -1,0 +1,90 @@
+name: V2-B CDN read-only verification
+
+# READ-ONLY checks of the public asset CDN (Cloudflare Pages project azerdex-assets): HTTP GET requests to azerdex-assets.pages.dev only.
+# No secrets, no upload, no deployment, no Vercel/Cloudflare API calls. It exists so that the owner never needs a local checkout or Windows tooling:
+#   - runs automatically when this workflow or the verification script changes (pull_request, path-filtered), and
+#   - can be run on demand (Actions -> "V2-B CDN read-only verification" -> Run workflow) once the file is on the default branch:
+#       mode Baseline  = before the upload: the live CDN must serve exactly the 171-file approved atlas baseline
+#       mode Post      = after the upload: the live CDN must serve all 179 files of the unified snapshot (atlas + 8 zone heroes)
+# A FAIL means the live CDN does not match; an unreachable host is never a PASS. Evidence JSON files are uploaded as artifacts (90 days).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Baseline (before upload) or Post (after upload)"
+        type: choice
+        options: [Baseline, Post]
+        default: Baseline
+      base_url:
+        description: "Origin to verify (azerdex-assets.pages.dev, assets.azerdex.com or <deployment>.azerdex-assets.pages.dev)"
+        default: "https://azerdex-assets.pages.dev"
+  pull_request:
+    paths:
+      - ".github/workflows/v2b-cdn-verify.yml"
+      - "scripts/map-atlas/windows/Verify-AzerdexCdn.ps1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2b-cdn-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: V2-B CDN read-only verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MODE: ${{ github.event.inputs.mode || 'Baseline' }}
+      BASE_URL: ${{ github.event.inputs.base_url || 'https://azerdex-assets.pages.dev' }}
+      # first 8 characters of the production deployment id 3ae723a0-df00-4dcd-9159-8ba93d0583aa (recorded by the owner's Cloudflare API audit)
+      RECORDED_DEPLOYMENT_URL: https://3ae723a0.azerdex-assets.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Raw HTTP evidence (status and response headers, nothing interpreted)
+        if: always()
+        run: |
+          set +e
+          show() { # url
+            echo "----- GET $1"
+            curl -sS -m 60 -D - -o /dev/null -H 'User-Agent: AzerDex-v2b-readonly/1.0' "$1" | grep -iE '^(HTTP/|cache-control|content-type|content-length|access-control-allow-origin|x-content-type-options|timing-allow-origin|cf-cache-status|age|server|cf-ray|etag|location|content-encoding)' | tr -d '\r'
+          }
+          for p in atlas/index.json atlas/builds.json forever/1420/v1/manifest.json forever/1420/v2/base.webp forever/1424/v1/manifest.json forever/947/v1/base.webp \
+                   forever/9999999/v1/manifest.json atlas/not-a-file.json zone-heroes/1424/v1/desktop-1280.webp zone-heroes/9999999/v1/desktop-1280.webp _headers index.html 404.html ''; do
+            show "$BASE_URL/$p"
+          done
+          echo; echo "===== recorded production deployment URL (first 8 chars of its id)"
+          show "$RECORDED_DEPLOYMENT_URL/atlas/index.json"
+
+      - name: Verify-AzerdexCdn.ps1 on ${{ env.BASE_URL }} (mode ${{ env.MODE }})
+        id: main
+        shell: pwsh
+        run: |
+          ./scripts/map-atlas/windows/Verify-AzerdexCdn.ps1 -Mode $env:MODE -BaseUrl $env:BASE_URL -EvidencePath "$PWD/evidence-main.json"
+
+      - name: Verify-AzerdexCdn.ps1 on the recorded production deployment URL (Baseline)
+        if: always() && env.MODE == 'Baseline'
+        shell: pwsh
+        run: |
+          ./scripts/map-atlas/windows/Verify-AzerdexCdn.ps1 -Mode Baseline -BaseUrl $env:RECORDED_DEPLOYMENT_URL -EvidencePath "$PWD/evidence-deployment.json"
+
+      - name: Evidence summary
+        if: always()
+        run: |
+          for f in evidence-main.json evidence-deployment.json; do
+            [ -f "$f" ] || continue
+            echo "=============== $f"
+            jq '{tool, mode, baseUrl, powershell, startedUtc, finishedUtc, expectedFiles, checked, ok, verdict, failures, warnings, probes}' "$f"
+            echo "--- response header groups (count of files per distinct combination)"
+            jq -r '[.rows[] | {status, cacheControl, contentType, cfCacheStatus, server}] | group_by(.) | map({n: length} + .[0]) | .[] | @json' "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2b-cdn-verification-evidence
+          path: evidence-*.json
+          if-no-files-found: warn
+          retention-days: 90
