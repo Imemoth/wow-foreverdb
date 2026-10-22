@@ -23,7 +23,9 @@ shows an en dash with a screen-reader "Not available" - nothing is invented or d
 2. Add one entry to `CINEMATIC_ZONE_ARTWORK`. `tests/unit/zone-artwork.test.ts` fails if a referenced file is missing.
 3. Record provenance in `docs/azerdex-hero-art/provenance.md`. No UI change, no zone-specific component.
 
-Hillsbrad Foothills is `1424` (`1415` is the Eastern Kingdoms continent map).
+Registered zones: Hillsbrad Foothills `1424`, Duskwood `1431` (`1415` is the Eastern Kingdoms continent map). Rendition widths follow
+the master: a master narrower than 2000 px is NOT upscaled and its largest file is named by its real width (Duskwood: `-1916`). Files are
+named by the uiMapID they belong to and may not be shared between entries (unit-tested).
 
 Published hero files must be **watermarked derivatives only**; never commit a master/source file under `web/public/` (guarded by
 `tests/unit/zone-artwork.test.ts`). Method and the private master's hash: `docs/azerdex-hero-art/provenance.md`.

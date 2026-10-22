@@ -22,6 +22,18 @@ describe("zone artwork resolution", () => {
     }
   });
 
+  it("Duskwood (1431) resolves to its own cinematic artwork; every file exists and no entry shares files with another zone", () => {
+    expect(resolveZoneArtwork(1431).kind).toBe("cinematic");
+    const art = CINEMATIC_ZONE_ARTWORK[1431]!;
+    for (const s of [...art.desktop, ...art.mobile]) expect(existsSync(join(PUBLIC, s.src)), s.src).toBe(true);
+    const owner = new Map<string, number>();
+    for (const [id, a] of Object.entries(CINEMATIC_ZONE_ARTWORK)) for (const s of [...a.desktop, ...a.mobile]) {
+      expect(owner.get(s.src), `${s.src} shared`).toBeUndefined();
+      owner.set(s.src, Number(id));
+      expect(s.src).toContain(`/${id}-`); // files are named by the stable uiMapID they belong to
+    }
+  });
+
   it("cinematic artwork wins over an available atlas map", () => {
     expect(resolveZoneArtwork(1424, atlas({ uiMapId: 1424 })).kind).toBe("cinematic");
   });

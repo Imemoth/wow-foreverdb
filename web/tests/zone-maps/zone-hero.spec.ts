@@ -54,6 +54,21 @@ test.describe("zone hero + atlas map (synthetic CDN, real browser CORS/CSP)", ()
     expect(t.bad, "no broken image requests").toEqual([]);
   });
 
+  test("Duskwood (1431): selected by uiMapID next to Hillsbrad, own watermarked renditions, no broken images, map unaffected", async ({ page }) => {
+    const t = track(page);
+    await page.goto("/zone/1431");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Duskwood");
+    await expect(hero(page)).toHaveAttribute("data-artwork", "cinematic");
+    await expect(hero(page)).toContainText("Eastern Kingdoms · Zone");
+    await expect(hero(page)).not.toContainText(/uiMapID|1431/);
+    const img = hero(page).locator("img[fetchpriority=high]");
+    await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
+    expect(await img.evaluate((i: HTMLImageElement) => i.currentSrc)).toMatch(/\/zones\/hero\/1431-duskwood-.*\.webp$/);
+    await mapReady(page);
+    await expect(page.getByTestId("map-fallback")).toHaveCount(0);
+    expect(t.bad, "no broken image requests").toEqual([]);
+  });
+
   test("a second zone with an available atlas map and no cinematic artwork (1426): map-layer hero, map loads, no broken images", async ({ page }) => {
     const t = track(page);
     await page.goto("/zone/1426");
@@ -93,7 +108,7 @@ test.describe("zone hero + atlas map (synthetic CDN, real browser CORS/CSP)", ()
   });
 
   test("accessibility (axe WCAG 2.2 AA) with the cinematic hero: /zone/1424 and an observed zone /zone/1420", async ({ page }) => {
-    for (const p of ["/zone/1424", "/zone/1420"]) {
+    for (const p of ["/zone/1424", "/zone/1431", "/zone/1420"]) {
       await page.goto(p);
       await expect(hero(page)).toBeVisible();
       const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();

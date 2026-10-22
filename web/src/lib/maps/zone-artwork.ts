@@ -41,6 +41,19 @@ export const CINEMATIC_ZONE_ARTWORK: Readonly<Record<number, CinematicArtwork>> 
     intrinsic: { width: 2000, height: 667 },
     objectPosition: "85% 50%",
   },
+  // Duskwood (the 1916 px master is not upscaled: the largest rendition is its native width)
+  1431: {
+    desktop: [
+      { src: "/zones/hero/1431-duskwood-1280.webp", width: 1280 },
+      { src: "/zones/hero/1431-duskwood-1916.webp", width: 1916 },
+    ],
+    mobile: [
+      { src: "/zones/hero/1431-duskwood-mobile-600.webp", width: 600 },
+      { src: "/zones/hero/1431-duskwood-mobile-900.webp", width: 900 },
+    ],
+    intrinsic: { width: 1916, height: 821 },
+    objectPosition: "85% 45%",
+  },
 };
 
 export type ResolvedZoneArtwork =
