@@ -16,7 +16,7 @@ import { atlasCatalog } from "@/lib/maps/atlas/catalog";
 import { isDirectoryMap } from "@/lib/maps/atlas/zone-catalog";
 import { parseMapFocus } from "@/lib/maps/focus";
 import { resolveZoneArtwork } from "@/lib/maps/zone-artwork";
-import { zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
+import { heroCdnBase, zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
 import { DISPLAY_KIND_PLURAL, LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
@@ -120,7 +120,7 @@ export default async function ZonePage({ params, searchParams }: { params: Param
           ? `Discover creatures, loot and gathering data across ${z.zoneName}.`
           : `Explore the ${z.zoneName} map. No public observations have been published for this zone yet.`}
         stats={observed ? { sources: z.sourceCount, items: z.itemCount, locatedObservations: z.observations } : null}
-        artwork={resolveZoneArtwork(z.mapId, atlasMap, configuredAssetBase())}
+        artwork={resolveZoneArtwork(z.mapId, atlasMap, configuredAssetBase(), heroCdnBase())}
       />
 
       {/* 2. Geographic observations. With the zone-map experience enabled this is the interactive atlas map (real CDN artwork + the

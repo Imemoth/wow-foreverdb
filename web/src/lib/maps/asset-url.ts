@@ -42,3 +42,21 @@ export function resolveMapAssetUrl(
   const b = parseAssetBase(base) ?? LOCAL_ASSET_BASE;
   return `${b}/forever/${zoneId}/${version}/${file}`;
 }
+
+/** Namespace of the cinematic zone heroes on the asset host (independent of `forever/`: hero art is never mixed into atlas maps). */
+export const ZONE_HERO_NAMESPACE = "zone-heroes";
+const HERO_FILE = /^(desktop|mobile)-[1-9]\d{2,4}\.webp$/;
+
+/**
+ * `https://<allow-listed host>/zone-heroes/<uiMapID>/<version>/<desktop|mobile>-<width>.webp`. Unlike map assets there is no same-origin
+ * form: a hero base must be an https allow-listed host (the same validation as every other asset URL), otherwise this throws and the
+ * caller keeps its same-origin files. Pure string construction: resolving a hero URL never needs a network request.
+ */
+export function resolveZoneHeroUrl(base: string | undefined | null, zoneId: number, version: string, file: string): string {
+  if (!Number.isInteger(zoneId) || zoneId < 1 || zoneId > 999_999) throw new Error("invalid_zone_id");
+  if (!/^v[1-9]\d{0,3}$/.test(version)) throw new Error("invalid_version");
+  if (!HERO_FILE.test(file)) throw new Error("invalid_file");
+  const b = parseAssetBase(base);
+  if (!b || !b.startsWith("https://")) throw new Error("invalid_asset_base");
+  return `${b}/${ZONE_HERO_NAMESPACE}/${zoneId}/${version}/${file}`;
+}

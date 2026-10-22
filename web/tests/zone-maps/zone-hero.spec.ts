@@ -11,6 +11,11 @@ test.afterAll(async () => { await cdn.close(); });
 test.beforeEach(() => { cdn.stripCors = false; cdn.down = false; cdn.seen.length = 0; });
 
 const hero = (page: Page) => page.getByTestId("zone-hero");
+// Same assertions in both hero-source modes: same-origin rollback files (default) or the CDN zone-heroes namespace (E2E_HERO_SOURCE=cdn).
+const CDN_HEROES = process.env.E2E_HERO_SOURCE === "cdn";
+const heroSrc = (id: number, slug: string) => CDN_HEROES
+  ? new RegExp(`^https://azerdex-assets\\.pages\\.dev/zone-heroes/${id}/v1/(desktop|mobile)-\\d+\\.webp$`)
+  : new RegExp(`/zones/hero/${id}-${slug}-.*\\.webp$`);
 
 /** Every request the page made, with status, so "no broken image requests" is evidence, not an assumption. */
 function track(page: Page) {
@@ -44,7 +49,7 @@ test.describe("zone hero + atlas map (synthetic CDN, real browser CORS/CSP)", ()
     // hero image: same origin, decoded, a WebP rendition (not the atlas map)
     const img = hero(page).locator("img[fetchpriority=high]");
     await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
-    expect(await img.evaluate((i: HTMLImageElement) => i.currentSrc)).toMatch(/\/zones\/hero\/1424-hillsbrad-foothills-.*\.webp$/);
+    expect(await img.evaluate((i: HTMLImageElement) => i.currentSrc)).toMatch(heroSrc(1424, "hillsbrad-foothills"));
     // the Zone Map itself is unaffected: manifest + image from the CDN with HTTP 200, no fallback
     await mapReady(page);
     await expect(page.getByTestId("map-fallback")).toHaveCount(0);
@@ -63,7 +68,7 @@ test.describe("zone hero + atlas map (synthetic CDN, real browser CORS/CSP)", ()
     await expect(hero(page)).not.toContainText(/uiMapID|1431/);
     const img = hero(page).locator("img[fetchpriority=high]");
     await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
-    expect(await img.evaluate((i: HTMLImageElement) => i.currentSrc)).toMatch(/\/zones\/hero\/1431-duskwood-.*\.webp$/);
+    expect(await img.evaluate((i: HTMLImageElement) => i.currentSrc)).toMatch(heroSrc(1431, "duskwood"));
     await mapReady(page);
     await expect(page.getByTestId("map-fallback")).toHaveCount(0);
     expect(t.bad, "no broken image requests").toEqual([]);

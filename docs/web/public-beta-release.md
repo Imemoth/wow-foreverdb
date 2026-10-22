@@ -98,6 +98,7 @@ Companion → private Supabase (wow-forever) ─(foreverdb_projection_reader, EX
 | Variable | Value | Secret |
 | --- | --- | --- |
 | `AZERDEX_ZONE_MAPS` | `1` | no |
+| `AZERDEX_ZONE_HERO_SOURCE` | *(unset)* — `cdn` serves the cinematic zone heroes from `<asset host>/zone-heroes/…` once the unified snapshot is uploaded (V2-A, not enabled) | no |
 | `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL` | `https://azerdex-assets.pages.dev` | no |
 | `FOREVERDB_DEPLOYMENT` | `preview` | no |
 | `FOREVERDB_DATA_SOURCE` | `postgres` | no |

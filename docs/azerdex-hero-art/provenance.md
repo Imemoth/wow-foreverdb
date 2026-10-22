@@ -317,3 +317,11 @@ bell tower, a hooded statue on a pedestal, wrought-iron graveyard gates, ravens,
 fantasy motifs; Duskwood is known for a graveyard/village theme and a reviewer could read the composition as evocative of it, but no claim
 of reproduction of a specific in-game location is made (not compared against game assets). Heraldic banners: none. **Status:
 owner-supplied and approved for the beta; NOT legally cleared;** generator terms and training-data provenance not verified.
+
+## CDN publication record (V2-A, prepared — not uploaded)
+
+The eight zone-hero derivatives above (Hillsbrad Foothills `1424`, Duskwood `1431`) are inventoried per version in
+`scripts/map-atlas/heroes/zone-heroes.json` (published name, dimensions, bytes, SHA-256, approval, watermark, master hash, provenance reference) and are packaged byte-for-byte,
+not re-encoded, into the unified CDN snapshot under `zone-heroes/<uiMapID>/v1/` ([`docs/web/unified-cdn-v2a.md`](../web/unified-cdn-v2a.md)). The packager refuses any file whose bytes equal a recorded
+private master, any file carrying EXIF/XMP/ICC metadata or animation, and any change to a published version (new artwork = new version). Legal clearance stays `not-cleared` for both zones;
+nothing here changes the open items above (heraldry decision, preview-deployment cleanup, generator terms). No master file, unwatermarked derivative or screenshot is added.

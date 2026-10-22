@@ -3,7 +3,7 @@
  * Enabled only with AZERDEX_ZONE_MAPS=1 (Preview/local); with the variable unset every page behaves exactly as before.
  * Activating it on a Production deployment is a separate owner step (see docs/web/zone-atlas.md).
  */
-import { assetOrigin } from "./asset-url";
+import { assetOrigin, parseAssetBase } from "./asset-url";
 
 export function zoneMapsEnabled(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return env.AZERDEX_ZONE_MAPS === "1";
@@ -32,4 +32,25 @@ export function assetOriginForPage(
 ): string | null {
   if (!pathname.startsWith("/poc/maps/") && !zoneMapsEnabled(env)) return null;
   return assetOrigin(configuredBase);
+}
+
+/**
+ * Where the cinematic zone heroes are served from. DEFAULT (anything but exactly "cdn"): the same-origin files in web/public/zones/hero
+ * (the rollback path). `AZERDEX_ZONE_HERO_SOURCE=cdn` switches to `<asset host>/zone-heroes/...`, but only when the existing, validated
+ * NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL is an https allow-listed host: an unset/invalid host silently keeps the same-origin files.
+ * The flag is deliberately separate from the asset base (which the beta already sets for the atlas): configuring the CDN for maps must never
+ * switch the heroes before the hero files are published there. Server-side only (no NEXT_PUBLIC), read per request.
+ */
+export function heroCdnBase(env: Readonly<Record<string, string | undefined>> = process.env): string | null {
+  if (env.AZERDEX_ZONE_HERO_SOURCE !== "cdn") return null;
+  const b = parseAssetBase(env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL);
+  return b && b.startsWith("https://") ? b : null;
+}
+
+/**
+ * The origin img-src (ONLY img-src) must allow for CDN-served heroes, or null. Like the map origin it has to be on every HTML document: a
+ * client-side navigation keeps the CSP of the page the visitor first loaded. Null (no CSP change at all) while the hero source is local.
+ */
+export function heroImgOrigin(env: Readonly<Record<string, string | undefined>> = process.env): string | null {
+  return assetOrigin(heroCdnBase(env));
 }
