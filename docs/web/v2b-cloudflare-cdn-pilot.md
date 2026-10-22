@@ -1,10 +1,22 @@
 # V2-B — Cloudflare CDN pilot for the cinematic zone heroes (Hillsbrad Foothills 1424, Duskwood 1431): preflight and runbook
 
-Verdict: **`V2B_PREFLIGHT_READY`** — for owner approval of the upload. Asset integrity of the live baseline is verified **two independent ways (171/171)**, the read-only HTTP checks of every baseline path pass,
-and the remaining unverified items are listed in §1.2; none of them blocks the *upload approval*, and each has a defined check at the point where it can first be made.
-Nothing was uploaded, no Vercel variable changed, no hero activated, nothing merged or promoted. The owner needs **no local Git checkout and no Windows commands** (§3). Builds on [`unified-cdn-v2a.md`](unified-cdn-v2a.md) (pipeline),
-[`map-atlas-cdn-deploy.md`](map-atlas-cdn-deploy.md) and [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md).
-**This document and the audit are not licensing clearance for the artwork** (§6).
+Verdict: **`V2B_CDN_DEPLOYED_VERIFIED`** — the unified snapshot (atlas baseline + 8 zone-hero derivatives) is live on the Cloudflare Pages project `azerdex-assets` (Production, branch `main`) and passed the Post verification (179/179).
+**CDN-served heroes are NOT activated**: the Vercel beta still serves same-origin heroes; activation is a separate step (§4). Production Vercel, the ledgers and every other system are untouched.
+Builds on [`unified-cdn-v2a.md`](unified-cdn-v2a.md) (pipeline), [`map-atlas-cdn-deploy.md`](map-atlas-cdn-deploy.md) and [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md).
+**Neither the audit nor this record is licensing clearance for the artwork** (§6).
+
+## 0. Deployment record (2026-10-22)
+| Fact | Value | Source |
+| --- | --- | --- |
+| Project / environment / branch | `azerdex-assets` / Production / `main` | owner, from the authenticated Cloudflare API |
+| **New production deployment** | **`04effe36-d1e6-45b8-a529-fa32136d1b38`**, status success; served asset manifest 179 files including all 8 hero derivatives | owner, from the authenticated Cloudflare API (not read by this session: the sandbox has no Cloudflare API access) |
+| Uploaded package | `azerdex-cdn-dist-1.60.1.70450-8da4f1345f65.zip`, 180 files, SHA-256 `339858b25d42eb06699510ab63092917138264efbd993d79e702df76768b1e15` (hash re-verified here before the upload) | this session |
+| **Rollback target** | **`3ae723a0-df00-4dcd-9159-8ba93d0583aa`** (previous production, 171 served baseline files; its own URL `3ae723a0.azerdex-assets.pages.dev` still serves them) | owner + this session |
+| **Post verification** | `V2-B CDN read-only verification`, mode Post, `https://azerdex-assets.pages.dev`: **PASS 179/179, 0 failures, 0 warnings** — [run 39816836056](https://github.com/Imemoth/wow-foreverdb/actions/runs/39816836056), evidence artifact 12442018037 | this session (full-byte download, every file's size + SHA-256 = the release record) |
+| Headers observed | 61 manifests `application/json` + 114 `image/webp`, all `public, max-age=31536000, immutable`; 4 atlas JSON `public, max-age=300, must-revalidate`; hero sample: `image/webp`, immutable, CORS `*`, `nosniff`, `Timing-Allow-Origin: *`; unknown paths / `_headers` / `index.html` / `404.html` / `/` → 404 `no-store` | run log |
+| Existing atlas | the 171 baseline files are byte-identical to the approved baseline (same content as before the upload) | run 39816836056 (a subset of the 179) |
+
+The rollback ID and the new deployment ID are two independent facts: the first from before the upload (audit), the second from after it (Cloudflare API, owner). Rollback procedure: §5.
 
 ## 1. What was verified (evidence, 2026-10-22)
 | Check | Result |
@@ -46,7 +58,7 @@ A browser logged in to the Cloudflare dashboard with edit rights on the Pages pr
 if the approved baseline zip is available), and — only for the later website step — Vercel dashboard access. **No Git checkout, Node, Python, PowerShell or Windows command is required**: the verification runs on GitHub-hosted runners (`.github/workflows/v2b-cdn-verify.yml`) and is started by this session through the GitHub API (or from the repository's *Actions* tab → *Run workflow* by anyone with write access).
 The artwork zip is game art: keep it private; never commit it.
 
-## 3. Cloudflare Pages procedure (every step after A needs your explicit approval; **nothing here has been run**)
+## 3. Cloudflare Pages procedure (executed 2026-10-22 as B and C; result in §0; kept as the repeatable procedure for the next version)
 **A. Immediately before the upload (read-only; ~2 minutes)**
 1. **A1 Zip identity** — the file you upload has SHA-256 `339858b2…1e15` (Windows *PowerShell* `Get-FileHash`, macOS/Linux `shasum -a 256`, or any online-free hash tool; or tell this session the hash you see).
 2. **A2 Baseline still live** — this session runs `V2-B CDN read-only verification`, mode **Baseline**, (`workflow_dispatch` on the branch that carries the workflow): it must show **PASS 171/171, 0 failures, 0 warnings** for `azerdex-assets.pages.dev` and `3ae723a0.azerdex-assets.pages.dev`. A Pages Direct Upload is a **complete snapshot**: any live file missing from the upload would disappear, so any FAIL/WARN = stop.
@@ -65,24 +77,16 @@ Optionally first verify the new deployment's own unique URL (Cloudflare shows it
 
 Optional dry run, if you prefer to see the snapshot before touching production: create the deployment with *Preview* (a non-production branch) — the live production alias is not changed — and run Post mode against its `<hash>.azerdex-assets.pages.dev` URL. This is an extra step, not a requirement.
 
-## 4. Vercel beta activation (separate approval; Preview, branch `web/azerdex-beta` only — never Production)
-Preconditions: C passed; the beta CSP already allows `https://azerdex-assets.pages.dev` in `img-src` (observed); `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL` is set on beta (observed via the CSP).
-1. **Baseline of the current state (before)** — saves evidence and performance numbers:
-   ```powershell
-   node web\scripts\hero-cdn-smoke.mjs --site https://beta.azerdex.com --expect local --out smoke-before.json     # PASS: same-origin heroes, class crop, strict CSP
-   node web\scripts\hero-perf-probe.mjs --vercel https://beta.azerdex.com --cloudflare https://azerdex-assets.pages.dev --runs 10 --out probe-1.json
-   ```
-2. **Set the variable** (Preview only, this branch only): Dashboard → `wow-foreverdb` → Settings → Environment Variables → Add → name `AZERDEX_ZONE_HERO_SOURCE`, value `cdn`, Environments: *Preview*, branch `web/azerdex-beta`; or
-   `npx vercel env add AZERDEX_ZONE_HERO_SOURCE preview web/azerdex-beta` (enter `cdn`). It is server-side only (no `NEXT_PUBLIC_`) and read per request.
-3. **Redeploy** the latest `web/azerdex-beta` deployment (Dashboard → Deployments → ⋯ → Redeploy; or `npx vercel redeploy <deployment-url>`): variables apply to new deployments.
-4. **Smoke tests** (Hillsbrad and Duskwood):
-   ```powershell
-   node web\scripts\hero-cdn-smoke.mjs --site https://beta.azerdex.com --expect cdn --out smoke-after.json
-   ```
-   asserts per zone: HTTP 200; `<source>`/`<img>` `srcset`, `src`, `sizes`, intrinsic size, `fetchpriority=high` exactly as today but on `https://azerdex-assets.pages.dev/zone-heroes/<id>/v1/…`; crop = stylesheet class (`hero-pos-85-50` / `hero-pos-85-45`), no inline style; CSP strict (no `unsafe-inline`), `img-src` = `'self' data:` + the one CDN origin; all 8 files fetched with the inventory's exact bytes and headers.
-   Manual: open `https://beta.azerdex.com/zone/1424` and `/zone/1431` on desktop and a phone (or DevTools device mode): DevTools → Network → the hero request is `azerdex-assets.pages.dev/zone-heroes/…` status 200, Console shows **no** CSP message, the crop matches the approved render, the map below still loads.
-5. **Performance comparison** (the Vercel-vs-Cloudflare baseline, protocol in [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md) §4): rerun the probe (`probe-2.json`, from ≥ 3 regions/times), plus Lighthouse (mobile and desktop, ≥ 5 runs) on both states; record LCP, hero TTFB/download, cache status (`cf-cache-status`, `x-vercel-cache`), extra connection cost. Suggested acceptance: Cloudflare median hero download ≤ same-origin median (warm) and LCP not worse by more than noise (±10 %); otherwise keep `local`.
-6. If anything is wrong → section 5.2 (one variable, one redeploy).
+## 4. Vercel beta activation (separate go-ahead; Preview, branch `web/azerdex-beta` only — never Production)
+Preconditions (all met): the Cloudflare deployment is verified (§0); the beta CSP already allows `https://azerdex-assets.pages.dev` in `img-src` (observed); `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL` is set on beta (observed via the CSP).
+Nothing below needs a local checkout: the smoke and performance probe run on a GitHub runner via **Actions → "V2-B hero smoke (read-only)" → Run workflow** (`.github/workflows/v2b-hero-smoke.yml`, GET only, evidence artifact), which this session can also start through the API.
+1. **Before (rollback-state baseline)** — workflow with `expect = local`, site `https://beta.azerdex.com`: must **PASS** (same-origin heroes `/zones/hero/…`, no `zone-heroes` reference, crop class, strict CSP, all 8 same-origin files = inventory bytes). It also records the Vercel-vs-Cloudflare probe (`probe-local.json`) while still on `local`.
+2. **Set the variable** (one variable; server-side only, read per request): name `AZERDEX_ZONE_HERO_SOURCE`, value `cdn`, environment **Preview**, git branch **`web/azerdex-beta`** only. Dashboard: Project `wow-foreverdb` → Settings → Environment Variables → Add (Environments: Preview → branch `web/azerdex-beta`); or this session sets it with the Vercel integration once you say so. **Never** Production or "All preview branches".
+3. **Redeploy** the latest `web/azerdex-beta` deployment (Dashboard → Deployments → ⋯ → Redeploy; or this session via the Vercel integration): variables apply to new deployments only. Wait until it is READY and `beta.azerdex.com` points at it.
+4. **After** — workflow with `expect = cdn`: must **PASS** per zone (Hillsbrad 1424, Duskwood 1431): HTTP 200; `<source>`/`<img>` `srcset`, `src`, `sizes`, intrinsic size and `fetchpriority=high` exactly as before but on `https://azerdex-assets.pages.dev/zone-heroes/<id>/v1/…`; crop = stylesheet class (`hero-pos-85-50` / `hero-pos-85-45`), no inline style; CSP strict (no `unsafe-inline`), `img-src` = `'self' data:` + the one CDN origin; all 8 hero files fetched with the inventory's exact bytes and immutable / `image/webp` / CORS / nosniff / timing headers.
+   Visual check by the owner (desktop and phone): `https://beta.azerdex.com/zone/1424` and `/zone/1431` — DevTools → Network: hero request on `azerdex-assets.pages.dev/zone-heroes/…` status 200; Console: **no** CSP message; crop as approved; the atlas map below the hero loads.
+5. **Performance comparison** (protocol in [`zone-hero-performance-baseline.md`](zone-hero-performance-baseline.md) §4): `probe-local.json` (before) vs `probe-cdn.json` (after) from the workflow, repeated at different times; Lighthouse (mobile and desktop, ≥ 5 runs) on both states is the owner/browser-side part. Suggested acceptance: Cloudflare median hero download ≤ same-origin median (warm), LCP not worse than noise (±10 %); otherwise keep `local`. The probe is informational (no thresholds).
+6. If anything is wrong → §5.1 (remove the variable, redeploy; one variable, one redeploy).
 
 ## 5. Rollback plan
 1. **Website (fast, no data involved)**: remove the variable (`npx vercel env rm AZERDEX_ZONE_HERO_SOURCE preview web/azerdex-beta`, or set it to `local`) and redeploy (or use Vercel's instant rollback to the previous deployment). The same-origin files are still in the repository and the app. Verify: `web/scripts/hero-cdn-smoke.mjs --expect local` → PASS.
@@ -91,10 +95,9 @@ Preconditions: C passed; the beta CSP already allows `https://azerdex-assets.pag
 Order for a full back-out: 1 (website) → 2 (Cloudflare) → 3.
 
 ## 6. Open items, approvals and limits
-**No blocker remains for approving the upload.** Open items, none of which is a pre-condition that can be closed earlier than stated:
-1. **Owner approval** of the upload (B) — requested; nothing is uploaded until it is given. Then C and D follow; the Vercel activation (§4) is a **separate** approval.
-2. **A3, immediately before the upload**: confirm the newest Production deployment is still `3ae723a0-df00-4dcd-9159-8ba93d0583aa` (dashboard, or automatically if the optional read-only secrets are added). Until then the rollback target is *recorded*, not *re-confirmed*.
-3. Direct Upload / production branch `main` are **owner-reported** (the Cloudflare API audit); this session could not read the API itself (§1.2).
-4. `/zone-heroes/*` headers are verifiable only after the upload (Post mode, C); real-browser decode/CSP/crop only after activation (§4). §4's smoke and performance scripts need a host that can reach `beta.azerdex.com` and the CDN: they will run from a GitHub runner (a small workflow added together with the activation approval), not from the owner's machine.
-5. **Licensing: the audit and this preflight prove file integrity only. They are not licensing clearance.** The hero art is owner-approved but **not legally cleared**; publishing it on the public CDN is subject to the owner's licensing decision (already public on the beta; the CDN adds a second URL, not new exposure of the files). The same applies to the 171 baseline atlas files.
+1. **Vercel beta activation (§4)** — prepared, not performed; needs the explicit go-ahead. Production Vercel is out of scope.
+2. Ledger promotion (§3 D: `promote-ledger`, `promote-hero-ledger`) — not done; it needs its own reviewed PR now that the deployment is verified.
+3. The new deployment ID and its Production/`main` placement come from the owner's authenticated Cloudflare API check; this session verified the served content (179/179) but could not read the API (optional read-only secrets would let the workflow check the deployment ID itself).
+4. Real-browser decode / CSP / crop of CDN-served heroes — only possible after activation (§4 step 4).
+5. **Licensing: the audit, the verification and this record prove file integrity only. They are not licensing clearance.** The eight hero derivatives are owner-approved beta artwork whose public CDN hosting the owner authorised for this pilot; the baseline atlas files are as approved. No private master artwork was uploaded.
 6. Windows PowerShell 5.1 was never run; irrelevant under this procedure (PowerShell 7 on the runner; `atlas.py verify-remote` is the Python equivalent).
