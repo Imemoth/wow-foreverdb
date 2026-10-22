@@ -31,23 +31,29 @@ function decodeNewsEntities(value: string): string {
   });
 }
 
-export function cleanNewsExcerpt(value: string, maxLength = 180): string {
-  const limit = Math.max(1, maxLength);
-  const normalized = decodeNewsEntities(value)
+/** Normalize stored source text without applying a card-preview length limit. */
+export function normalizeNewsExcerpt(value: string): string {
+  return decodeNewsEntities(value)
     .replace(/<[^>]*>/g, " ")
-    .replace(/\[[^\]]*…\]/g, "[…]")
+    // Some upstream fragments start with a bracket and an encoded ellipsis but
+    // never close the bracket. Remove that broken fragment before presentation.
+    .replace(/\[[^\]\r\n]*(?:…|\.\.\.)\s*\]/g, "...")
+    .replace(/\[[^\]\r\n]*(?:…|\.\.\.)/g, "...")
+    .replace(/\[[^\]\r\n]*$/g, "...")
+    .replace(/…/g, "...")
     .replace(/\s+/g, " ")
     .trim();
-  if (normalized.length <= limit) return normalized;
+}
 
-  const words = normalized.split(" ");
-  let result = "";
-  for (const word of words) {
-    const candidate = result ? `${result} ${word}` : word;
-    if (candidate.length > limit) break;
-    result = candidate;
-  }
-  if (result && /…$|\[…\]$/.test(result)) return result;
-  const clipped = result.length < limit ? result : result.slice(0, Math.max(1, limit - 1)).trimEnd();
-  return `${clipped.replace(/[\s,;:]+$/, "")}…`;
+export function cleanNewsExcerpt(value: string, maxLength = 180): string {
+  const limit = Math.max(1, maxLength);
+  const normalized = normalizeNewsExcerpt(value);
+  if (normalized.length <= limit) return normalized;
+  if (limit <= 3) return normalized.slice(0, limit);
+
+  const clipped = normalized.slice(0, limit - 3).trimEnd();
+  if (clipped.endsWith("...")) return clipped;
+  const boundary = clipped.lastIndexOf(" ");
+  const readable = boundary > 0 ? clipped.slice(0, boundary) : clipped;
+  return `${readable.replace(/[\s,;:]+$/, "")}...`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getNewsVisualVariant, cleanNewsExcerpt, filterNewsByRegion } from "@/lib/news/presentation";
+import { getNewsVisualVariant, cleanNewsExcerpt, filterNewsByRegion, normalizeNewsExcerpt } from "@/lib/news/presentation";
 import type { NewsEntry } from "@/lib/data/types";
 
 const entry = (region: NewsEntry["region"]): NewsEntry => ({
@@ -30,10 +30,13 @@ describe("news presentation", () => {
     expect(getNewsVisualVariant({ category: "azerdex", sourceType: "azerdex" })).toBe("editorial");
   });
 
-  it("normalizes encoded ellipses before truncating an excerpt", () => {
-    expect(cleanNewsExcerpt("Read the latest update [important&hellip;] with context", 28)).toBe("Read the latest update […]");
+  it("normalizes encoded and malformed ellipses before truncating an excerpt", () => {
+    expect(cleanNewsExcerpt("Read the latest update [important&hellip;] with context", 28)).toBe("Read the latest update...");
     expect(cleanNewsExcerpt("A short excerpt.", 80)).toBe("A short excerpt.");
     expect(cleanNewsExcerpt("1234567890 extra", 10).length).toBeLessThanOrEqual(10);
+    expect(normalizeNewsExcerpt("Read the latest update [im&hellip; 21 October")).toBe("Read the latest update ... 21 October");
+    expect(normalizeNewsExcerpt("A source fragment [im&hellip;")).toBe("A source fragment ...");
+    expect(normalizeNewsExcerpt("x ".repeat(150)).length).toBeGreaterThan(180);
   });
 
   it("filters Bluepost rows by the selected region while keeping the all view intact", () => {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { NewsEntry } from "@/lib/data/types";
 import { fmtDate } from "@/lib/format";
-import { cleanNewsExcerpt, getNewsVisualVariant } from "@/lib/news/presentation";
+import { getNewsVisualVariant, normalizeNewsExcerpt } from "@/lib/news/presentation";
 import { Breadcrumbs } from "./Breadcrumbs";
 
 const labels: Record<NewsEntry["category"], string> = {
@@ -10,7 +10,7 @@ const labels: Record<NewsEntry["category"], string> = {
 
 export function NewsDetail({ entry, nonce, baseUrl }: { entry: NewsEntry; nonce?: string; baseUrl: string }) {
   const variant = getNewsVisualVariant(entry);
-  const excerpt = cleanNewsExcerpt(entry.excerpt || "Official news from Azeroth.");
+  const announcement = normalizeNewsExcerpt(entry.excerpt || "Official news from Azeroth.");
   return (
     <article className="mx-auto max-w-3xl space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "News", href: "/news" }, { name: entry.title }]} />
@@ -29,8 +29,7 @@ export function NewsDetail({ entry, nonce, baseUrl }: { entry: NewsEntry; nonce?
       <div className="rule-ornament" />
       <section className={`news-detail__announcement news-detail__announcement--${variant} space-y-3`} aria-labelledby="announcement-title">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mist">Announcement</p>
-        <h2 id="announcement-title" className="font-[family-name:var(--font-display)] text-2xl font-semibold text-parchment">{entry.title}</h2>
-        <p className="news-detail__body text-base leading-8 text-parchment">{excerpt}</p>
+        <p id="announcement-title" className="news-detail__body text-base leading-8 text-parchment">{announcement}</p>
       </section>
       <section className={`news-detail__source news-detail__source--${variant} space-y-3`} aria-labelledby="official-source-title">
         <h2 id="official-source-title" className="text-sm font-semibold uppercase tracking-[0.16em] text-mist">Source attribution</h2>

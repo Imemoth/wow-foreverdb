@@ -10,7 +10,10 @@ import { filterNewsByRegion, type NewsRegionFilter } from "@/lib/news/presentati
 import { pageContext } from "@/lib/page";
 
 const PAGE_SIZE = 12;
-const REGION_FILTER_MAX_ROWS = 500;
+// web_api.news_list currently accepts offsets through 5000. Region filtering
+// is performed after the stable database ordering so the existing UI can keep
+// exact search, ordering, and pagination without changing the database.
+const REGION_FILTER_FETCH_CEILING = 5000;
 const TABS: Array<{ label: string; value: NewsCategory | null }> = [
   { label: "All News", value: null },
   { label: "Blue Posts", value: "bluepost" },
@@ -42,7 +45,7 @@ function queryUrl(category: NewsCategory | null, query: string, page: number, re
 async function loadAllNews(category: NewsCategory | null, query: string) {
   const pageSize = 50;
   const firstPage = await data().newsList({ category, query, page: 1, pageSize });
-  if (firstPage.total > REGION_FILTER_MAX_ROWS) throw new Error("news_region_filter_limit");
+  if (firstPage.total > REGION_FILTER_FETCH_CEILING) throw new Error("news_region_filter_requires_rpc");
   const totalPages = Math.min(Math.ceil(firstPage.total / pageSize), 100);
   const remainingPages = await Promise.all(Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
     data().newsList({ category, query, page: index + 2, pageSize })));
@@ -58,9 +61,13 @@ async function loadNews(category: NewsCategory | null, query: string, page: numb
       const start = (page - 1) * PAGE_SIZE;
       return { result: { rows: filtered.slice(start, start + PAGE_SIZE), total: filtered.length }, error: false };
     }
-    return { result: await data().newsList({ category, query, page, pageSize: PAGE_SIZE }), error: false };
-  } catch {
-    return { result: { rows: [], total: 0 }, error: true };
+    return { result: await data().newsList({ category, query, page, pageSize: PAGE_SIZE }), error: false, regionFilterUnavailable: false };
+  } catch (error) {
+    return {
+      result: { rows: [], total: 0 },
+      error: true,
+      regionFilterUnavailable: error instanceof Error && error.message === "news_region_filter_requires_rpc",
+    };
   }
 }
 
@@ -80,6 +87,7 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
   const adjustedLoad = !initialLoad.error && safePage !== page ? await loadNews(category, query, safePage, region) : null;
   const result = adjustedLoad?.result ?? initialLoad.result;
   const newsError = initialLoad.error || Boolean(adjustedLoad?.error);
+  const regionFilterUnavailable = initialLoad.regionFilterUnavailable || Boolean(adjustedLoad?.regionFilterUnavailable);
   const editorial = visibleArticles("news");
 
   return (
@@ -134,7 +142,11 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
           {!newsError && <p className="text-xs text-mist">{result.total} published {result.total === 1 ? "entry" : "entries"}</p>}
         </div>
         {newsError ? (
-          <div className="panel mt-4 p-6 text-sm text-mist" role="alert">The news feed is temporarily unavailable. Please try again shortly.</div>
+          <div className="panel mt-4 p-6 text-sm text-mist" role="alert">
+            {regionFilterUnavailable
+              ? "This region filter has reached the current archive scan limit. Refine your search or use All regions."
+              : "The news feed is temporarily unavailable. Please try again shortly."}
+          </div>
         ) : result.rows.length === 0 ? (
           <div className="panel mt-4 p-6 text-sm text-mist">No published news matches those filters. Try another category or search term.</div>
         ) : (
