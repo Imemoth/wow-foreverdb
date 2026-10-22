@@ -6,7 +6,7 @@ do $verify$
 declare
     t text;
 begin
-    foreach t in array ['news_sources', 'news_entries', 'news_post_versions', 'news_sync_runs'] loop
+    foreach t in array ARRAY['news_sources', 'news_entries', 'news_post_versions', 'news_sync_runs'] loop
         if not (select relrowsecurity from pg_class where oid = format('pub.%s', t)::regclass) then
             raise exception 'RLS is disabled on pub.%', t;
         end if;
