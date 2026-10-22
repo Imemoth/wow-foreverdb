@@ -35,13 +35,15 @@ try {
     console.log(`\n/zone/${z.id} ${z.name} ${vp.name} (${vp.width}x${vp.height}) expecting ${expect}`);
     const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: vp.isMobile, hasTouch: vp.isMobile, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
-    const heroReqs = [], cdnReqs = [], failed = [], consoleErrors = [];
+    const heroReqs = [], cdnReqs = [], failed = [], consoleErrors = [], otherErrors = [];
     page.on("response", (r) => {
       const u = r.url();
       if (/\/zone-heroes\/|\/zones\/hero\//.test(u)) heroReqs.push({ url: u, status: r.status() });
       if (u.startsWith(cdn + "/")) cdnReqs.push({ url: u, status: r.status() });
+      else if (r.status() >= 400) otherErrors.push(`${r.status()} ${u.replace(site, "")}`);
     });
-    page.on("requestfailed", (r) => failed.push(`${r.url()} ${r.failure()?.errorText}`));
+    // aborted requests (navigation prefetches cancelled when the context closes) are not failures
+    page.on("requestfailed", (r) => { if (r.failure()?.errorText !== "net::ERR_ABORTED") failed.push(`${r.url()} ${r.failure()?.errorText}`); });
     page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
     await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => ((window).__csp ??= []).push(`${e.violatedDirective} ${e.blockedURI}`)));
     const resp = await page.goto(`${site}/zone/${z.id}`, { waitUntil: "load", timeout: 45_000 });
@@ -70,7 +72,12 @@ try {
     check(bad.length === 0, `${cdnReqs.length} request(s) to ${cdn}: ${bad.length} with status >= 400${bad.length ? " -> " + JSON.stringify(bad) : ""}`);
     const csp = await page.evaluate(() => window.__csp ?? []);
     check(csp.length === 0, `no CSP violation event${csp.length ? ": " + csp.join(" | ") : ""}`);
-    check(consoleErrors.length === 0 && failed.length === 0, `no console error / failed request${consoleErrors.length || failed.length ? ": " + JSON.stringify({ consoleErrors, failed }) : ""}`);
+    // resource errors are attributed by URL: anything from the CDN or the hero files fails the check; other site responses >= 400 (for example the anonymous
+    // Account/session probe answering 401) are reported as notes because they are independent of the heroes and the CDN
+    const consoleOther = consoleErrors.filter((m) => !/Failed to load resource/.test(m));
+    check(consoleOther.length === 0 && failed.length === 0, `no console error / failed request${consoleOther.length || failed.length ? ": " + JSON.stringify({ consoleOther, failed }) : ""}`);
+    if (otherErrors.length) console.log(`  note  non-hero responses >= 400 on the site (not part of the heroes/CDN): ${otherErrors.join(", ")}`);
+    results.notes ??= []; if (otherErrors.length) results.notes.push({ zone: z.id, viewport: vp.name, otherErrors });
     if (args.get("shots")) { await page.locator('[data-testid="zone-hero"]').screenshot({ path: join(args.get("shots"), `${z.name}-${vp.name}-${expect}.png`) }).catch(() => {}); }
     await ctx.close();
   }
