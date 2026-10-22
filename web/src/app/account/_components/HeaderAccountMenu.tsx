@@ -5,25 +5,28 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { getJson } from "@/lib/account/client";
 import { createHeaderStatusStore, type HeaderAccountStatus } from "@/lib/account/header-status";
 import { LogoutButton } from "./LogoutButton";
+import { BookIcon, ChevronDownIcon, InstallIcon, LogInIcon, MonitorIcon, PersonIcon, UserPlusIcon } from "./icons";
 
 type Status = HeaderAccountStatus;
 
-const GUEST_HREF = "/account/register";
+const GUEST_LINKS = [
+  { href: "/account/login", label: "Log in", Icon: LogInIcon },
+  { href: "/account/register", label: "Register", Icon: UserPlusIcon },
+];
 
-const LINKS = [
-  { href: "/account", label: "My account" },
-  { href: "/account/link", label: "Link an installation" },
-  { href: "/account/installations", label: "My installations" },
-  { href: "/account/devices", label: "Devices" },
-  { href: "/account/guildbook", label: "Guildbook" },
+const MEMBER_LINKS = [
+  { href: "/account", label: "My account", Icon: PersonIcon },
+  { href: "/account/installations", label: "My installations", Icon: InstallIcon },
+  { href: "/account/devices", label: "Devices", Icon: MonitorIcon },
+  { href: "/account/guildbook", label: "Guildbook", Icon: BookIcon },
 ];
 
 /**
  * Signed-in state for the header. The session cookie is HttpOnly and Path=/account, so the page cannot read it and
  * public pages never receive it; /account/api/me (same-origin, no token in JavaScript) is the only signal. Until it
- * answers (and whenever it fails) the entry is the guest link, which is always safe: a signed-in visitor who follows
- * it is redirected to /account by the register page, never shown the registration form. The answer is shared by all
- * entries on the page (module-level store), so the mobile menu, which mounts when opened, shows it immediately.
+ * answers (and whenever it fails) the menu offers the guest items, which are always safe: a signed-in visitor who
+ * follows one is redirected to /account by the login and register pages, never shown the form. The answer is shared by
+ * all entries on the page (module-level store), so the mobile menu, which mounts when opened, shows it immediately.
  */
 const store = createHeaderStatusStore(() => getJson("/account/api/me"));
 
@@ -32,50 +35,32 @@ function useAccountStatus(): Status {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
 }
 
-function PersonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
-    </svg>
-  );
-}
-
 const TRIGGER =
   "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-gold-500/50 bg-ink-950/60 px-2.5 py-1.5 text-sm font-medium text-parchment no-underline transition hover:border-gold-400 hover:text-violet-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400";
 
-export function HeaderAccountMenu({ variant }: { variant: "desktop" | "mobile" }) {
-  const status = useAccountStatus();
-  return variant === "mobile" ? <MobileEntry status={status} /> : <DesktopEntry status={status} />;
-}
-
-function MobileEntry({ status }: { status: Status }) {
+/** The items of the dropdown: the same list on desktop and inside the mobile menu. */
+function AccountItems({ status }: { status: Status }) {
   if (status !== "authed") {
     return (
-      <div className="mt-1 border-t border-ink-700/80 pt-1">
-        <Link href={GUEST_HREF} className="flex min-h-11 items-center gap-2 rounded-md px-3 py-2.5 text-parchment no-underline hover:bg-ink-800 hover:text-violet-300" data-account-entry="guest">
-          <PersonIcon /> Account
-        </Link>
-      </div>
+      <ul className="flex flex-col">
+        {GUEST_LINKS.map(({ href, label, Icon }) => (
+          <li key={href}><Link href={href} className="account-menu-item"><Icon className="h-4 w-4 text-violet-300" />{label}</Link></li>
+        ))}
+      </ul>
     );
   }
   return (
-    <div data-account-entry="authed" role="group" aria-label="Account" className="mt-1 border-t border-ink-700/80 pt-1">
-      <ul className="flex flex-col gap-1">
-        {LINKS.map((l) => (
-          <li key={l.href}>
-            <Link href={l.href} className="flex min-h-11 items-center rounded-md px-3 py-2.5 text-parchment no-underline hover:bg-ink-800 hover:text-violet-300">
-              {l.label}
-            </Link>
-          </li>
-        ))}
-        <li><LogoutButton compact /></li>
-      </ul>
-    </div>
+    <ul className="flex flex-col">
+      {MEMBER_LINKS.map(({ href, label, Icon }) => (
+        <li key={href}><Link href={href} className="account-menu-item"><Icon className="h-4 w-4 text-violet-300" />{label}</Link></li>
+      ))}
+      <li className="mt-1 border-t border-ink-700/80 pt-1"><LogoutButton compact /></li>
+    </ul>
   );
 }
 
-function DesktopEntry({ status }: { status: Status }) {
+export function HeaderAccountMenu({ variant }: { variant: "desktop" | "mobile" }) {
+  const status = useAccountStatus();
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -105,32 +90,33 @@ function DesktopEntry({ status }: { status: Status }) {
     };
   }, [open]);
 
-  if (status !== "authed") {
-    return (
-      <Link href={GUEST_HREF} className={TRIGGER} data-account-entry="guest">
-        <PersonIcon /> Account
-      </Link>
-    );
-  }
+  const mobile = variant === "mobile";
+  const close = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a")) setOpen(false);
+  };
+
   return (
-    <div ref={rootRef} className="relative" data-account-entry="authed">
-      <button ref={toggleRef} type="button" className={TRIGGER} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((o) => !o)}>
+    <div ref={rootRef} className={mobile ? "mt-1 border-t border-ink-700/80 pt-1" : "relative"} data-account-entry={status === "authed" ? "authed" : "guest"}>
+      <button
+        ref={toggleRef}
+        type="button"
+        className={mobile ? "flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-parchment hover:bg-ink-800 hover:text-violet-300" : TRIGGER}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((o) => !o)}
+      >
         <PersonIcon /> Account
-        <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <ChevronDownIcon className={`h-3.5 w-3.5 transition ${mobile ? "ml-auto" : ""} ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div id={panelId} className="absolute right-0 z-50 mt-2 w-60 rounded-lg border border-ink-700 bg-ink-900 p-1.5 shadow-2xl shadow-black/60"
-          onClick={(e) => { if ((e.target as HTMLElement).closest("a")) setOpen(false); }}>
-          <nav aria-label="Account">
-            <ul className="flex flex-col">
-              {LINKS.map((l) => (
-                <li key={l.href}><Link href={l.href} className="account-menu-item">{l.label}</Link></li>
-              ))}
-              <li className="mt-1 border-t border-ink-700/80 pt-1"><LogoutButton compact /></li>
-            </ul>
-          </nav>
+        <div
+          id={panelId}
+          className={mobile
+            ? "mt-1 rounded-lg border border-violet-700/40 bg-ink-950/70 p-1.5"
+            : "absolute right-0 z-50 mt-2 w-60 rounded-xl border border-violet-700/40 bg-ink-900 p-1.5 shadow-2xl shadow-black/60"}
+          onClick={close}
+        >
+          <nav aria-label="Account"><AccountItems status={status} /></nav>
         </div>
       )}
     </div>

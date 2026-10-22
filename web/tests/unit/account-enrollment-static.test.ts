@@ -107,7 +107,7 @@ describe("zero-touch enrollment (static)", () => {
   });
 
   it("the new UI is linked from the account overview and the installation list", () => {
-    expect(code(join(SRC, "app/account/page.tsx"))).toContain('href="/account/devices"');
+    expect(code(join(SRC, "app/account/_ui/AccountDashboard.tsx"))).toContain('href="/account/devices"');
     expect(code(join(SRC, "app/account/installations/page.tsx"))).toContain('href="/account/devices"');
   });
 });

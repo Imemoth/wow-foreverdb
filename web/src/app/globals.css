@@ -355,23 +355,30 @@
     border-color: var(--color-violet-400);
     color: #fff;
   }
-  /* Account nav cluster item (app/account/layout.tsx's signed-in nav + the compact sign-out action). */
+  /* Account dropdown item (header menu, desktop and mobile) and its sign-out action: icon + label row. */
   .account-menu-item {
-    display: block;
-    border-radius: 0.4rem;
-    padding: 0.6rem 0.75rem;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
     color: var(--color-parchment);
     text-decoration: none;
+    text-align: left;
     font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
   }
   .account-menu-item:hover {
-    background: rgb(108 65 199 / 0.16);
+    background: rgb(108 65 199 / 0.18);
     color: #fff;
   }
-  .account-menu-item[aria-current="page"] {
-    background: rgb(108 65 199 / 0.22);
-    color: var(--color-gold-300);
-    font-weight: 600;
+  .account-menu-item:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .prose-fdb {
     line-height: 1.75;
