@@ -18,10 +18,17 @@ shows an en dash with a screen-reader "Not available" - nothing is invented or d
 3. **fallback** - the vector `ArcaneSurveyBanner` backdrop. Needs no asset, so a missing/failed image can never leave an empty hero
    (the vector backdrop is always rendered underneath the image layers).
 
+### Crop (`object-position`) and the CSP
+The crop is per zone data (`CINEMATIC_ZONE_ARTWORK[id].objectPosition`, e.g. `85% 50%`) and is applied as a **class**, not an inline style: the page CSP (`style-src` with a nonce, no `'unsafe-inline'`)
+blocks `style` attributes, which previously made the browser drop the crop (computed value stayed `50% 50%`). `lib/maps/hero-position.ts` maps a whole-percent pair to `hero-pos-<x>-<y>` (anything else is
+refused and keeps the centred default); the declaration lives in `app/globals.css`. Adding or changing a zone's crop = its `objectPosition` + the matching `.hero-pos-<x>-<y>` rule
+(`tests/unit/hero-position.test.ts` fails if a registered position has no rule, or a rule is unused). `tests/zone-maps/zone-hero-crop.spec.ts` asserts the effective computed value, no `style` attribute and zero
+CSP violations in a real browser for Hillsbrad and Duskwood on desktop and mobile. The corrected crop differs from the previously rendered (centred) one: before/after in `docs/web/zone-cinematic-hero/crop-fix/`.
+
 ### Adding a zone (Duskwood, Tanaris, ...)
 1. Export the panorama without any text/UI; make renditions (~1280 and ~2000 wide) and a phone crop (~600 and ~900 wide) as WebP;
    save as `web/public/zones/hero/<uiMapId>-<slug>-<width>.webp`.
-2. Add one entry to `CINEMATIC_ZONE_ARTWORK`. `tests/unit/zone-artwork.test.ts` fails if a referenced file is missing.
+2. Add one entry to `CINEMATIC_ZONE_ARTWORK` and, for a new crop value, one `.hero-pos-<x>-<y>` rule in `globals.css`. `tests/unit/zone-artwork.test.ts` fails if a referenced file is missing.
 3. Record provenance in `docs/azerdex-hero-art/provenance.md`. No UI change, no zone-specific component.
 
 Registered zones: Hillsbrad Foothills `1424`, Duskwood `1431` (`1415` is the Eastern Kingdoms continent map). Rendition widths follow
@@ -59,7 +66,3 @@ Artwork is `alt=""` + `aria-hidden`; the `<section>` is labelled by the `h1`; st
 - By default the artwork is served from the app (`/zones/hero`). The CDN delivery is prepared (V2-A) but **off**: the unified snapshot (`zone-heroes/` next to the unchanged atlas files) has not been uploaded,
   and `AZERDEX_ZONE_HERO_SOURCE=cdn` is not set anywhere. Hero art never mixes into the atlas export (`forever/`, `atlas/`): it lives in its own, independently versioned `zone-heroes/` namespace.
 - A zone's hero files are registered twice by design: `CINEMATIC_ZONE_ARTWORK` (runtime) and `scripts/map-atlas/heroes/zone-heroes.json` (audited inventory with hashes); `tests/unit/zone-artwork.test.ts` fails if they drift.
-- **Pre-existing, found during V2-A (not changed here):** the hero `<img>` carries an inline `style="object-position:…"`. The site's nonce-based `style-src` has no `unsafe-inline`, so Chromium reports a
-  `style-src-attr` violation and drops that attribute: the art-directed crop (`85% 50%` / `85% 45%`) is not applied in the browser and the class `object-center` wins. It happens with same-origin and CDN
-  heroes alike (`tests/zone-maps/zone-hero-cdn.spec.ts` documents it and asserts that nothing else is reported). Fixing it (e.g. a per-zone utility class or a `<style nonce>`) would change the visual
-  composition, so it is left to its own change.

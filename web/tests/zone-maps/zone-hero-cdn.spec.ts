@@ -51,6 +51,8 @@ test.describe("zone heroes from the CDN (real browser)", () => {
     expect(src).toMatch(mobile ? /^https:\/\/azerdex-assets\.pages\.dev\/zone-heroes\/1424\/v1\/mobile-(600|900)\.webp$/ : /^https:\/\/azerdex-assets\.pages\.dev\/zone-heroes\/1424\/v1\/desktop-(1280|2000)\.webp$/);
     await expect(hero(page)).toHaveAttribute("data-artwork", "cinematic");
     expect(await heroImg(page).evaluate((i: HTMLImageElement) => [i.getAttribute("width"), i.getAttribute("height"), i.getAttribute("fetchpriority")])).toEqual(["2000", "667", "high"]);
+    // the configured crop reaches the browser (class from the stylesheet, no inline style) with CDN-served images too
+    expect(await heroImg(page).evaluate((i: HTMLImageElement) => [getComputedStyle(i).objectPosition, i.getAttribute("style")])).toEqual(["85% 50%", null]);
     expect(heroReqs.length).toBeGreaterThan(0);
     expect(heroReqs.every((r) => r.url.startsWith(`${ORIGIN}/zone-heroes/1424/v1/`) && r.status === 200), JSON.stringify(heroReqs)).toBe(true);
     expect(cdn.seen.some((s) => s.url.startsWith("/zone-heroes/1424/v1/"))).toBe(true);
@@ -62,9 +64,10 @@ test.describe("zone heroes from the CDN (real browser)", () => {
     const src = await heroImg(page).evaluate((i: HTMLImageElement) => i.currentSrc);
     expect(src).toMatch(info.project.name === "mobile" ? /\/zone-heroes\/1431\/v1\/mobile-(600|900)\.webp$/ : /\/zone-heroes\/1431\/v1\/desktop-(1280|1916)\.webp$/);
     expect(src).not.toContain("/1424/");
+    expect(await heroImg(page).evaluate((i: HTMLImageElement) => [getComputedStyle(i).objectPosition, i.getAttribute("style")])).toEqual(["85% 45%", null]);
   });
 
-  test("no CSP violation: the page's CSP allows the CDN in img-src only for the hero, and the browser reports nothing", async ({ page }) => {
+  test("zero CSP violations: the page's CSP allows the CDN in img-src for the hero, and the browser reports nothing at all", async ({ page }) => {
     const violations: string[] = [];
     await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => ((window as unknown as { __csp: string[] }).__csp ??= []).push(`${e.violatedDirective} ${e.blockedURI}`)));
     page.on("console", (m) => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
@@ -72,12 +75,9 @@ test.describe("zone heroes from the CDN (real browser)", () => {
     const csp = res!.headers()["content-security-policy"]!;
     expect(csp).toContain(`img-src 'self' data: ${ORIGIN}`);
     await expect.poll(() => heroImg(page).evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
-    // The ONLY report is the pre-existing `style-src-attr` one: the (unchanged) hero <img> carries an inline style="object-position:…" that the
-    // nonce-based style-src blocks, in the default same-origin mode just the same (found while writing this spec, documented in
-    // docs/web/zone-cinematic-hero.md). Nothing may be reported for img-src/connect-src, i.e. the CDN origin is fully allowed.
-    const reported = await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []);
-    expect(reported.filter((v) => !v.startsWith("style-src-attr inline"))).toEqual([]);
-    expect(violations.filter((v) => !/style-src-attr|inline style/i.test(v))).toEqual([]);
+    // Strict: the browser reports NOTHING (no style-src-attr exception any more: the hero crop is a stylesheet class, see lib/maps/hero-position.ts).
+    expect(await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? [])).toEqual([]);
+    expect(violations).toEqual([]);
   });
 
   test("Resource Timing sees the real hero size (Timing-Allow-Origin works in the browser: performance baseline is measurable)", async ({ page }) => {

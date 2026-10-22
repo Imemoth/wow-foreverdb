@@ -200,7 +200,9 @@ describe("ZoneCinematicHero is structurally unchanged and renders the CDN rendit
     expect(img).toContain('height="667"');
     expect(img).toContain('decoding="async"');
     expect(img).toContain('alt=""');
-    expect(img).toContain("object-cover"); // the crop mechanism itself (inline style today) is deliberately not pinned here: it is fixed separately
+    expect(img).toContain("object-cover");
+    expect(img).toContain("hero-pos-85-50"); // crop = stylesheet class (CSP: no inline style attribute); details in hero-position.test.ts
+    expect(img).not.toMatch(/\sstyle=/);
     expect(h).toContain('data-artwork="cinematic"');
     expect(h).not.toMatch(/loading="lazy"/);
   });
