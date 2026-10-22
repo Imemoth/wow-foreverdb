@@ -427,4 +427,3 @@ export async function collectNews(options: CollectorOptions): Promise<SyncReport
   for (const source of sources) reports.push(await collectSource(source, options));
   return reports;
 }
-
