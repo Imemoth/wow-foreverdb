@@ -7,7 +7,7 @@ import { FeatureCard, type FeatureCardData } from "@/components/FeatureCard";
 import { HeroBackground } from "@/components/hero/HeroBackground";
 import { HeroImageLayer } from "@/components/hero/HeroImageLayer";
 import { StatTile } from "@/components/StatTile";
-import { articlePath, visibleArticles } from "@/lib/content/loader";
+import { NewsSection } from "@/components/NewsSection";
 import { serverEnv } from "@/lib/env";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
@@ -91,9 +91,9 @@ const FEATURE_CARDS: FeatureCardData[] = [
 export default async function HomePage() {
   const { db, nonce, env } = await pageContext();
   const betaHomepage = await isIndexablePublicBetaHomepage(env, await requestHostname(), "/");
-  const [meta, recent, zones] = await Promise.all([db.meta(), db.recent(5), db.zones()]);
-  const articles = visibleArticles();
-  const news = articles.filter((a) => a.section === "news").slice(0, 3);
+  const [meta, recent, zones, newsEntries] = await Promise.all([
+    db.meta(), db.recent(5), db.zones(), db.newsFeatured(8).catch(() => []),
+  ]);
   const c = meta.counts ?? {};
 
   return (
@@ -171,27 +171,7 @@ export default async function HomePage() {
           </ul>
         </section>
 
-        {/* Latest news: full-width, ahead of Recently Observed - a step toward AzerDex
-            becoming a hub for community updates and (eventually, separately planned)
-            WoW: Forever Blue Posts. No feed/crawler here - same visibleArticles()
-            content as the existing /news page, just the newest 3. */}
-        <section aria-labelledby="news-title">
-          <div className="flex items-baseline justify-between">
-            <h2 id="news-title" className="panel-title text-2xl">Latest news</h2>
-            <Link href="/news" className="text-sm">All news →</Link>
-          </div>
-          {/* Single column through tablet widths, then straight to 3 - three items split across
-              sm:grid-cols-2 would leave a lone card stranded in column 1 of its own row. */}
-          <ul className="mt-5 grid gap-4 md:grid-cols-3">
-            {news.map((a) => (
-              <li key={a.slug} className="panel h-full p-4">
-                <Link href={articlePath(a)} className="font-semibold text-parchment no-underline hover:text-gold-300">{a.title}</Link>
-                <p className="mt-1 text-sm text-mist">{a.description}</p>
-                <p className="mt-2 text-xs text-mist">{fmtDate(a.publishedAt)}{a.sample && <span className="ml-2 rounded bg-conf-low/15 px-1.5 py-0.5 text-conf-low">Sample article</span>}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <NewsSection entries={newsEntries} />
 
         {/* Recently observed: a compact, full-width activity strip - five rows, not a
             dashboard table. */}

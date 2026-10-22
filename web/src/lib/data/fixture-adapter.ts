@@ -10,6 +10,9 @@ import {
   type LootKind,
   type Page,
   type PublicDataAdapter,
+  type NewsEntry,
+  type NewsPage,
+  type NewsQuery,
   type RecentRow,
   type SearchQuery,
   type SearchRow,
@@ -247,6 +250,22 @@ export class FixtureAdapter implements PublicDataAdapter {
         sourceLevel: null, name: i.name, lastObservedAt: i.last_observed_at })),
     ];
     return rows.sort((a, b) => (b.lastObservedAt ?? "").localeCompare(a.lastObservedAt ?? "") || a.name.localeCompare(b.name)).slice(0, limit);
+  }
+
+  /** The fixture projection predates the news feed; keep local previews honest by returning no synthetic Blizzard stories. */
+  async newsList(query: NewsQuery): Promise<NewsPage> {
+    void query;
+    return { rows: [], total: 0 };
+  }
+
+  async newsFeatured(limit: number): Promise<NewsEntry[]> {
+    void limit;
+    return [];
+  }
+
+  async newsEntry(slug: string): Promise<NewsEntry | null> {
+    void slug;
+    return null;
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {

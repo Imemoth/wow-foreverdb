@@ -23,6 +23,41 @@ export interface DatasetMeta {
   thresholds: { minBucketObservationsForRate?: number; lowConfidenceBelow?: number; highConfidenceAtLeast?: number } | null;
 }
 
+export const NEWS_CATEGORIES = ["bluepost", "official_news", "patch_notes", "azerdex"] as const;
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+export type NewsSourceType = "bluepost" | "official_news" | "azerdex";
+export type NewsRegion = "us" | "eu" | "global";
+
+export interface NewsEntry {
+  id: number;
+  slug: string;
+  sourceType: NewsSourceType;
+  sourceKey: string;
+  sourceEntryId: string;
+  sourceTopicId: string | null;
+  threadKey: string | null;
+  canonicalUrl: string;
+  title: string;
+  author: string | null;
+  region: NewsRegion;
+  publishedAt: string;
+  modifiedAt: string | null;
+  ingestedAt: string;
+  excerpt: string;
+  category: NewsCategory;
+  importance: number;
+  featured: boolean;
+}
+
+export interface NewsQuery {
+  category: NewsCategory | null;
+  query: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface NewsPage { rows: NewsEntry[]; total: number }
+
 export interface EntityRef {
   entityKind: "item" | "source";
   displayKind: DisplayKind;
@@ -178,6 +213,9 @@ export interface PublicDataAdapter {
   /** Published map cells of ONE source (bounded, deterministic order, same rules as the zone read). */
   sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints>;
   recent(limit: number): Promise<RecentRow[]>;
+  newsList(query: NewsQuery): Promise<NewsPage>;
+  newsFeatured(limit: number): Promise<NewsEntry[]>;
+  newsEntry(slug: string): Promise<NewsEntry | null>;
   sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]>;
 }
 

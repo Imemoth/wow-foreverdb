@@ -41,6 +41,9 @@ function cached(inner: PublicDataAdapter): PublicDataAdapter {
     zoneMapPoints: (id, kind, lim) => c.get(k("zoneMapPoints", [id, kind, lim]), () => inner.zoneMapPoints(id, kind, lim)),
     sourceMapPoints: (q) => c.get(k("sourceMapPoints", [q]), () => inner.sourceMapPoints(q)),
     recent: (n) => c.get(k("recent", [n]), () => inner.recent(n)),
+    newsList: (q) => c.get(k("newsList", [q]), () => inner.newsList(q)),
+    newsFeatured: (n) => c.get(k("newsFeatured", [n]), () => inner.newsFeatured(n)),
+    newsEntry: (slug) => c.get(k("newsEntry", [slug]), () => inner.newsEntry(slug)),
     sitemap: (e, o, l) => c.get(k("sitemap", [e, o, l]), () => inner.sitemap(e, o, l)),
   };
 }

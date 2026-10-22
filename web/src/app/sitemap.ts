@@ -18,10 +18,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!isIndexable(env)) return [];
   const u = (p: string) => new URL(p, env.SITE_URL).toString();
   const db = data();
-  const [items, sources, zones] = await Promise.all([db.sitemap("item", 0, 5000), db.sitemap("source", 0, 5000), db.sitemap("zone", 0, 5000)]);
+  const [items, sources, zones, firstNews] = await Promise.all([
+    db.sitemap("item", 0, 5000), db.sitemap("source", 0, 5000), db.sitemap("zone", 0, 5000),
+    db.newsList({ category: null, query: "", page: 1, pageSize: 50 }).catch(() => ({ rows: [], total: 0 })),
+  ]);
+  const news = [...firstNews.rows];
+  const newsPages = Math.ceil(firstNews.total / 50);
+  for (let page = 2; page <= newsPages; page += 1) {
+    try {
+      news.push(...(await db.newsList({ category: null, query: "", page, pageSize: 50 })).rows);
+    } catch {
+      break;
+    }
+  }
   return [
     { url: u("/"), changeFrequency: "daily", priority: 1 },
     ...["/database", "/zones", "/news", "/guides", "/blog", "/download", "/about/data"].map((p) => ({ url: u(p) })),
+    ...news.map((entry) => ({ url: u(`/news/entry/${entry.slug}`), lastModified: entry.modifiedAt ?? entry.publishedAt })),
     ...visibleArticles().filter((a) => a.status === "published" && !a.sample).map((a) => ({ url: u(articlePath(a)), lastModified: a.updatedAt ?? a.publishedAt })),
     ...items.map((r) => ({ url: u(itemPath(r.itemId!)), lastModified: r.updatedAt ?? undefined })),
     ...sources.map((r) => ({ url: u(sourcePath(r.sourceType!, r.sourceId!).split("#")[0]!), lastModified: r.updatedAt ?? undefined })),

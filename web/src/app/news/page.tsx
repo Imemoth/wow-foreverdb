@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ArticleHub, articleQueryFrom, type SP } from "@/components/content/ArticleHub";
-import { NewsObservatoryBanner } from "@/components/news/NewsObservatoryBanner";
+import { NewsArchive } from "@/components/NewsArchive";
+import { articleQueryFrom, type SP } from "@/components/content/ArticleHub";
 import { SECTION_META } from "@/components/ArticleViews";
 import { isEmptyArticleQuery } from "@/lib/content/article-query";
 import { robotsFor } from "@/lib/seo";
@@ -17,17 +17,5 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
 }
 
 export default function Page({ searchParams }: { searchParams: SP }) {
-  return (
-    <ArticleHub
-      section="news"
-      searchParams={searchParams}
-      eyebrow="Dispatches"
-      eyebrowIcon="/library/medallions/chronicle.webp"
-      title={SECTION_META.news.title}
-      intro={SECTION_META.news.intro}
-      Banner={NewsObservatoryBanner}
-      searchLabel="Search News"
-      rss
-    />
-  );
+  return <NewsArchive searchParams={searchParams} />;
 }

@@ -9,6 +9,12 @@ import {
   type Page,
   type PublicDataAdapter,
   type RecentRow,
+  type NewsEntry,
+  type NewsPage,
+  type NewsQuery,
+  type NewsSourceType,
+  type NewsRegion,
+  type NewsCategory,
   type SearchQuery,
   type SearchRow,
   type SitemapRow,
@@ -103,6 +109,44 @@ export function describeConnectionTarget(connectionString: string): Record<strin
 }
 
 const num = (v: unknown) => (v == null ? null : Number(v));
+
+function toNewsEntry(r: Row): NewsEntry {
+  return {
+    id: Number(r.id),
+    slug: String(r.slug),
+    sourceType: r.source_type as NewsSourceType,
+    sourceKey: String(r.source_key),
+    sourceEntryId: String(r.source_entry_id),
+    sourceTopicId: (r.source_topic_id as string) ?? null,
+    threadKey: (r.thread_key as string) ?? null,
+    canonicalUrl: String(r.canonical_url),
+    title: String(r.title),
+    author: (r.author as string) ?? null,
+    region: r.region as NewsRegion,
+    publishedAt: new Date(r.published_at as string).toISOString(),
+    modifiedAt: r.modified_at ? new Date(r.modified_at as string).toISOString() : null,
+    ingestedAt: new Date(r.ingested_at as string).toISOString(),
+    excerpt: String(r.excerpt ?? ""),
+    category: r.category as NewsCategory,
+    importance: Number(r.importance ?? 0),
+    featured: Boolean(r.featured),
+  };
+}
+
+function fromNewsJson(value: unknown): NewsEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const r = value as Record<string, unknown>;
+  return {
+    id: Number(r.id), slug: String(r.slug), sourceType: r.sourceType as NewsSourceType,
+    sourceKey: String(r.sourceKey), sourceEntryId: String(r.sourceEntryId),
+    sourceTopicId: (r.sourceTopicId as string) ?? null, threadKey: (r.threadKey as string) ?? null,
+    canonicalUrl: String(r.canonicalUrl), title: String(r.title), author: (r.author as string) ?? null,
+    region: r.region as NewsRegion, publishedAt: new Date(r.publishedAt as string).toISOString(),
+    modifiedAt: r.modifiedAt ? new Date(r.modifiedAt as string).toISOString() : null,
+    ingestedAt: new Date(r.ingestedAt as string).toISOString(), excerpt: String(r.excerpt ?? ""),
+    category: r.category as NewsCategory, importance: Number(r.importance ?? 0), featured: Boolean(r.featured),
+  };
+}
 
 function toSearchRow(r: Row): SearchRow {
   return {
@@ -267,6 +311,21 @@ export class PostgresAdapter implements PublicDataAdapter {
   async recent(limit: number): Promise<RecentRow[]> {
     const rows = await this.q("select * from web_api.recent($1)", [limit]);
     return rows.map((r) => ({ ...toSearchRow({ ...r, observations: 0 }), lastObservedAt: r.last_observed_at ? new Date(r.last_observed_at as string).toISOString() : null }));
+  }
+
+  async newsList(q: NewsQuery): Promise<NewsPage> {
+    const rows = await this.q("select * from web_api.news_list($1, $2, $3, $4)", [q.category, q.query, q.pageSize, (q.page - 1) * q.pageSize]);
+    return { rows: rows.map(toNewsEntry), total: rows.length ? Number(rows[0]!.total_count) : 0 };
+  }
+
+  async newsFeatured(limit: number): Promise<NewsEntry[]> {
+    const rows = await this.q("select * from web_api.news_featured($1)", [limit]);
+    return rows.map(toNewsEntry);
+  }
+
+  async newsEntry(slug: string): Promise<NewsEntry | null> {
+    const [row] = await this.q("select web_api.news_entry($1) as d", [slug]);
+    return fromNewsJson(row?.d);
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {
