@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { getJson } from "@/lib/account/client";
+import { createHeaderStatusStore, type HeaderAccountStatus } from "@/lib/account/header-status";
 import { LogoutButton } from "./LogoutButton";
 
-type Status = "unknown" | "guest" | "authed";
+type Status = HeaderAccountStatus;
 
 const GUEST_HREF = "/account/register";
 
@@ -21,21 +22,14 @@ const LINKS = [
  * Signed-in state for the header. The session cookie is HttpOnly and Path=/account, so the page cannot read it and
  * public pages never receive it; /account/api/me (same-origin, no token in JavaScript) is the only signal. Until it
  * answers (and whenever it fails) the entry is the guest link, which is always safe: a signed-in visitor who follows
- * it is redirected to /account by the register page, never shown the registration form.
+ * it is redirected to /account by the register page, never shown the registration form. The answer is shared by all
+ * entries on the page (module-level store), so the mobile menu, which mounts when opened, shows it immediately.
  */
+const store = createHeaderStatusStore(() => getJson("/account/api/me"));
+
 function useAccountStatus(): Status {
-  const [status, setStatus] = useState<Status>("unknown");
-  useEffect(() => {
-    const ctl = new AbortController();
-    getJson("/account/api/me", ctl.signal).then((r) => {
-      if (ctl.signal.aborted) return;
-      if (r.status === 401) setStatus("guest");
-      else if (r.status === 200) setStatus(r.data.ok === true ? "authed" : "guest");
-      // 0 / 404 / 503 / 5xx: keep the guest link, ask again on the next page load
-    });
-    return () => ctl.abort();
-  }, []);
-  return status;
+  useEffect(() => store.ensureLoaded(), []);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
 }
 
 function PersonIcon() {
