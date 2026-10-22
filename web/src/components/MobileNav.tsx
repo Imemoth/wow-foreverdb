@@ -7,10 +7,9 @@ import { SUPPORT_URL } from "@/lib/support-link";
 
 /**
  * Mobile hamburger disclosure. ADR-015: like SiteHeader.tsx, this file must never import
- * account modules or inspect session/feature-flag state. No Account entry here, matching the
- * desktop header: for the current public-beta scope (Account Auth disabled) a global,
- * state-agnostic /account link is misleading, and this file cannot safely make it conditional
- * without crossing the boundary - the real /account app and its own nav are unaffected.
+ * account modules or inspect session/feature-flag state. The Account entry arrives as an opaque
+ * `accountSlot` node rendered by SiteHeader (null where Account is not enabled); this file only
+ * closes the menu when a link inside the slot is followed.
  */
 const MENU_LINKS = [
   { href: "/database", label: "Database" },
@@ -21,7 +20,7 @@ const MENU_LINKS = [
   { href: "/download", label: "Download" },
 ];
 
-export function MobileNav() {
+export function MobileNav({ accountSlot }: { accountSlot?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   // The header's actual bottom edge, not a guessed constant: it also sits below the optional
   // DatasetBanner (synthetic-data notice), whose height varies, so a fixed Tailwind offset would
@@ -117,6 +116,11 @@ export function MobileNav() {
                       </Link>
                     </li>
                   ))}
+                  {accountSlot && (
+                    <li className="contents" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) setOpen(false); }}>
+                      {accountSlot}
+                    </li>
+                  )}
                   <li className="mt-1 border-t border-ink-700/80 pt-1">
                     {/* Last item, visually secondary: a plain external link, not another nav
                         destination. See SiteHeader.tsx's desktop placement for the same link. */}

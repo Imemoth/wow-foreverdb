@@ -196,9 +196,9 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(r.config).toMatchObject({
       mode: "pilot", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
     });
-    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
   });
 
   it("accepts production only after separate code approval and matching real Vercel Production signals", () => {
@@ -307,7 +307,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
     const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
     expect(rp.ok).toBe(false);
-    expect(!rp.ok && rp.issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/Vercel preview deployment/);
     // The pilot's source-code approval must not create public access or a public backend credential.
     const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
     expect(x.ok).toBe(false);

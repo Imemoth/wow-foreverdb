@@ -76,7 +76,7 @@ export function RegisterForm({ turnstileSiteKey }: { turnstileSiteKey: string | 
         hint="At least 12 characters. Use something unique to AzerDex; a passphrase works well." />
       {turnstileSiteKey && <AccountTurnstile siteKey={turnstileSiteKey} onToken={onToken} resetSignal={resetSignal} />}
       <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
-      <p className="text-sm text-mist">Already registered? <Link href="/account/login">Sign in</Link></p>
+      <p className="text-sm text-mist">Already have an account? <Link href="/account/login">Sign in</Link></p>
     </form>
   );
 }
