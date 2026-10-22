@@ -17,6 +17,17 @@ import type { AtlasMap } from "./atlas/schema";
 
 export interface ArtworkSource { src: string; width: number }
 
+/**
+ * The art-directed desktop crops in use, each mapped to a LITERAL Tailwind class. The hero is server-rendered under a `style-src 'self' 'nonce-…'`
+ * CSP without 'unsafe-inline', which drops any inline `style="object-position:…"`; a compiled class keeps the value in the stylesheet instead.
+ * Tailwind only emits classes whose exact text it can read, so a new crop needs a new line here (the type of `objectPosition` enforces it).
+ */
+export const HERO_FOCAL_CLASS = {
+  "85% 50%": "object-[85%_50%]",
+  "85% 45%": "object-[85%_45%]",
+} as const;
+export type HeroFocal = keyof typeof HERO_FOCAL_CLASS;
+
 /** What the hero component renders (unchanged shape): resolved URLs for the chosen source. */
 export interface CinematicArtwork {
   /** Wide panorama (desktop/tablet) renditions, smallest first; the LAST is the `src` fallback. Must carry no baked-in text or UI. */
@@ -25,8 +36,8 @@ export interface CinematicArtwork {
   mobile: readonly ArtworkSource[];
   /** Intrinsic size of the largest desktop rendition (reserves space, avoids layout shift). */
   intrinsic: { width: number; height: number };
-  /** CSS object-position of the desktop crop; the subject sits on the right, so the crop is right-weighted. */
-  objectPosition: string;
+  /** CSS object-position of the desktop crop (applied through HERO_FOCAL_CLASS); the subject sits on the right, so the crop is right-weighted. */
+  objectPosition: HeroFocal;
   /** Where these URLs point: the same-origin rollback files or the versioned CDN namespace. */
   origin: "local" | "cdn";
 }
@@ -40,7 +51,7 @@ export interface CinematicArtworkDefinition {
   desktop: readonly HeroRendition[];
   mobile: readonly HeroRendition[];
   intrinsic: { width: number; height: number };
-  objectPosition: string;
+  objectPosition: HeroFocal;
 }
 
 /**

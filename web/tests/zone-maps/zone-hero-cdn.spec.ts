@@ -68,12 +68,14 @@ test.describe("zone heroes from the CDN (real browser)", () => {
     const csp = res!.headers()["content-security-policy"]!;
     expect(csp).toContain(`img-src 'self' data: ${ORIGIN}`);
     await expect.poll(() => heroImg(page).evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
-    // The ONLY report is the pre-existing `style-src-attr` one: the (unchanged) hero <img> carries an inline style="object-position:…" that the
-    // nonce-based style-src blocks, in the default same-origin mode just the same (found while writing this spec, documented in
-    // docs/web/zone-cinematic-hero.md). Nothing may be reported for img-src/connect-src, i.e. the CDN origin is fully allowed.
+    // Nothing may be reported at all: not for img-src/connect-src (the CDN origin is fully allowed) and not for style-src-attr either. The hero crop is a
+    // compiled utility class (HERO_FOCAL_CLASS), not an inline style="object-position:…", so the nonce-based style-src has nothing to block.
     const reported = await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []);
-    expect(reported.filter((v) => !v.startsWith("style-src-attr inline"))).toEqual([]);
-    expect(violations.filter((v) => !/style-src-attr|inline style/i.test(v))).toEqual([]);
+    expect(reported).toEqual([]);
+    expect(violations).toEqual([]);
+    // ...and the crop is really applied (the class used to lose to `object-center` once the inline style was dropped).
+    expect(await heroImg(page).evaluate((i: HTMLImageElement) => getComputedStyle(i).objectPosition)).toBe("85% 50%");
+    expect(await heroImg(page).evaluate((i: HTMLImageElement) => i.hasAttribute("style"))).toBe(false);
   });
 
   test("Resource Timing sees the real hero size (Timing-Allow-Origin works in the browser: performance baseline is measurable)", async ({ page }) => {

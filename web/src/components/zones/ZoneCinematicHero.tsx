@@ -1,7 +1,7 @@
 import { ArcaneSurveyBanner } from "@/components/cartography/ArcaneSurveyBanner";
 import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { fmtInt } from "@/lib/format";
-import type { ResolvedZoneArtwork } from "@/lib/maps/zone-artwork";
+import { HERO_FOCAL_CLASS, type ResolvedZoneArtwork } from "@/lib/maps/zone-artwork";
 
 /** Real figures from the public read model, or null when none exist (never 0 by assumption). */
 export interface ZoneHeroStats { sources: number; items: number; locatedObservations: number }
@@ -94,8 +94,7 @@ function HeroImage({ artwork }: { artwork: ResolvedZoneArtwork }) {
           aria-hidden="true"
           fetchPriority="high"
           decoding="async"
-          style={{ objectPosition }}
-          className="absolute inset-0 h-full w-full object-cover object-center"
+          className={`absolute inset-0 h-full w-full object-cover ${HERO_FOCAL_CLASS[objectPosition]}`}
         />
       </picture>
     );

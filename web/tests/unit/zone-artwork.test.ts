@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ZoneCinematicHero } from "@/components/zones/ZoneCinematicHero";
 import { resolveZoneHeroUrl } from "@/lib/maps/asset-url";
 import type { AtlasMap } from "@/lib/maps/atlas/schema";
-import { CINEMATIC_ZONE_ARTWORK, heroFileName, resolveZoneArtwork, type ResolvedZoneArtwork } from "@/lib/maps/zone-artwork";
+import { CINEMATIC_ZONE_ARTWORK, HERO_FOCAL_CLASS, heroFileName, resolveZoneArtwork, type ResolvedZoneArtwork } from "@/lib/maps/zone-artwork";
 import { heroCdnBase, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
 import { buildPageCsp } from "@/lib/security/headers";
 
@@ -200,9 +200,22 @@ describe("ZoneCinematicHero is structurally unchanged and renders the CDN rendit
     expect(img).toContain('height="667"');
     expect(img).toContain('decoding="async"');
     expect(img).toContain('alt=""');
-    expect(img).toContain("object-position:85% 50%");
+    // The crop is a compiled utility class, never an inline style: the nonce-based style-src (no 'unsafe-inline') blocks style="…".
+    expect(img).not.toContain("style=");
+    expect(img).toContain("object-[85%_50%]");
+    expect(img).not.toContain("object-center");
     expect(h).toContain('data-artwork="cinematic"');
     expect(h).not.toMatch(/loading="lazy"/);
+  });
+
+  it("every registered crop has a literal focal class (Tailwind only emits classes it can read), and Duskwood keeps its own", () => {
+    for (const [id, def] of Object.entries(CINEMATIC_ZONE_ARTWORK)) {
+      const cls = HERO_FOCAL_CLASS[def.objectPosition];
+      expect(cls, `zone ${id}`).toBe(`object-[${def.objectPosition.replace(/ /g, "_")}]`);
+    }
+    const duskwood = imgTag(html(resolveZoneArtwork(1431)));
+    expect(duskwood).toContain("object-[85%_45%]");
+    expect(duskwood).not.toContain("style=");
   });
 
   it("local and CDN markup are identical once the artwork URLs are normalised (same composition, same DOM)", () => {
