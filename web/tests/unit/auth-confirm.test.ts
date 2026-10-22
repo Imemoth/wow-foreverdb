@@ -48,6 +48,9 @@ describe("public auth confirmation (independent of the Account flags)", () => {
     const h = (o: Record<string, string>) => ({ get: (n: string) => o[n] ?? null });
     expect(isSameOriginForm(h({ origin: "https://beta.azerdex.com", host: "beta.azerdex.com" }))).toBe(true);
     expect(isSameOriginForm(h({ origin: "https://evil.example", host: "beta.azerdex.com" }))).toBe(false);
+    // no-referrer pages send Origin: null on their own same-origin POST: Fetch-Metadata decides
+    expect(isSameOriginForm(h({ origin: "null", "sec-fetch-site": "same-origin", host: "beta.azerdex.com" }))).toBe(true);
+    expect(isSameOriginForm(h({ origin: "null", "sec-fetch-site": "cross-site", host: "beta.azerdex.com" }))).toBe(false);
     expect(isSameOriginForm(h({ origin: "null", host: "beta.azerdex.com" }))).toBe(false);
     expect(isSameOriginForm(h({ "sec-fetch-site": "same-origin", host: "x" }))).toBe(true);
     expect(isSameOriginForm(h({ "sec-fetch-site": "cross-site", host: "x" }))).toBe(false);
