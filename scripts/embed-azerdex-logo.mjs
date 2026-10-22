@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../supabase/functions/azerdex-welcome-worker");
+// Other functions that attach the same emblem get their own generated copy (API-based deploys bundle only the function's own directory).
+const COPIES = [path.resolve(dir, "../azerdex-auth-email/logo-data.ts")];
 export function render() {
   const png = fs.readFileSync(path.join(dir, "azerdex-logo.png"));
   const sha = createHash("sha256").update(png).digest("hex");
@@ -23,10 +25,12 @@ export const LOGO_PNG_BASE64 =
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const out = path.join(dir, "logo-data.ts");
   if (process.argv.includes("--check")) {
-    const ok = fs.existsSync(out) && fs.readFileSync(out, "utf8") === render();
+    const ok = [out, ...COPIES].every((f) => fs.existsSync(f) && fs.readFileSync(f, "utf8") === render());
     console.log(ok ? "logo-data.ts is up to date" : "logo-data.ts is STALE: run node scripts/embed-azerdex-logo.mjs");
     process.exit(ok ? 0 : 1);
   }
-  fs.writeFileSync(out, render());
-  console.log(`wrote ${path.relative(process.cwd(), out)}`);
+  for (const f of [out, ...COPIES]) {
+    fs.writeFileSync(f, render());
+    console.log(`wrote ${path.relative(process.cwd(), f)}`);
+  }
 }

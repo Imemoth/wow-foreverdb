@@ -1,0 +1,13 @@
+Confirm your email.
+
+Thanks for registering with AzerDex. Verify your email address to activate your account.
+
+This link is time-limited and can be used once. Nothing changes on your account until you open it.
+
+Verify My Email: {{{CONFIRM_URL}}}
+
+DIDN'T REGISTER? If you did not create an AzerDex account you can ignore this message: no account is activated unless this link is used.
+AzerDex will never ask for your password, a verification code or installation credentials by e-mail.
+
+Questions? Reply to this message or write to support@azerdex.com.
+Transactional message about your account, not a newsletter. AzerDex is an independent fan project and is not affiliated with Blizzard Entertainment.

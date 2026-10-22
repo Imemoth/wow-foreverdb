@@ -5,3 +5,13 @@
 verify_jwt = false
 # NOTE: no `static_files`. The CID emblem is embedded as the generated module logo-data.ts (see scripts/embed-azerdex-logo.mjs) because Supabase
 # cannot ship static files with API-based deploys (dashboard / MCP / --use-api); an imported module is bundled by every deploy path.
+
+[functions.azerdex-auth-email]
+# Supabase Auth calls this Send Email hook, not a user: no user JWT exists. Authentication is the Standard Webhooks signature
+# (SEND_EMAIL_HOOK_SECRET), verified before the body is parsed; fail-closed when the secret is unset. Never copy this setting to another function.
+verify_jwt = false
+
+[functions.azerdex-auth-confirm]
+# Called by the public confirmation page's server route (a visitor, not a Supabase user). The credential is the one-time e-mail token
+# (consumed only by this explicit POST), exactly as with Auth's own public /verify endpoint. Never copy this setting to another function.
+verify_jwt = false

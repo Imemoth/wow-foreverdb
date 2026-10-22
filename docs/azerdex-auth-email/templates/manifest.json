@@ -1,0 +1,79 @@
+[
+  {
+    "alias": "azerdex-confirm-signup-v1",
+    "name": "AzerDex — Confirm Sign-up (V1)",
+    "subject": "Confirm Your Email — Welcome to AzerDex",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "CONFIRM_URL"
+    ]
+  },
+  {
+    "alias": "azerdex-reset-password-v1",
+    "name": "AzerDex — Reset Password (V1)",
+    "subject": "Reset Your Password — AzerDex",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "RESET_URL"
+    ]
+  },
+  {
+    "alias": "azerdex-email-change-v1",
+    "name": "AzerDex — Confirm Email Change (V1)",
+    "subject": "Confirm Your Email Change — AzerDex",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "CONFIRM_URL",
+      "NEW_EMAIL"
+    ]
+  },
+  {
+    "alias": "azerdex-auth-link-v1",
+    "name": "AzerDex — Account Link (V1)",
+    "subject": "Your AzerDex Account Link",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "TITLE",
+      "MESSAGE",
+      "BUTTON_LABEL",
+      "CONFIRM_URL"
+    ]
+  },
+  {
+    "alias": "azerdex-auth-code-v1",
+    "name": "AzerDex — Verification Code (V1)",
+    "subject": "Your AzerDex Verification Code",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "CODE"
+    ]
+  },
+  {
+    "alias": "azerdex-auth-notice-v1",
+    "name": "AzerDex — Account Notice (V1)",
+    "subject": "Account Notice — AzerDex",
+    "from": "AzerDex <noreply@azerdex.com>",
+    "reply_to": [
+      "support@azerdex.com"
+    ],
+    "variables": [
+      "TITLE",
+      "MESSAGE"
+    ]
+  }
+]
