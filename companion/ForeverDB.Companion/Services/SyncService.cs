@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Models;
@@ -23,6 +24,8 @@ public sealed class SyncService
     private readonly DeviceSyncService? _device;
     private readonly Dictionary<string, string> _knownFiles =
         new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _deviceGates = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _lastDeviceSync = new(StringComparer.Ordinal);
 
     public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
@@ -110,11 +113,10 @@ public sealed class SyncService
             },
             SnapshotJson);
 
-        // Zero-touch: an installation owned by this computer's registered device (or about to be) never takes the anonymous path.
-        // Only the explicit Sync now uploads; the watcher and startup sync send nothing for it.
+        // An installation owned by this computer's registered device (or about to be) never takes the anonymous path.
         if (_device is { } device && device.Handles(snapshot.InstallationId))
         {
-            return await SyncRegisteredDeviceAsync(device, snapshot, json, trigger, cancellationToken);
+            return await SyncRegisteredDeviceAsync(device, snapshot, json, force, trigger, cancellationToken);
         }
 
         var attempt = await _coordinator.SyncAsync(
@@ -165,46 +167,70 @@ public sealed class SyncService
         DeviceSyncService device,
         ForeverDbSnapshot snapshot,
         string json,
+        bool force,
         SyncTrigger trigger,
         CancellationToken cancellationToken)
     {
-        var result = trigger == SyncTrigger.Manual
-            ? await device.SyncNowAsync(json, cancellationToken)
-            : await device.SyncAutomaticAsync(json, cancellationToken);
-
-        if (result.Outcome == DeviceSyncOutcome.Synced)
+        var gate = _deviceGates.GetOrAdd(snapshot.InstallationId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            Authenticated?.Invoke();
-            SyncCompleted?.Invoke(
+            if (!force && _lastDeviceSync.TryGetValue(snapshot.InstallationId, out var last) && snapshot.UpdatedAt <= last)
+            {
+                Authenticated?.Invoke();
+                return new SyncAttempt(
+                    SyncOutcome.UpToDate,
+                    BlockReason.None,
+                    InstallationOwnership.OwnedByRegisteredAccount,
+                    null,
+                    null);
+            }
+
+            var result = trigger == SyncTrigger.Manual
+                ? await device.SyncNowAsync(json, cancellationToken).ConfigureAwait(false)
+                : await device.SyncAutomaticAsync(json, cancellationToken).ConfigureAwait(false);
+
+            if (result.Outcome == DeviceSyncOutcome.Synced)
+            {
+                _lastDeviceSync.AddOrUpdate(
+                    snapshot.InstallationId,
+                    snapshot.UpdatedAt,
+                    (_, current) => Math.Max(current, snapshot.UpdatedAt));
+                Authenticated?.Invoke();
+                SyncCompleted?.Invoke(
+                    this,
+                    new SyncCompletedEventArgs(
+                        DateTimeOffset.Now,
+                        snapshot.Sources.Count,
+                        snapshot.Guilds.Sum(guild => guild.Members.Count),
+                        trigger));
+                _afterSynced?.Invoke(snapshot);
+                _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);
+                return new SyncAttempt(SyncOutcome.Synced, BlockReason.None, InstallationOwnership.OwnedByRegisteredAccount, null, null);
+            }
+
+            if (result.Outcome == DeviceSyncOutcome.AutoSyncOff)
+            {
+                return SyncAttempt.Blocked(BlockReason.DeviceAutoSyncOff, InstallationOwnership.OwnedByRegisteredAccount);
+            }
+
+            _coordinator.NoteDeviceUploadNotCompleted(snapshot.InstallationId, BlockReason.DeviceSyncNotCompleted);
+            SyncBlocked?.Invoke(
                 this,
-                new SyncCompletedEventArgs(
-                    DateTimeOffset.Now,
-                    snapshot.Sources.Count,
-                    snapshot.Guilds.Sum(guild => guild.Members.Count),
-                    trigger));
-            _afterSynced?.Invoke(snapshot);
-            _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);
-            return new SyncAttempt(SyncOutcome.Synced, BlockReason.None, InstallationOwnership.OwnedByRegisteredAccount, null, null);
-        }
-
-        if (result.Outcome == DeviceSyncOutcome.AutoSyncOff)
-        {
-            // By design, not an error: no message on every SavedVariables save.
-            return SyncAttempt.Blocked(BlockReason.DeviceAutoSyncOff, InstallationOwnership.OwnedByRegisteredAccount);
-        }
-
-        _coordinator.NoteDeviceUploadNotCompleted(snapshot.InstallationId, BlockReason.DeviceSyncNotCompleted);
-        SyncBlocked?.Invoke(
-            this,
-            new SyncBlockedEventArgs(
-                snapshot.InstallationId,
+                new SyncBlockedEventArgs(
+                    snapshot.InstallationId,
+                    BlockReason.DeviceSyncNotCompleted,
+                    result.Outcome == DeviceSyncOutcome.Failed,
+                    result.Message));
+            return new SyncAttempt(
+                result.Outcome == DeviceSyncOutcome.Failed ? SyncOutcome.Failed : SyncOutcome.Blocked,
                 BlockReason.DeviceSyncNotCompleted,
-                result.Outcome == DeviceSyncOutcome.Failed,
-                result.Message));
-        return new SyncAttempt(
-            result.Outcome == DeviceSyncOutcome.Failed ? SyncOutcome.Failed : SyncOutcome.Blocked,
-            BlockReason.DeviceSyncNotCompleted,
-            InstallationOwnership.OwnedByRegisteredAccount, null, null);
+                InstallationOwnership.OwnedByRegisteredAccount, null, null);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 }
 

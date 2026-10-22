@@ -224,7 +224,7 @@ public class DeviceSyncTests
     // ---- transport ----------------------------------------------------------------------------
 
     [Fact]
-    public async Task A_401_refreshes_the_device_session_once_and_retries_once()
+    public async Task An_automatic_upload_401_refreshes_the_device_session_once_and_retries_once()
     {
         using var rig = await Registered();
         await rig.Sync.CheckStatusAsync();
@@ -240,7 +240,7 @@ public class DeviceSyncTests
             return null;
         };
 
-        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncNowAsync(rig.Snapshot())).Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncAutomaticAsync(rig.Snapshot())).Outcome);
         Assert.Equal(2, IngestCalls(rig));
         Assert.Equal(1, rig.Server.SuccessfulRefreshCount);
         Assert.Equal(1, rig.Server.SignupCount);
@@ -268,28 +268,28 @@ public class DeviceSyncTests
     [InlineData(429, DeviceDetail.RateLimited)]
     [InlineData(503, DeviceDetail.Offline)]
     [InlineData(500, DeviceDetail.Offline)]
-    public async Task Rate_limits_and_server_errors_are_retry_later_and_keep_the_registration(int http, DeviceDetail detail)
+    public async Task Automatic_rate_limits_and_server_errors_are_retry_later_and_keep_the_registration(int http, DeviceDetail detail)
     {
         using var rig = await Registered();
         await rig.Sync.CheckStatusAsync();
         var before = File.ReadAllBytes(rig.Context.Store.BlobPath);
         rig.Backend.Fault = rpc => rpc == "fdb_device_ingest" ? new FakeResponse(http, "{\"code\":\"X\"}") : null;
 
-        var result = await rig.Sync.SyncNowAsync(rig.Snapshot());
+        var result = await rig.Sync.SyncAutomaticAsync(rig.Snapshot());
         Assert.Equal(DeviceSyncOutcome.RetryLater, result.Outcome);
         Assert.Equal(new DeviceStatus(DeviceState.Registered, detail), result.Status);
         Assert.Equal(before, File.ReadAllBytes(rig.Context.Store.BlobPath));
 
         rig.Backend.Fault = null;
-        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncNowAsync(rig.Snapshot())).Outcome);
+        Assert.Equal(DeviceSyncOutcome.Synced, (await rig.Sync.SyncAutomaticAsync(rig.Snapshot())).Outcome);
     }
 
     [Fact]
-    public async Task A_dead_network_is_retry_later_and_the_message_says_nothing_was_lost()
+    public async Task An_automatic_upload_on_a_dead_network_is_retry_later_and_reports_the_failure()
     {
         using var rig = await Registered();
         rig.Handler.Offline = true;
-        var result = await rig.Sync.SyncNowAsync(rig.Snapshot());
+        var result = await rig.Sync.SyncAutomaticAsync(rig.Snapshot());
         Assert.Equal(DeviceSyncOutcome.RetryLater, result.Outcome);
         Assert.Equal(DeviceState.Registered, result.Status.State);
         Assert.Contains("could not be reached", result.Message);
@@ -465,20 +465,17 @@ public class DeviceSyncTests
         Assert.Equal(1, rig.Backend.Count("fdb_device_rotate_credential"));
     }
 
-    // ---- AutoSync stays off -------------------------------------------------------------------
+    // ---- AutoSync -----------------------------------------------------------------------------
 
     [Fact]
-    public async Task Automatic_upload_for_a_registered_device_sends_nothing()
+    public async Task Automatic_upload_for_a_registered_device_uses_the_same_authenticated_device_path()
     {
         using var rig = await Registered();
-        var calls = rig.Server.Requests.Count;
         var result = await rig.Sync.SyncAutomaticAsync(rig.Snapshot());
-        Assert.Equal(DeviceSyncOutcome.AutoSyncOff, result.Outcome);
-        Assert.Equal(DeviceDetail.AutoSyncOff, result.Status.Detail);
+        Assert.Equal(DeviceSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(DeviceDetail.Synced, result.Status.Detail);
         Assert.Equal(DeviceState.Registered, result.Status.State);
-        Assert.Equal(calls, rig.Server.Requests.Count);
-        Assert.Equal(0, rig.Backend.DeviceIngests);
-        Assert.Contains("Sync now", result.Message);
+        Assert.Equal(1, rig.Backend.DeviceIngests);
     }
 
     // ---- pending / not enrolled ----------------------------------------------------------------

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace ForeverDB.Companion.Account.Tests;
 
-/// <summary>Production account linking is narrow: direct linking/manual device sync, without activation-file enrollment or AutoSync.</summary>
+/// <summary>Production account linking supports direct linking and user-controlled device sync without activation-file enrollment.</summary>
 public class DeviceGateTests
 {
     private const string Key = "sb_publishable_testkey";
@@ -37,18 +37,19 @@ public class DeviceGateTests
         AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
 
     [Fact]
-    public void Production_account_linking_is_approved_while_zero_touch_and_auto_sync_stay_off()
+    public void Production_account_linking_and_auto_sync_are_approved_while_zero_touch_stays_off()
     {
         var production = typeof(AccountFeatureGate).GetField(nameof(AccountFeatureGate.ProductionAccountAuthApproved), BindingFlags.Public | BindingFlags.Static)!;
         Assert.True(production.IsInitOnly);
         Assert.Equal(true, production.GetValue(null));
 
-        foreach (var name in new[] { nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), nameof(AccountFeatureGate.DeviceAutoSyncApproved) })
-        {
-            var field = typeof(AccountFeatureGate).GetField(name, BindingFlags.Public | BindingFlags.Static)!;
-            Assert.True(field.IsLiteral, $"{name} must be a const");
-            Assert.Equal(false, field.GetRawConstantValue());
-        }
+        var zeroTouch = typeof(AccountFeatureGate).GetField(nameof(AccountFeatureGate.ZeroTouchEnrollmentApproved), BindingFlags.Public | BindingFlags.Static)!;
+        Assert.True(zeroTouch.IsLiteral);
+        Assert.Equal(false, zeroTouch.GetRawConstantValue());
+
+        var autoSync = typeof(AccountFeatureGate).GetField(nameof(AccountFeatureGate.DeviceAutoSyncApproved), BindingFlags.Public | BindingFlags.Static)!;
+        Assert.True(autoSync.IsLiteral);
+        Assert.Equal(true, autoSync.GetRawConstantValue());
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public class DeviceGateTests
         Assert.True(AccountFeatureGate.DirectAccountLinkingAvailable(standard));
         Assert.False(AccountFeatureGate.ZeroTouchAvailable(standard));
         Assert.False(AccountFeatureGate.ZeroTouchEnrollmentApproved);
-        Assert.False(AccountFeatureGate.DeviceAutoSyncApproved);
+        Assert.True(AccountFeatureGate.DeviceAutoSyncApproved);
     }
 
     [Fact]
