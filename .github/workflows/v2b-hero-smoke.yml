@@ -19,6 +19,12 @@ on:
       perf_runs:
         description: "Sequential requests per file and origin for the Vercel-vs-Cloudflare probe (0 = skip)"
         default: "5"
+  # also runs (with the defaults: expect local, site https://beta.azerdex.com) when this workflow or its scripts change; this is also what registers the workflow for manual dispatch before it is on the default branch
+  pull_request:
+    paths:
+      - ".github/workflows/v2b-hero-smoke.yml"
+      - "web/scripts/hero-cdn-smoke.mjs"
+      - "web/scripts/hero-perf-probe.mjs"
 
 permissions:
   contents: read
@@ -29,13 +35,13 @@ concurrency:
 
 jobs:
   smoke:
-    name: Hero smoke (${{ github.event.inputs.expect }})
+    name: Hero smoke (${{ github.event.inputs.expect || 'local' }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      EXPECT: ${{ github.event.inputs.expect }}
-      SITE: ${{ github.event.inputs.site }}
-      PERF_RUNS: ${{ github.event.inputs.perf_runs }}
+      EXPECT: ${{ github.event.inputs.expect || 'local' }}
+      SITE: ${{ github.event.inputs.site || 'https://beta.azerdex.com' }}
+      PERF_RUNS: ${{ github.event.inputs.perf_runs || '5' }}
       CDN: https://azerdex-assets.pages.dev
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: v2b-hero-smoke-${{ github.event.inputs.expect }}
+          name: v2b-hero-smoke-${{ github.event.inputs.expect || 'local' }}
           path: |
             smoke-*.json
             probe-*.json
