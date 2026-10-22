@@ -6,11 +6,17 @@ An empty WoW root is not a new ForeverDB installation. The addon creates its ins
 
 The Account tab may continue showing an installation discovered before a Settings change until the Companion process exits. Closing the window only hides it in the notification area. Use the tray icon's **Exit** command to end the process. A restart with an empty root shows no locally discovered installation, but it still is not a fresh-user test because the Windows profile's account and device credentials remain intact.
 
+## Owner acceptance outcome (2026-10-21)
+
+**PASS on the normal Windows build, without Windows Sandbox.** The owner used an explicitly disposable Windows test profile, removed its obsolete `%LOCALAPPDATA%\ForeverDB` test-only application state, configured an isolated WoW test root and generated a fresh schema-9 SavedVariables installation ID. Anonymous manual sync, registered account sign-in, installation connection/device registration, and subsequent manual sync all passed. The final snapshot contained 0 sources and 0 Guildbook members; non-empty data behavior remains untested. See [acceptance record](account-linking-mvp-acceptance.md).
+
+**Important:** deleting `%LOCALAPPDATA%\ForeverDB` resets Companion authentication/device credentials and local settings **only for that Windows user**. It is appropriate only if the user explicitly accepts losing that test-only state; do **not** delete the Windows DPAPI key store, production user credentials, or WoW SavedVariables. On a real user profile, use the isolation options below instead.
+
 ## Isolate the test from existing ForeverDB data
 
-Windows Sandbox is the preferred test environment. Its `%LOCALAPPDATA%`, DPAPI keys and filesystem are separate from the host and are discarded when the Sandbox closes. Do not delete, rename or reuse the host's `%LOCALAPPDATA%\ForeverDB`, WoW installation, `WTF` directory or SavedVariables. A new local Windows user is the supported fallback because DPAPI `CurrentUser` gives it the same isolation.
+For profiles containing valuable installations, Windows Sandbox is the preferred test environment. Its `%LOCALAPPDATA%`, DPAPI keys and filesystem are separate from the host and are discarded when the Sandbox closes. Do not delete, rename or reuse the host's `%LOCALAPPDATA%\ForeverDB`, WoW installation, `WTF` directory or SavedVariables. A new local Windows user is the supported fallback because DPAPI `CurrentUser` gives it the same isolation.
 
-1. Download the normal workflow artifact on the host and open Windows Sandbox.
+1. Download the normal workflow artifact on the host and open Windows Sandbox (or use a clean local Windows test user as described below).
 2. Copy the artifact ZIP into the Sandbox and extract it to `C:\ForeverDB-Test`. Do not run it from inside the ZIP.
 3. In Sandbox PowerShell, create a disposable SavedVariables tree and a new installation ID:
 
