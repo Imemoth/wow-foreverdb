@@ -1,0 +1,13 @@
+{{{TITLE}}}
+
+{{{MESSAGE}}}
+
+This link is time-limited and can be used once.
+
+{{{BUTTON_LABEL}}}: {{{CONFIRM_URL}}}
+
+DIDN'T EXPECT THIS? If you did not expect this message you can ignore it.
+AzerDex will never ask for your password, a verification code or installation credentials by e-mail.
+
+Questions? Reply to this message or write to support@azerdex.com.
+Transactional message about your account, not a newsletter. AzerDex is an independent fan project and is not affiliated with Blizzard Entertainment.

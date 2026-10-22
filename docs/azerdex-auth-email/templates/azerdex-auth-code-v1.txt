@@ -1,0 +1,13 @@
+Your verification code.
+
+Enter this code to confirm a sensitive change on your AzerDex account.
+
+The code is time-limited and can be used once.
+
+Code: {{{CODE}}}
+
+DIDN'T ASK FOR THIS? If you did not request a code, ignore this message and consider changing your password.
+AzerDex will never ask for your password, a verification code or installation credentials by e-mail.
+
+Questions? Reply to this message or write to support@azerdex.com.
+Transactional message about your account, not a newsletter. AzerDex is an independent fan project and is not affiliated with Blizzard Entertainment.

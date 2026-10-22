@@ -51,6 +51,12 @@ jobs:
         with: { deno-version: '2.9.6' }   # real Deno runtime for the entry-point / bundle-layout tests
       - name: Worker unit tests, emblem asset and Deno entry-point/bundle regression (mocked Resend and database)
         run: node --test tests/welcome-worker/*.test.mjs
+      - name: Auth e-mail hook + confirm function + generated templates (mocked Resend and Auth; real Deno type-check)
+        run: |
+          node scripts/build-azerdex-auth-templates.mjs --check
+          node scripts/embed-azerdex-logo.mjs --check
+          node --test tests/auth-email/*.test.mjs
+          deno check --no-lock supabase/functions/azerdex-auth-email/index.ts supabase/functions/azerdex-auth-confirm/index.ts
         env:
           FDB_REQUIRE_DENO: '1'
       - name: Build real GoTrue (pinned upstream release tag)
