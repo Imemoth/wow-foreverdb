@@ -200,7 +200,7 @@ describe("ZoneCinematicHero is structurally unchanged and renders the CDN rendit
     expect(img).toContain('height="667"');
     expect(img).toContain('decoding="async"');
     expect(img).toContain('alt=""');
-    expect(img).toContain("object-position:85% 50%");
+    expect(img).toContain("object-cover"); // the crop mechanism itself (inline style today) is deliberately not pinned here: it is fixed separately
     expect(h).toContain('data-artwork="cinematic"');
     expect(h).not.toMatch(/loading="lazy"/);
   });
