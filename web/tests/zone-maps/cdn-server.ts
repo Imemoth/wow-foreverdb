@@ -58,12 +58,15 @@ const pngFor = (w: number, h: number) => png.get(`${w}x${h}`) ?? (png.set(`${w}x
 
 /** Synthetic manifest/image for `forever/<id>/<ver>/...`, derived from the catalog (never invented for unknown maps). */
 function synthetic(path: string): { body: Buffer; type: string } | null {
-  const m = /^\/forever\/(\d+)\/(v\d+)\/(manifest\.json|map\.png)$/.exec(path);
+  const m = /^\/forever\/(\d+)\/(v\d+)\/(manifest\.json|map\.png|[A-Za-z0-9][A-Za-z0-9._-]*\.webp)$/.exec(path);
   if (!m) return null;
   const map = snapshot.maps.find((x) => x.uiMapId === Number(m[1]) && x.latestVersion === m[2]);
   if (!map || !map.image) return null;
   const { width, height, variant } = map.image;
-  if (m[3] === "map.png") return { body: pngFor(width, height), type: "image/png" };
+  // The catalog-declared default image (what the zone hero's map layer requests) is served too, as it is on the real CDN.
+  const file = m[3]!;
+  if (file.endsWith(".webp") && file !== map.image.path.split("/").pop()) return null;
+  if (file !== "manifest.json") return { body: pngFor(width, height), type: "image/png" };
   const manifest = {
     schemaVersion: 1, zoneId: map.uiMapId, slug: map.slug, zoneName: map.name, version: m[2],
     image: { file: "map.png", format: "png", width, height, variant: `synthetic-${variant}` },

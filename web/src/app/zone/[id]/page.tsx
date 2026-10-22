@@ -4,19 +4,18 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AutoSubmitSelect } from "@/components/AutoSubmitSelect";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { CartographyBanner } from "@/components/cartography/CartographyBanner";
-import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { DataNote } from "@/components/DataNote";
 import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
-import { ZoneMapSection } from "@/components/maps/ZoneMapSection";
+import { ZoneMapSection, configuredAssetBase } from "@/components/maps/ZoneMapSection";
 import { ResultsTable } from "@/components/ResultsTable";
-import { StatTile } from "@/components/StatTile";
+import { ZoneCinematicHero } from "@/components/zones/ZoneCinematicHero";
 import { data } from "@/lib/data";
 import { DISPLAY_KINDS, InvalidQueryError, LOOT_KINDS, type Page, type ZoneDetail, type ZoneEntityQuery, type ZoneEntityRow } from "@/lib/data/types";
 import { atlasCatalog } from "@/lib/maps/atlas/catalog";
 import { isDirectoryMap } from "@/lib/maps/atlas/zone-catalog";
 import { parseMapFocus } from "@/lib/maps/focus";
+import { resolveZoneArtwork } from "@/lib/maps/zone-artwork";
 import { zoneMapsEnabled } from "@/lib/maps/zone-maps-gate";
 import { DISPLAY_KIND_PLURAL, LOOT_KIND_LABEL, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
@@ -78,6 +77,9 @@ export default async function ZonePage({ params, searchParams }: { params: Param
   const sp = toParams(await searchParams);
   const gated = zoneMapsEnabled();
   const atlasMap = gated ? (await atlasCatalog()).byId.get(z.mapId) : undefined;
+  const parentId = atlasMap?.parentUiMapId;
+  const parent = parentId != null ? (await atlasCatalog()).byId.get(parentId) : undefined;
+  const continent = parent?.category === "continent" ? parent : undefined;
   const focus = parseMapFocus(sp);
 
   let q: ZoneEntityQuery | null = null;
@@ -108,28 +110,18 @@ export default async function ZonePage({ params, searchParams }: { params: Param
     <div className="space-y-6">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Zones", href: "/zones" }, { name: z.zoneName }]} />
 
-      {/* 1. Zone identity and summary - a decorative medallion (same rotation as the Zones
-          directory, see zoneMedallion.ts) ties this page back to its card, but the banner itself
-          stays the existing contained CartographyBanner at its original height: this is a
-          data-heavy detail page, not a landing hero. */}
-      <CartographyBanner>
-        <div className="flex items-start gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
-          <img src={medallionFor(z.zoneName)} alt="" aria-hidden="true"
-            className="mt-0.5 hidden h-10 w-10 shrink-0 rounded-full border border-ink-600/80 bg-ink-900/60 object-cover p-1.5 opacity-90 sm:block" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Zone · uiMapID {z.mapId}</p>
-            <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-parchment sm:text-4xl">{z.zoneName}</h1>
-          </div>
-        </div>
-      </CartographyBanner>
-      {observed && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatTile label="Sources" value={fmtInt(z.sourceCount)} />
-          <StatTile label="Items (inferred)" value={fmtInt(z.itemCount)} />
-          <StatTile label="Located obs." value={fmtInt(z.observations)} />
-        </div>
-      )}
+      {/* 1. Zone identity and summary: the central cinematic hero (artwork resolved per uiMapID in lib/maps/zone-artwork.ts).
+          The three stats are real read-model figures; an atlas-only zone has none, so they render as "not available". */}
+      <ZoneCinematicHero
+        zoneName={z.zoneName}
+        region={continent?.name ?? null}
+        kindLabel={atlasMap?.category === "city" ? "City" : "Zone"}
+        description={observed
+          ? `Discover creatures, loot and gathering data across ${z.zoneName}.`
+          : `Explore the ${z.zoneName} map. No public observations have been published for this zone yet.`}
+        stats={observed ? { sources: z.sourceCount, items: z.itemCount, locatedObservations: z.observations } : null}
+        artwork={resolveZoneArtwork(z.mapId, atlasMap, configuredAssetBase())}
+      />
 
       {/* 2. Geographic observations. With the zone-map experience enabled this is the interactive atlas map (real CDN artwork + the
           published zone-wide observation layer); otherwise the original pointer to each source's own map. */}
