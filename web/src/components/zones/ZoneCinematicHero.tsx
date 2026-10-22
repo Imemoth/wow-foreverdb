@@ -1,6 +1,7 @@
 import { ArcaneSurveyBanner } from "@/components/cartography/ArcaneSurveyBanner";
 import { medallionFor } from "@/components/cartography/zoneMedallion";
 import { fmtInt } from "@/lib/format";
+import { heroPositionClass } from "@/lib/maps/hero-position";
 import type { ResolvedZoneArtwork } from "@/lib/maps/zone-artwork";
 
 /** Real figures from the public read model, or null when none exist (never 0 by assumption). */
@@ -94,8 +95,7 @@ function HeroImage({ artwork }: { artwork: ResolvedZoneArtwork }) {
           aria-hidden="true"
           fetchPriority="high"
           decoding="async"
-          style={{ objectPosition }}
-          className="absolute inset-0 h-full w-full object-cover object-center"
+          className={`absolute inset-0 h-full w-full object-cover ${heroPositionClass(objectPosition) ?? "object-center"}`}
         />
       </picture>
     );

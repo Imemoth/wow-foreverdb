@@ -17,10 +17,17 @@ shows an en dash with a screen-reader "Not available" - nothing is invented or d
 3. **fallback** - the vector `ArcaneSurveyBanner` backdrop. Needs no asset, so a missing/failed image can never leave an empty hero
    (the vector backdrop is always rendered underneath the image layers).
 
+### Crop (`object-position`) and the CSP
+The crop is per zone data (`CINEMATIC_ZONE_ARTWORK[id].objectPosition`, e.g. `85% 50%`) and is applied as a **class**, not an inline style: the page CSP (`style-src` with a nonce, no `'unsafe-inline'`)
+blocks `style` attributes, which previously made the browser drop the crop (computed value stayed `50% 50%`). `lib/maps/hero-position.ts` maps a whole-percent pair to `hero-pos-<x>-<y>` (anything else is
+refused and keeps the centred default); the declaration lives in `app/globals.css`. Adding or changing a zone's crop = its `objectPosition` + the matching `.hero-pos-<x>-<y>` rule
+(`tests/unit/hero-position.test.ts` fails if a registered position has no rule, or a rule is unused). `tests/zone-maps/zone-hero-crop.spec.ts` asserts the effective computed value, no `style` attribute and zero
+CSP violations in a real browser for Hillsbrad and Duskwood on desktop and mobile. The corrected crop differs from the previously rendered (centred) one: before/after in `docs/web/zone-cinematic-hero/crop-fix/`.
+
 ### Adding a zone (Duskwood, Tanaris, ...)
 1. Export the panorama without any text/UI; make renditions (~1280 and ~2000 wide) and a phone crop (~600 and ~900 wide) as WebP;
    save as `web/public/zones/hero/<uiMapId>-<slug>-<width>.webp`.
-2. Add one entry to `CINEMATIC_ZONE_ARTWORK`. `tests/unit/zone-artwork.test.ts` fails if a referenced file is missing.
+2. Add one entry to `CINEMATIC_ZONE_ARTWORK` and, for a new crop value, one `.hero-pos-<x>-<y>` rule in `globals.css`. `tests/unit/zone-artwork.test.ts` fails if a referenced file is missing.
 3. Record provenance in `docs/azerdex-hero-art/provenance.md`. No UI change, no zone-specific component.
 
 Registered zones: Hillsbrad Foothills `1424`, Duskwood `1431` (`1415` is the Eastern Kingdoms continent map). Rendition widths follow

@@ -433,3 +433,9 @@
 .azd-tip-line { color: var(--color-mist); }
 /* Letterbox area around the map image (phones are narrower than the image aspect): AzerDex dark, not Leaflet's #ddd. */
 .azd-map.leaflet-container { background: var(--color-ink-900); }
+
+/* Cinematic zone hero crop (object-position), one class per configured position. A class instead of an inline style attribute because the
+   nonce-based CSP (style-src without 'unsafe-inline') blocks style attributes. Mapping + how to add a position: lib/maps/hero-position.ts.
+   Keep in step with CINEMATIC_ZONE_ARTWORK[*].objectPosition (unit-tested). Unlayered on purpose: it must win over the centred default. */
+.hero-pos-85-50 { object-position: 85% 50%; }
+.hero-pos-85-45 { object-position: 85% 45%; }
