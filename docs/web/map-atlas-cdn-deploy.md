@@ -1,6 +1,6 @@
 # Map atlas CDN — preflight, approval steps and rollback
 
-Status: **prepared, NOT deployed.** Nothing in this repository uploads to Cloudflare, changes DNS, touches Vercel environment variables or promotes the version ledger.
+Status: **prepared, NOT deployed.** The atlas-only snapshot below is superseded for the next upload by the **unified snapshot** (atlas + cinematic zone heroes, [`unified-cdn-v2a.md`](unified-cdn-v2a.md)); its upload and rollback steps are in the last section of this page. Nothing in this repository uploads to Cloudflare, changes DNS, touches Vercel environment variables or promotes the version ledger.
 The package is built by `atlas.py import-exporter` (see [`map-atlas.md`](map-atlas.md)) from the owner's verified real export and lives **outside Git** (`atlas-dist-<version>.zip`).
 
 ## What gets published
@@ -62,3 +62,42 @@ Manual (owner):
 - The instance catalog is raw and unreviewed: it includes development/test records (flagged by transparent heuristics, not removed) and cannot say which instances are released. 51 of 55 have no interior map art and none is invented. Floors/entrances stay unverified.
 - City maps carry exporter category `city` from a small English name list (confidence recorded per map).
 - No tiled representation: each variant is one WebP (largest 293 KB), far under the Pages limits.
+
+## Unified snapshot (V2-A: atlas + cinematic zone heroes) — upload and rollback
+
+Pages Direct Upload is a **complete snapshot**: whatever is not in the uploaded folder disappears from the newest deployment. The next upload therefore MUST be the unified dist
+(`azerdex-cdn-dist-<build>-<rev>.zip` → `dist/`: the 172 approved atlas files byte-for-byte **plus** the eight `zone-heroes/` files and the extended `_headers`). Never upload a hero-only folder.
+Nothing below has been run; every step is a separate owner decision. The agent that prepared this did not and will not upload.
+
+### 0. Before approving (no network writes)
+1. Rebuild locally and compare with the reviewed report (the build is deterministic: same inputs ⇒ the same zip sha256):
+   `python scripts/map-atlas/atlas.py build-unified --baseline <atlas-dist-1.60.1.70450.zip> --out <out>` → `unified-report.md` must say `READY_FOR_APPROVED_UPLOAD`, 180 files, and the zip sha256 recorded in the PR.
+2. `python scripts/map-atlas/atlas.py verify-unified --dist <out>/dist` → `unified dist OK: 180 files`.
+3. **Prove the live CDN still equals the baseline** (this could not be done from the preparation environment: proxy 403 on `*.pages.dev`). From an unrestricted machine, with the baseline extracted to `<baseline-dir>`:
+   `python scripts/map-atlas/atlas.py verify-remote --base-url https://azerdex-assets.pages.dev --dist <baseline-dir>`
+   Expected: every one of the 171 served files matches by SHA-256 (the `zone-heroes/...` probes must return 404 because nothing is published there yet). If anything differs, **stop**: the baseline is not what is live and the upload must not proceed until the owner decides which state is authoritative.
+4. Note the current production deployment ID in the Pages dashboard (rollback target) and keep the baseline zip.
+
+### 1. Upload (owner)
+From the folder that contains `dist/`: `npx wrangler pages deploy dist --project-name azerdex-assets --branch <the project's production branch>` (existing project, no new project/R2/DNS/domain change).
+Cost: zero (existing Pages Free project; 180 files of 20,000 allowed; largest file 300 KB of 25 MiB; `_headers` 3 rules of 100).
+
+### 2. Verify what is served (read-only)
+`python scripts/map-atlas/atlas.py verify-remote --base-url https://azerdex-assets.pages.dev --dist <out>/dist`
+Checks all 179 served files (SHA-256, `Cache-Control`, `Access-Control-Allow-Origin`; for `zone-heroes/*` also `Content-Type: image/webp`, `nosniff`, `Timing-Allow-Origin`) and that unknown paths (`zone-heroes/9999999/v1/…`, `zone-heroes/1424/v999/…`, `forever/9999999/v1/…`) are HTTP **404**, not a fallback page.
+If it fails, do not promote anything; use the rollback below.
+
+### 3. Promote the ledgers (only after step 2 passed)
+`python scripts/map-atlas/atlas.py promote-ledger --from <out>/ledger.next.json` (maps: appends the 60 baseline versions to `ledger/published.json`; refuses any change/removal) and
+`python scripts/map-atlas/atlas.py promote-hero-ledger --from <out>/zone-heroes-ledger.next.json` (heroes: `ledger/zone-heroes.json`). Commit both. From then on a changed file in `zone-heroes/1424/v1` (or any published version) fails the build: new art ⇒ `v2`.
+
+### 4. Website (separate approval, Preview first)
+The site keeps serving the heroes from its own origin until `AZERDEX_ZONE_HERO_SOURCE=cdn` is set (with the existing `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL`). Set it on the Vercel **Preview** environment only, redeploy, open `/zone/1424` and `/zone/1431` (network tab: `zone-heroes/…` HTTP 200 from the CDN host, no CSP error), compare with the performance baseline, and only then consider Production. Not part of V2-A.
+
+### Rollback
+| Situation | Action |
+| --- | --- |
+| Upload verification fails / wrong files served | Pages dashboard → project `azerdex-assets` → Deployments → the previously noted deployment → roll back (confirm the control name in the dashboard). Re-run `verify-remote --dist <baseline-dir>`. Do **not** run either `promote-*` command. |
+| Hero artwork wrong after publication | Never edit a published file. Fix the source, add `v2` to `heroes/zone-heroes.json` (+ registry entry), build a new unified snapshot, upload, verify. `v1` stays served. Website: flip `AZERDEX_ZONE_HERO_SOURCE` back (below). |
+| Website misbehaves with CDN heroes | Unset `AZERDEX_ZONE_HERO_SOURCE` (or set `local`) and redeploy / use Vercel instant rollback: the same-origin `/zones/hero/*` files (kept in the repository) serve again; no data or schema is involved. |
+| Ledgers promoted but the deployment rolled back | Keep the archived baseline and the unified zip; the next build needs the baseline (`--baseline`) so every published version is carried forward, otherwise it refuses by design. |

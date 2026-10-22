@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
-import { assetOriginForPage } from "@/lib/maps/zone-maps-gate";
+import { assetOriginForPage, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
 import { isIndexablePublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
@@ -181,6 +181,8 @@ export async function proxy(request: NextRequest) {
     // The validated asset origin (img-src + connect-src only) is on EVERY HTML document while the zone-map experience is on, because a
     // client-side navigation keeps the CSP of the page the visitor first loaded (see assetOriginForPage). Off => strict policy everywhere.
     assetOrigin: assetOriginForPage(pathname, process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL),
+    // img-src only, and only when AZERDEX_ZONE_HERO_SOURCE=cdn (default: same-origin heroes, CSP unchanged).
+    heroImgOrigin: heroImgOrigin(),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

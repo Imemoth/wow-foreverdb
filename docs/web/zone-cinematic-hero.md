@@ -11,7 +11,8 @@ Located obs.). Stats are the real read-model values. A zone without published ob
 shows an en dash with a screen-reader "Not available" - nothing is invented or defaulted to 0.
 
 ## Artwork resolution (`web/src/lib/maps/zone-artwork.ts`, keyed by uiMapID)
-1. **cinematic** - an entry in `CINEMATIC_ZONE_ARTWORK` (same-origin files in `web/public/zones/hero/`): art-directed `<picture>`
+1. **cinematic** - an entry in `CINEMATIC_ZONE_ARTWORK` (default: same-origin files in `web/public/zones/hero/`; with `AZERDEX_ZONE_HERO_SOURCE=cdn` the same renditions from the
+   versioned CDN namespace `<asset host>/zone-heroes/<id>/<version>/`, see [`unified-cdn-v2a.md`](unified-cdn-v2a.md)): art-directed `<picture>`
    (phones < 640px get a right-weighted crop), `srcset`, intrinsic width/height (no layout shift), `fetchpriority=high`.
 2. **map** - the zone's published atlas map (CDN, validated host) as a darkened, softened mood layer.
 3. **fallback** - the vector `ArcaneSurveyBanner` backdrop. Needs no asset, so a missing/failed image can never leave an empty hero
@@ -62,4 +63,10 @@ Artwork is `alt=""` + `aria-hidden`; the `<section>` is labelled by the `h1`; st
 ## Known limitations
 - Continent label only appears with the zone-map experience enabled (the catalog is only read then).
 - `images.unoptimized` is site-wide, so responsive sizes are pre-generated files, not on-the-fly.
-- The artwork is served from the app (`/zones/hero`), not the atlas CDN: the CDN publishes the immutable atlas export, which hero art must not mix into.
+- By default the artwork is served from the app (`/zones/hero`). The CDN delivery is prepared (V2-A) but **off**: the unified snapshot (`zone-heroes/` next to the unchanged atlas files) has not been uploaded,
+  and `AZERDEX_ZONE_HERO_SOURCE=cdn` is not set anywhere. Hero art never mixes into the atlas export (`forever/`, `atlas/`): it lives in its own, independently versioned `zone-heroes/` namespace.
+- A zone's hero files are registered twice by design: `CINEMATIC_ZONE_ARTWORK` (runtime) and `scripts/map-atlas/heroes/zone-heroes.json` (audited inventory with hashes); `tests/unit/zone-artwork.test.ts` fails if they drift.
+- **Pre-existing, found during V2-A (not changed here):** the hero `<img>` carries an inline `style="object-position:…"`. The site's nonce-based `style-src` has no `unsafe-inline`, so Chromium reports a
+  `style-src-attr` violation and drops that attribute: the art-directed crop (`85% 50%` / `85% 45%`) is not applied in the browser and the class `object-center` wins. It happens with same-origin and CDN
+  heroes alike (`tests/zone-maps/zone-hero-cdn.spec.ts` documents it and asserts that nothing else is reported). Fixing it (e.g. a per-zone utility class or a `<style nonce>`) would change the visual
+  composition, so it is left to its own change.

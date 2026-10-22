@@ -98,6 +98,13 @@ jobs:
         run: |
           npm run build
           npx playwright test -c playwright.zone-maps.config.ts
+      # Same build, cinematic heroes served from the CDN host's zone-heroes/ namespace (AZERDEX_ZONE_HERO_SOURCE=cdn, default is same-origin).
+      # The stand-in CDN serves the public watermarked derivatives with the headers of the unified _headers; checks headers, 404s, CSP, CORS, timing.
+      - name: Zone atlas maps with CDN-served cinematic heroes (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+          E2E_HERO_SOURCE: cdn
+        run: npx playwright test -c playwright.zone-maps.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }

@@ -12,6 +12,15 @@ python scripts/map-atlas/atlas.py build      --bundle map-atlas-bundle --out map
 python scripts/map-atlas/atlas.py verify-dist --dist map-atlas-out/dist --ledger map-atlas-out/ledger.next.json
 ```
 
+Unified CDN snapshot (atlas baseline + cinematic zone heroes, V2-A; nothing is uploaded — see [`docs/web/unified-cdn-v2a.md`](../../docs/web/unified-cdn-v2a.md)):
+
+```
+python scripts/map-atlas/atlas.py build-unified  --baseline <atlas-dist-1.60.1.70450.zip> --out <out>   # verifies the baseline against baseline/*.json first
+python scripts/map-atlas/atlas.py verify-unified --dist <out>/dist
+python scripts/map-atlas/atlas.py verify-baseline --baseline <zip or extracted dir>                      # e.g. a download of the live CDN
+python scripts/map-atlas/atlas.py hero-measure   --dir <derivatives>                                      # inventory records for a new hero
+```
+
 Tests (synthetic client, no network): `cd scripts/map-atlas && python -m unittest discover -s tests`.
 
 | Module | Role |
@@ -22,5 +31,6 @@ Tests (synthetic client, no network): `cd scripts/map-atlas && python -m unittes
 | `casc.py` | CascLib.dll FileDataID → BLP extraction (mirrors `NativeCascMapReader.cs`) |
 | `assemble.py`, `validate.py` | Tile placement identical to the Companion; blank/transparent/seam/aspect/WebP checks |
 | `versioning.py`, `packaging.py` | Append-only ledger, Pages limits, deterministic zip, superset (no-drop) guarantee |
+| `heroes.py`, `unified.py` | V2-A: hero inventory/ledger validation and the unified baseline + heroes snapshot (pin, headers, Pages limits, append-only) |
 | `reference.py` | Evidence-only comparison with an accepted reference image (Tirisfal) |
 | `report.py`, `gallery.py` | Coverage report (discovery ≠ extraction) and offline preview gallery |
