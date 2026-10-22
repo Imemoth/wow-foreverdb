@@ -114,6 +114,8 @@ export interface Cdn {
   /** Respond 503 to every request (CDN outage). */
   down: boolean;
   mode: "real" | "synthetic";
+  /** The stand-in's temporary self-signed certificate (PEM; public part only, regenerated per run). Node clients trust exactly this via `ca`. */
+  certPem: string;
   close: () => Promise<void>;
 }
 
@@ -122,7 +124,8 @@ export async function startCdn(): Promise<Cdn> {
   execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "k.pem"), "-out", join(dir, "c.pem"), "-days", "1",
     "-subj", "/CN=azerdex-assets.pages.dev", "-addext", "subjectAltName=DNS:azerdex-assets.pages.dev"], { stdio: "ignore" });
   const rules = REAL_DIST ? parseHeaders((readDistFile(REAL_DIST, "/_headers") ?? Buffer.alloc(0)).toString("utf8")) : [];
-  const state: Cdn = { seen: [], stripCors: false, down: false, mode: REAL_DIST ? "real" : "synthetic", close: async () => {} };
+  const certPem = readFileSync(join(dir, "c.pem"), "utf8");
+  const state: Cdn = { seen: [], stripCors: false, down: false, mode: REAL_DIST ? "real" : "synthetic", certPem, close: async () => {} };
   const server = createServer({ key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) }, (req, res) => {
     const path = new URL(req.url ?? "/", ORIGIN).pathname;
     state.seen.push({ url: path, origin: req.headers.origin as string | undefined });

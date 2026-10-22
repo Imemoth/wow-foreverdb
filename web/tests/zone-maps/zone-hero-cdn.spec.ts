@@ -20,10 +20,14 @@ test.beforeEach(() => { cdn.stripCors = false; cdn.down = false; cdn.seen.length
 const hero = (page: Page) => page.getByTestId("zone-hero");
 const heroImg = (page: Page) => hero(page).locator("img[fetchpriority=high]");
 
-/** Direct HTTPS request to the stand-in CDN (Node does not use Chromium's host-resolver rule, so connect to the port and keep the Host/SNI). */
-function get(path: string, method = "GET"): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
+/**
+ * Direct HTTPS request to the stand-in CDN (Node does not use Chromium's host-resolver rule, so connect to the port and keep the Host/SNI).
+ * Certificate verification stays ON: the only trust added is the stand-in's own temporary certificate (`ca`, scoped to this one request), and the
+ * host name is still checked against its SAN (azerdex-assets.pages.dev). `ca: null` is the default trust store, used to prove it is not accepted.
+ */
+function get(path: string, method = "GET", ca: string | null = cdn.certPem): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
   return new Promise((ok, fail) => {
-    const r = request({ host: "127.0.0.1", port: CDN_PORT, path, method, servername: "azerdex-assets.pages.dev", headers: { host: "azerdex-assets.pages.dev" }, rejectUnauthorized: false }, (res) => {
+    const r = request({ host: "127.0.0.1", port: CDN_PORT, path, method, servername: "azerdex-assets.pages.dev", headers: { host: "azerdex-assets.pages.dev" }, ca: ca ?? undefined }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c) => chunks.push(c as Buffer));
       res.on("end", () => ok({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks) }));
@@ -119,6 +123,17 @@ test.describe("zone-heroes HTTP contract (the stand-in CDN serves what the unifi
       expect(res.headers["timing-allow-origin"]).toBe("*");
       expect([res.body.length, createHash("sha256").update(res.body).digest("hex")]).toEqual([r.bytes, r.sha256]);
     }
+  });
+
+  test("TLS verification is real: the stand-in certificate is trusted only when passed explicitly (default trust store and wrong host name are refused)", async () => {
+    await expect(get("/zone-heroes/1424/v1/desktop-1280.webp", "GET", null)).rejects.toThrow(/self[- ]signed|unable to verify|certificate/i);
+    const wrongHost = new Promise<void>((ok, fail) => {
+      const r = request({ host: "127.0.0.1", port: CDN_PORT, path: "/", servername: "evil.example", headers: { host: "evil.example" }, ca: cdn.certPem }, () => ok());
+      r.on("error", fail);
+      r.end();
+    });
+    await expect(wrongHost).rejects.toThrow(/altnames|hostname|certificate/i);
+    expect((await get("/zone-heroes/1424/v1/desktop-1280.webp")).status).toBe(200);
   });
 
   test("the existing /forever/* and /atlas/* behaviour is unchanged next to it", async () => {
