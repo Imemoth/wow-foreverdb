@@ -121,12 +121,14 @@ export interface Cdn {
 
 export async function startCdn(): Promise<Cdn> {
   const dir = mkdtempSync(join(tmpdir(), "azd-zcdn-"));
-  execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "k.pem"), "-out", join(dir, "c.pem"), "-days", "1",
-    "-subj", "/CN=azerdex-assets.pages.dev", "-addext", "subjectAltName=DNS:azerdex-assets.pages.dev"], { stdio: "ignore" });
+  // The certificate (public part) is taken from openssl's stdout and kept in memory: it is both the server's certificate and the one explicit
+  // trust anchor handed to Node test clients, so no certificate file is ever read back and sent anywhere. Only the private key touches the temp dir.
+  const certPem = execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "k.pem"), "-days", "1",
+    "-subj", "/CN=azerdex-assets.pages.dev", "-addext", "subjectAltName=DNS:azerdex-assets.pages.dev"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  if (!certPem.startsWith("-----BEGIN CERTIFICATE-----")) throw new Error("openssl did not return a certificate");
   const rules = REAL_DIST ? parseHeaders((readDistFile(REAL_DIST, "/_headers") ?? Buffer.alloc(0)).toString("utf8")) : [];
-  const certPem = readFileSync(join(dir, "c.pem"), "utf8");
   const state: Cdn = { seen: [], stripCors: false, down: false, mode: REAL_DIST ? "real" : "synthetic", certPem, close: async () => {} };
-  const server = createServer({ key: readFileSync(join(dir, "k.pem")), cert: readFileSync(join(dir, "c.pem")) }, (req, res) => {
+  const server = createServer({ key: readFileSync(join(dir, "k.pem")), cert: certPem }, (req, res) => {
     const path = new URL(req.url ?? "/", ORIGIN).pathname;
     state.seen.push({ url: path, origin: req.headers.origin as string | undefined });
     if (state.down) { res.writeHead(503).end("down"); return; }
