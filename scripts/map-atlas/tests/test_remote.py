@@ -70,6 +70,11 @@ class RemoteTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 verify_remote(bad, self.root, CdnStub(self.root))
         verify_remote("https://assets.azerdex.com", self.root, lambda u: (404, {}, b""))
+        verify_remote("https://3fa9c1d2.azerdex-assets.pages.dev", self.root, lambda u: (404, {}, b""))  # preview deployment of the project (pre-upload verification)
+        verify_remote("https://v2b-heroes.azerdex-assets.pages.dev", self.root, lambda u: (404, {}, b""))
+        for bad in ("https://evil.azerdex-assets.pages.dev.evil.example", "https://a.b.azerdex-assets.pages.dev", "https://-x.azerdex-assets.pages.dev", "https://azerdex-assetsXpages.dev"):
+            with self.assertRaises(ValueError, msg=bad):
+                verify_remote(bad, self.root, CdnStub(self.root))
 
     def test_host_allow_list_is_identical_to_the_web_resolvers(self):
         src = (REPO / "web/src/lib/maps/asset-url.ts").read_text()

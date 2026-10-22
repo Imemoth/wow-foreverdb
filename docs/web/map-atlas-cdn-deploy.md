@@ -65,6 +65,8 @@ Manual (owner):
 
 ## Unified snapshot (V2-A: atlas + cinematic zone heroes) — upload and rollback
 
+> **V2-B update:** the executable, Windows-first procedure (read-only PowerShell verification `scripts/map-atlas/windows/Verify-AzerdexCdn.ps1`, optional preview deployment, rollback-target capture, Vercel beta activation smoke tests) is [`v2b-cloudflare-cdn-pilot.md`](v2b-cloudflare-cdn-pilot.md) and supersedes the steps below where they differ.
+
 Pages Direct Upload is a **complete snapshot**: whatever is not in the uploaded folder disappears from the newest deployment. The next upload therefore MUST be the unified dist
 (`azerdex-cdn-dist-<build>-<rev>.zip` → `dist/`: the 172 approved atlas files byte-for-byte **plus** the eight `zone-heroes/` files and the extended `_headers`). Never upload a hero-only folder.
 Nothing below has been run; every step is a separate owner decision. The agent that prepared this did not and will not upload.

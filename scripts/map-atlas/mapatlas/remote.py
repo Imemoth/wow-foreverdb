@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,6 +14,9 @@ from typing import Callable
 from .asset_url_compat import ALLOWED_ASSET_HOSTS
 from .packaging import file_table
 
+# A Pages deployment of the project is also reachable at <deployment-or-branch>.azerdex-assets.pages.dev: allowed ONLY for read-only verification of a
+# preview deployment BEFORE the production upload (the website itself never accepts these hosts, see web/src/lib/maps/asset-url.ts).
+PREVIEW_HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.azerdex-assets\.pages\.dev$")
 Opener = Callable[[str], tuple[int, dict[str, str], bytes]]
 EXPECT = (("forever/", "public, max-age=31536000, immutable"), ("zone-heroes/", "public, max-age=31536000, immutable"),
           ("atlas/", "public, max-age=300, must-revalidate"))
@@ -30,7 +34,7 @@ def _default_open(url: str) -> tuple[int, dict[str, str], bytes]:
 
 def verify_remote(base_url: str, dist: Path, opener: Opener | None = None) -> dict:
     u = urllib.parse.urlparse(base_url)
-    if u.scheme != "https" or u.hostname not in ALLOWED_ASSET_HOSTS or u.port or u.path not in ("", "/") or u.query or u.username:
+    if u.scheme != "https" or not (u.hostname in ALLOWED_ASSET_HOSTS or PREVIEW_HOST_RE.match(u.hostname or "")) or u.port or u.path not in ("", "/") or u.query or u.username:
         raise ValueError(f"refusing base URL {base_url!r}: https on an allow-listed host only ({', '.join(ALLOWED_ASSET_HOSTS)})")
     open_fn = opener or _default_open
     base = f"https://{u.hostname}"
@@ -46,7 +50,7 @@ def verify_remote(base_url: str, dist: Path, opener: Opener | None = None) -> di
         if hashlib.sha256(body).hexdigest() != meta["sha256"]:
             problems.append(f"{rel}: bytes differ from the audited distribution")
         want = next((c for prefix, c in EXPECT if rel.startswith(prefix)), None)
-        if want and headers.get("cache-control", "").replace(" ", "") != want.replace(" ", ""):
+        if want and sorted(d.strip() for d in headers.get("cache-control", "").lower().split(",") if d.strip()) != sorted(d.strip() for d in want.lower().split(",")):
             problems.append(f"{rel}: cache-control {headers.get('cache-control')!r} != {want!r}")
         if headers.get("access-control-allow-origin") != "*":
             problems.append(f"{rel}: missing Access-Control-Allow-Origin: *")
