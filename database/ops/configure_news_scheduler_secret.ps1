@@ -12,6 +12,12 @@ try {
 \set ON_ERROR_STOP on
 \getenv scheduler_secret AZERDEX_NEWS_SCHEDULER_SECRET
 begin;
+create table if not exists private.azerdex_news_settings (
+  key text primary key check (key in ('news_collector_url', 'news_collector_secret')),
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+revoke all on private.azerdex_news_settings from public, anon, authenticated;
 insert into private.azerdex_news_settings(key, value)
 values
   ('news_collector_url', 'https://chcoypkjzxfznsqmmbrq.supabase.co/functions/v1/azerdex-news-collector'),

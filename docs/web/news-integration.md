@@ -58,7 +58,7 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
    ```
 
    The pooler endpoint is the verified EU Supavisor transaction-pooler endpoint for this project. Keep `sslmode=require`; the Deno PostgreSQL client used by the Edge Function accepts this standard PostgreSQL URL. URL-encode reserved characters in the password. If CLI provisioning is required instead, use `supabase secrets set --project-ref chcoypkjzxfznsqmmbrq --env-file <protected-temporary-file>` and delete the file immediately after confirmation.
-4. After the Edge Function secrets are saved, apply `database/ops/0016_schedule_news_collector.sql` only when the function authentication check and a manual ingestion have passed. Then run the repository-reviewed helper below. It prompts for the scheduler secret without storing it in SQL Editor history or the command line:
+4. After the Edge Function secrets are saved, complete the function authentication check and a manual ingestion. Then run the repository-reviewed helper below. It creates/configures the private settings row before any cron jobs exist, and prompts for the scheduler secret without storing it in SQL Editor history or the command line:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\database\ops\configure_news_scheduler_secret.ps1
@@ -67,6 +67,8 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
    The helper prompts for the admin password through `psql`; the collector secret is read from a masked prompt into the child process environment and is not present in the command line or SQL input history. Use the exact same value that was stored as `AZERDEX_NEWS_COLLECTOR_SECRET`.
 
 5. From the protected environment, run `database/public-read/tests/news_ingest_role_security.sql` through the new `NEWS_DATABASE_URL`. Then call the Edge Function with the matching `x-azerdex-news-secret` header, verify persistence, repeat the same run for idempotency, and only then enable/verify the cron jobs.
+
+6. After the authenticated role test, manual ingestion, and idempotency check pass, apply `database/ops/0016_schedule_news_collector.sql`. It will find the already-configured private settings and create the three active cron jobs. Verify the next scheduled request in `cron.job_run_details`; do not apply this script earlier.
 
 The schedule is not activated by this PR because the connected Supabase/public-read credentials are not present in the repository environment. Applying the schedule is an operator action and does not require a Vercel redeployment.
 
