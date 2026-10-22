@@ -69,11 +69,14 @@ export async function forwardConfirm(endpoint: string, r: ConfirmRequest, io: (u
   }
 }
 
-/** The submit handler's CSRF check: same-origin by Origin vs Host, or Fetch-Metadata when no Origin is sent. */
+/**
+ * The submit handler's CSRF check. A real Origin must match Host. The confirmation page sends `Referrer-Policy: no-referrer`, and browsers then send
+ * `Origin: null` on its same-origin form POST, so an absent or "null" Origin falls back to Fetch-Metadata, which browsers send regardless of the referrer policy.
+ */
 export function isSameOriginForm(h: { get(n: string): string | null }): boolean {
   const origin = h.get("origin");
   const host = h.get("x-forwarded-host") ?? h.get("host");
-  if (origin) {
+  if (origin && origin !== "null") {
     try {
       return host !== null && new URL(origin).host === host;
     } catch {
