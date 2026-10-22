@@ -26,7 +26,7 @@ The existing editorial Markdown system remains the AzerDex-authored archive. Dat
 
 ## Scheduling and activation
 
-The intended Supabase `pg_cron` jobs are defined in `database/ops/0016_schedule_news_collector.sql`:
+The intended Supabase `pg_cron` jobs are defined in `database/ops/0017_schedule_news_collector_vault.sql`:
 
 | Job | Schedule | Sources |
 | --- | --- | --- |
@@ -34,11 +34,11 @@ The intended Supabase `pg_cron` jobs are defined in `database/ops/0016_schedule_
 | `azerdex-news-official` | every 30 minutes | US official news |
 | `azerdex-news-revisions` | every 6 hours | all sources, revision mode |
 
-Before enabling the schedule, deploy `supabase/functions/azerdex-news-collector` and insert the `news_collector_url` and `news_collector_secret` rows into the private `azerdex_news_settings` table created by the scheduling script. The Edge Function needs a server-only `NEWS_DATABASE_URL` for the public-read `azerdex_news_ingest` role and `AZERDEX_NEWS_COLLECTOR_SECRET`. The unschedule script is `database/ops/0016_unschedule_news_collector.sql`.
+Before enabling the schedule, deploy `supabase/functions/azerdex-news-collector` and create the Vault secret `azerdex_news_collector_secret` in the `azerdex-public-read` project. The scheduler reads that secret at execution time; it never stores it in `private.azerdex_news_settings`, SQL source, or cron command text. The Edge Function needs a server-only `NEWS_DATABASE_URL` for the public-read `azerdex_news_ingest` role and `AZERDEX_NEWS_COLLECTOR_SECRET`. The unschedule script is `database/ops/0016_unschedule_news_collector.sql`.
 
 ### Operator credential procedure
 
-Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session, and an operator password manager. Do not place any generated value in Git, a PR, a chat message, a shell command, or SQL Editor history. Do not rotate the existing `foreverdb_web_reader`, `foreverdb_publisher`, or account-system credentials.
+Use the `azerdex-public-read` Supabase Dashboard and an operator password manager. Do not place any generated value in Git, a PR, a chat message, a shell command, or SQL Editor history. Do not rotate the existing `foreverdb_web_reader`, `foreverdb_publisher`, or account-system credentials.
 
 1. Generate one strong database password and one independent collector/scheduler secret (at least 24 characters) in the password manager.
 2. Set only the new role's password through an interactive direct database session. The command below contains no password; `psql` prompts for the existing admin password and `\password` prompts twice for the new role password without putting either value in command history:
@@ -58,13 +58,10 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
    ```
 
    The pooler endpoint is the verified EU Supavisor transaction-pooler endpoint for this project. Keep `sslmode=require`; the Deno PostgreSQL client used by the Edge Function accepts this standard PostgreSQL URL. URL-encode reserved characters in the password. If CLI provisioning is required instead, use `supabase secrets set --project-ref chcoypkjzxfznsqmmbrq --env-file <protected-temporary-file>` and delete the file immediately after confirmation.
-4. After the Edge Function secrets are saved, complete the function authentication check and a manual ingestion. Then run the repository-reviewed helper below. It creates/configures the private settings row before any cron jobs exist, and prompts for the scheduler secret without storing it in SQL Editor history or the command line:
+4. In Supabase Dashboard → Database → Vault, create/update the secret with name `azerdex_news_collector_secret`. Do not paste the value into SQL Editor history, GitHub, chat, or a local file. The configured Vault value must be the same shared value already stored as `AZERDEX_NEWS_COLLECTOR_SECRET` in the Edge Function.
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\database\ops\configure_news_scheduler_secret.ps1
-   ```
+   Do not run the deprecated local helper `database/ops/configure_news_scheduler_secret.ps1`; it is intentionally disabled.
 
-   The helper prompts for the admin password through `psql`; the collector secret is read from a masked prompt into the child process environment and is not present in the command line or SQL input history. Use the exact same value that was stored as `AZERDEX_NEWS_COLLECTOR_SECRET`.
 
 5. From the protected environment, run `database/public-read/tests/news_ingest_role_security.sql` through the new `NEWS_DATABASE_URL`:
 
@@ -102,11 +99,7 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
 
    Continue only if the role test passes, the collector returns success for the live US/EU/official sources, entries are persisted, and the repeated call is idempotent.
 
-6. After the authenticated role test, manual ingestion, and idempotency check pass, apply `database/ops/0016_schedule_news_collector.sql`. It will find the already-configured private settings and create the three active cron jobs. Verify the next scheduled request in `cron.job_run_details`; do not apply this script earlier.
-
-   ```powershell
-   psql -X -W "host=db.chcoypkjzxfznsqmmbrq.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" -f .\database\ops\0016_schedule_news_collector.sql
-   ```
+6. After the authenticated role test, manual ingestion, and idempotency check pass, apply `database/ops/0017_schedule_news_collector_vault.sql` through the authenticated Supabase integration. It creates only the URL row, reads the Vault secret at each execution, and creates/replaces only the three News jobs. It does not touch existing cron jobs.
 
    Verify all three jobs and their latest execution:
 
@@ -125,7 +118,7 @@ Use the `azerdex-public-read` Supabase Dashboard, an interactive `psql` session,
    order by j.jobname;
    ```
 
-The schedule is not activated by this PR because the connected Supabase/public-read credentials are not present in the repository environment. Applying the schedule is an operator action and does not require a Vercel redeployment.
+The schedule is activated through the Supabase integration after the live ingestion gates pass; it does not require a Vercel redeployment.
 
 ## Manual diagnostics
 
