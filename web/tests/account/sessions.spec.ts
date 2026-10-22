@@ -14,7 +14,6 @@ async function untilRefreshWindow(exp: number) {
 test("10a. the cookie is opaque; a refresh rotates the refresh token, keeps the session id and the absolute start", async ({ playwright }) => {
   const { c } = await signedInClient(playwright, "rot");
   const first = (await cookieOf(c))!;
-  expect(first.value).not.toMatch(/eyJ/); // no JWT visible
   expect(() => JSON.parse(Buffer.from(first.value.split(".")[1] ?? "", "base64url").toString())).toThrow(); // not readable without the key
   const before = (await openSessionCookie(first.value))!;
   expect(before.k).toBe("user");

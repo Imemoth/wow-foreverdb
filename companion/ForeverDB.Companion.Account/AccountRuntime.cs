@@ -11,7 +11,8 @@ public sealed class AccountRuntime
         InstallationSyncCoordinator sync,
         ClaimService claims,
         AccountEndpoint endpoint,
-        DeviceRuntime? device)
+        DeviceRuntime? device,
+        AccountLinkService linking)
     {
         Device = device;
         Gate = gate;
@@ -21,6 +22,7 @@ public sealed class AccountRuntime
         Sync = sync;
         Claims = claims;
         Endpoint = endpoint;
+        Linking = linking;
     }
 
     public AccountGateDecision Gate { get; }
@@ -31,7 +33,9 @@ public sealed class AccountRuntime
     public ClaimService Claims { get; }
     /// <summary>The single Supabase project all Companion Auth and RPC traffic uses.</summary>
     public AccountEndpoint Endpoint { get; }
-    /// <summary>Zero-touch enrollment and device sync. Null unless <see cref="AccountFeatureGate.ZeroTouchAvailable"/> allows it (never in the default production mode).</summary>
+    /// <summary>Direct account connection for an existing anonymous installation.</summary>
+    public AccountLinkService Linking { get; }
+    /// <summary>Direct-link/manual-sync device runtime; activation-file discovery is independently gated.</summary>
     public DeviceRuntime? Device { get; }
 
     /// <summary>
@@ -60,11 +64,14 @@ public sealed class AccountRuntime
             directory = Path.Combine(directory, gate.CredentialSubdirectory);
         }
 
+        var approvedProductionOrigin = gate.Environment == AccountEnvironment.ProductionAccountLinking
+            ? gate.Endpoint!.BaseUri
+            : null;
         var http = new HttpClient(
             new ProductionHostGuardHandler(
                 handler ?? new HttpClientHandler { AllowAutoRedirect = false },
                 enforce: gate.AccountsEnabled,
-                privatePilotOrigin: privatePilot ? gate.Endpoint!.BaseUri : null));
+                approvedOrigin: privatePilot ? gate.Endpoint!.BaseUri : approvedProductionOrigin));
         var credentialProtector = protector ?? CreateDefaultProtector();
         var vault = new SessionVault(directory, credentialProtector);
         if (claimPilot)
@@ -111,7 +118,9 @@ public sealed class AccountRuntime
             allowClaims: !privatePilot || claimPilot,
             scopedInstallationId: claimPilot ? gate.ScopedClaimInstallationId : null);
         DeviceRuntime? device = null;
-        if (AccountFeatureGate.ZeroTouchAvailable(gate))
+        var zeroTouchAvailable = AccountFeatureGate.ZeroTouchAvailable(gate);
+        var directLinkingAvailable = AccountFeatureGate.DirectAccountLinkingAvailable(gate);
+        if (zeroTouchAvailable || directLinkingAvailable)
         {
             // The device identity lives in its own subdirectory (own DPAPI session, own gate); the account slots above are not shared.
             var deviceDirectory = Path.Combine(directory, DeviceContract.DeviceSubdirectory);
@@ -123,11 +132,14 @@ public sealed class AccountRuntime
                 new DeviceEnrollmentService(
                     context,
                     activationSource ?? FileActivationSource.CreateDefault(localAppDataDirectory: productionVaultDirectory),
-                    installations ?? (() => sync.Installations.Select(i => i.InstallationId).ToArray())),
+                    installations ?? (() => sync.Installations.Select(i => i.InstallationId).ToArray()),
+                    enabled: true,
+                    activationFilesEnabled: zeroTouchAvailable),
                 new DeviceSyncService(context));
         }
 
-        return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint, device);
+        var linking = new AccountLinkService(sessions, rpc, claims, device);
+        return new AccountRuntime(gate, sessions, rpc, router, sync, claims, endpoint, device, linking);
     }
 
     private static ICredentialProtector CreateDefaultProtector() =>

@@ -92,11 +92,11 @@ public partial class MainWindow : Window
 
         // Account System V1: one validated endpoint for Auth AND data traffic. With the gate closed (default,
         // production) this is exactly the 0.8.x anonymous-only behaviour against the configured project.
-        var gate = AccountFeatureGate.EvaluateFromEnvironment();
         var productionEndpoint = new AccountEndpoint(
             _settings.SupabaseUrl,
             _settings.SupabaseKey,
             "production");
+        var gate = AccountFeatureGate.EvaluateFromEnvironment(productionEndpoint);
         var runtimeKey =
             $"{gate.Environment}|{gate.AccountsEnabled}|{gate.CredentialSubdirectory}|{gate.Endpoint?.BaseUrl}|{gate.Endpoint?.PublishableKey}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
 

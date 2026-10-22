@@ -22,6 +22,10 @@ public sealed class ClaimOffer : IDisposable
     public string DisplayCode =>
         _code is { } c ? Contract.FormatClaimCode(new string(c)) : throw new ObjectDisposedException(nameof(ClaimOffer));
 
+    /// <summary>Canonical code for the immediate in-process redemption path. Never persist or log this value.</summary>
+    internal string CanonicalCode =>
+        _code is { } c ? new string(c) : throw new ObjectDisposedException(nameof(ClaimOffer));
+
     public bool IsDisposed => _code is null;
 
     public bool IsExpired(TimeProvider clock) => clock.GetUtcNow() >= ExpiresAt;

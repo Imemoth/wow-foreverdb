@@ -71,6 +71,8 @@ describe("interrupted network requests", () => {
     const out = (await tx.query("select public.fdb_device_enroll($1,$2,$3) as r", [t.ticket, inst, "PC"])).rows[0].r;
     assert.equal(out.ok, true, "the server-side work completed inside the transaction");
     const pid = tx.processID;
+    // pg emits a client-level error as well as rejecting the pending query when the backend is terminated. Both are expected here.
+    tx.on("error", () => {});
     await w.admin.query("select pg_terminate_backend($1)", [pid]); // the link drops before COMMIT
     await settle(tx.query("commit"));
     await settle(tx.end());

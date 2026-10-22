@@ -42,6 +42,34 @@ if (!available) {
   const call = (s, fn, args = []) => rpc(client, verifyJwt(s.token), fn, args);
 
   describe("real GoTrue sessions", () => {
+    it("a real anonymous owner and registered login complete the MVP claim-to-device vertical slice", async () => {
+      const owner = await anonymousSignup();
+      const acct = await registered();
+      const device = await anonymousSignup();
+      const inst = instId();
+      await fx.resetBudgets();
+      assert.equal((await call(owner, "ingest_foreverdb_snapshot_auth", [snapshot(inst, { updatedAt: 4100 })])).ok, true);
+      await fx.resetBudgets();
+      const claim = await call(owner, "fdb_account_claim_start", [inst]);
+      assert.equal(claim.ok, true);
+      await fx.resetBudgets();
+      assert.equal((await call(acct, "fdb_account_claim_redeem", [claim.code])).ok, true);
+      await fx.resetBudgets();
+      const ticket = await call(acct, "fdb_account_enrollment_ticket_issue", ["MVP PC"]);
+      assert.equal(ticket.ok, true);
+      const enrolled = await call(device, "fdb_device_enroll", [ticket.ticket, inst, "MVP PC"]);
+      assert.equal(enrolled.ok, true);
+      assert.match(enrolled.device_secret, SECRET_RE);
+      await fx.resetBudgets();
+      assert.equal((await call(device, "fdb_device_ingest", [enrolled.device_secret, snapshot(inst, { updatedAt: 4200 })])).ok, true);
+
+      const row = (await admin.query("select owner_user_id from public.installations where id = $1", [inst])).rows[0];
+      assert.equal(row.owner_user_id, acct.uid);
+      assert.notEqual(device.uid, acct.uid);
+      await fx.resetBudgets();
+      await assert.rejects(call(owner, "ingest_foreverdb_snapshot_auth", [snapshot(inst, { updatedAt: 4300 })]), /belongs to another authenticated client/);
+    });
+
     it("registered web session issues the ticket; the Companion's real anonymous identity redeems it, syncs, and the account reads the Guildbook", async () => {
       const acct = await registered();
       const device = await anonymousSignup();

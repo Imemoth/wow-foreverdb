@@ -2,6 +2,18 @@ name: Build ForeverDB Companion
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'companion/**'
+      - 'scripts/build-current-casclib.ps1'
+      - '.github/workflows/companion-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: companion-normal-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
