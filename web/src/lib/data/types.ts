@@ -35,6 +35,7 @@ export interface NewsEntry {
   sourceKey: string;
   sourceEntryId: string;
   sourceTopicId: string | null;
+  sourcePostNumber: number | null;
   threadKey: string | null;
   canonicalUrl: string;
   title: string;

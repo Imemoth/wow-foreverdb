@@ -9,6 +9,7 @@ const entry = (region: NewsEntry["region"]): NewsEntry => ({
   sourceKey: "blizzard-bluepost-us",
   sourceEntryId: "post:1",
   sourceTopicId: "topic:1",
+  sourcePostNumber: 1,
   threadKey: "us:topic:1",
   canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/entry/1/1",
   title: "Forever announcement",

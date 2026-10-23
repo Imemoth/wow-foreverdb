@@ -59,31 +59,46 @@ describe("Blizzard news source parsing", () => {
     });
   });
 
-  it("keeps Bluepost replies distinct while retaining their shared thread key", () => {
+  it("publishes only the authoritative topic opener and ignores player and staff replies", () => {
     const entries = parseBluepostFeed(JSON.stringify({ posts: [
       { id: 2, topic_id: 7, topic_title: "Forever beta", topic_slug: "forever-beta", url: "/t/forever-beta/7/2", post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", excerpt: "A reply." },
       { id: 1, topic_id: 7, topic_title: "Forever beta", topic_slug: "forever-beta", url: "/t/forever-beta/7/1", post_number: 1, username: "Kaivax", created_at: "2026-10-22T00:00:00Z", excerpt: "The announcement." },
     ] }), us);
 
-    expect(entries.map((entry) => entry.sourceEntryId)).toEqual(["post:2", "post:1"]);
-    expect(new Set(entries.map((entry) => entry.threadKey))).toEqual(new Set(["us:topic:7"]));
+    expect(entries.map((entry) => entry.sourceEntryId)).toEqual(["post:1"]);
+    expect(entries[0]?.sourcePostNumber).toBe(1);
   });
 
-  it("accepts a topic JSON revision response and preserves the modified timestamp", () => {
+  it("does not promote a user-created topic opener from a topic response", () => {
+    const entries = parseBluepostFeed(JSON.stringify({
+      id: 7,
+      slug: "forever-beta",
+      title: "Forever beta",
+      post_stream: { posts: [
+        { id: 1, post_number: 1, username: "ordinary-player", created_at: "2026-10-22T00:00:00Z", raw: "A player topic." },
+        { id: 2, post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", raw: "A Blizzard reply." },
+      ] },
+    }), us);
+
+    expect(entries).toEqual([]);
+  });
+
+  it("accepts only an authorized original from topic JSON and preserves the modified timestamp", () => {
     const entries = parseBluepostFeed(JSON.stringify({
       id: 7,
       slug: "forever-beta",
       title: "World of Warcraft: Forever Beta",
-      post_stream: { posts: [{ id: 2, post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", updated_at: "2026-10-22T02:00:00Z", raw: "The Forever beta update." }] },
-    }), us);
+      post_stream: { posts: [{ id: 1, post_number: 1, username: "Kaivax", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T03:00:00Z", raw: "The Forever beta update." }, { id: 2, post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", updated_at: "2026-10-22T04:00:00Z", raw: "A later staff reply." }] },
+    }), us, { authoritativePostIds: new Set(["post:1"]) });
 
-    expect(entries[0]).toMatchObject({ sourceEntryId: "post:2", modifiedAt: "2026-10-22T02:00:00.000Z", status: "published" });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ sourceEntryId: "post:1", sourcePostNumber: 1, modifiedAt: "2026-10-22T03:00:00.000Z", status: "published" });
   });
 
   it("classifies unrelated Blizzard posts as rejected and skips invalid timestamps", () => {
     const entries = parseBluepostFeed(JSON.stringify({ posts: [
-      { id: 10, topic_id: 8, topic_title: "Midnight Hotfixes", url: "/t/midnight-hotfixes/8/1", username: "Linxy", created_at: "2026-10-22T01:00:00Z", excerpt: "Retail changes." },
-      { id: 11, topic_id: 9, topic_title: "Forever beta", url: "/t/forever-beta/9/1", username: "Kaivax", created_at: "not-a-date", excerpt: "Bad timestamp." },
+      { id: 10, topic_id: 8, topic_title: "Midnight Hotfixes", url: "/t/midnight-hotfixes/8/1", username: "Linxy", post_number: 1, created_at: "2026-10-22T01:00:00Z", excerpt: "Retail changes." },
+      { id: 11, topic_id: 9, topic_title: "Forever beta", url: "/t/forever-beta/9/1", username: "Kaivax", post_number: 1, created_at: "not-a-date", excerpt: "Bad timestamp." },
     ] }), us);
 
     expect(entries).toHaveLength(1);
@@ -119,10 +134,10 @@ describe("Blizzard news source parsing", () => {
       requests.push(url);
       if (url.includes("eu.forums")) throw new Error("EU unavailable");
       if (url.includes("page=2")) {
-        return new Response(JSON.stringify({ posts: [{ id: 2, topic_id: 2, topic_title: "Forever follow-up", url: "/t/follow-up/2/1", username: "Kaivax", created_at: "2026-10-22T01:00:00Z", excerpt: "World of Warcraft: Forever follow-up", }] }), { status: 200 });
+        return new Response(JSON.stringify({ posts: [{ id: 2, topic_id: 2, topic_title: "Forever follow-up", url: "/t/follow-up/2/1", username: "Kaivax", post_number: 1, created_at: "2026-10-22T01:00:00Z", excerpt: "World of Warcraft: Forever follow-up", }] }), { status: 200 });
       }
       if (url.includes("forums")) {
-        return new Response(JSON.stringify({ meta: { next_page: 2 }, posts: [{ id: 1, topic_id: 1, topic_title: "Forever announcement", url: "/t/announcement/1/1", username: "Kaivax", created_at: "2026-10-22T00:00:00Z", excerpt: "World of Warcraft: Forever announcement", }] }), { status: 200 });
+        return new Response(JSON.stringify({ meta: { next_page: 2 }, posts: [{ id: 1, topic_id: 1, topic_title: "Forever announcement", url: "/t/announcement/1/1", username: "Kaivax", post_number: 1, created_at: "2026-10-22T00:00:00Z", excerpt: "World of Warcraft: Forever announcement", }] }), { status: 200 });
       }
       return new Response(`<article class="NewsBlog"><div class="NewsBlog-title">World of Warcraft: Forever News</div><p class="NewsBlog-desc">A Forever article.</p><div data-props="{&quot;iso8601&quot;:&quot;2026-10-22T02:00:00.000Z&quot;}"></div><a class="Link NewsBlog-link" href="/news/24300001/forever"></a></article>`, { status: 200 });
     };
@@ -142,7 +157,7 @@ describe("Blizzard news source parsing", () => {
 
   it("refreshes Bluepost topic JSON during revision runs", async () => {
     const requests: string[] = [];
-    let appliedEntries: Array<{ modifiedAt: string | null }> = [];
+    let appliedEntries: Array<{ publishedAt: string; modifiedAt: string | null; sourceEntryId: string }> = [];
     const fetcher: typeof fetch = async (input) => {
       const url = String(input);
       requests.push(url);
@@ -151,10 +166,10 @@ describe("Blizzard news source parsing", () => {
           id: 7,
           slug: "forever-beta",
           title: "World of Warcraft: Forever Beta",
-          post_stream: { posts: [{ id: 1, post_number: 1, username: "Kaivax", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T03:00:00Z", raw: "Updated Forever beta details." }] },
+          post_stream: { posts: [{ id: 1, post_number: 1, username: "Kaivax", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T03:00:00Z", raw: "Updated Forever beta details." }, { id: 2, post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", updated_at: "2026-10-22T04:00:00Z", raw: "A reply that must not publish." }] },
         }), { status: 200 });
       }
-      return new Response(JSON.stringify({ posts: [{ id: 1, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/1", username: "Kaivax", created_at: "2026-10-22T00:00:00Z", excerpt: "Initial details." }] }), { status: 200 });
+      return new Response(JSON.stringify({ posts: [{ id: 1, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/1", username: "Kaivax", post_number: 1, created_at: "2026-10-22T00:00:00Z", excerpt: "Initial details." }] }), { status: 200 });
     };
 
     await collectNews({
@@ -169,7 +184,80 @@ describe("Blizzard news source parsing", () => {
 
     expect(requests).toContain("https://us.forums.blizzard.com/en/wow/t/forever-beta/7.json");
     expect(appliedEntries).toHaveLength(1);
+    expect(appliedEntries[0]?.sourceEntryId).toBe("post:1");
+    expect(appliedEntries[0]?.publishedAt).toBe("2026-10-22T00:00:00.000Z");
     expect(appliedEntries[0]?.modifiedAt).toBe("2026-10-22T03:00:00.000Z");
+  });
+
+  it("does not fetch or publish a user-created topic when the Tracker only returns a Blizzard reply", async () => {
+    const requests: string[] = [];
+    let appliedCount = -1;
+    const report = await collectNews({
+      sources: [us],
+      mode: "revision",
+      fetcher: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        return new Response(JSON.stringify({
+          posts: [{ id: 99, topic_id: 9, topic_title: "Forever beta question", topic_slug: "forever-beta-question", url: "/t/forever-beta-question/9/2", post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", excerpt: "A Blizzard reply to a player topic." }],
+        }), { status: 200 });
+      },
+      apply: async (payload) => {
+        appliedCount = payload.entries.length;
+        return { inserted: 0, updated: 0 };
+      },
+    });
+
+    expect(report[0]?.status).toBe("succeeded");
+    expect(appliedCount).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toContain("/t/");
+  });
+
+  it("is idempotent across repeated normal and revision collection", async () => {
+    const snapshots: string[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith("/t/forever-beta/7.json")) {
+        return new Response(JSON.stringify({
+          id: 7,
+          slug: "forever-beta",
+          title: "World of Warcraft: Forever Beta",
+          post_stream: { posts: [
+            { id: 1, post_number: 1, username: "Kaivax", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T03:00:00Z", raw: "Updated details." },
+            { id: 2, post_number: 2, username: "Kaivax", created_at: "2026-10-22T01:00:00Z", updated_at: "2026-10-22T04:00:00Z", raw: "Reply ignored." },
+          ] },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ posts: [
+        { id: 1, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/1", username: "Kaivax", post_number: 1, created_at: "2026-10-22T00:00:00Z", excerpt: "Initial details." },
+        { id: 2, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/2", username: "Kaivax", post_number: 2, created_at: "2026-10-22T01:00:00Z", excerpt: "Reply ignored." },
+      ] }), { status: 200 });
+    };
+
+    for (const mode of ["normal", "revision"] as const) {
+      await collectNews({ fetcher, sources: [us], mode, apply: async (payload) => {
+        snapshots.push(JSON.stringify(payload.entries.map((entry) => {
+          const { contentHash, ...withoutHash } = entry;
+          void contentHash;
+          return withoutHash;
+        })));
+        return { inserted: 0, updated: 0 };
+      } });
+      await collectNews({ fetcher, sources: [us], mode, apply: async (payload) => {
+        snapshots.push(JSON.stringify(payload.entries.map((entry) => {
+          const { contentHash, ...withoutHash } = entry;
+          void contentHash;
+          return withoutHash;
+        })));
+        return { inserted: 0, updated: 0 };
+      } });
+    }
+
+    expect(snapshots).toHaveLength(4);
+    expect(snapshots[0]).toBe(snapshots[1]);
+    expect(snapshots[2]).toBe(snapshots[3]);
+    expect(JSON.parse(snapshots[3] ?? "[]")).toHaveLength(1);
   });
 
   it("records malformed source payloads as failures without disabling the source", async () => {
@@ -201,7 +289,7 @@ describe("Blizzard news source parsing", () => {
       mode: "revision",
       fetcher: async (input) => {
         if (String(input).includes("/t/") && String(input).endsWith(".json")) throw new Error("revision_timeout");
-        return new Response(JSON.stringify({ posts: [{ id: 1, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/1", username: "Kaivax", created_at: "2026-10-22T00:00:00Z", excerpt: "World of Warcraft: Forever details." }] }), { status: 200 });
+        return new Response(JSON.stringify({ posts: [{ id: 1, topic_id: 7, topic_title: "World of Warcraft: Forever Beta", url: "/t/forever-beta/7/1", username: "Kaivax", post_number: 1, created_at: "2026-10-22T00:00:00Z", excerpt: "World of Warcraft: Forever details." }] }), { status: 200 });
       },
       apply: async (payload) => {
         runStatus = payload.run.status;

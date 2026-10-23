@@ -24,6 +24,53 @@ The existing editorial Markdown system remains the AzerDex-authored archive. Dat
 
 `database/public-read/tests/news_model_security.sql` checks RLS, direct table privileges, and function grants. `database/public-read/tests/news_model_behavior.sql` runs transactional insert, identical-hash no-op, revision snapshot, and partial-error audit assertions, then rolls everything back.
 
+## Bluepost deduplication hotfix
+
+The collector now admits only `post_number = 1` from the authoritative US/EU
+Blizzard Tracker feed. Revision mode may refresh a topic only when its opener's
+post ID was already proven by that feed; a full topic response containing a
+player opener and a Blizzard reply is therefore ignored. Revision updates keep
+the opener's `created_at` publication timestamp and do not change its featured
+state. Official News parsing is unchanged.
+
+`database/public-read/migrations/0010_news_bluepost_suppression.sql` adds only
+the nullable `suppressed_at` and `suppression_reason` markers and defense-in-
+depth predicates/ingestion guards. It does not modify historical rows. Public
+list, featured, and detail functions hide both marked rows and any non-opener
+Bluepost, while the existing `pub_admin`/`web_api` least-privilege boundary is
+retained.
+
+The confirmed cleanup projection is:
+
+| Measure | Before | After cleanup |
+| --- | ---: | ---: |
+| Total stored News rows | 701 | 701 |
+| Published News rows visible | 409 | 66 |
+| Published Blueposts visible | 371 | 28 |
+| Legitimate Bluepost openers retained | 28 | 28 |
+| Published Bluepost replies visible | 343 | 0 |
+| Published Bluepost replies suppressed | 0 | 343 |
+| Published Bluepost topics represented | 29 | 28 |
+| Stored Bluepost topics across all statuses | 43 | 43 |
+| Distinct visible Bluepost topics | 29 | 28 |
+
+These are projected counts from the confirmed live-read findings; run
+`database/public-read/ops/news_bluepost_dedup_dry_run.sql` first and attach its
+JSON output to the change record. The safe order is:
+
+1. Deploy and health-check the corrected collector code.
+2. Apply `0010_news_bluepost_suppression.sql` on the isolated public-read database and run its SQL/security tests.
+3. Run the dry-run report and compare its counts with the table above.
+4. After explicit operator authorization, run `news_bluepost_dedup_apply.sql` with a unique UTC `cleanup_id` and the required confirmation token.
+5. Re-run public read checks for archive pagination, search, RSS, sitemap, detail, homepage, and US/EU filters.
+
+The apply script updates only suppression markers, writes an auditable
+`pub.news_sync_runs` record, and never deletes entries or
+`pub.news_post_versions`. If validation fails, run
+`news_bluepost_dedup_rollback.sql` with the same `cleanup_id`; this clears only
+that cleanup's marker. Non-opener Blueposts remain hidden after rollback by the
+correctness invariant, and no unsafe reply publication is restored.
+
 ## Scheduling and activation
 
 The intended Supabase `pg_cron` jobs are defined in `database/ops/0017_schedule_news_collector_vault.sql`:
