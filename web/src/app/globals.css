@@ -100,6 +100,153 @@
     letter-spacing: 0.04em;
     color: var(--color-gold-300);
   }
+  /* Shared News visual variants. Content components stay shared; the category only changes
+     the atmosphere, accents, and source treatment. */
+  .news-card,
+  .news-detail__header {
+    position: relative;
+    isolation: isolate;
+  }
+  .news-card--bluepost {
+    background:
+      radial-gradient(120% 90% at 8% -18%, rgb(104 190 255 / 0.16), transparent 54%),
+      linear-gradient(145deg, rgb(16 43 88 / 0.98), rgb(7 15 37 / 0.98) 72%);
+    border-color: rgb(123 198 255 / 0.4);
+    box-shadow: 0 1px 0 rgb(222 244 255 / 0.09) inset, 0 14px 34px -20px rgb(35 133 214 / 0.52);
+  }
+  .news-card--official {
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 14px 32px -20px rgb(108 65 199 / 0.42);
+  }
+  .news-card--editorial {
+    background: linear-gradient(180deg, rgb(31 29 76 / 0.94), rgb(17 19 59 / 0.94));
+    border-color: rgb(108 65 199 / 0.42);
+  }
+  .news-card--bluepost::before,
+  .news-detail__header--bluepost::before {
+    position: absolute;
+    content: "";
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(166 225 255 / 0.95), transparent);
+    box-shadow: 0 0 18px 2px rgb(91 186 255 / 0.42);
+    pointer-events: none;
+  }
+  .news-card--bluepost::after,
+  .news-detail__header--bluepost::after {
+    position: absolute;
+    content: "";
+    inset: 0;
+    z-index: -1;
+    opacity: 0.18;
+    background:
+      linear-gradient(115deg, transparent 18%, rgb(118 203 255 / 0.14) 18.2%, transparent 18.6%),
+      linear-gradient(25deg, transparent 54%, rgb(118 203 255 / 0.1) 54.2%, transparent 54.6%),
+      radial-gradient(circle at 82% 18%, rgb(145 219 255 / 0.2) 0 1px, transparent 1.5px);
+    background-size: 180px 140px, 220px 180px, 120px 120px;
+    pointer-events: none;
+  }
+  .news-card > *,
+  .news-detail__header > * {
+    position: relative;
+    z-index: 1;
+  }
+  .news-card__eyebrow--bluepost,
+  .news-detail__eyebrow--bluepost {
+    color: rgb(168 224 255 / 0.94);
+  }
+  .news-card__mark {
+    display: inline-flex;
+    width: 1rem;
+    height: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: #a8e2ff;
+    filter: drop-shadow(0 0 5px rgb(88 186 255 / 0.5));
+  }
+  .news-card__mark svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 0.9;
+  }
+  .news-card--bluepost .news-card__title,
+  .news-card--bluepost .news-card__title a {
+    color: #d9f2ff;
+    text-shadow: 0 0 18px rgb(91 186 255 / 0.2);
+  }
+  .news-card--bluepost .news-card__title a:hover {
+    color: #fff;
+  }
+  .news-card--bluepost .news-card__region {
+    color: rgb(203 234 255 / 0.86);
+  }
+  .news-card--bluepost .news-card__source,
+  .news-detail__header--bluepost .news-detail__title {
+    color: #a8ddff;
+  }
+  .news-card--bluepost .news-card__source:hover {
+    color: #e5f7ff;
+  }
+  .news-detail__header {
+    border-radius: 0.9rem;
+    padding: 1.5rem;
+  }
+  .news-detail__header--bluepost {
+    overflow: hidden;
+    background:
+      radial-gradient(90% 130% at 88% 0%, rgb(80 164 229 / 0.18), transparent 58%),
+      linear-gradient(145deg, rgb(14 38 78 / 0.96), rgb(7 15 37 / 0.98) 76%);
+    border: 1px solid rgb(123 198 255 / 0.38);
+    box-shadow: 0 1px 0 rgb(222 244 255 / 0.08) inset, 0 22px 42px -30px rgb(35 133 214 / 0.56);
+  }
+  .news-detail__header--official {
+    background: linear-gradient(145deg, rgb(42 27 77 / 0.35), transparent 70%);
+  }
+  .news-detail__header--editorial {
+    background: linear-gradient(145deg, rgb(108 65 199 / 0.1), transparent 70%);
+  }
+  .news-detail__header--bluepost .news-detail__dek,
+  .news-detail__header--bluepost .news-detail__title {
+    color: #d9f2ff;
+  }
+  .news-detail__announcement {
+    border-left: 2px solid var(--color-violet-500);
+    padding: 0.5rem 0 0.5rem 1.25rem;
+  }
+  .news-detail__announcement--bluepost {
+    border-left-color: rgb(112 199 255 / 0.82);
+    background: linear-gradient(90deg, rgb(21 61 112 / 0.26), transparent 72%);
+    padding: 1.1rem 1.25rem;
+    border-radius: 0 0.6rem 0.6rem 0;
+  }
+  .news-detail__body {
+    max-width: 68ch;
+  }
+  .news-detail__source {
+    border: 1px solid rgb(60 61 125 / 0.72);
+    border-radius: 0.65rem;
+    padding: 1rem 1.15rem;
+    background: rgb(13 15 51 / 0.3);
+  }
+  .news-detail__source--bluepost {
+    border-color: rgb(107 178 229 / 0.32);
+    background: rgb(8 28 57 / 0.34);
+  }
+  .news-source-action {
+    width: fit-content;
+    border-color: rgb(128 202 255 / 0.55);
+    color: #bce9ff;
+    background: transparent;
+  }
+  .news-source-action:hover {
+    border-color: rgb(178 229 255 / 0.9);
+    color: #f2fbff;
+    background: rgb(81 169 231 / 0.1);
+  }
   .rule-ornament {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--color-bronze-600), var(--color-gold-500), var(--color-bronze-600), transparent);
@@ -208,23 +355,30 @@
     border-color: var(--color-violet-400);
     color: #fff;
   }
-  /* Account nav cluster item (app/account/layout.tsx's signed-in nav + the compact sign-out action). */
+  /* Account dropdown item (header menu, desktop and mobile) and its sign-out action: icon + label row. */
   .account-menu-item {
-    display: block;
-    border-radius: 0.4rem;
-    padding: 0.6rem 0.75rem;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
     color: var(--color-parchment);
     text-decoration: none;
+    text-align: left;
     font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
   }
   .account-menu-item:hover {
-    background: rgb(108 65 199 / 0.16);
+    background: rgb(108 65 199 / 0.18);
     color: #fff;
   }
-  .account-menu-item[aria-current="page"] {
-    background: rgb(108 65 199 / 0.22);
-    color: var(--color-gold-300);
-    font-weight: 600;
+  .account-menu-item:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .prose-fdb {
     line-height: 1.75;

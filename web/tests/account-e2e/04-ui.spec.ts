@@ -36,7 +36,7 @@ test("the person's journey: open the link page, paste the code, enter the passwo
   const { ctx, page, problems, requests } = await browserFor(browser, a);
 
   await page.goto("/account");
-  await page.getByRole("link", { name: "Link an installation" }).click();
+  await page.getByRole("link", { name: "Connect Companion" }).click();
   await expect(page).toHaveURL("/account/link");
   await expect(page.getByRole("heading", { name: "Link a Companion installation" })).toBeVisible();
   await expect(page.getByTestId("link-destination")).toHaveText(a.email); // the SERVER-CONFIRMED address
