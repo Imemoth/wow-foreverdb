@@ -137,7 +137,8 @@ begin
 
         if v_old_hash is distinct from v_hash then
             insert into pub.news_post_versions (news_entry_id, content_hash, snapshot)
-            values (v_entry_id, v_hash, v_entry);
+            values (v_entry_id, v_hash, v_entry)
+            on conflict (news_entry_id, content_hash) do nothing;
         end if;
     end loop;
 

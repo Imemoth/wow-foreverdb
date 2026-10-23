@@ -11,6 +11,7 @@ declare
     v_reply_count integer;
     v_visible_count integer;
     v_versions integer;
+    v_entry_id bigint;
 begin
     v_payload := jsonb_build_object(
         'source', jsonb_build_object(
@@ -34,6 +35,32 @@ begin
     end if;
     select count(*) into v_reply_count from pub.news_entries where source_key = 'dedup-test-source';
     if v_reply_count <> 0 then raise exception 'Reply payload left a row behind'; end if;
+
+    -- A retry can encounter a historical version hash even when the current
+    -- entry hash is older (for example, after a prior partial revision run).
+    -- The migration must preserve that history without raising a duplicate-key
+    -- error or creating another copy of the same version.
+    v_payload := jsonb_set(v_payload, '{entries,0,sourceEntryId}', '"post:original"');
+    v_payload := jsonb_set(v_payload, '{entries,0,sourcePostNumber}', '1');
+    v_payload := jsonb_set(v_payload, '{entries,0,title}', '"World of Warcraft: Forever original"');
+    v_payload := jsonb_set(v_payload, '{entries,0,canonicalUrl}', '"https://example.com/t/dedup/1/1"');
+    v_payload := jsonb_set(v_payload, '{entries,0,contentHash}', to_jsonb(repeat('c', 64)));
+    select pub_admin.news_apply_sync(v_payload) into v_result;
+    if (v_result ->> 'inserted')::integer <> 1 then
+        raise exception 'Original fixture did not insert: %', v_result;
+    end if;
+    select id into v_entry_id from pub.news_entries
+    where source_key = 'dedup-test-source' and source_entry_id = 'post:original';
+    insert into pub.news_post_versions(news_entry_id, content_hash, snapshot)
+    values (v_entry_id, repeat('d', 64), jsonb_build_object('sourceEntryId', 'post:original'));
+    v_payload := jsonb_set(v_payload, '{entries,0,contentHash}', to_jsonb(repeat('d', 64)));
+    v_payload := jsonb_set(v_payload, '{entries,0,excerpt}', '"replayed revision"');
+    select pub_admin.news_apply_sync(v_payload) into v_result;
+    if (v_result ->> 'updated')::integer <> 1 then
+        raise exception 'Historical version replay did not update the opener: %', v_result;
+    end if;
+    select count(*) into v_versions from pub.news_post_versions where news_entry_id = v_entry_id;
+    if v_versions <> 2 then raise exception 'Historical version replay duplicated version history'; end if;
 
     insert into pub.news_sources(source_key, source_type, region, endpoint_url)
     values ('dedup-fixture-source', 'bluepost', 'us', 'https://example.com/news')
