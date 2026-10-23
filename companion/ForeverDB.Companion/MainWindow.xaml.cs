@@ -148,7 +148,7 @@ public partial class MainWindow : Window
             account.Device?.Sync,
             _guildbookSync = new AccountGuildbookSync(
                 account.Sessions,
-                new AccountGuildbookRpcAdapter(account.Rpc)));
+                new LocalGuildbookStore()));
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -473,6 +473,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_guildbookSync is null || !_guildbookSync.IsAvailable)
+        {
+            GuildbookPanel.Visibility = Visibility.Collapsed;
+            GuildSelector.ItemsSource = null;
+            GuildMembersGrid.ItemsSource = null;
+            return;
+        }
+
+        GuildbookPanel.Visibility = Visibility.Visible;
+
         if (GuildSelector.SelectedItem is not ForeverDbGuild guild)
         {
             GuildMembersGrid.ItemsSource = null;
@@ -535,7 +545,7 @@ public partial class MainWindow : Window
                 : "unknown";
 
         GuildbookStatusText.Text =
-            $"Captured {captured}. Addon roster refresh runs every 30 minutes while logged in; disk/Supabase sync still follows SavedVariables writes. Recipe lookup is currently runtime-limited.";
+            $"Captured {captured}. Local only — Stored on this device. Addon roster refresh runs every 30 minutes while logged in.";
 
         GuildbookMembersText.Text =
             roster.MembersCountText;
@@ -1632,8 +1642,8 @@ public partial class MainWindow : Window
 
         LastSyncCountsText.Text =
             _syncHealth.LastSuccessfulSyncAt is null
-                ? "Sources — · Guild members —"
-                : $"Sources {_syncHealth.LastSourceCount} · Guild members {_syncHealth.LastGuildMemberCount} · via {_syncHealth.LastTrigger}";
+                ? "Public sources —"
+                : $"Public sources {_syncHealth.LastSourceCount} · via {_syncHealth.LastTrigger}";
 
         LastErrorHealthText.Text =
             string.IsNullOrWhiteSpace(_syncHealth.LastError)

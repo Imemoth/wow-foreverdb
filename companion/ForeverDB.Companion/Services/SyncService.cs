@@ -6,9 +6,9 @@ using ForeverDB.Companion.Models;
 namespace ForeverDB.Companion.Services;
 
 /// <summary>
-/// Reads a SavedVariables export and uploads it through the ownership-aware coordinator.
-/// Parsing and map metadata always run first and never depend on remote authentication. Private Guildbook records
-/// use the separate account RPC boundary and are never included in public collector/device payloads.
+/// Reads a SavedVariables export and uploads only public observations through
+/// the ownership-aware coordinator. Guildbook is parsed and persisted locally
+/// through the separate local boundary; it is never a public payload or RPC.
 /// </summary>
 public sealed class SyncService
 {
@@ -112,8 +112,8 @@ public sealed class SyncService
         _mapSink?.Invoke(snapshot.Maps);
 
         // Capture provenance and private records never enter a public
-        // collector/device payload. Account Guildbook routing is invoked
-        // separately below and is guarded by the active registered session.
+        // collector/device payload. Local Guildbook processing is independent
+        // of whether this public request succeeds.
         _guildbook?.ObserveSnapshot(snapshot);
 
         var publicSnapshot = new ForeverDbSnapshot
@@ -133,15 +133,18 @@ public sealed class SyncService
             },
             SnapshotJson);
 
+        // Local persistence is deliberately completed before public transport;
+        // a Supabase outage must not prevent an authenticated local snapshot
+        // from being retained.
+        await SyncGuildbookAsync(snapshot, cancellationToken).ConfigureAwait(false);
+
         // An installation owned by this computer's registered device (or about to be) never takes the anonymous path.
         if (_device is { } device && device.Handles(snapshot.InstallationId))
         {
             // The device credential is an independent public collector. An
             // interactive account session must not gate it, so sign-out and
-            // A -> B switches preserve public AutoSync while Guildbook stays
-            // on the account RPC below.
+            // A -> B switches preserve public AutoSync.
             var deviceAttempt = await SyncRegisteredDeviceAsync(device, snapshot, json, force, trigger, cancellationToken);
-            await SyncGuildbookAsync(snapshot, cancellationToken).ConfigureAwait(false);
             return deviceAttempt;
         }
 
@@ -158,8 +161,6 @@ public sealed class SyncService
             attempt = SyncAttempt.Blocked(BlockReason.CollectorEnrollmentRequired, attempt.Ownership);
         }
 
-        await SyncGuildbookAsync(snapshot, cancellationToken).ConfigureAwait(false);
-
         switch (attempt.Outcome)
         {
             case SyncOutcome.Synced:
@@ -169,9 +170,7 @@ public sealed class SyncService
                     new SyncCompletedEventArgs(
                         DateTimeOffset.Now,
                         snapshot.Sources.Count,
-                        snapshot.Guilds.Sum(
-                            guild =>
-                                guild.Members.Count),
+                        0,
                         trigger));
                 _afterSynced?.Invoke(snapshot);
                 break;
@@ -260,7 +259,7 @@ public sealed class SyncService
                     new SyncCompletedEventArgs(
                         DateTimeOffset.Now,
                         snapshot.Sources.Count,
-                        snapshot.Guilds.Sum(guild => guild.Members.Count),
+                        0,
                         trigger));
                 _afterSynced?.Invoke(snapshot);
                 _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);

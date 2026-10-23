@@ -1259,7 +1259,8 @@ public sealed class AccountSessionManager
 
             next = new AccountStatus(
                 state, fault, email, legacyPresent, legacyFault, pendingRevocation, AccountsEnabled,
-                Interlocked.Read(ref _generation), verified, primary.Status != SlotReadStatus.Missing);
+                Interlocked.Read(ref _generation), verified, primary.Status != SlotReadStatus.Missing,
+                primary.Session?.UserId);
             changed = next != _status;
             _status = next;
 

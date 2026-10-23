@@ -89,7 +89,8 @@ public sealed record AccountStatus(
     bool AccountsEnabled,
     long Generation,
     bool IdentityVerified = false,
-    bool PrimaryCredentialPresent = false)
+    bool PrimaryCredentialPresent = false,
+    string? AccountId = null)
 {
     public static AccountStatus Initial(bool accountsEnabled) =>
         new(SessionState.LoggedOut, SessionFault.None, null, false, SessionFault.None, false, accountsEnabled, 0);

@@ -25,8 +25,6 @@ import type { AccountAuthConfig } from "./config";
 export const WEB_RPCS = [
   "fdb_account_claim_redeem",
   "fdb_account_installations",
-  "fdb_account_guildbook_guilds",
-  "fdb_account_guildbook_members",
 ] as const satisfies readonly AccountRpcName[];
 export type WebRpcName = (typeof WEB_RPCS)[number];
 

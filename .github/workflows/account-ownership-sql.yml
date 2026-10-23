@@ -112,6 +112,12 @@ jobs:
       - name: Account-independent collector suite (one device identity, multiple installations, revocation and cross-account isolation)
         run: node --test --test-concurrency=1 database/tests/enrollment/11_independent_collectors.test.mjs
 
+      - name: Apply 0018 (disable Guildbook cloud RPCs; retain data and definitions)
+        run: database/tests/account/stack.sh apply18
+
+      - name: Guildbook local-only server guard (old clients receive no executable RPC)
+        run: node --test --test-concurrency=1 database/tests/enrollment/12_guildbook_cloud_disabled.test.mjs
+
       - name: Mutation check 0014 (manual)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
         run: node database/tests/enrollment/mutation_check.mjs

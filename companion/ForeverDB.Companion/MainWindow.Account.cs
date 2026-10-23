@@ -43,7 +43,11 @@ public partial class MainWindow
         }
 
         account.Sessions.StatusChanged += _ =>
-            Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                RefreshAccountUi();
+                RefreshGuildbookUi();
+            }));
 
         account.Sync.InstallationChanged += _ =>
             Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
@@ -157,6 +161,7 @@ public partial class MainWindow
         HideClaimCard();
         AccountMessageText.Visibility = Visibility.Collapsed;
         RefreshAccountUi();
+        RefreshGuildbookUi();
     }
 
     private async Task<string> GetSearchTokenAsync(
