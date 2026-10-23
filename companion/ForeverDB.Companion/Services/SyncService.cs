@@ -116,14 +116,18 @@ public sealed class SyncService
         // of whether this public request succeeds.
         _guildbook?.ObserveSnapshot(snapshot);
 
-        var publicSnapshot = new ForeverDbSnapshot
+        // Do not serialize ForeverDbSnapshot here: its local Guildbook
+        // properties intentionally remain available to the parser/store. An
+        // explicit anonymous projection prevents even an empty `guilds` key
+        // (or future private field) from entering the public contract.
+        var publicSnapshot = new
         {
-            SchemaVersion = snapshot.SchemaVersion,
-            AddonVersion = snapshot.AddonVersion,
-            InstallationId = snapshot.InstallationId,
-            UpdatedAt = snapshot.UpdatedAt,
-            Sources = snapshot.Sources,
-            Maps = snapshot.Maps
+            schemaVersion = snapshot.SchemaVersion,
+            addonVersion = snapshot.AddonVersion,
+            installationId = snapshot.InstallationId,
+            updatedAt = snapshot.UpdatedAt,
+            sources = snapshot.Sources,
+            maps = snapshot.Maps
         };
 
         var json = JsonSerializer.Serialize(
