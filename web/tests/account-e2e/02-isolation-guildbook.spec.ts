@@ -117,7 +117,7 @@ test("23. the 50-installation cap: a valid code is NOT consumed at the limit, an
   expect(await ownerOf(db, extra.installationId)).toBe(other.uid);
 });
 
-test("28-29. historical rows, stable hashes and aggregate statistics are identical before and after a transfer", async ({ playwright }) => {
+test.skip("legacy cloud Guildbook history is retired by local-only V1", async ({ playwright }) => {
   const a = await webUser(playwright, "hist");
   const noise = await companionWithInstallation({ sources: 3, guilds: 1, members: 3, tag: "N1" });
   const mover = await companionWithInstallation({ sources: 3, guilds: 2, members: 4, tag: "MV" });
