@@ -1,4 +1,53 @@
 {
   "schemaVersion": 1,
-  "zones": {}
+  "zones": {
+    "1424": {
+      "v1": {
+        "files": {
+          "desktop-1280.webp": {
+            "bytes": 56890,
+            "sha256": "9dc58eb3afdd2f86d0beec90f0230cd0c27e492e6b8122b502acb2184f74e880"
+          },
+          "desktop-2000.webp": {
+            "bytes": 103602,
+            "sha256": "fbc70e484f13e6eea1ad965d1dc4c211c731dc08893daeb426d7e41b416fde07"
+          },
+          "mobile-600.webp": {
+            "bytes": 30614,
+            "sha256": "50e481ad12038ba65ab06fe838ea8ab4e721c91d963a6e9dec58c73e6c1d91d2"
+          },
+          "mobile-900.webp": {
+            "bytes": 57650,
+            "sha256": "cc87be9a4b5970afcf5b28fb5a05b0741721b65c22b980c52e8f3e25434dae72"
+          }
+        },
+        "firstDist": "1.60.1.70450+heroes.8da4f1345f65",
+        "inventorySha256": "493248b53c7183f37c14340a5c67375e800d0aa892c2968d5951957101fb7ea0"
+      }
+    },
+    "1431": {
+      "v1": {
+        "files": {
+          "desktop-1280.webp": {
+            "bytes": 63462,
+            "sha256": "0202c6857a61696c6e3d0a298e5ded5a0a5dfb43ead3de011a850d77d1c27299"
+          },
+          "desktop-1916.webp": {
+            "bytes": 112782,
+            "sha256": "bf118ae7764a4c20b3392ea245cee272e0bd2b43147579c940b1579e30e49080"
+          },
+          "mobile-600.webp": {
+            "bytes": 45462,
+            "sha256": "5d27f395774108672465042d1ffcba9cf515ede847382f21a08dc4632903a8e0"
+          },
+          "mobile-900.webp": {
+            "bytes": 83146,
+            "sha256": "60652b0d84f17a919b980caa2f9eb3b382002885c84c8c59aa47239d85cb0985"
+          }
+        },
+        "firstDist": "1.60.1.70450+heroes.8da4f1345f65",
+        "inventorySha256": "493248b53c7183f37c14340a5c67375e800d0aa892c2968d5951957101fb7ea0"
+      }
+    }
+  }
 }

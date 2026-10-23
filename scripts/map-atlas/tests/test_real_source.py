@@ -25,7 +25,7 @@ class RealSourceTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.work = Path(cls.keep or cls.tmp.name)
         cls.work.mkdir(parents=True, exist_ok=True)
-        shutil.copy(ROOT / "ledger/published.json", cls.work / "ledger.in.json")
+        shutil.copy(ROOT / "tests/fixtures/ledger-pre-v2b.json", cls.work / "ledger.in.json")
         cls.o = ImportOptions(Path(ZIP), cls.work / "out", cls.work / "ledger.in.json", None, LEGACY, LEGACY / "forever/1420/v1/tirisfal-glades.webp",
                               expect_version="1.60.1.70450", expect_zip_sha256=os.environ.get("ATLAS_REAL_EXPORT_SHA256"),
                               expect_maps=60, expect_variants=105, expect_instances=55)
@@ -83,7 +83,7 @@ class RealSourceTests(unittest.TestCase):
 
     def test_deterministic_and_idempotent_on_the_real_source(self):
         out2 = self.work / "again"
-        shutil.copy(ROOT / "ledger/published.json", self.work / "ledger2.in.json")
+        shutil.copy(ROOT / "tests/fixtures/ledger-pre-v2b.json", self.work / "ledger2.in.json")
         r2 = run_import(ImportOptions(Path(ZIP), out2, self.work / "ledger2.in.json", None, LEGACY, self.o.reference_1420, expect_maps=60, expect_variants=105, expect_instances=55))
         self.assertEqual(file_table(self.dist), file_table(out2 / "dist"))
         self.assertEqual(r2["package"]["zip"]["sha256"], self.r["package"]["zip"]["sha256"])

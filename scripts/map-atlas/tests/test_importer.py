@@ -21,7 +21,8 @@ from mapatlas.importer import ImportOptions, MapPlan, development_flags, plan_fi
 from mapatlas.packaging import ASSET_PATH_RE, PackageError, check_limits, file_table, list_files, verify_catalog, verify_superset
 
 LEGACY = REPO / "web/public/maps"
-REAL_LEDGER = ROOT / "ledger/published.json"
+# the map ledger as committed BEFORE the V2-B promotion (only 1420/v1): the synthetic exports in these tests only know that version
+REAL_LEDGER = ROOT / "tests/fixtures/ledger-pre-v2b.json"
 REF = LEGACY / "forever/1420/v1/tirisfal-glades.webp"
 FIXTURE = ROOT / "tests/fixtures/sample-atlas-manifest.json"
 

@@ -113,7 +113,7 @@ Order for a full back-out: 1 (website) → 2 (Cloudflare) → 3.
 
 ## 6. Open items, approvals and limits
 1. **Vercel beta activation (§4)** — prepared, not performed; needs the explicit go-ahead. Production Vercel is out of scope.
-2. Ledger promotion (§3 D: `promote-ledger`, `promote-hero-ledger`) — not done; it needs its own reviewed PR now that the deployment is verified.
+2. Ledger promotion (§3 D: `promote-ledger`, `promote-hero-ledger`) — prepared in its own minimal PR against the verified deployment `04effe36…` (record: `scripts/map-atlas/ledger/promotion-04effe36.json`); the ledgers take effect when that PR is merged.
 3. The new deployment ID and its Production/`main` placement come from the owner's authenticated Cloudflare API check; this session verified the served content (179/179) but could not read the API (optional read-only secrets would let the workflow check the deployment ID itself).
 4. Real-browser decode / CSP / crop of CDN-served heroes — only possible after activation (§4 step 4).
 5. **Licensing: the audit, the verification and this record prove file integrity only. They are not licensing clearance.** The eight hero derivatives are owner-approved beta artwork whose public CDN hosting the owner authorised for this pilot; the baseline atlas files are as approved. No private master artwork was uploaded.
