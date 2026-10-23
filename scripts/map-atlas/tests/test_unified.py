@@ -24,7 +24,8 @@ from mapatlas.unified import (BaselineError, UnifiedOptions, build_unified, head
 from mapatlas.versioning import Ledger
 
 LEGACY = REPO / "web/public/maps"
-REAL_LEDGER = ROOT / "ledger/published.json"
+# the map ledger as committed BEFORE the V2-B promotion (only 1420/v1): the synthetic exports in these tests only know that version
+REAL_LEDGER = ROOT / "tests/fixtures/ledger-pre-v2b.json"
 REF = LEGACY / "forever/1420/v1/tirisfal-glades.webp"
 REAL_PIN = ROOT / "baseline/atlas-dist-1.60.1.70450.json"
 REAL_INVENTORY = ROOT / "heroes/zone-heroes.json"
@@ -582,7 +583,7 @@ class CommittedArtifactsTests(unittest.TestCase):
         if not zp or not Path(zp).is_file():
             self.skipTest("set ATLAS_BASELINE_ZIP to the approved atlas-dist zip (private artwork, never in CI)")
         with tempfile.TemporaryDirectory() as t:
-            r = build_unified(UnifiedOptions(Path(zp), REAL_PIN, REAL_INVENTORY, REAL_HERO_SOURCES, Path(t), REAL_LEDGER, ROOT / "ledger/zone-heroes.json"))
+            r = build_unified(UnifiedOptions(Path(zp), REAL_PIN, REAL_INVENTORY, REAL_HERO_SOURCES, Path(t), ROOT / "ledger/published.json", ROOT / "ledger/zone-heroes.json"))  # the promoted ledgers: rebuilding the approved release must stay idempotent
             self.assertEqual((r["dist"]["fileCount"], r["heroes"]["renditions"]), (180, 8))
             self.assertEqual(r["dist"]["zip"]["sha256"], "339858b25d42eb06699510ab63092917138264efbd993d79e702df76768b1e15")
             self.assertEqual(json.loads((Path(t) / "unified-release.json").read_text()), json.loads((ROOT / "baseline/unified-dist-1.60.1.70450-8da4f1345f65.release.json").read_text()))
