@@ -50,7 +50,8 @@ The confirmed cleanup projection is:
 | Legitimate Bluepost openers retained | 28 | 28 |
 | Published Bluepost replies visible | 343 | 0 |
 | Published Bluepost replies suppressed | 0 | 343 |
-| Distinct historical Bluepost topics represented in storage | 29 | 29 |
+| Published Bluepost topics represented | 29 | 28 |
+| Stored Bluepost topics across all statuses | 43 | 43 |
 | Distinct visible Bluepost topics | 29 | 28 |
 
 These are projected counts from the confirmed live-read findings; run
