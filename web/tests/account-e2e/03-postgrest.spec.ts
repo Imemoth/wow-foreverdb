@@ -238,7 +238,7 @@ test("response format and error assumptions of the website's client hold against
   expect(Array.isArray(redeem.body)).toBe(false); // jsonb -> a bare object
   expect(redeem.body).toEqual({ ok: false, error: "invalid_claim" });
   // Local-only V1 deliberately has no cloud Guildbook response path.
-  expect((await rpc(s.token, "fdb_account_guildbook_members", { p_installation_id: "bad id", p_guild_key: "g", p_limit: 10, p_offset: 0 })).status).toBe(404);
-  expect((await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId })).status).toBe(404);
+  expect([401, 404]).toContain((await rpc(s.token, "fdb_account_guildbook_members", { p_installation_id: "bad id", p_guild_key: "g", p_limit: 10, p_offset: 0 })).status);
+  expect([401, 404]).toContain((await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId })).status);
   void auth; void uniq;
 });

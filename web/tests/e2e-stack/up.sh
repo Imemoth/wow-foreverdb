@@ -101,10 +101,13 @@ echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\":
 GUILDBOOK_AFTER=""
 for i in $(seq 1 100); do
   GUILDBOOK_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{"p_installation_id":"x"}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_guildbook_guilds")"
-  [ "$GUILDBOOK_AFTER" = 404 ] && break
+  # PostgREST may retain the function in its schema cache while applying the
+  # ACL change; both 401 (known RPC, no EXECUTE) and 404 (cache omission) are
+  # blocked cloud paths.
+  { [ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 404 ]; } && break
   sleep 0.2
 done
-[ "$GUILDBOOK_AFTER" = 404 ] || { echo "schema cache did not apply 0018 cloud Guildbook revocation (status=$GUILDBOOK_AFTER)"; exit 1; }
+[ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 404 ] || { echo "schema cache did not apply 0018 cloud Guildbook revocation (status=$GUILDBOOK_AFTER)"; exit 1; }
 
 # 5. What was REALLY started (recorded, not assumed).
 GOTRUE_VERSION="$(curl -fsS "http://127.0.0.1:9999/health" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("unknown")}})')"
