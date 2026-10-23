@@ -184,7 +184,7 @@ export const ACCOUNT_RPCS = {
         p_capture_id: z.string().min(1).max(200),
         p_captured_at: z.number().int().min(0),
         p_source_character: z.string().min(1).max(200),
-        p_guilds: z.array(z.record(z.unknown())).max(100),
+        p_guilds: z.array(z.record(z.string(), z.unknown())).max(100),
       })
       .strict(),
     output: z.discriminatedUnion("ok", [
