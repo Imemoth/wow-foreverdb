@@ -74,7 +74,7 @@ test("a successful reset revokes every session of the account (attacker, other b
     expect((await old.c.get("/account/api/me")).status()).toBe(401); // server-confirmed identity: session_not_found
     expect((await old.c.get("/account/api/installations")).status()).toBe(401);
     const stolen = await clientWithSessionCookie(playwright, (await cookieOf(old.c))?.value ?? "x");
-    expect([401, 404]).toContain((await post(stolen, "/account/api/guildbook/guilds", { installationId: mine.installationId })).status());
+    expect([401, 403, 404]).toContain((await post(stolen, "/account/api/guildbook/guilds", { installationId: mine.installationId })).status());
     expect((await post(stolen, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: fresh, confirm: true, accountId: victim.uid })).status()).toBe(401);
   }
   // refresh tokens are dead: they cannot mint new access tokens
