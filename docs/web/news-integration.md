@@ -44,10 +44,12 @@ The confirmed cleanup projection is:
 
 | Measure | Before | After cleanup |
 | --- | ---: | ---: |
-| Stored news rows | 371 | 371 |
+| Total stored News rows | 701 | 701 |
+| Published News rows visible | 409 | 66 |
 | Published Blueposts visible | 371 | 28 |
-| Retained original Bluepost openers | 28 | 28 |
-| Suppressed published replies | 0 | 343 |
+| Legitimate Bluepost openers retained | 28 | 28 |
+| Published Bluepost replies visible | 343 | 0 |
+| Published Bluepost replies suppressed | 0 | 343 |
 | Distinct historical Bluepost topics represented in storage | 29 | 29 |
 | Distinct visible Bluepost topics | 29 | 28 |
 

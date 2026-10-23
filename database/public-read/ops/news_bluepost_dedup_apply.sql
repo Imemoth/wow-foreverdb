@@ -10,22 +10,31 @@
 \if :{?confirm}
 \else
 \echo 'Refusing cleanup: pass -v confirm=SUPPRESS_BLUEPOST_REPLIES'
-\quit 2
+do $refuse$
+begin
+    raise exception 'Refusing cleanup: confirmation token is required';
+end
+$refuse$;
 \endif
 \if :{?cleanup_id}
 \else
 \echo 'Refusing cleanup: pass a unique -v cleanup_id=...'
-\quit 2
+do $refuse$
+begin
+    raise exception 'Refusing cleanup: cleanup_id is required';
+end
+$refuse$;
 \endif
 
 select set_config('azerdex.bluepost_cleanup_id', :'cleanup_id', false);
+select set_config('azerdex.bluepost_cleanup_confirm', :'confirm', false);
 
 begin;
 set local role foreverdb_pub_owner;
 
 do $verify$
 begin
-    if :'confirm' <> 'SUPPRESS_BLUEPOST_REPLIES' then
+    if current_setting('azerdex.bluepost_cleanup_confirm') <> 'SUPPRESS_BLUEPOST_REPLIES' then
         raise exception 'Cleanup confirmation token is invalid';
     end if;
     if current_setting('azerdex.bluepost_cleanup_id') !~ '^[0-9]{8}T[0-9]{6}Z$' then
@@ -68,9 +77,10 @@ $apply$;
 
 select jsonb_build_object(
     'cleanup_id', current_setting('azerdex.bluepost_cleanup_id'),
-    'suppressed_rows', count(*) filter (where suppression_reason = 'bluepost_reply_dedup_v1:' || current_setting('azerdex.bluepost_cleanup_id')),
-    'stored_rows', count(*),
-    'visible_blueposts', count(*) filter (where s.source_type = 'bluepost' and n.status = 'published' and n.suppressed_at is null and n.source_post_number = 1),
+    'suppressed_published_bluepost_replies', count(*) filter (where suppression_reason = 'bluepost_reply_dedup_v1:' || current_setting('azerdex.bluepost_cleanup_id')),
+    'total_stored_news_rows', count(*),
+    'visible_published_news_rows', count(*) filter (where n.status = 'published' and n.suppressed_at is null and (s.source_type <> 'bluepost' or n.source_post_number = 1)),
+    'visible_published_bluepost_openers', count(*) filter (where s.source_type = 'bluepost' and n.status = 'published' and n.suppressed_at is null and n.source_post_number = 1),
     'version_rows', (select count(*) from pub.news_post_versions)
 ) as bluepost_dedup_apply_report
 from pub.news_entries n
