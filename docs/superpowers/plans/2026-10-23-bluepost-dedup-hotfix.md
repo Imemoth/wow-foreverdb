@@ -82,7 +82,7 @@
 - [x] **Step 1: Write failing unit assertions** that homepage selection keeps only original Blueposts, preserves publication ordering/featured state, and keeps US/EU topics separate.
 - [x] **Step 2: Run focused web tests and verify they fail against reply-shaped fixtures.**
 - [x] **Step 3: Implement only the necessary defensive selection/read filtering** without changing Official News or editorial routes.
-- [ ] **Step 4: Run focused unit tests and relevant News E2E tests, including archive pagination, search, region filters, RSS, and detail/sitemap smoke coverage where the environment supports it.** Unit coverage passes; E2E is blocked because the sandbox cannot bind the Next server port and the optimized build hangs.
+- [ ] **Step 4: Run focused unit tests and relevant News E2E tests, including archive pagination, search, region filters, RSS, and detail/sitemap smoke coverage where the environment supports it.** Unit coverage passes; the News E2E run reached the app and completed 10/16 tests. Six legacy assertions fail because they expect the former editorial `ArticleHub` UI while the current `NewsArchive` implementation is active; the passing cases include all responsive overflow and article-reader checks.
 
 ### Task 4: Verification, review, branch, and PR handoff
 
@@ -90,7 +90,7 @@
 - Modify: `docs/web/news-integration.md` with actual verification evidence, projected counts, deployment order, and rollback instructions
 - Modify: `docs/superpowers/plans/2026-10-23-bluepost-dedup-hotfix.md` only for completed evidence if the repository convention requires it
 
-- [ ] **Step 1: Run focused collector tests, SQL/security tests, Web E2E, lint, typecheck, build, bundle-secret checks, and required CI; record exact PASS/PARTIAL/BLOCKED results.** Unit, SQL/security, lint, and typecheck pass; build, bundle scan, Web E2E, and CI status remain environment/remote-verification dependent.
+- [ ] **Step 1: Run focused collector tests, SQL/security tests, Web E2E, lint, typecheck, build, bundle-secret checks, and required CI; record exact PASS/PARTIAL/BLOCKED results.** Unit, SQL/security, lint, typecheck, webpack build, and bundle scan pass. The default Turbopack build is blocked by the environment's child-process port restriction; News E2E is 10/16 with six pre-existing legacy-assertion failures; GitHub CI status cannot be inspected from this environment.
 - [ ] **Step 2: Verify live source fixtures/read-only counts if credentials are available, without printing secrets; do not execute cleanup or database migration against live data without explicit authorization.** Live forum reads returned HTTP 403; repository fixtures cover the representative Discourse payload shapes.
 - [x] **Step 3: Inspect the diff for scope boundaries and request an independent review before push/PR creation.** No independent reviewer tool is available in this session; completed a focused self-review and kept changes within News/public-read/docs.
 - [ ] **Step 4: Push the dedicated branch and open a PR targeting `web/azerdex-beta`; do not merge or deploy.**
