@@ -14,11 +14,19 @@ function groupThreads(entries: NewsEntry[]): NewsEntry[] {
   return [...grouped.values()].sort(byPublished);
 }
 
+function publishedBluepostsOnly(entries: NewsEntry[]): NewsEntry[] {
+  return entries.filter((entry) =>
+    entry.sourceType !== "bluepost" && entry.category !== "bluepost"
+      || entry.sourcePostNumber === 1,
+  );
+}
+
 export function selectHomepageNews(entries: NewsEntry[], limit = 3): { featured: NewsEntry | null; recent: NewsEntry[] } {
-  const candidates = groupThreads(entries).sort((a, b) =>
+  const visible = publishedBluepostsOnly(entries);
+  const candidates = groupThreads(visible).sort((a, b) =>
     Number(b.featured) - Number(a.featured) || b.importance - a.importance || byPublished(a, b));
   const featured = candidates[0] ?? null;
-  const recent = groupThreads(entries)
+  const recent = groupThreads(visible)
     .filter((entry) => entry.id !== featured?.id)
     .sort(byPublished)
     .slice(0, Math.max(0, limit));

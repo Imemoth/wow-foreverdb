@@ -11,6 +11,11 @@ export interface BluepostSource {
   baseUrl: string;
 }
 
+export interface BluepostParseOptions {
+  /** Post IDs observed in the authoritative Blizzard Tracker feed. */
+  authoritativePostIds?: ReadonlySet<string>;
+}
+
 export interface OfficialNewsSource {
   sourceType: "official_news";
   sourceKey: string;
@@ -104,7 +109,7 @@ function statusFor(relevance: Relevance): PublicationStatus {
   return "rejected";
 }
 
-export function parseBluepostFeed(body: string, source: BluepostSource): NormalizedNewsEntry[] {
+export function parseBluepostFeed(body: string, source: BluepostSource, options: BluepostParseOptions = {}): NormalizedNewsEntry[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -127,6 +132,7 @@ export function parseBluepostFeed(body: string, source: BluepostSource): Normali
         ?? (post as Record<string, unknown> | null)?.cooked,
     }))
     : [];
+  const isTopicResponse = Boolean(root.post_stream && typeof root.post_stream === "object");
   const posts = Array.isArray(root.posts) ? root.posts : streamPosts;
 
   return posts.flatMap((candidate): NormalizedNewsEntry[] => {
@@ -139,14 +145,21 @@ export function parseBluepostFeed(body: string, source: BluepostSource): Normali
     const url = stringValue(post.url);
     if (!id || !topicId || !title || !publishedAt || !url) return [];
 
+    const sourceEntryId = `post:${id}`;
+    const sourcePostNumber = typeof post.post_number === "number" && Number.isInteger(post.post_number)
+      ? post.post_number
+      : null;
+    if (sourcePostNumber !== 1) return [];
+    if (isTopicResponse && !options.authoritativePostIds?.has(sourceEntryId)) return [];
+
     const excerpt = excerptOf(post.excerpt);
     const relevance = classifyRelevance(title, excerpt, source.sourceType);
     return [{
       sourceType: source.sourceType,
       sourceKey: source.sourceKey,
-      sourceEntryId: `post:${id}`,
+      sourceEntryId,
       sourceTopicId: `topic:${topicId}`,
-      sourcePostNumber: typeof post.post_number === "number" ? post.post_number : null,
+      sourcePostNumber,
       threadKey: `${source.region}:topic:${topicId}`,
       title: decodeHtml(title),
       canonicalUrl: sourceUrl(url, source.baseUrl),
@@ -339,13 +352,13 @@ async function collectSource(source: CollectorSource, options: CollectorOptions)
   try {
     if (source.sourceType === "bluepost") {
       let page = 1;
-      let previousSignature = "";
+      let previousSignature: string | null = null;
       while (page <= 10) {
         const body = await fetchText(fetcher, endpointFor(source, page));
         if (!isBluepostPayload(body)) throw new Error("source_invalid_bluepost_payload");
         const entries = parseBluepostFeed(body, source);
         const signature = entrySignature(entries);
-        if (signature === previousSignature) break;
+        if (previousSignature !== null && signature === previousSignature) break;
         previousSignature = signature;
         all.push(...entries);
         pages += 1;
@@ -354,10 +367,17 @@ async function collectSource(source: CollectorSource, options: CollectorOptions)
         page = next;
       }
       if (mode === "revision") {
-        const topicUrls = [...new Set(all.map((entry) => topicRevisionUrl(entry.canonicalUrl)).filter((url): url is string => Boolean(url)))];
-        for (const topicUrl of topicUrls.slice(0, 25)) {
+        const topicAllowLists = new Map<string, Set<string>>();
+        for (const entry of all) {
+          const topicUrl = topicRevisionUrl(entry.canonicalUrl);
+          if (!topicUrl) continue;
+          const allowList = topicAllowLists.get(topicUrl) ?? new Set<string>();
+          allowList.add(entry.sourceEntryId);
+          topicAllowLists.set(topicUrl, allowList);
+        }
+        for (const [topicUrl, authoritativePostIds] of [...topicAllowLists.entries()].slice(0, 25)) {
           try {
-            all.push(...parseBluepostFeed(await fetchText(fetcher, topicUrl), source));
+            all.push(...parseBluepostFeed(await fetchText(fetcher, topicUrl), source, { authoritativePostIds }));
           } catch (caught) {
             revisionFailures.push(caught instanceof Error ? caught.message : "topic_revision_failed");
           }

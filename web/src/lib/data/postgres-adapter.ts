@@ -110,16 +110,27 @@ export function describeConnectionTarget(connectionString: string): Record<strin
 
 const num = (v: unknown) => (v == null ? null : Number(v));
 
+function newsSourcePostNumber(sourceType: NewsSourceType, explicit: unknown, canonicalUrl: unknown): number | null {
+  if (sourceType !== "bluepost") return null;
+  const fromRow = num(explicit);
+  if (fromRow != null) return fromRow;
+  const match = /\/(\d+)$/.exec(String(canonicalUrl ?? ""));
+  return match ? Number(match[1]) : null;
+}
+
 function toNewsEntry(r: Row): NewsEntry {
+  const sourceType = r.source_type as NewsSourceType;
+  const canonicalUrl = String(r.canonical_url);
   return {
     id: Number(r.id),
     slug: String(r.slug),
-    sourceType: r.source_type as NewsSourceType,
+    sourceType,
     sourceKey: String(r.source_key),
     sourceEntryId: String(r.source_entry_id),
     sourceTopicId: (r.source_topic_id as string) ?? null,
+    sourcePostNumber: newsSourcePostNumber(sourceType, r.source_post_number, canonicalUrl),
     threadKey: (r.thread_key as string) ?? null,
-    canonicalUrl: String(r.canonical_url),
+    canonicalUrl,
     title: String(r.title),
     author: (r.author as string) ?? null,
     region: r.region as NewsRegion,
@@ -136,11 +147,13 @@ function toNewsEntry(r: Row): NewsEntry {
 function fromNewsJson(value: unknown): NewsEntry | null {
   if (!value || typeof value !== "object") return null;
   const r = value as Record<string, unknown>;
+  const sourceType = r.sourceType as NewsSourceType;
+  const canonicalUrl = String(r.canonicalUrl);
   return {
-    id: Number(r.id), slug: String(r.slug), sourceType: r.sourceType as NewsSourceType,
+    id: Number(r.id), slug: String(r.slug), sourceType,
     sourceKey: String(r.sourceKey), sourceEntryId: String(r.sourceEntryId),
-    sourceTopicId: (r.sourceTopicId as string) ?? null, threadKey: (r.threadKey as string) ?? null,
-    canonicalUrl: String(r.canonicalUrl), title: String(r.title), author: (r.author as string) ?? null,
+    sourceTopicId: (r.sourceTopicId as string) ?? null, sourcePostNumber: newsSourcePostNumber(sourceType, r.sourcePostNumber, canonicalUrl), threadKey: (r.threadKey as string) ?? null,
+    canonicalUrl, title: String(r.title), author: (r.author as string) ?? null,
     region: r.region as NewsRegion, publishedAt: new Date(r.publishedAt as string).toISOString(),
     modifiedAt: r.modifiedAt ? new Date(r.modifiedAt as string).toISOString() : null,
     ingestedAt: new Date(r.ingestedAt as string).toISOString(), excerpt: String(r.excerpt ?? ""),

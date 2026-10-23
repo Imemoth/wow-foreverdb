@@ -9,6 +9,7 @@ const entry = (overrides: Partial<NewsEntry>): NewsEntry => ({
   sourceKey: "blizzard-bluepost-us",
   sourceEntryId: "post:1",
   sourceTopicId: "topic:1",
+  sourcePostNumber: 1,
   threadKey: "us:topic:1",
   canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/entry/1/1",
   title: "Forever announcement",
@@ -47,5 +48,17 @@ describe("homepage news selection", () => {
 
     expect(result.featured?.slug).toBe("important");
     expect(result.recent.map((item) => item.slug)).toEqual(["recent"]);
+  });
+
+  it("ignores Bluepost replies before choosing featured or recent stories", () => {
+    const result = selectHomepageNews([
+      entry({ id: 1, slug: "original", sourceEntryId: "post:1", sourcePostNumber: 1, importance: 10, publishedAt: "2026-10-22T00:00:00.000Z" }),
+      entry({ id: 2, slug: "reply", sourceEntryId: "post:2", sourcePostNumber: 2, importance: 100, featured: true, publishedAt: "2026-10-22T03:00:00.000Z" }),
+      entry({ id: 3, slug: "eu-original", sourceKey: "blizzard-bluepost-eu", region: "eu", threadKey: "eu:topic:1", sourceEntryId: "post:3", sourcePostNumber: 1 }),
+    ], 3);
+
+    expect(result.featured?.slug).toBe("eu-original");
+    expect(result.recent.map((item) => item.slug)).toEqual(["original"]);
+    expect(result.featured?.region).toBe("eu");
   });
 });
