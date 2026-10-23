@@ -24,8 +24,6 @@ const ACCOUNT_FUNCTIONS: [string, Record<string, unknown>][] = [
   ["fdb_account_claim_redeem", { p_code: "0123456789ABCDEF0123456789ABCDEF" }],
   ["fdb_installation_link_status", { p_installation_id: "x-1" }],
   ["fdb_account_installations", {}],
-  ["fdb_account_guildbook_guilds", { p_installation_id: "x-1" }],
-  ["fdb_account_guildbook_members", { p_installation_id: "x-1", p_guild_key: "g", p_limit: 10, p_offset: 0 }],
 ];
 
 test("schema cache: the functions did not exist for PostgREST before 0012 and appeared after the migration's NOTIFY, without a restart", async () => {
@@ -70,7 +68,7 @@ test("SQL role and EXECUTE privileges as PostgREST applies them: anon and servic
     expect(r.body.code, `service_role ${name}`).toBe("42501");
   }
   // identity kinds: registered-only functions refuse an anonymous user (403); claim_start refuses a registered user (403)
-  for (const name of ["fdb_account_claim_redeem", "fdb_account_installations", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members"]) {
+  for (const name of ["fdb_account_claim_redeem", "fdb_account_installations"]) {
     const args = ACCOUNT_FUNCTIONS.find(([n]) => n === name)![1];
     const r = await rpc(anon.token, name, args);
     expect(r.status, `anonymous ${name}`).toBe(403);
@@ -239,10 +237,8 @@ test("response format and error assumptions of the website's client hold against
   const redeem = await rpc(s.token, "fdb_account_claim_redeem", { p_code: "00000000000000000000000000000000" });
   expect(Array.isArray(redeem.body)).toBe(false); // jsonb -> a bare object
   expect(redeem.body).toEqual({ ok: false, error: "invalid_claim" });
-  const err = await rpc(s.token, "fdb_account_guildbook_members", { p_installation_id: "bad id", p_guild_key: "g", p_limit: 10, p_offset: 0 });
-  expect([err.status, err.body.code]).toEqual([400, "PT400"]);
-  expect(Object.keys(err.body).sort()).toEqual(["code", "details", "hint", "message"]);
-  const guilds = await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId });
-  expect(typeof guilds.body[0].captured_at).toBe("number"); // bigint -> JSON number (the Zod contract expects an integer)
+  // Local-only V1 deliberately has no cloud Guildbook response path.
+  expect((await rpc(s.token, "fdb_account_guildbook_members", { p_installation_id: "bad id", p_guild_key: "g", p_limit: 10, p_offset: 0 })).status).toBe(404);
+  expect((await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId })).status).toBe(404);
   void auth; void uniq;
 });
