@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { evaluateAccountAuth, type AccountAuthConfig } from "./account/config";
 
 /**

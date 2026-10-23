@@ -2,7 +2,7 @@ import "server-only";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { serverEnv } from "../env";
 
 /**
