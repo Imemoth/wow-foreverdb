@@ -21,6 +21,8 @@ python scripts/map-atlas/atlas.py verify-baseline --baseline <zip or extracted d
 python scripts/map-atlas/atlas.py hero-measure   --dir <derivatives>                                      # inventory records for a new hero
 ```
 
+Read-only CDN verification for the owner (Windows PowerShell 5.1/7, no dependencies): `windows\Verify-AzerdexCdn.ps1 -Mode Local|Baseline|Post` — see [`docs/web/v2b-cloudflare-cdn-pilot.md`](../../docs/web/v2b-cloudflare-cdn-pilot.md).
+
 Tests (synthetic client, no network): `cd scripts/map-atlas && python -m unittest discover -s tests`.
 
 | Module | Role |

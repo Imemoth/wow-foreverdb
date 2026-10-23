@@ -561,6 +561,21 @@ class CommittedArtifactsTests(unittest.TestCase):
         self.assertFalse([p for p in pin["files"] if "zone-heroes" in p])
         self.assertTrue(all(not HERO_PATH_RE.match(p) for p in pin["files"]))
 
+    def test_committed_release_record_is_exactly_pin_plus_inventory_plus_headers(self):
+        """The commit-able release record (what the owner's read-only CDN verification expects) cannot drift from its sources."""
+        rel = json.loads((ROOT / "baseline/unified-dist-1.60.1.70450-8da4f1345f65.release.json").read_text())
+        pin = json.loads(REAL_PIN.read_text())
+        inv = load_inventory(REAL_INVENTORY)
+        want = {p: m for p, m in pin["files"].items() if p != "_headers"}
+        want.update({r.dist_path: {"sha256": r.sha256, "bytes": r.bytes} for r in renditions(inv)})
+        want["_headers"] = {"sha256": sha(UNIFIED_HEADERS.encode()), "bytes": len(UNIFIED_HEADERS.encode())}
+        self.assertEqual(rel["files"], want)
+        self.assertEqual((rel["counts"]["files"], rel["counts"]["totalBytes"]), (180, sum(m["bytes"] for m in want.values())))
+        self.assertEqual(rel["baselineZipSha256"], pin["distributionZipSha256"])
+        self.assertEqual(rel["heroInventorySha256"], inventory_sha256(inv))
+        self.assertTrue(rel["distLabel"].endswith(hashlib.sha256(json.dumps(want, sort_keys=True).encode()).hexdigest()[:12]))
+        self.assertEqual(rel["zip"]["sha256"], "339858b25d42eb06699510ab63092917138264efbd993d79e702df76768b1e15")
+
     def test_real_baseline_end_to_end_when_the_private_archive_is_available(self):
         import os
         zp = os.environ.get("ATLAS_BASELINE_ZIP")
@@ -569,6 +584,8 @@ class CommittedArtifactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             r = build_unified(UnifiedOptions(Path(zp), REAL_PIN, REAL_INVENTORY, REAL_HERO_SOURCES, Path(t), REAL_LEDGER, ROOT / "ledger/zone-heroes.json"))
             self.assertEqual((r["dist"]["fileCount"], r["heroes"]["renditions"]), (180, 8))
+            self.assertEqual(r["dist"]["zip"]["sha256"], "339858b25d42eb06699510ab63092917138264efbd993d79e702df76768b1e15")
+            self.assertEqual(json.loads((Path(t) / "unified-release.json").read_text()), json.loads((ROOT / "baseline/unified-dist-1.60.1.70450-8da4f1345f65.release.json").read_text()))
 
 
 if __name__ == "__main__":

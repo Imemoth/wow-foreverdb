@@ -23,6 +23,7 @@ from .packaging import (ASSET_PATH_RE, HEADERS, HERO_PATH_RE, PAGES_MAX_FILES, P
 from .versioning import Ledger
 
 PIN_KIND = "azerdex-cdn-baseline"
+RELEASE_KIND = "azerdex-cdn-unified-release"
 PAGES_MAX_HEADER_RULES = 100
 PAGES_MAX_HEADER_LINE = 2000
 MAX_BASELINE_ENTRIES = 5000
@@ -308,6 +309,11 @@ def build_unified(o: UnifiedOptions) -> dict:
     label = f"{pin['client']['version']}+heroes.{rev}"
     zip_info = write_deterministic_zip(dist, o.out / f"azerdex-cdn-dist-{pin['client']['version']}-{rev}.zip")
     (o.out / "dist-files.json").write_text(canonical_json(table), encoding="utf-8")
+    # The commit-able release record of this exact snapshot: what the owner's read-only verification (Verify-AzerdexCdn.ps1, verify-remote) expects to be served.
+    (o.out / "unified-release.json").write_text(canonical_json({
+        "schemaVersion": 1, "kind": RELEASE_KIND, "distLabel": label, "client": pin["client"], "baselineZipSha256": pin.get("distributionZipSha256"),
+        "zip": zip_info, "heroInventorySha256": inventory_sha256(inv), "counts": {"files": len(table), "totalBytes": sum(m["bytes"] for m in table.values())},
+        "files": table}), encoding="utf-8")
     (o.out / "SHA256SUMS.txt").write_text("".join(f"{m['sha256']}  {p}\n" for p, m in table.items()), encoding="utf-8")
     inv_sha = inventory_sha256(inv)
     (o.out / "zone-heroes-ledger.next.json").write_text(hero_ledger.proposed(inv, inv_sha, label).to_text(), encoding="utf-8")

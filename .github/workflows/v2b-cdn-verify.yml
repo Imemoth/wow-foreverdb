@@ -1,0 +1,117 @@
+name: V2-B CDN read-only verification
+
+# READ-ONLY checks of the public asset CDN (Cloudflare Pages project azerdex-assets): HTTP GET requests to azerdex-assets.pages.dev only.
+# No secrets, no upload, no deployment, no Vercel/Cloudflare API calls. It exists so that the owner never needs a local checkout or Windows tooling:
+#   - runs automatically when this workflow or the verification script changes (pull_request, path-filtered), and
+#   - can be run on demand (Actions -> "V2-B CDN read-only verification" -> Run workflow) once the file is on the default branch:
+#       mode Baseline  = before the upload: the live CDN must serve exactly the 171-file approved atlas baseline
+#       mode Post      = after the upload: the live CDN must serve all 179 files of the unified snapshot (atlas + 8 zone heroes)
+# A FAIL means the live CDN does not match; an unreachable host is never a PASS. Evidence JSON files are uploaded as artifacts (90 days).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Baseline (before upload) or Post (after upload)"
+        type: choice
+        options: [Baseline, Post]
+        default: Baseline
+      base_url:
+        description: "Origin to verify (azerdex-assets.pages.dev, assets.azerdex.com or <deployment>.azerdex-assets.pages.dev)"
+        default: "https://azerdex-assets.pages.dev"
+  pull_request:
+    paths:
+      - ".github/workflows/v2b-cdn-verify.yml"
+      - "scripts/map-atlas/windows/Verify-AzerdexCdn.ps1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2b-cdn-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: V2-B CDN read-only verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MODE: ${{ github.event.inputs.mode || 'Baseline' }}
+      BASE_URL: ${{ github.event.inputs.base_url || 'https://azerdex-assets.pages.dev' }}
+      # first 8 characters of the production deployment id 3ae723a0-df00-4dcd-9159-8ba93d0583aa (recorded by the owner's Cloudflare API audit)
+      RECORDED_DEPLOYMENT_URL: https://3ae723a0.azerdex-assets.pages.dev
+      RECORDED_DEPLOYMENT_ID: 3ae723a0-df00-4dcd-9159-8ba93d0583aa
+      # OPTIONAL, read-only: a Cloudflare API token with only "Account > Cloudflare Pages > Read" and the account id, stored as repository secrets,
+      # enable the Pages API check below. Without them that step prints a notice and is skipped (nothing else depends on it).
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Raw HTTP evidence (status and response headers, nothing interpreted)
+        if: always()
+        run: |
+          set +e
+          show() { # url
+            echo "----- GET $1"
+            curl -sS -m 60 -D - -o /dev/null -H 'User-Agent: AzerDex-v2b-readonly/1.0' "$1" | grep -iE '^(HTTP/|cache-control|content-type|content-length|access-control-allow-origin|x-content-type-options|timing-allow-origin|cf-cache-status|age|server|cf-ray|etag|location|content-encoding)' | tr -d '\r'
+          }
+          for p in atlas/index.json atlas/builds.json forever/1420/v1/manifest.json forever/1420/v2/base.webp forever/1424/v1/manifest.json forever/947/v1/base.webp \
+                   forever/9999999/v1/manifest.json atlas/not-a-file.json zone-heroes/1424/v1/desktop-1280.webp zone-heroes/9999999/v1/desktop-1280.webp _headers index.html 404.html ''; do
+            show "$BASE_URL/$p"
+          done
+          echo; echo "===== recorded production deployment URL (first 8 chars of its id)"
+          show "$RECORDED_DEPLOYMENT_URL/atlas/index.json"
+
+      - name: Cloudflare Pages API (read-only; only when the optional secrets exist)
+        if: always()
+        run: |
+          set +x
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ACCOUNT_ID" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not configured: Pages API check skipped (the owner's audit recorded: project azerdex-assets, production branch main, deployment $RECORDED_DEPLOYMENT_ID, trigger ad_hoc, status success)."
+            exit 0
+          fi
+          api() { curl -sS -m 60 -H "Authorization: Bearer $CF_API_TOKEN" -H 'User-Agent: AzerDex-v2b-readonly/1.0' "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$1"; }
+          api azerdex-assets > project.json
+          jq -e '.success == true' project.json >/dev/null || { echo "Cloudflare API error:"; jq '{success, errors}' project.json; exit 1; }
+          jq '.result | {name, production_branch, source, direct_upload: (.source == null),
+                canonical: {id: .canonical_deployment.id, environment: .canonical_deployment.environment, trigger: .canonical_deployment.deployment_trigger.type, branch: .canonical_deployment.deployment_trigger.metadata.branch, status: .canonical_deployment.latest_stage.status, created_on: .canonical_deployment.created_on},
+                latest: {id: .latest_deployment.id, environment: .latest_deployment.environment, trigger: .latest_deployment.deployment_trigger.type, status: .latest_deployment.latest_stage.status}}' project.json
+          cur=$(jq -r '.result.canonical_deployment.id' project.json)
+          if [ "$MODE" = "Baseline" ]; then
+            if [ "$cur" = "$RECORDED_DEPLOYMENT_ID" ]; then echo "OK: the current production deployment is still $RECORDED_DEPLOYMENT_ID (rollback target confirmed)"; else echo "STOP: current production deployment is $cur, not the recorded $RECORDED_DEPLOYMENT_ID"; exit 1; fi
+            jq -e '.result.production_branch == "main" and (.result.source == null)' project.json >/dev/null && echo "OK: production branch main, no Git source (Direct Upload)" || { echo "STOP: project is not (main, Direct Upload) as recorded"; exit 1; }
+          else
+            echo "Post mode: new production deployment id is $cur (previous rollback target: $RECORDED_DEPLOYMENT_ID)"
+          fi
+
+      - name: Verify-AzerdexCdn.ps1 on ${{ env.BASE_URL }} (mode ${{ env.MODE }})
+        id: main
+        shell: pwsh
+        run: |
+          ./scripts/map-atlas/windows/Verify-AzerdexCdn.ps1 -Mode $env:MODE -BaseUrl $env:BASE_URL -EvidencePath "$PWD/evidence-main.json"
+
+      - name: Verify-AzerdexCdn.ps1 on the recorded production deployment URL (Baseline)
+        if: always() && env.MODE == 'Baseline'
+        shell: pwsh
+        run: |
+          ./scripts/map-atlas/windows/Verify-AzerdexCdn.ps1 -Mode Baseline -BaseUrl $env:RECORDED_DEPLOYMENT_URL -EvidencePath "$PWD/evidence-deployment.json"
+
+      - name: Evidence summary
+        if: always()
+        run: |
+          for f in evidence-main.json evidence-deployment.json; do
+            [ -f "$f" ] || continue
+            echo "=============== $f"
+            jq '{tool, mode, baseUrl, powershell, startedUtc, finishedUtc, expectedFiles, checked, ok, verdict, failures, warnings, probes}' "$f"
+            echo "--- response header groups (count of files per distinct combination)"
+            jq -r '[.rows[] | {status, cacheControl, contentType, cfCacheStatus, server}] | group_by(.) | map({n: length} + .[0]) | .[] | @json' "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2b-cdn-verification-evidence
+          path: evidence-*.json
+          if-no-files-found: warn
+          retention-days: 90
