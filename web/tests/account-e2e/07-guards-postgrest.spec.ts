@@ -14,8 +14,6 @@ test.afterAll(async () => { await db.end(); });
 const REGISTERED: [string, (i: string) => Record<string, unknown>][] = [
   ["fdb_account_claim_redeem", () => ({ p_code: "0123456789ABCDEF0123456789ABCDEF" })],
   ["fdb_account_installations", () => ({})],
-  ["fdb_account_guildbook_guilds", (i) => ({ p_installation_id: i })],
-  ["fdb_account_guildbook_members", (i) => ({ p_installation_id: i, p_guild_key: "Realm:Guild1", p_limit: 10, p_offset: 0 })],
   ["fdb_installation_link_status", (i) => ({ p_installation_id: i })],
 ];
 

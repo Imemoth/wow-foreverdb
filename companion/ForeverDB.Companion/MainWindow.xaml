@@ -132,7 +132,8 @@
             </Grid>
         </Border>
 
-        <TabControl Grid.Row="2"
+        <TabControl x:Name="MainTabs"
+                    Grid.Row="2"
                     Margin="18,10,18,18">
             <TabItem Header="STATUS">
                 <Grid Margin="8,16,8,8">
@@ -227,7 +228,7 @@
                                            FontWeight="SemiBold"
                                            Margin="0,12,0,4" />
                                 <TextBlock x:Name="LastSyncCountsText"
-                                           Text="Sources — · Guild members —"
+                                           Text="Public sources —"
                                            Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
                         </Border>
@@ -404,7 +405,9 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="GUILDBOOK">
+            <TabItem x:Name="GuildbookTab"
+                     Header="GUILDBOOK"
+                     Visibility="Collapsed">
                 <Grid Margin="8,16,8,8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -480,9 +483,11 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="2"
+                    <Border x:Name="GuildbookPanel"
+                            Grid.Row="2"
                             Style="{StaticResource CardStyle}"
-                            Padding="16">
+                            Padding="16"
+                            Visibility="Collapsed">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -504,7 +509,7 @@
                                     <TextBlock x:Name="GuildbookStatusText"
                                                Margin="0,4,0,0"
                                                Foreground="{StaticResource MutedTextBrush}"
-                                               Text="Sync a schema 9 addon snapshot to load guild data." />
+                                               Text="Local only — Stored on this device" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1"

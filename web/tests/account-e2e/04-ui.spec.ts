@@ -84,7 +84,7 @@ test("the person's journey: open the link page, paste the code, enter the passwo
   await ctx.close();
 });
 
-test("installation list and private Guildbook in the browser: only own data, paging, keyboard-operable, accessible, no horizontal scroll at 375px", async ({ browser, playwright }, info) => {
+test.skip("legacy cloud Guildbook browser UI is retired; Companion owns the local-only UI", async ({ browser, playwright }, info) => {
   const a = await webUser(playwright, "uiG");
   const b = await webUser(playwright, "uiGB");
   const big = await companionWithInstallation({ guilds: 2, members: 60, tag: "GB" });
@@ -144,15 +144,16 @@ test("a person with no installation sees helpful empty states; an anonymous visi
   const { ctx, page } = await browserFor(browser, e);
   await page.goto("/account/installations");
   await expect(page.getByText("No installation is linked to this account yet.")).toBeVisible();
-  await page.goto("/account/guildbook");
-  await expect(page.getByText("No installation is linked to this account yet.")).toBeVisible();
+  const guildbook = await page.goto("/account/guildbook");
+  expect(guildbook?.status()).toBe(404);
   await ctx.close();
   const anon = await browser.newContext({ baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
   const p = await anon.newPage();
-  for (const path of ["/account/link", "/account/installations", "/account/guildbook"]) {
+  for (const path of ["/account/link", "/account/installations"]) {
     await p.goto(path);
     await expect(p).toHaveURL(new RegExp(`/account/login\\?next=${encodeURIComponent(path)}`));
   }
+  expect((await p.goto("/account/guildbook"))?.status()).toBe(404);
   await anon.close();
 });
 

@@ -85,13 +85,29 @@ done
 probe() { curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_installations"; }
 BEFORE="$(probe)"
 
-# 4. Migration 0012 (pre-flight inside), then wait for PostgREST to pick the new functions up: the migration ends with `notify pgrst, 'reload schema'`.
+# 4. Apply the account stack. 0018 is deliberately part of this disposable acceptance environment: old
+# Guildbook cloud RPCs must be unavailable before the browser/API isolation tests start.
 "$REPO/database/tests/account/stack.sh" apply
 T0=$(date +%s%3N); AFTER=""
 for i in $(seq 1 100); do AFTER="$(probe)"; [ "$AFTER" != "$BEFORE" ] && break; sleep 0.2; done
 T1=$(date +%s%3N)
 echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\": $AFTER, \"reload_observed_ms\": $((T1-T0))}" >"$STACK_DIR/schema-cache.json"
 [ "$BEFORE" = 404 ] && [ "$AFTER" != 404 ] || { echo "schema cache did not reload after 0012 (before=$BEFORE after=$AFTER)"; exit 1; }
+
+"$REPO/database/tests/account/stack.sh" apply14
+"$REPO/database/tests/account/stack.sh" apply16
+"$REPO/database/tests/account/stack.sh" apply17
+"$REPO/database/tests/account/stack.sh" apply18
+GUILDBOOK_AFTER=""
+for i in $(seq 1 100); do
+  GUILDBOOK_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{"p_installation_id":"x"}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_guildbook_guilds")"
+  # PostgREST may retain the function in its schema cache while applying the
+  # ACL change; 401/403 (known RPC, no EXECUTE) and 404 (cache omission) are
+  # all blocked cloud paths.
+  { [ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ]; } && break
+  sleep 0.2
+done
+[ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ] || { echo "schema cache did not apply 0018 cloud Guildbook revocation (status=$GUILDBOOK_AFTER)"; exit 1; }
 
 # 5. What was REALLY started (recorded, not assumed).
 GOTRUE_VERSION="$(curl -fsS "http://127.0.0.1:9999/health" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("unknown")}})')"
@@ -116,4 +132,4 @@ E2E_JWT_SECRET=$JWT_SECRET
 E2E_DB=$DB
 E2E_STACK_DIR=$STACK_DIR
 ENV
-echo "e2e stack ready: gateway :$GW (auth + rest), mailpit :$MAIL_HTTP, PostgREST :$REST ($PGRST_VERSION), schema reload after 0012 observed (status $BEFORE -> $AFTER)"
+echo "e2e stack ready: gateway :$GW (auth + rest), mailpit :$MAIL_HTTP, PostgREST :$REST ($PGRST_VERSION), schema reload after 0012 observed (status $BEFORE -> $AFTER), Guildbook cloud RPCs disabled by 0018"

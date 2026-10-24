@@ -275,7 +275,7 @@ describe("redirect allowlist", () => {
   it("returns allowlisted pathnames only and drops query and fragment", () => {
     expect(safeNext("/account/link")).toBe("/account/link");
     expect(safeNext("/account/link?x=1#y")).toBe("/account/link");
-    expect(safeNext("/account/guildbook/")).toBe("/account/guildbook");
+    expect(safeNext("/account/guildbook/")).toBe("/account");
     expect(safeNext("/account")).toBe("/account");
   });
   it("falls back to /account for open-redirect attempts and encodings of them", () => {

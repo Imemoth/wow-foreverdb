@@ -50,7 +50,7 @@ public class CompanionRegressionTests
         Assert.Equal(SyncOutcome.Synced, first!.Outcome);
         Assert.Equal(SyncOutcome.Synced, second!.Outcome);      // manual Sync always uploads
         Assert.Equal(2, rig.Server.IngestCount);
-        Assert.Contains("synced:Manual:1:3", events);
+        Assert.Contains("synced:Manual:1:0", events);
         Assert.Equal(anon.UserId, rig.Server.OwnerOf("inst-1"));
     }
 

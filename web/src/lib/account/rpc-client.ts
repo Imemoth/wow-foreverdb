@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { ACCOUNT_RPCS, isAccountRpc, type AccountRpcName } from "./contracts";
 import { ENROLLMENT_RPCS, isEnrollmentRpc, type EnrollmentRpcName } from "./contracts-enrollment";
 import type { AccountAuthConfig } from "./config";
@@ -25,8 +25,6 @@ import type { AccountAuthConfig } from "./config";
 export const WEB_RPCS = [
   "fdb_account_claim_redeem",
   "fdb_account_installations",
-  "fdb_account_guildbook_guilds",
-  "fdb_account_guildbook_members",
 ] as const satisfies readonly AccountRpcName[];
 export type WebRpcName = (typeof WEB_RPCS)[number];
 

@@ -109,7 +109,7 @@ export const uniq = (prefix: string) => `${prefix}-${randomUUID().slice(0, 8)}`;
 
 /** A snapshot the real ingest function accepts: sources with loot, locations, quest drops, guilds with members and professions. */
 export function snapshot(installationId: string, o: { updatedAt?: number; sources?: number; guilds?: number; members?: number; tag?: string } = {}) {
-  const { updatedAt = 1000, sources = 3, guilds = 2, members = 4, tag = "M" } = o;
+  const { updatedAt = 1000, sources = 3, guilds = 0, members = 4, tag = "M" } = o;
   const src = [];
   for (let s = 1; s <= sources; s += 1) {
     src.push({

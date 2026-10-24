@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 
 /**
  * Layered, distributed fixed-window rate limiting.
@@ -55,7 +55,7 @@ export const DEFAULT_RULES: Record<RuleName, Rule> = {
 
 export function loadRules(json: string | undefined): Record<RuleName, Rule> {
   if (!json) return DEFAULT_RULES;
-  const parsed = z.record(z.enum(RULE_NAMES), Rule.partial()).parse(JSON.parse(json));
+  const parsed = z.partialRecord(z.enum(RULE_NAMES), Rule.partial()).parse(JSON.parse(json));
   const out = { ...DEFAULT_RULES };
   for (const name of RULE_NAMES) out[name] = Rule.parse({ ...DEFAULT_RULES[name], ...(parsed[name] ?? {}) });
   return out;
