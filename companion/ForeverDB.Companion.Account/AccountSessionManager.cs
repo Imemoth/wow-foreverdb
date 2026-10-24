@@ -400,6 +400,7 @@ public sealed class AccountSessionManager
             {
                 var rotated = result.Value!;
                 rotated.Email ??= current.Email;
+                rotated.LastVerifiedAt = current.LastVerifiedAt;
                 if (rotated.UserId != current.UserId)
                 {
                     // A refresh must never change who we are. Treat as an ambiguous reply and keep what we have.
@@ -491,6 +492,16 @@ public sealed class AccountSessionManager
             return SessionFault.RegisteredVerificationFailed;
         }
 
+        // Persist the proof in the already DPAPI-protected session. This lets
+        // local Guildbook restoration work offline after restart while leaving
+        // unverified or damaged credentials fail-closed.
+        session.Email = verified.Email;
+        session.LastVerifiedAt = _clock.GetUtcNow().ToUnixTimeSeconds();
+        if (!await TryPersistAsync(slot, session, SlotMarker.For(SessionKind.Registered), ct).ConfigureAwait(false))
+        {
+            SetFault(SlotRole.Primary, SessionFault.StorageFailure);
+            return SessionFault.StorageFailure;
+        }
         _verifiedUserId = session.UserId;
         _verifiedEmail = verified.Email;
         _verificationFailedUserId = null;
@@ -752,6 +763,7 @@ public sealed class AccountSessionManager
                     }
 
                     // Step 2: the registered session becomes primary.
+                    session.LastVerifiedAt = _clock.GetUtcNow().ToUnixTimeSeconds();
                     _vault.Primary.Write(session, SlotMarker.For(SessionKind.Registered));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -1210,8 +1222,9 @@ public sealed class AccountSessionManager
                     else
                     {
                         state = SessionState.Registered;
-                        verified = _verifiedUserId == primary.Session!.UserId;
-                        email = verified ? _verifiedEmail : null;
+                        verified = _verifiedUserId == primary.Session!.UserId ||
+                                   primary.Session.LastVerifiedAt > 0;
+                        email = verified ? (_verifiedEmail ?? primary.Session.Email) : null;
                     }
                 }
                 else if (rejected)
