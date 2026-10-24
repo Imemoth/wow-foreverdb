@@ -135,9 +135,10 @@ public sealed class GuildbookAccountScopeTests
         Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
         var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
         using var service = new AccountGuildbookSync(rig.Sessions, store);
+        var capture = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
 
-        Assert.True((await service.SyncAsync(SnapshotFor("inst-a", "a-capture", 200, "A", "A guild"))).CaptureAccepted);
-        Assert.True((await service.SyncAsync(SnapshotFor("inst-b", "b-capture", 201, "A", "A second guild"))).CaptureAccepted);
+        Assert.True((await service.SyncAsync(SnapshotFor("inst-a", "a-capture", capture, "A", "A guild"))).CaptureAccepted);
+        Assert.True((await service.SyncAsync(SnapshotFor("inst-b", "b-capture", capture + 1, "A", "A second guild"))).CaptureAccepted);
         Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
 
         var b = rig.Server.AddRegisteredUser("restore-b@example.test", "password-b");
