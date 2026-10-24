@@ -6,7 +6,16 @@ begin;
 do $restore$
 declare
     r record;
+    v_local_only boolean := false;
 begin
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        execute 'select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = ''disabled'')'
+            into v_local_only;
+    end if;
+    if v_local_only then
+        raise exception '0018 rollback refused: Guildbook local-only kill switch is active';
+    end if;
+
     for r in
         select p.oid::regprocedure::text as sig
         from pg_proc p

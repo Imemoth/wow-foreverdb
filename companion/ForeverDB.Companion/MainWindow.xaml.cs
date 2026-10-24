@@ -191,8 +191,6 @@ public partial class MainWindow : Window
             effective,
             GetSearchTokenAsync);
 
-        await LoadSearchZonesAsync();
-
         if (_settings.AutoSync)
         {
             try
@@ -237,9 +235,20 @@ public partial class MainWindow : Window
             }
         }
 
-        RefreshSyncHealthUi();
+        // Restore encrypted local Guildbook data before any optional network
+        // work. This path is independent of AutoSync and never calls the
+        // public synchronization workflow.
+        var discoveredInstallations = TryDiscoverInstallations();
+        if (_guildbookSync is not null)
+        {
+            await GuildbookStartupCoordinator.RestoreAsync(
+                _guildbookSync,
+                discoveredInstallations);
+        }
 
-        TryDiscoverInstallations();
+        await LoadSearchZonesAsync();
+
+        RefreshSyncHealthUi();
 
         _ = RunDeviceBackgroundAsync(account);
 
@@ -262,14 +271,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void TryDiscoverInstallations()
+    private IReadOnlyList<string> TryDiscoverInstallations()
     {
         try
         {
             if (_syncService is null ||
                 string.IsNullOrWhiteSpace(_settings.WowRoot))
             {
-                return;
+                return Array.Empty<string>();
             }
 
             var watcher = _watcher ??
@@ -277,7 +286,7 @@ public partial class MainWindow : Window
                     _settings.WowRoot,
                     (_, _) => Task.CompletedTask);
 
-            _syncService.DiscoverInstallations(
+            var discovered = _syncService.DiscoverInstallations(
                 watcher.FindExistingFiles());
 
             if (_watcher is null)
@@ -286,10 +295,12 @@ public partial class MainWindow : Window
             }
 
             RefreshAccountUi();
+            return discovered;
         }
         catch (Exception)
         {
             // Discovery only feeds the Account tab.
+            return Array.Empty<string>();
         }
     }
 

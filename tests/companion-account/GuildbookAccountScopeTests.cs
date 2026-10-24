@@ -101,6 +101,77 @@ public sealed class GuildbookAccountScopeTests
     }
 
     [Fact]
+    public async Task Startup_coordinator_restores_with_auto_sync_off_without_public_upload()
+    {
+        using var rig = new Rig();
+        rig.SeedRegistered("startup@example.test", "password-startup");
+        await rig.Sessions.InitializeAsync();
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        var capture = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
+        using (var writer = new AccountGuildbookSync(rig.Sessions, store))
+            Assert.True((await writer.SyncAsync(Snapshot("startup-capture", capture, "Startup", "Saved locally"))).CaptureAccepted);
+
+        rig.Restart();
+        await rig.Sessions.InitializeAsync();
+        var requestsAfterSessionInitialization = rig.Server.Requests.Count;
+        using var restored = new AccountGuildbookSync(rig.Sessions, store);
+
+        var result = await GuildbookStartupCoordinator.RestoreAsync(restored, new[] { "inst-1" });
+
+        Assert.True(result.Authorized);
+        Assert.Equal(new[] { "inst-1" }, result.LoadedInstallationIds);
+        Assert.Equal("Saved locally", Assert.Single(restored.CachedGuilds).Name);
+        Assert.Equal(requestsAfterSessionInitialization, rig.Server.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Startup_restore_is_account_and_installation_scoped_across_A_B_A()
+    {
+        using var rig = new Rig();
+        var a = rig.SeedRegistered("restore-a@example.test", "password-a");
+        await rig.Sessions.InitializeAsync();
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        using var service = new AccountGuildbookSync(rig.Sessions, store);
+
+        Assert.True((await service.SyncAsync(SnapshotFor("inst-a", "a-capture", 200, "A", "A guild"))).CaptureAccepted);
+        Assert.True((await service.SyncAsync(SnapshotFor("inst-b", "b-capture", 201, "A", "A second guild"))).CaptureAccepted);
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+
+        var b = rig.Server.AddRegisteredUser("restore-b@example.test", "password-b");
+        Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync(b.Email!, b.Password!.ToCharArray()));
+        var bRestore = await GuildbookStartupCoordinator.RestoreAsync(service, new[] { "inst-a", "inst-b" });
+        Assert.True(bRestore.Authorized);
+        Assert.Empty(bRestore.LoadedInstallationIds);
+        Assert.Empty(service.CachedGuilds);
+
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+        Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync(a.User.Email!, "password-a".ToCharArray()));
+        var aRestore = await GuildbookStartupCoordinator.RestoreAsync(service, new[] { "inst-a", "inst-b" });
+        Assert.Equal(new[] { "inst-a", "inst-b" }, aRestore.LoadedInstallationIds);
+        Assert.Equal("A guild", Assert.Single(service.GetCachedGuilds("inst-a")).Name);
+        Assert.Equal("A second guild", Assert.Single(service.GetCachedGuilds("inst-b")).Name);
+    }
+
+    [Fact]
+    public async Task Startup_restore_rejects_anonymous_identity_and_missing_installations()
+    {
+        using var rig = new Rig();
+        rig.SeedAnonymous();
+        await rig.Sessions.InitializeAsync();
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        using var service = new AccountGuildbookSync(rig.Sessions, store);
+
+        var result = await GuildbookStartupCoordinator.RestoreAsync(service, new[] { "missing-installation" });
+
+        Assert.False(result.Authorized);
+        Assert.Empty(result.LoadedInstallationIds);
+        Assert.Empty(service.CachedGuilds);
+    }
+
+    [Fact]
     public void Empty_or_older_snapshot_never_replaces_the_saved_snapshot()
     {
         using var rig = new Rig();
@@ -212,9 +283,12 @@ public sealed class GuildbookAccountScopeTests
         Assert.Equal("Guild 8", store.Load("account-a", "inst-1").Snapshot!.Guilds.Single().Name);
     }
 
-    private static ForeverDbSnapshot Snapshot(string captureId, long capturedAt, string source, string guildName = "Guild") => new()
+    private static ForeverDbSnapshot Snapshot(string captureId, long capturedAt, string source, string guildName = "Guild") =>
+        SnapshotFor("inst-1", captureId, capturedAt, source, guildName);
+
+    private static ForeverDbSnapshot SnapshotFor(string installationId, string captureId, long capturedAt, string source, string guildName = "Guild") => new()
     {
-        InstallationId = "inst-1",
+        InstallationId = installationId,
         SchemaVersion = 9,
         UpdatedAt = capturedAt,
         GuildbookCaptureId = captureId,

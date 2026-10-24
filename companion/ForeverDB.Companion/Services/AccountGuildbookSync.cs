@@ -5,12 +5,22 @@ namespace ForeverDB.Companion.Services;
 
 public sealed record AccountGuildbookSyncResult(bool Loaded, bool CaptureAccepted, bool Stale);
 
+public sealed record AccountGuildbookRestoreResult(
+    bool Authorized,
+    int DiscoveredInstallations,
+    IReadOnlyList<string> LoadedInstallationIds,
+    IReadOnlyList<string> UnreadableInstallationIds);
+
 /// <summary>Local Guildbook boundary. It deliberately has no RPC or token method.</summary>
 public interface IAccountGuildbookSync
 {
     event Action<IReadOnlyList<ForeverDbGuild>>? Changed;
     bool IsAvailable { get; }
     void ObserveSnapshot(ForeverDbSnapshot snapshot);
+    Task<AccountGuildbookRestoreResult> RestoreLocalAsync(
+        IEnumerable<string> installationIds,
+        string? preferredInstallationId = null,
+        CancellationToken cancellationToken = default);
     Task<AccountGuildbookSyncResult> SyncAsync(ForeverDbSnapshot snapshot, CancellationToken cancellationToken = default);
     void Clear();
 }
@@ -28,7 +38,9 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
     private readonly Dictionary<string, CaptureStamp> _lastObserved = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CaptureStamp> _identityFloor = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CaptureStamp> _lastAccepted = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ForeverDbGuild> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, ForeverDbGuild>> _cacheByInstallation =
+        new(StringComparer.Ordinal);
+    private string? _activeInstallationId;
     private CancellationTokenSource _identityCancellation = new();
     private long _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private bool _disposed;
@@ -45,13 +57,100 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
 
     public IReadOnlyList<ForeverDbGuild> CachedGuilds
     {
-        get { lock (_gate) return _cache.Values.ToArray(); }
+        get
+        {
+            lock (_gate)
+            {
+                return _activeInstallationId is { } id && _cacheByInstallation.TryGetValue(id, out var guilds)
+                    ? guilds.Values.ToArray()
+                    : Array.Empty<ForeverDbGuild>();
+            }
+        }
+    }
+
+    public string? ActiveInstallationId
+    {
+        get { lock (_gate) return _activeInstallationId; }
+    }
+
+    public IReadOnlyList<ForeverDbGuild> GetCachedGuilds(string installationId)
+    {
+        lock (_gate)
+        {
+            return _cacheByInstallation.TryGetValue(installationId, out var guilds)
+                ? guilds.Values.ToArray()
+                : Array.Empty<ForeverDbGuild>();
+        }
     }
 
     public void ObserveSnapshot(ForeverDbSnapshot snapshot)
     {
         if (TryGetCapture(snapshot) is not { } capture) return;
         lock (_gate) _lastObserved[snapshot.InstallationId] = capture;
+    }
+
+    /// <summary>
+    /// Restores already encrypted local snapshots only. It never parses a
+    /// SavedVariables file, obtains a token, or calls a network endpoint.
+    /// </summary>
+    public Task<AccountGuildbookRestoreResult> RestoreLocalAsync(
+        IEnumerable<string> installationIds,
+        string? preferredInstallationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<AccountGuildbookRestoreResult>(cancellationToken);
+
+        var ids = installationIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var status = _sessions.Status;
+        if (!CanUseLocal(status))
+        {
+            Clear();
+            return Task.FromResult(new AccountGuildbookRestoreResult(false, ids.Length, Array.Empty<string>(), Array.Empty<string>()));
+        }
+
+        var generation = status.Generation;
+        var loaded = new Dictionary<string, IReadOnlyDictionary<string, ForeverDbGuild>>(StringComparer.Ordinal);
+        var loadedIds = new List<string>();
+        var unreadableIds = new List<string>();
+
+        foreach (var installationId in ids)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromCanceled<AccountGuildbookRestoreResult>(cancellationToken);
+
+            var result = _store.Load(status.AccountId!, installationId);
+            if (result.Snapshot is { } snapshot)
+            {
+                loaded[installationId] = ToGuildDictionary(snapshot.Guilds);
+                loadedIds.Add(installationId);
+            }
+            else if (result.Status is LocalGuildbookReadStatus.Unreadable or LocalGuildbookReadStatus.IoError)
+            {
+                unreadableIds.Add(installationId);
+            }
+        }
+
+        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+        {
+            Clear();
+            return Task.FromResult(new AccountGuildbookRestoreResult(false, ids.Length, Array.Empty<string>(), Array.Empty<string>()));
+        }
+
+        lock (_gate)
+        {
+            _cacheByInstallation.Clear();
+            foreach (var pair in loaded)
+                _cacheByInstallation[pair.Key] = pair.Value;
+            _activeInstallationId = preferredInstallationId is { } preferred && loaded.ContainsKey(preferred)
+                ? preferred
+                : loadedIds.FirstOrDefault();
+        }
+        Changed?.Invoke(CachedGuilds);
+        return Task.FromResult(new AccountGuildbookRestoreResult(true, ids.Length, loadedIds, unreadableIds));
     }
 
     public Task<AccountGuildbookSyncResult> SyncAsync(
@@ -96,11 +195,11 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         }
         if (loaded.Snapshot is { } local)
         {
+            var guilds = ToGuildDictionary(local.Guilds);
             lock (_gate)
             {
-                _cache.Clear();
-                foreach (var guild in local.Guilds.Where(g => !string.IsNullOrWhiteSpace(g.GuildKey)))
-                    _cache[guild.GuildKey] = guild;
+                _cacheByInstallation[snapshot.InstallationId] = guilds;
+                _activeInstallationId = snapshot.InstallationId;
             }
             Changed?.Invoke(CachedGuilds);
             return Task.FromResult(new AccountGuildbookSyncResult(true, accepted, stale));
@@ -109,13 +208,20 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         return Task.FromResult(new AccountGuildbookSyncResult(false, accepted, stale));
     }
 
+    private static IReadOnlyDictionary<string, ForeverDbGuild> ToGuildDictionary(IEnumerable<ForeverDbGuild> guilds) =>
+        guilds
+            .Where(guild => !string.IsNullOrWhiteSpace(guild.GuildKey))
+            .GroupBy(guild => guild.GuildKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(guild => guild.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
+
     public void Clear()
     {
         if (_disposed) return;
         CancellationTokenSource previous;
         lock (_gate)
         {
-            _cache.Clear();
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
             previous = _identityCancellation;
             _identityCancellation = new CancellationTokenSource();
         }
@@ -131,7 +237,8 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
             _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             _identityFloor.Clear();
             foreach (var pair in _lastObserved) _identityFloor[pair.Key] = pair.Value;
-            _cache.Clear();
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
             _lastAccepted.Clear();
             previous = _identityCancellation;
             _identityCancellation = new CancellationTokenSource();
@@ -182,7 +289,8 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         {
             _identityCancellation.Cancel();
             _identityCancellation.Dispose();
-            _cache.Clear();
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
         }
     }
 }

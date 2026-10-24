@@ -42,6 +42,19 @@ begin
     end if;
 end $prepare$;
 
+-- Durable schema marker for later migrations. The Supabase migration ledger
+-- records execution order, while this marker protects the database even when
+-- an operator is recovering from an out-of-order disposable deployment.
+create table if not exists private.guildbook_cloud_sync_guard (
+    guard_name text primary key check (guard_name = 'disabled'),
+    activated_at timestamptz not null default clock_timestamp()
+);
+insert into private.guildbook_cloud_sync_guard (guard_name)
+values ('disabled')
+on conflict (guard_name) do nothing;
+alter table private.guildbook_cloud_sync_guard enable row level security;
+revoke all on table private.guildbook_cloud_sync_guard from public, anon, authenticated, service_role;
+
 create or replace function private.fdb_public_snapshot(p_snapshot jsonb)
 returns jsonb
 language sql

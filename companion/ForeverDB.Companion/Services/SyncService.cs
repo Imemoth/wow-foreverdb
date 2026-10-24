@@ -66,8 +66,9 @@ public sealed class SyncService
     /// <summary>
     /// Parses SavedVariables only to learn installation IDs for the Account tab. No upload, no authentication.
     /// </summary>
-    public void DiscoverInstallations(IEnumerable<string> paths)
+    public IReadOnlyList<string> DiscoverInstallations(IEnumerable<string> paths)
     {
+        var discovered = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
             try
@@ -82,6 +83,7 @@ public sealed class SyncService
                     }
 
                     _coordinator.NoteLocalInstallation(snapshot.InstallationId);
+                    discovered.Add(snapshot.InstallationId);
                 }
             }
             catch (Exception)
@@ -89,6 +91,8 @@ public sealed class SyncService
                 // An unreadable file is reported by the normal sync path; discovery stays silent.
             }
         }
+
+        return discovered.ToArray();
     }
 
     public async Task<SyncAttempt?> SyncFileAsync(
