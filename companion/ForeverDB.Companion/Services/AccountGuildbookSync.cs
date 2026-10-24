@@ -65,6 +65,7 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         var status = _sessions.Status;
         if (!CanUseLocal(status))
             return Task.FromResult(new AccountGuildbookSyncResult(false, false, false));
+        var generation = status.Generation;
 
         var candidate = TryGetCapture(snapshot);
         var accepted = false;
@@ -86,6 +87,13 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         }
 
         var loaded = _store.Load(status.AccountId!, snapshot.InstallationId);
+        // A sign-out/switch can happen while local IO is in progress. Do not
+        // publish the old account's result after the session generation moved.
+        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+        {
+            Clear();
+            return Task.FromResult(new AccountGuildbookSyncResult(false, false, true));
+        }
         if (loaded.Snapshot is { } local)
         {
             lock (_gate)
@@ -147,6 +155,7 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
 
     private static bool CanUseLocal(AccountStatus status) =>
         status.State == SessionState.Registered &&
+        status.IdentityVerified &&
         status.PrimaryCredentialPresent &&
         !status.PendingRevocation &&
         status.AccountsEnabled &&

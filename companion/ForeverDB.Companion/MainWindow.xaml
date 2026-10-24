@@ -132,7 +132,8 @@
             </Grid>
         </Border>
 
-        <TabControl Grid.Row="2"
+        <TabControl x:Name="MainTabs"
+                    Grid.Row="2"
                     Margin="18,10,18,18">
             <TabItem Header="STATUS">
                 <Grid Margin="8,16,8,8">
@@ -404,7 +405,9 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="GUILDBOOK">
+            <TabItem x:Name="GuildbookTab"
+                     Header="GUILDBOOK"
+                     Visibility="Collapsed">
                 <Grid Margin="8,16,8,8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

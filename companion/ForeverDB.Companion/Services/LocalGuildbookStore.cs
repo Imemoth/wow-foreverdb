@@ -88,18 +88,10 @@ public sealed class LocalGuildbookStore
                 catch (IOException)
                 {
                     sawIo = true;
-                    if (!candidate.Item2)
-                    {
-                        return new(LocalGuildbookReadStatus.IoError);
-                    }
                 }
                 catch (UnauthorizedAccessException)
                 {
                     sawIo = true;
-                    if (!candidate.Item2)
-                    {
-                        return new(LocalGuildbookReadStatus.IoError);
-                    }
                 }
                 catch (Exception) when (candidate.Item2)
                 {
@@ -124,6 +116,7 @@ public sealed class LocalGuildbookStore
         if (!ValidIdentity(accountId, installationId) ||
             !string.Equals(snapshot.InstallationId, installationId, StringComparison.Ordinal) ||
             snapshot.Guilds.Count == 0 ||
+            snapshot.UpdatedAt <= 0 ||
             string.IsNullOrWhiteSpace(snapshot.GuildbookCaptureId) ||
             snapshot.GuildbookCapturedAt is not > 0 ||
             string.IsNullOrWhiteSpace(snapshot.GuildbookSourceCharacter))
@@ -134,6 +127,12 @@ public sealed class LocalGuildbookStore
         lock (_gate)
         {
             var existing = Load(accountId, installationId);
+            if (existing.Status is LocalGuildbookReadStatus.Unreadable or LocalGuildbookReadStatus.IoError)
+            {
+                // Never replace an unreadable file or a temporarily locked
+                // file: the caller can retry, and recovery remains possible.
+                return new(LocalGuildbookSaveStatus.Failed);
+            }
             if (existing.Snapshot is { } old && IsOlder(snapshot, old))
             {
                 return new(LocalGuildbookSaveStatus.OlderSnapshot, old);
@@ -153,18 +152,39 @@ public sealed class LocalGuildbookStore
             };
 
             var temp = paths.Main + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var recoveryTemp = existing.Recovered
+                ? paths.Main + "." + Guid.NewGuid().ToString("N") + ".recovery.tmp"
+                : null;
             try
             {
                 _io.EnsureDirectory(paths.Directory);
                 var plain = JsonSerializer.SerializeToUtf8Bytes(envelope, Json);
                 var protectedBytes = _protector.Protect(plain);
                 _io.WriteDurable(temp, Encoding.ASCII.GetBytes(Convert.ToBase64String(protectedBytes)));
+
+                // File.Replace would otherwise move a corrupt main file over
+                // a valid backup. The candidate is durable first; then promote
+                // the valid backup and commit the candidate. If the final
+                // commit fails, the recovered main file remains readable.
+                if (recoveryTemp is not null)
+                {
+                    _io.WriteDurable(recoveryTemp, _io.ReadAllBytes(paths.Backup));
+                    // Do not use Commit here: its backup argument would move
+                    // the corrupt main file over the valid recovery backup.
+                    // The valid backup remains in place until the candidate
+                    // commit below has a valid replacement ready.
+                    _io.Move(recoveryTemp, paths.Main);
+                }
                 _io.Commit(temp, paths.Main, paths.Backup);
                 return new(LocalGuildbookSaveStatus.Saved, snapshot);
             }
             catch
             {
                 try { _io.Delete(temp); } catch { }
+                if (recoveryTemp is not null)
+                {
+                    try { _io.Delete(recoveryTemp); } catch { }
+                }
                 return new(LocalGuildbookSaveStatus.Failed, existing.Snapshot);
             }
         }
@@ -199,10 +219,20 @@ public sealed class LocalGuildbookStore
         };
     }
 
-    private static bool IsOlder(ForeverDbSnapshot candidate, ForeverDbSnapshot existing) =>
-        candidate.UpdatedAt < existing.UpdatedAt ||
-        (candidate.UpdatedAt == existing.UpdatedAt &&
-         candidate.GuildbookCapturedAt.GetValueOrDefault() <= existing.GuildbookCapturedAt.GetValueOrDefault());
+    private static bool IsOlder(ForeverDbSnapshot candidate, ForeverDbSnapshot existing)
+    {
+        var candidateCapturedAt = candidate.GuildbookCapturedAt.GetValueOrDefault();
+        var existingCapturedAt = existing.GuildbookCapturedAt.GetValueOrDefault();
+        if (candidateCapturedAt != existingCapturedAt)
+            return candidateCapturedAt < existingCapturedAt;
+
+        var captureOrder = string.CompareOrdinal(
+            candidate.GuildbookCaptureId,
+            existing.GuildbookCaptureId);
+        if (captureOrder == 0)
+            return true; // capture identity is immutable; replay never rewrites it
+        return captureOrder < 0;
+    }
 
     private (string Directory, string Main, string Backup) Paths(string accountId, string installationId)
     {

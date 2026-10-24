@@ -473,8 +473,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_guildbookSync is null || !_guildbookSync.IsAvailable)
+        var canUseGuildbook = _guildbookSync is not null && _guildbookSync.IsAvailable;
+        GuildbookTab.Visibility = canUseGuildbook ? Visibility.Visible : Visibility.Collapsed;
+        if (!canUseGuildbook)
         {
+            if (ReferenceEquals(MainTabs.SelectedItem, GuildbookTab))
+                MainTabs.SelectedIndex = 0;
+            GuildSelector.SelectedItem = null;
+            GuildFilterBox.Text = "";
+            GuildOnlineOnlyCheck.IsChecked = false;
             GuildbookPanel.Visibility = Visibility.Collapsed;
             GuildSelector.ItemsSource = null;
             GuildMembersGrid.ItemsSource = null;

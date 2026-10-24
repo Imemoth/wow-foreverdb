@@ -112,6 +112,106 @@ public sealed class GuildbookAccountScopeTests
         Assert.Equal("New", store.Load("account-a", "inst-1").Snapshot!.Guilds.Single().Name);
     }
 
+    [Fact]
+    public async Task General_export_timestamp_cannot_replace_a_fresher_guildbook_capture()
+    {
+        using var rig = new Rig();
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-a", 200, "A", "Fresh Guild")).Status);
+
+        var staleGeneralExport = Snapshot("capture-old", 100, "A", "Old Guild");
+        staleGeneralExport.UpdatedAt = 9_999;
+        Assert.Equal(LocalGuildbookSaveStatus.OlderSnapshot, store.Save("account-a", "inst-1", staleGeneralExport).Status);
+        Assert.Equal("Fresh Guild", store.Load("account-a", "inst-1").Snapshot!.Guilds.Single().Name);
+    }
+
+    [Fact]
+    public void Corrupt_main_recovers_from_backup_and_next_save_keeps_recovery_possible()
+    {
+        using var rig = new Rig();
+        var root = Path.Combine(rig.Directory, "guildbook");
+        var store = new LocalGuildbookStore(root, TestEnv.Protector());
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-a", 100, "A", "A")).Status);
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-b", 200, "B", "B")).Status);
+
+        var main = Directory.EnumerateFiles(root, "snapshot.dat", SearchOption.AllDirectories).Single();
+        File.WriteAllText(main, "corrupt-main");
+        var recovered = store.Load("account-a", "inst-1");
+        Assert.True(recovered.Recovered);
+        Assert.Equal("A", recovered.Snapshot!.Guilds.Single().Name);
+
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-c", 300, "C", "C")).Status);
+        Assert.Equal("C", store.Load("account-a", "inst-1").Snapshot!.Guilds.Single().Name);
+    }
+
+    [Fact]
+    public void Failed_save_after_recovery_does_not_turn_the_valid_backup_into_corruption()
+    {
+        using var rig = new Rig();
+        var root = Path.Combine(rig.Directory, "guildbook");
+        var io = new FaultyIo();
+        var store = new LocalGuildbookStore(root, TestEnv.Protector(), io);
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-a", 100, "A", "A")).Status);
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-b", 200, "B", "B")).Status);
+
+        var main = Directory.EnumerateFiles(root, "snapshot.dat", SearchOption.AllDirectories).Single();
+        var backup = main + ".bak";
+        File.WriteAllText(main, "corrupt-main");
+        io.FailAt = "commit";
+        Assert.Equal(LocalGuildbookSaveStatus.Failed, store.Save("account-a", "inst-1", Snapshot("capture-c", 300, "C", "C")).Status);
+
+        File.WriteAllText(main, "corrupt-again");
+        var recovered = store.Load("account-a", "inst-1");
+        Assert.True(recovered.Recovered);
+        Assert.Equal("A", recovered.Snapshot!.Guilds.Single().Name);
+        Assert.True(File.Exists(backup));
+    }
+
+    [Fact]
+    public void Corrupt_main_and_backup_fail_closed_without_overwriting_the_files()
+    {
+        using var rig = new Rig();
+        var root = Path.Combine(rig.Directory, "guildbook");
+        var store = new LocalGuildbookStore(root, TestEnv.Protector());
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-a", 100, "A", "A")).Status);
+        Assert.Equal(LocalGuildbookSaveStatus.Saved, store.Save("account-a", "inst-1", Snapshot("capture-b", 200, "B", "B")).Status);
+        foreach (var path in Directory.EnumerateFiles(root, "snapshot.dat*", SearchOption.AllDirectories)) File.WriteAllText(path, "corrupt");
+        var before = Directory.EnumerateFiles(root, "snapshot.dat*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
+
+        Assert.Equal(LocalGuildbookReadStatus.Unreadable, store.Load("account-a", "inst-1").Status);
+        Assert.Equal(LocalGuildbookSaveStatus.Failed, store.Save("account-a", "inst-1", Snapshot("capture-c", 300, "C", "C")).Status);
+        foreach (var pair in before) Assert.Equal(pair.Value, File.ReadAllBytes(pair.Key));
+    }
+
+    [Fact]
+    public async Task Local_access_requires_server_verified_registered_identity()
+    {
+        using var rig = new Rig();
+        rig.SeedRegistered("unverified-local@example.test", "password-a");
+        await rig.Sessions.InitializeAsync();
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        using var service = new AccountGuildbookSync(rig.Sessions, store);
+        var snapshot = Snapshot("capture-a", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30, "A", "A");
+
+        Assert.False((await service.SyncAsync(snapshot)).CaptureAccepted);
+        Assert.False(service.IsAvailable);
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+        Assert.True((await service.SyncAsync(Snapshot("capture-b", snapshot.GuildbookCapturedAt!.Value + 1, "A", "A2"))).CaptureAccepted);
+    }
+
+    [Fact]
+    public async Task Concurrent_saves_resolve_to_the_newest_capture_deterministically()
+    {
+        using var rig = new Rig();
+        var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
+        var saves = Enumerable.Range(1, 8).Select(i => Task.Run(() => store.Save(
+            "account-a",
+            "inst-1",
+            Snapshot($"capture-{i:000}", i, "A", $"Guild {i}")))).ToArray();
+        await Task.WhenAll(saves);
+        Assert.Equal("Guild 8", store.Load("account-a", "inst-1").Snapshot!.Guilds.Single().Name);
+    }
+
     private static ForeverDbSnapshot Snapshot(string captureId, long capturedAt, string source, string guildName = "Guild") => new()
     {
         InstallationId = "inst-1",

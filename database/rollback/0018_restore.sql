@@ -1,10 +1,21 @@
--- Operator-approved restoration for 0018 on a disposable/recovery database.
--- This restores only EXECUTE grants; it never drops or rewrites Guildbook data.
+-- Explicit operator rollback for 0018 on a disposable/recovery database.
+-- Restores only authenticated EXECUTE for account Guildbook RPCs that exist.
+-- It never grants public/anon/service_role access, never restores the legacy
+-- ingest projection, and never changes data.
 begin;
-grant execute on function public.fdb_account_guildbook_guilds(text) to authenticated;
-grant execute on function public.fdb_account_guildbook_members(text,text,integer,integer) to authenticated;
-grant execute on function public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb) to authenticated;
-grant execute on function public.fdb_account_guildbook_guilds_scoped(text) to authenticated;
-grant execute on function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) to authenticated;
+do $restore$
+declare
+    r record;
+begin
+    for r in
+        select p.oid::regprocedure::text as sig
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname like 'fdb_account_guildbook_%'
+    loop
+        execute format('grant execute on function %s to authenticated', r.sig);
+    end loop;
+end $restore$;
 notify pgrst, 'reload schema';
 commit;
