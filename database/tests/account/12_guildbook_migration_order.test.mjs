@@ -93,7 +93,7 @@ async function assertIngestPreservesRows(database, seeded) {
   const w = await makeWorld({ database });
   try {
     const before = await w.history(seeded.installation);
-    const result = await rpc(w.client, seeded.identity.claims, "ingest_foreverdb_snapshot_auth", [
+    const result = await rpc(w.client, seeded.claims, "ingest_foreverdb_snapshot_auth", [
       snapshot(seeded.installation, { sources: 2, guilds: 4, members: 5, updatedAt: 9000 }),
     ]);
     assert.equal(result.ok, true);
@@ -102,7 +102,13 @@ async function assertIngestPreservesRows(database, seeded) {
     assert.equal(after.members, before.members);
     assert.equal(Number(after.source.split(":")[0]) > Number(before.source.split(":")[0]), true);
 
-    const account = { ...seeded.identity, kind: "account", call: (fn, args = []) => rpc(w.client, seeded.identity.claims, fn, args) };
+    const account = {
+      uid: seeded.uid,
+      sid: seeded.sid,
+      claims: seeded.claims,
+      kind: "account",
+      call: (fn, args = []) => rpc(w.client, seeded.claims, fn, args),
+    };
     const enrolled = await w.enrolled(account, { installationId: seeded.installation });
     const deviceResult = await w.ingest(enrolled.device, enrolled.secret, snapshot(seeded.installation, {
       sources: 3,
