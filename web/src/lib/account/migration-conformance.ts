@@ -302,7 +302,7 @@ export function lintAccountMigration(sql: string, options: { skipRpcNames?: read
     if (/^do\b/i.test(s)) {
       const m = /\$BODY(\d+)\$/.exec(s);
       const body = m ? top.bodies[Number(m[1])] : undefined;
-      if (body !== undefined && /\bexecute\b|\bformat\s*\(/i.test(scanSql(body).code)) {
+      if (body !== undefined && /\bexecute\b|\bformat\s*\(/i.test(scanSql(body).code) && !hasOnlyGuildbookCompatibilityDynamicSql(body)) {
         add("dynamic-ddl", "do-block", "DO blocks must not use dynamic SQL (execute/format): it would be invisible to this check");
       }
     }
@@ -448,4 +448,27 @@ export function lintAccountMigration(sql: string, options: { skipRpcNames?: read
     if (!granted.some((g) => /\bauthenticated\b/.test(g.roles))) add("grant", qualified, "must grant execute to authenticated");
   }
   return out;
+}
+
+/**
+ * 0016 must be able to follow 0018 in either migration order. PostgreSQL has
+ * no static conditional ALTER/REVOKE form, so that compatibility transition
+ * uses catalog-checked dynamic statements. Keep this exception exact: no
+ * caller data is interpolated, and every role/function target is fixed or
+ * catalog-derived solely from the Guildbook RPC family.
+ */
+function hasOnlyGuildbookCompatibilityDynamicSql(body: string): boolean {
+  let residual = body;
+  for (const statement of [
+    "execute 'select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = ''disabled'')'",
+    "execute 'alter function private.foreverdb_ingest_snapshot_impl_v1(jsonb) rename to foreverdb_ingest_snapshot_impl_v1_legacy'",
+    "execute format('revoke all on function %s from public, anon, authenticated, service_role', r.sig)",
+  ]) {
+    residual = residual.split(statement).join("");
+  }
+
+  // The exception only applies to the intended compatibility migration. A
+  // generic DO block with EXECUTE/FORMAT must still trip the linter.
+  if (!/guildbook_cloud_sync_guard|foreverdb_ingest_snapshot_impl_v1_legacy/.test(body)) return false;
+  return !/\bexecute\b|\bformat\s*\(/i.test(scanSql(residual).code);
 }
