@@ -261,7 +261,7 @@ export default async function DatabasePage({ searchParams }: { searchParams: SP 
             {result.rows.length === 0 ? (
               <EmptyState title="No observations match">
                 AzerDex only lists what players have actually observed. Try a different spelling, an exact game ID, or
-                remove a filter. Missing something? <Link href="/download">Run the addon</Link> to help collect it.
+                remove a filter. Missing something? <Link href="/addon-companion">Run the addon</Link> to help collect it.
               </EmptyState>
             ) : (
               <ResultsTable rows={result.rows} zones={zones} caption="Search results" />

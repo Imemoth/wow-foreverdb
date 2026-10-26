@@ -41,9 +41,35 @@ describe("navigation wiring", () => {
     expect(home).not.toMatch(/href="\/download"[^>]*>Get the addon/);
   });
 
-  it("header, mobile menu and footer carry no Download entry", () => {
-    for (const f of ["components/SiteHeader.tsx", "components/MobileNav.tsx", "components/SiteFooter.tsx"]) {
+  it("header and mobile menu carry no Download entry", () => {
+    for (const f of ["components/SiteHeader.tsx", "components/MobileNav.tsx"]) {
       expect(read(f), f).not.toMatch(/\/download/);
     }
+  });
+
+  it("footer 'Addon & Companion' link points at /addon-companion, never /download", () => {
+    const footer = read("components/SiteFooter.tsx");
+    expect(footer).toContain('<li><Link href="/addon-companion">Addon &amp; Companion</Link></li>');
+    expect(footer).not.toMatch(/\/download/);
+  });
+
+  it("database zero-results 'Run the addon' link points at /addon-companion with the copy unchanged", () => {
+    const db = read("app/database/page.tsx");
+    expect(db).toContain('<Link href="/addon-companion">Run the addon</Link> to help collect it.');
+    expect(db).toContain("AzerDex only lists what players have actually observed. Try a different spelling, an exact game ID, or");
+    expect(db).toContain("remove a filter. Missing something? ");
+    expect(db).not.toMatch(/href="\/download"/);
+  });
+});
+
+describe("indexing and /download are unchanged", () => {
+  it("the sitemap keeps /download and does not list the coming-soon page", () => {
+    const sitemap = read("app/sitemap.ts");
+    expect(sitemap).toContain('"/blog", "/download", "/about/data"');
+    expect(sitemap).not.toContain("addon-companion");
+  });
+
+  it("the new page sets no robots rule of its own (the site-wide policy applies)", () => {
+    expect(page).not.toMatch(/robots/i);
   });
 });

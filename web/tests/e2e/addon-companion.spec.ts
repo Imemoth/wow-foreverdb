@@ -56,11 +56,35 @@ test.describe("homepage CTA and the untouched /download page", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Your next adventure is loading." })).toBeVisible();
   });
 
+  test("the footer 'Addon & Companion' link opens /addon-companion", async ({ page }) => {
+    await page.goto("/about/data");
+    const link = page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Addon & Companion" });
+    await expect(link).toHaveAttribute("href", "/addon-companion");
+    await link.click();
+    await expect(page).toHaveURL(/\/addon-companion$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Your next adventure is loading." })).toBeVisible();
+  });
+
+  test("database zero results: empty-state copy is unchanged and 'Run the addon' opens /addon-companion", async ({ page }) => {
+    await page.goto("/database?q=zzzznomatchzzzz");
+    const empty = page.getByRole("main").getByText("No observations match", { exact: true });
+    await expect(empty).toBeVisible();
+    const para = page.getByText(/AzerDex only lists what players have actually observed\./);
+    await expect(para).toContainText(
+      "AzerDex only lists what players have actually observed. Try a different spelling, an exact game ID, or remove a filter. Missing something? Run the addon to help collect it.",
+    );
+    const link = para.getByRole("link", { name: "Run the addon", exact: true });
+    await expect(link).toHaveAttribute("href", "/addon-companion");
+    await link.click();
+    await expect(page).toHaveURL(/\/addon-companion$/);
+  });
+
   test("/download is not redirected and still renders its own page", async ({ page }) => {
     const res = await page.goto("/download");
     expect(res?.status()).toBe(200);
     await expect(page).toHaveURL(/\/download$/);
     await expect(page.getByRole("heading", { level: 1, name: "Addon & Companion" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Addon & Companion sections" })).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/download$/);
   });
 });

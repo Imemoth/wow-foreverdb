@@ -17,6 +17,7 @@ export function SiteFooter() {
           <ul className="grid grid-cols-2 gap-2">
             <li><Link href="/about/data">How the data works</Link></li>
             <li><Link href="/about/privacy">Privacy</Link></li>
+            <li><Link href="/addon-companion">Addon &amp; Companion</Link></li>
             <li><Link href="/news/rss.xml">RSS feed</Link></li>
             <li><Link href="/zones">All zones</Link></li>
             <li><a href="https://github.com/Imemoth/wow-foreverdb" rel="noopener noreferrer">Source on GitHub</a></li>
