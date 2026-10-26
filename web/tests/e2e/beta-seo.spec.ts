@@ -118,7 +118,7 @@ test.describe("post-launch beta deindexing (authorized published preview)", () =
       expect(r.headers["x-robots-tag"]).toBe("noindex, follow");
       expect(r.headers["x-foreverdb-deployment"]).toBe("preview");
       expect(r.body).toMatch(/<meta name="robots" content="noindex, follow"/);
-      expect(r.body).toContain(`<link rel="canonical" href="https://azerdex.com/"`);
+      expect(r.body).toContain(`<link rel="canonical" href="https://azerdex.com"`);
       expect(r.body).toContain(`<meta property="og:url" content="https://${BETA_HOST}"`);
       const ld = /"@type":"WebSite"[\s\S]*?"url":"([^"]+)"/.exec(r.body)?.[1];
       expect(ld).toBe(`https://${BETA_HOST}`);
