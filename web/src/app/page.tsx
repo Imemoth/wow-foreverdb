@@ -12,27 +12,23 @@ import { serverEnv } from "@/lib/env";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { entityPath, searchPath, zonePath } from "@/lib/routes";
-import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage, requestHostname } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isPublicBetaHost, requestHostname } from "@/lib/seo";
 
-/**
- * Narrowly-scoped public-beta exception: ONLY on beta.azerdex.com, in preview mode, reading the
- * real public database with a genuine active publication, with this exact branch explicitly
- * authorized, is "/" indexable - see isIndexablePublicBetaHomepage in lib/seo.ts. Every other hostname (including generated *.vercel.app
- * Preview aliases) and every other branch keeps the static noindex fallback below.
- */
+/** Beta-specific share metadata and copy are preserved; search indexing is disabled after production launch. */
 export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
   const hostname = await requestHostname();
-  if (!(await isIndexablePublicBetaHomepage(env, hostname, "/"))) return { alternates: { canonical: "/" } };
+  if (!isPublicBetaHost(env, hostname)) return { alternates: { canonical: "/" } };
   const url = `https://${BETA_SEO_HOSTNAME}/`;
   const description =
     "AzerDex public beta: the WoW: Forever loot, gathering and zone database built from sanitized, aggregated player observations collected by the ForeverDB Companion, with interactive zone maps. Beta data, still growing.";
   return {
     title: "AzerDex Public Beta — Preview the WoW: Forever loot & gathering database",
     description,
-    alternates: { canonical: url },
+    // Beta must not compete with the live production homepage.
+    alternates: { canonical: "https://azerdex.com/" },
     openGraph: { title: "AzerDex — Public Beta", description, url, type: "website" },
-    robots: { index: true, follow: true },
+    robots: { index: false, follow: true },
   };
 }
 
@@ -90,7 +86,7 @@ const FEATURE_CARDS: FeatureCardData[] = [
 
 export default async function HomePage() {
   const { db, nonce, env } = await pageContext();
-  const betaHomepage = await isIndexablePublicBetaHomepage(env, await requestHostname(), "/");
+  const betaHomepage = isPublicBetaHost(env, await requestHostname());
   const [meta, recent, zones, newsEntries] = await Promise.all([
     db.meta(), db.recent(5), db.zones(), db.newsFeatured(8).catch(() => []),
   ]);
