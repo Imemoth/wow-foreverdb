@@ -1,6 +1,21 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'GuildbookSynthetic.Core.psm1') -Force
+# Parse all PowerShell entrypoints without running them. A script with syntax
+# errors must never be handed to a user even when fixture generation itself passes.
+foreach($name in @(
+    'GuildbookAcceptance.Core.psm1',
+    'GuildbookSynthetic.Core.psm1',
+    'Invoke-GuildbookAcceptance.ps1',
+    'Invoke-GuildbookSyntheticOffline.ps1',
+    'Test-GuildbookAcceptance.Synthetic.ps1',
+    'Test-GuildbookSyntheticFixture.ps1'
+)) {
+    $tokens=$null
+    $parseErrors=$null
+    [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$parseErrors)
+    if(@($parseErrors).Count -ne 0) {throw ('PowerShell syntax invalid in '+$name)}
+}
 $tmp=Join-Path $env:TEMP ('foreverdb-synthetic-tests-'+[Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($tmp) | Out-Null
 try {
