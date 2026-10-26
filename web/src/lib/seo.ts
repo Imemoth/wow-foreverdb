@@ -16,6 +16,9 @@ import { isIndexable, serverEnv, type ServerEnv } from "./env";
  */
 export const BETA_SEO_HOSTNAME = "beta.azerdex.com";
 
+/** Production is live: the former public-beta indexing exception is permanently disabled. */
+export const PUBLIC_BETA_INDEXING_ENABLED = false;
+
 type BetaSeoEnv = Pick<ServerEnv, "FOREVERDB_DEPLOYMENT" | "FOREVERDB_DATA_SOURCE" | "betaSeoBranchAuthorized">;
 
 /**
@@ -65,12 +68,12 @@ export async function hasGenuinePublication(): Promise<boolean> {
 
 /** isPublicBetaHost + the genuine-publication check (robots.txt / sitemap.xml). */
 export async function isIndexablePublicBetaHost(env: BetaSeoEnv, hostname: string): Promise<boolean> {
-  return isPublicBetaHost(env, hostname) && (await hasGenuinePublication());
+  return PUBLIC_BETA_INDEXING_ENABLED && isPublicBetaHost(env, hostname) && (await hasGenuinePublication());
 }
 
 /** isPublicBetaHomepage + the genuine-publication check (HTML metadata, X-Robots-Tag, JSON-LD). */
 export async function isIndexablePublicBetaHomepage(env: BetaSeoEnv, hostname: string, pathname: string): Promise<boolean> {
-  return isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
+  return PUBLIC_BETA_INDEXING_ENABLED && isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
 }
 
 /**
