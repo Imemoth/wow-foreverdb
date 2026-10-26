@@ -3,10 +3,13 @@ import { callWebRpc } from "@/lib/account/rpc-client";
 import { requirePageUser } from "@/lib/account/page-session";
 import { Unavailable } from "../_ui/Unavailable";
 import { GuildbookBrowser } from "../_components/GuildbookBrowser";
+import { ACCOUNT_GUILDBOOK_WEB_ENABLED } from "@/lib/account/config";
+import { notFound } from "next/navigation";
 
 export const metadata = { title: "Guildbook" };
 
 export default async function GuildbookPage() {
+  if (!ACCOUNT_GUILDBOOK_WEB_ENABLED) notFound();
   const p = await requirePageUser("/account/guildbook");
   if (!p.ok) return p.reason === "unavailable" ? <Unavailable /> : null;
   const out = await callWebRpc(p.ac.cfg, "fdb_account_installations", {}, p.session.at);

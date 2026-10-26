@@ -78,8 +78,9 @@ test("4. valid login, server-confirmed profile, closed redirect allowlist for `n
   expect(again.status()).toBe(200);
   // `next`: only an exact allowlisted pathname survives.
   const nexts: [string, string][] = [
-    ["/account/guildbook", "/account/guildbook"],
-    ["/account/guildbook?x=1#y", "/account/guildbook"],
+    ["/account", "/account"],
+    ["/account/guildbook", "/account"],
+    ["/account/guildbook?x=1#y", "/account"],
     ["https://evil.example/", "/account"],
     ["//evil.example", "/account"],
     ["/\\evil.example", "/account"],

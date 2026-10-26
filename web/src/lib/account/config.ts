@@ -39,6 +39,9 @@
 export const SINGLE_PROJECT_PILOT_APPROVED = false as boolean;
 export const PRODUCTION_ACCOUNT_AUTH_APPROVED = false as boolean;
 
+/** Guildbook is a Companion-local feature; the website must not expose its old private API. */
+export const ACCOUNT_GUILDBOOK_WEB_ENABLED = false as boolean;
+
 /** The existing private Supabase project: only an approved account boundary may contact it. */
 export const PRIVATE_PRODUCTION_PROJECT_REF = "klxhikdlfwgxurdyexdi";
 

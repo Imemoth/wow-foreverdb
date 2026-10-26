@@ -45,7 +45,7 @@ describe("account web zone (static)", () => {
       const methods = [...text.matchAll(/export (?:async function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g)].map((m) => m[1]);
       expect(methods.every((m) => m === "GET" || m === "POST"), `${rel(f)}: ${methods}`).toBe(true);
       expect(methods.length, rel(f)).toBe(1);
-      if (methods[0] === "POST") expect(text, rel(f)).toMatch(/export const POST = accountApi\(\{[^}]*mutating: true/);
+      if (methods[0] === "POST" && !rel(f).includes("guildbook/")) expect(text, rel(f)).toMatch(/accountApi\(\{[^}]*mutating: true/);
       expect(text, rel(f)).not.toMatch(/export const (revalidate|runtime|fetchCache)\b/);
     }
   });
@@ -100,7 +100,7 @@ describe("account web zone (static)", () => {
 
   it("PR E: the PostgREST client is closed (registry subset, fixed method/path, publishable key + user token, no redirects, bounded, no caller headers)", () => {
     const text = code(join(SRC, "lib/account/rpc-client.ts"));
-    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*"fdb_account_guildbook_guilds",\s*"fdb_account_guildbook_members",\s*\] as const satisfies/);
+    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*\] as const satisfies/);
     expect(text).not.toMatch(/fdb_account_claim_start|fdb_installation_link_status/); // Companion-only functions are unreachable from the website
     expect(text).toMatch(/isAccountRpc\(name\)/);
     expect(text).toMatch(/\$\{cfg\.authOrigin\}\/rest\/v1\/rpc\/\$\{name\}/);
@@ -142,11 +142,15 @@ describe("account web zone (static)", () => {
   });
 
   it("PR E: every private handler authenticates through the approved resolver and nothing takes ownership from the request", () => {
-    for (const r of ["link", "installations", "guildbook/guilds", "guildbook/members"]) {
+    for (const r of ["link", "installations"]) {
       const text = code(join(SRC, `app/account/api/${r}/route.ts`));
       expect(text, r).toMatch(/authenticate\(c(, \{ read: true \})?\)/);
       expect(text, r).toMatch(/\bsession\.at\b/);
       expect(text, r).not.toMatch(/process\.env|cookies\(\)|req\.headers\.get\("authorization"\)/i);
+    }
+    expect(code(join(SRC, "lib/account/config.ts"))).toMatch(/ACCOUNT_GUILDBOOK_WEB_ENABLED = false/);
+    for (const r of ["guildbook/guilds", "guildbook/members"]) {
+      expect(code(join(SRC, `app/account/api/${r}/route.ts`)), r).toMatch(/ACCOUNT_GUILDBOOK_WEB_ENABLED/);
     }
     const priv = code(join(SRC, "lib/account/private.ts"));
     expect(priv).toMatch(/resolveSession\(c\.ac\.cfg, c\.jar, c\.ac\.https, \{ kind: "user", canWrite: true \}\)/);
