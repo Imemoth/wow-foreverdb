@@ -20,6 +20,9 @@ jobs:
       - name: Fixture lifecycle, tamper safety and account stages
         shell: powershell
         run: .\scripts\guildbook-acceptance\Test-GuildbookSyntheticFixture.ps1
+      - name: Resumable checkpoint, tamper and offline safety self-test
+        shell: powershell
+        run: .\scripts\guildbook-acceptance\Test-GuildbookSyntheticResume.ps1
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
