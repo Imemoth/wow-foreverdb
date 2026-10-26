@@ -53,9 +53,10 @@ function New-GuildbookSyntheticFixture {
     if ([IO.Path]::GetFileName($parent.TrimEnd('\','/')) -cne 'synthetic-fixtures') {
         throw 'Use a dedicated synthetic-fixtures parent directory'
     }
-    $appdata = [IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar
-    if ($parent.StartsWith($appdata,[StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Refusing a fixture inside existing application data'
+    $existingData = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'ForeverDB')).TrimEnd('\','/')
+    if ($parent.Equals($existingData,[StringComparison]::OrdinalIgnoreCase) -or
+        $parent.StartsWith(($existingData + [IO.Path]::DirectorySeparatorChar),[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Refusing a fixture inside the real ForeverDB application data'
     }
     # Directory.CreateDirectory below only creates the dedicated fixture parent;
     # it never replaces files or directories.
