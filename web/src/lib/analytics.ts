@@ -9,6 +9,10 @@
 const PUBLIC_HOSTS = new Set(["azerdex.com", "www.azerdex.com", "beta.azerdex.com"]);
 const PRIVATE_PATH = /^\/(?:account|auth|verify|test-fixtures)(?:\/|$)/i;
 
+export function isPublicAnalyticsHost(hostname: string): boolean {
+  return PUBLIC_HOSTS.has(hostname.toLowerCase());
+}
+
 export function filterAnalyticsEvent<T extends { url: string }>(event: T): T | null {
   let url: URL;
   try {
@@ -16,7 +20,7 @@ export function filterAnalyticsEvent<T extends { url: string }>(event: T): T | n
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" || !PUBLIC_HOSTS.has(url.hostname.toLowerCase())) return null;
+  if (url.protocol !== "https:" || !isPublicAnalyticsHost(url.hostname)) return null;
   if (PRIVATE_PATH.test(url.pathname)) return null;
 
   // Search terms, auth tokens and other potential personal data never leave the browser.
