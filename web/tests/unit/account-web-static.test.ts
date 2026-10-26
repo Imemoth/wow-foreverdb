@@ -213,6 +213,18 @@ describe("account web zone (static)", () => {
     }
   });
 
+  it("hosted AzerDex never serves or links the legacy cloud Guildbook", () => {
+    const dashboard = code(join(SRC, "app/account/_ui/AccountDashboard.tsx"));
+    expect(dashboard).not.toMatch(/\\/account\\/guildbook|synchronized characters|sync your characters and guilds/);
+    const page = code(join(SRC, "app/account/guildbook/page.tsx"));
+    expect(page).toMatch(/p\\.ac\\.env\\.FOREVERDB_DEPLOYMENT !== "local"\\) notFound\\(\\)/);
+    for (const route of ["guildbook/guilds", "guildbook/members"]) {
+      const routeCode = code(join(SRC, `app/account/api/${route}/route.ts`));
+      expect(routeCode).toMatch(/c\\.ac\\.env\\.FOREVERDB_DEPLOYMENT !== "local"\\) return withSession\\(c, a\\.auth, failure\\(404, "not_found"\\)\\)/);
+      expect(routeCode.indexOf('failure(404, "not_found")')).toBeLessThan(routeCode.indexOf("callWebRpc("));
+    }
+  });
+
   it("robots and the sitemap do not advertise account routes", () => {
     for (const f of ["app/sitemap.ts", "app/robots.ts"]) expect(read(join(SRC, f)), f).not.toMatch(/\/account/);
   });
