@@ -11,7 +11,7 @@
  * listed here cannot be reached through the account boundary. Specification:
  * docs/account-v1/architecture.md (sections 4 and 5) and docs/account-v1/ownership-claim-protocol.md.
  */
-import { z } from "@/lib/zod";
+import { z } from "../zod";
 
 // ---------------------------------------------------------------------------------------------
 // Auth (GoTrue) endpoint allowlist

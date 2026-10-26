@@ -1,4 +1,4 @@
-import { z } from "@/lib/zod";
+import { z } from "../zod";
 import { AUTH_BODIES, guildKeySchema, installationIdSchema } from "./contracts";
 import { uuidSchema } from "./contracts-enrollment";
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "@/lib/zod";
+import { z } from "../zod";
 import { AUTH_BODIES, isAllowedAuthRequest } from "./contracts";
 import type { AccountAuthConfig } from "./config";
 
