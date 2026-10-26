@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRightIcon, BookIcon, CheckIcon, CircleUserIcon, InstallIcon, MonitorIcon } from "../_components/icons";
+import { CheckIcon, CircleUserIcon, InstallIcon, MonitorIcon } from "../_components/icons";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const CARD = "panel flex flex-col gap-3 p-5";
@@ -12,7 +12,6 @@ export function AccountDashboard({ email, since, installations, welcome }: {
   installations: { guild_count: number }[] | null;
   welcome: boolean;
 }) {
-  const guilds = installations?.reduce((n, i) => n + i.guild_count, 0) ?? 0;
   return (
     <div data-account-wide className="space-y-4">
       <div>
@@ -52,7 +51,7 @@ export function AccountDashboard({ email, since, installations, welcome }: {
           <p className="text-sm text-mist">
             {installations && installations.length > 0
               ? `${plural(installations.length, "installation", "installations")} connected to your account.`
-              : "Connect the Companion app to sync your characters and guilds with AzerDex."}
+              : "Manage your AzerDex Companion installations when you are ready."}
           </p>
           <div className="mt-auto flex flex-wrap gap-2 pt-1">
             <Link href="/account/link" className="btn-primary">Connect Companion</Link>
@@ -69,20 +68,6 @@ export function AccountDashboard({ email, since, installations, welcome }: {
         </section>
       </div>
 
-      <Link href="/account/guildbook" className="panel group flex items-center gap-4 p-5 no-underline transition hover:border-violet-400">
-        <BookIcon className="h-6 w-6 shrink-0 text-gold-400" />
-        <span className="min-w-0 flex-1">
-          <span className="block font-[family-name:var(--font-display)] text-lg font-semibold tracking-wide text-gold-300">Private Guildbook</span>
-          <span className="mt-0.5 block text-sm text-mist">
-            {installations && installations.length === 0
-              ? "Nothing here yet. Connect a Companion and your characters and guilds will show up in your Guildbook."
-              : installations && guilds > 0
-                ? `${plural(guilds, "guild", "guilds")} synchronized from your characters. Explore your private guild data.`
-                : "Explore your synchronized characters and guild data."}
-          </span>
-        </span>
-        <ArrowRightIcon className="h-5 w-5 shrink-0 text-violet-300 transition group-hover:translate-x-0.5" />
-      </Link>
     </div>
   );
 }
