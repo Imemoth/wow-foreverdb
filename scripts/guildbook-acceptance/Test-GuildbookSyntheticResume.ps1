@@ -4,6 +4,18 @@ Import-Module (Join-Path $PSScriptRoot 'GuildbookAcceptance.Core.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GuildbookSynthetic.Core.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'GuildbookResume.Core.psm1') -Force
 
+# Validate both scripts without executing the interactive launcher.
+foreach ($relative in @('Invoke-GuildbookSyntheticResume.ps1','GuildbookResume.Core.psm1')) {
+    $scriptPath = Join-Path $PSScriptRoot $relative
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile(
+        $scriptPath,[ref]$tokens,[ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+        throw ('PowerShell source cannot parse: ' + $relative)
+    }
+}
+
 function Expect([bool]$condition,[string]$message) {
     if (-not $condition) { throw ('Synthetic resumability check failed: ' + $message) }
 }
