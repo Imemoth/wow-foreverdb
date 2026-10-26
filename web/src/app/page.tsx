@@ -12,13 +12,13 @@ import { serverEnv } from "@/lib/env";
 import { fmtDate, fmtDateTime, fmtInt } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { entityPath, searchPath, zonePath } from "@/lib/routes";
-import { BETA_SEO_HOSTNAME, isPublicBetaHost, requestHostname } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isPublicBetaPresentationHomepage, requestHostname } from "@/lib/seo";
 
 /** Beta-specific share metadata and copy are preserved; search indexing is disabled after production launch. */
 export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
   const hostname = await requestHostname();
-  if (!isPublicBetaHost(env, hostname)) return { alternates: { canonical: "/" } };
+  if (!(await isPublicBetaPresentationHomepage(env, hostname, "/"))) return { alternates: { canonical: "/" } };
   const url = `https://${BETA_SEO_HOSTNAME}/`;
   const description =
     "AzerDex public beta: the WoW: Forever loot, gathering and zone database built from sanitized, aggregated player observations collected by the ForeverDB Companion, with interactive zone maps. Beta data, still growing.";
@@ -86,7 +86,7 @@ const FEATURE_CARDS: FeatureCardData[] = [
 
 export default async function HomePage() {
   const { db, nonce, env } = await pageContext();
-  const betaHomepage = isPublicBetaHost(env, await requestHostname());
+  const betaHomepage = await isPublicBetaPresentationHomepage(env, await requestHostname(), "/");
   const [meta, recent, zones, newsEntries] = await Promise.all([
     db.meta(), db.recent(5), db.zones(), db.newsFeatured(8).catch(() => []),
   ]);
