@@ -53,7 +53,7 @@ const Frontmatter = z
         articles: z.array(z.string().regex(/^(news|guides|blog)\/[a-z0-9-]{3,80}$/)).max(6).default([]),
       })
       .strict()
-      .default({}),
+      .prefault({}),
   })
   .strict();
 
