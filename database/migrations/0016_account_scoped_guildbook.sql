@@ -19,7 +19,12 @@ begin;
 do $preflight$
 declare
     v_sig text;
+    v_local_only boolean := false;
 begin
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        execute 'select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = ''disabled'')'
+            into v_local_only;
+    end if;
     if to_regclass('supabase_migrations.schema_migrations') is not null then
         if exists (select 1 from supabase_migrations.schema_migrations where name = 'account_scoped_guildbook') then
             raise exception '0016 pre-flight: ledger already shows account_scoped_guildbook';
@@ -41,7 +46,8 @@ begin
         end if;
     end loop;
 
-    if to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)') is not null then
+    if to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)') is not null
+       and not v_local_only then
         raise exception '0016 pre-flight: legacy ingest compatibility name is already occupied';
     end if;
 
@@ -223,26 +229,56 @@ language sql
 security definer
 set search_path = ''
 as $$
-    select p_snapshot
+    select coalesce(p_snapshot, '{}'::jsonb)
         - 'guilds'
         - 'guildbook'
+        - 'guildbookCapture'
         - 'guildbookCaptureId'
         - 'guildbookCapturedAt'
         - 'guildbookSourceCharacter';
 $$;
 
-alter function private.foreverdb_ingest_snapshot_impl_v1(jsonb)
-    rename to foreverdb_ingest_snapshot_impl_v1_legacy;
+do $prepare_ingest$
+begin
+    if to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)') is null then
+        execute 'alter function private.foreverdb_ingest_snapshot_impl_v1(jsonb) rename to foreverdb_ingest_snapshot_impl_v1_legacy';
+    end if;
+end $prepare_ingest$;
 
 create or replace function private.foreverdb_ingest_snapshot_impl_v1(p_snapshot jsonb)
 returns jsonb
-language sql
+language plpgsql
 security definer
 set search_path = ''
 as $$
-    select private.foreverdb_ingest_snapshot_impl_v1_legacy(
+declare
+    v_installation text := p_snapshot->>'installationId';
+    v_result jsonb;
+begin
+    -- The legacy implementation deletes and rebuilds Guildbook rows even
+    -- when the incoming projection contains no private fields. Preserve the
+    -- existing rows around the public observation ingest in both migration
+    -- orders, while never passing private fields to the legacy body.
+    drop table if exists pg_temp._fdb0016_guilds;
+    drop table if exists pg_temp._fdb0016_guild_members;
+    drop table if exists pg_temp._fdb0016_guild_professions;
+
+    create temp table _fdb0016_guilds on commit drop as
+        select * from public.installation_guilds where installation_id = v_installation;
+    create temp table _fdb0016_guild_members on commit drop as
+        select * from public.installation_guild_members where installation_id = v_installation;
+    create temp table _fdb0016_guild_professions on commit drop as
+        select * from public.installation_guild_professions where installation_id = v_installation;
+
+    v_result := private.foreverdb_ingest_snapshot_impl_v1_legacy(
         private.fdb_public_snapshot(p_snapshot)
     );
+
+    insert into public.installation_guilds select * from pg_temp._fdb0016_guilds;
+    insert into public.installation_guild_members select * from pg_temp._fdb0016_guild_members;
+    insert into public.installation_guild_professions select * from pg_temp._fdb0016_guild_professions;
+    return v_result;
+end;
 $$;
 
 -- ---------------------------------------------------------------------------------------------------------------------
@@ -504,12 +540,43 @@ grant execute on function public.fdb_account_guildbook_guilds_scoped(text) to au
 revoke all on function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) from public, anon, authenticated, service_role;
 grant execute on function public.fdb_account_guildbook_members_scoped(text,text,integer,integer) to authenticated;
 
+-- If 0018 was already applied, this migration may create the compatibility
+-- objects it needs but must not reopen any Guildbook cloud RPC. The catalog
+-- sweep also covers legacy overloads that are present only in the current
+-- production schema.
+do $local_only_acl$
+declare
+    r record;
+    v_local_only boolean := false;
+begin
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        execute 'select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = ''disabled'')'
+            into v_local_only;
+    end if;
+    if v_local_only then
+        for r in
+            select p.oid::regprocedure::text as sig
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname like 'fdb_account_guildbook_%'
+        loop
+            execute format('revoke all on function %s from public, anon, authenticated, service_role', r.sig);
+        end loop;
+    end if;
+end $local_only_acl$;
+
 do $verify$
 declare
     v_sig text;
     v_after record;
     r record;
+    v_local_only boolean := false;
 begin
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        execute 'select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = ''disabled'')'
+            into v_local_only;
+    end if;
     foreach v_sig in array array[
         'private.fdb_public_snapshot(jsonb)',
         'private.foreverdb_ingest_snapshot_impl_v1(jsonb)',
@@ -528,21 +595,38 @@ begin
         end if;
     end loop;
 
-    if has_function_privilege('public', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
-       or has_function_privilege('anon', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
-       or has_function_privilege('service_role', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
-       or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute') then
-        raise exception '0016 post-condition: account ingest ACL is incorrect';
-    end if;
-    if has_function_privilege('public', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
-       or has_function_privilege('anon', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
-       or has_function_privilege('service_role', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
-       or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
-       or has_function_privilege('public', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
-       or has_function_privilege('anon', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
-       or has_function_privilege('service_role', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
-       or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute') then
-        raise exception '0016 post-condition: scoped account read ACL is incorrect';
+    if v_local_only then
+        for r in
+            select p.oid::regprocedure::text as sig
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname like 'fdb_account_guildbook_%'
+        loop
+            if has_function_privilege('public', r.sig, 'execute')
+               or has_function_privilege('anon', r.sig, 'execute')
+               or has_function_privilege('authenticated', r.sig, 'execute')
+               or has_function_privilege('service_role', r.sig, 'execute') then
+                raise exception '0016 post-condition: local-only Guildbook RPC % remains executable', r.sig;
+            end if;
+        end loop;
+    else
+        if has_function_privilege('public', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
+           or has_function_privilege('anon', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
+           or has_function_privilege('service_role', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute')
+           or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_ingest(text,text,bigint,text,jsonb)', 'execute') then
+            raise exception '0016 post-condition: account ingest ACL is incorrect';
+        end if;
+        if has_function_privilege('public', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+           or has_function_privilege('anon', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+           or has_function_privilege('service_role', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+           or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_guilds_scoped(text)', 'execute')
+           or has_function_privilege('public', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+           or has_function_privilege('anon', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+           or has_function_privilege('service_role', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute')
+           or not has_function_privilege('authenticated', 'public.fdb_account_guildbook_members_scoped(text,text,integer,integer)', 'execute') then
+            raise exception '0016 post-condition: scoped account read ACL is incorrect';
+        end if;
     end if;
 
     for v_sig in select unnest(array['private.account_guildbook_captures', 'private.account_guildbook_guilds',

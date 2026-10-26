@@ -50,13 +50,12 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
         <h2 id="inst-h" className="panel-title text-lg">Companion installations</h2>
         <p className="text-sm text-mist">
           Link a Companion installation to this account with a code from the Companion&apos;s ACCOUNT tab, see the installations
-          you own, and browse their private Guildbook.
+          you own and manage their collector devices.
         </p>
         <ul className="space-y-1 text-sm">
           <li><Link href="/account/link">Link an installation</Link></li>
           <li><Link href="/account/installations">Your installations</Link></li>
           <li><Link href="/account/devices">Your computers and activation files</Link></li>
-          <li><Link href="/account/guildbook">Private Guildbook</Link></li>
         </ul>
       </section>
       <LogoutButton />

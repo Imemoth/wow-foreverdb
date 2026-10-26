@@ -11,7 +11,7 @@
  * listed here cannot be reached through the account boundary. Specification:
  * docs/account-v1/architecture.md (sections 4 and 5) and docs/account-v1/ownership-claim-protocol.md.
  */
-import { z } from "zod";
+import { z } from "@/lib/zod";
 
 // ---------------------------------------------------------------------------------------------
 // Auth (GoTrue) endpoint allowlist
@@ -184,7 +184,7 @@ export const ACCOUNT_RPCS = {
         p_capture_id: z.string().min(1).max(200),
         p_captured_at: z.number().int().min(0),
         p_source_character: z.string().min(1).max(200),
-        p_guilds: z.array(z.record(z.unknown())).max(100),
+        p_guilds: z.array(z.record(z.string(), z.unknown())).max(100),
       })
       .strict(),
     output: z.discriminatedUnion("ok", [
@@ -357,7 +357,6 @@ export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
   "/account/link",
   "/account/installations",
   "/account/devices",
-  "/account/guildbook",
   "/account/security",
 ];
 

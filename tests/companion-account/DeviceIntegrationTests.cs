@@ -244,6 +244,28 @@ public class DeviceIntegrationTests
     }
 
     [Fact]
+    public async Task An_account_owned_installation_without_collector_enrollment_reports_the_missing_enrollment_after_switch()
+    {
+        using var w = new Wiring();
+        w.Server.SetOwner(w.Installation, w.Account.Id);
+        var vault = new SessionVault(Path.Combine(w.Dir, w.Runtime.Gate.CredentialSubdirectory), TestEnv.Protector());
+        vault.Primary.Write(w.Server.IssueSession(w.Account.Id), SlotMarker.For(SessionKind.Registered));
+        await w.Runtime.Sessions.InitializeAsync();
+
+        Assert.Equal(SyncOutcome.Synced, (await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Auto))!.Outcome);
+        Assert.Equal(SignOutOutcome.Confirmed, await w.Runtime.Sessions.SignOutRegisteredAsync());
+        var other = w.Server.AddRegisteredUser("other@example.test", "correct horse battery");
+        Assert.Equal(SignInOutcome.Success, await w.Runtime.Sessions.SignInRegisteredAsync(other.Email!, other.Password!.ToCharArray()));
+
+        w.Write(200);
+        var blocked = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Auto);
+        Assert.Equal(SyncOutcome.Blocked, blocked!.Outcome);
+        Assert.Equal(BlockReason.CollectorEnrollmentRequired, blocked.Reason);
+        Assert.Contains("initial collector enrollment", AccountMessages.Describe(blocked.Reason), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, w.Server.IngestCount);
+    }
+
+    [Fact]
     public async Task Without_a_device_sync_service_the_sync_service_is_exactly_the_old_one()
     {
         using var w = new Wiring();

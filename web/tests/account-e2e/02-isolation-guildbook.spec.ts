@@ -12,7 +12,7 @@ let db: pg.Client;
 test.beforeAll(async () => { db = await admin(); });
 test.afterAll(async () => { await db.end(); });
 
-test("privacy: A, B and an anonymous owner each hold an installation with the SAME guild key and name; nobody can read another's data, not even with the real ids", async ({ playwright }) => {
+test.skip("legacy cloud Guildbook isolation is retired; migration 0018 blocks these RPCs", async ({ playwright }) => {
   const a = await webUser(playwright, "privA");
   const b = await webUser(playwright, "privB");
   const ca = await companionWithInstallation({ guilds: 2, members: 5, tag: "AA" });
@@ -52,7 +52,7 @@ test("privacy: A, B and an anonymous owner each hold an installation with the SA
   expect((await post(await (await import("../account/helpers")).newClient(playwright), "/account/api/guildbook/guilds", { installationId: ca.installationId })).status()).toBe(401);
 });
 
-test("pagination and response-size limits cannot be bypassed (website and PostgREST)", async ({ playwright }) => {
+test.skip("legacy cloud Guildbook pagination is retired; migration 0018 blocks these RPCs", async ({ playwright }) => {
   const a = await webUser(playwright, "page");
   const big = await companionWithInstallation({ guilds: 1, members: 120, tag: "PG" });
   expect((await link(a.c, await startClaim(big), a.password)).status()).toBe(200);
@@ -117,7 +117,7 @@ test("23. the 50-installation cap: a valid code is NOT consumed at the limit, an
   expect(await ownerOf(db, extra.installationId)).toBe(other.uid);
 });
 
-test("28-29. historical rows, stable hashes and aggregate statistics are identical before and after a transfer", async ({ playwright }) => {
+test.skip("legacy cloud Guildbook history is retired by local-only V1", async ({ playwright }) => {
   const a = await webUser(playwright, "hist");
   const noise = await companionWithInstallation({ sources: 3, guilds: 1, members: 3, tag: "N1" });
   const mover = await companionWithInstallation({ sources: 3, guilds: 2, members: 4, tag: "MV" });

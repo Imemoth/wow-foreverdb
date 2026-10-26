@@ -1,75 +1,59 @@
-using System.Text.Json;
 using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Models;
 
 namespace ForeverDB.Companion.Services;
 
-public sealed record AccountGuildbookCapture(
-    string InstallationId,
-    string CaptureId,
-    long CapturedAt,
-    string SourceCharacter,
-    IReadOnlyList<ForeverDbGuild> Guilds);
+public sealed record AccountGuildbookSyncResult(bool Loaded, bool CaptureAccepted, bool Stale);
 
-public sealed record AccountGuildbookSyncResult(
-    bool Loaded,
-    bool CaptureAccepted,
-    bool Stale);
+public sealed record AccountGuildbookRestoreResult(
+    bool Authorized,
+    int DiscoveredInstallations,
+    IReadOnlyList<string> LoadedInstallationIds,
+    IReadOnlyList<string> UnreadableInstallationIds);
 
-/// <summary>Account-private Guildbook boundary. Public observation sync never consumes this interface.</summary>
+/// <summary>Local Guildbook boundary. It deliberately has no RPC or token method.</summary>
 public interface IAccountGuildbookSync
 {
     event Action<IReadOnlyList<ForeverDbGuild>>? Changed;
-
+    bool IsAvailable { get; }
     void ObserveSnapshot(ForeverDbSnapshot snapshot);
-
-    Task<AccountGuildbookSyncResult> SyncAsync(
-        ForeverDbSnapshot snapshot,
+    Task<AccountGuildbookRestoreResult> RestoreLocalAsync(
+        IEnumerable<string> installationIds,
+        string? preferredInstallationId = null,
         CancellationToken cancellationToken = default);
-
+    Task<AccountGuildbookSyncResult> SyncAsync(ForeverDbSnapshot snapshot, CancellationToken cancellationToken = default);
     void Clear();
 }
 
-public interface IAccountGuildbookRpc
-{
-    Task<RpcResult<bool>> IngestAsync(
-        string accessToken,
-        AccountGuildbookCapture capture,
-        CancellationToken cancellationToken);
-
-    Task<RpcResult<IReadOnlyList<ForeverDbGuild>>> ReadAsync(
-        string accessToken,
-        string installationId,
-        CancellationToken cancellationToken);
-}
-
 /// <summary>
-/// In-memory account Guildbook cache and capture freshness gate. A cache entry
-/// is never retained across AccountSessionManager.IdentityChanged and all
-/// in-flight work is tied to that identity generation.
+/// Authenticated local Guildbook cache and capture freshness gate. No Guildbook
+/// data is sent to Supabase; public observation sync may invoke this boundary
+/// without being coupled to a private network operation.
 /// </summary>
 public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
 {
     private readonly AccountSessionManager _sessions;
-    private readonly IAccountGuildbookRpc _rpc;
+    private readonly LocalGuildbookStore _store;
     private readonly object _gate = new();
     private readonly Dictionary<string, CaptureStamp> _lastObserved = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CaptureStamp> _identityFloor = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CaptureStamp> _lastAccepted = new(StringComparer.Ordinal);
-    private readonly Dictionary<(string Installation, long Generation, long UpdatedAt), bool> _lastLoaded = new();
-    private readonly Dictionary<string, ForeverDbGuild> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, ForeverDbGuild>> _cacheByInstallation =
+        new(StringComparer.Ordinal);
+    private string? _activeInstallationId;
     private CancellationTokenSource _identityCancellation = new();
     private long _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private bool _disposed;
 
-    public AccountGuildbookSync(AccountSessionManager sessions, IAccountGuildbookRpc rpc)
+    public AccountGuildbookSync(AccountSessionManager sessions, LocalGuildbookStore store)
     {
         _sessions = sessions;
-        _rpc = rpc;
+        _store = store;
         _sessions.IdentityChanged += OnIdentityChanged;
     }
 
     public event Action<IReadOnlyList<ForeverDbGuild>>? Changed;
+    public bool IsAvailable => CanUseLocal(_sessions.Status);
 
     public IReadOnlyList<ForeverDbGuild> CachedGuilds
     {
@@ -77,158 +61,170 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         {
             lock (_gate)
             {
-                return _cache.Values.ToArray();
+                return _activeInstallationId is { } id && _cacheByInstallation.TryGetValue(id, out var guilds)
+                    ? guilds.Values.ToArray()
+                    : Array.Empty<ForeverDbGuild>();
             }
+        }
+    }
+
+    public string? ActiveInstallationId
+    {
+        get { lock (_gate) return _activeInstallationId; }
+    }
+
+    public IReadOnlyList<ForeverDbGuild> GetCachedGuilds(string installationId)
+    {
+        lock (_gate)
+        {
+            return _cacheByInstallation.TryGetValue(installationId, out var guilds)
+                ? guilds.Values.ToArray()
+                : Array.Empty<ForeverDbGuild>();
         }
     }
 
     public void ObserveSnapshot(ForeverDbSnapshot snapshot)
     {
-        if (TryGetCapture(snapshot) is not { } capture)
+        if (TryGetCapture(snapshot) is not { } capture) return;
+        lock (_gate) _lastObserved[snapshot.InstallationId] = capture;
+    }
+
+    /// <summary>
+    /// Restores already encrypted local snapshots only. It never parses a
+    /// SavedVariables file, obtains a token, or calls a network endpoint.
+    /// </summary>
+    public Task<AccountGuildbookRestoreResult> RestoreLocalAsync(
+        IEnumerable<string> installationIds,
+        string? preferredInstallationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<AccountGuildbookRestoreResult>(cancellationToken);
+
+        var ids = installationIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var status = _sessions.Status;
+        if (!CanUseLocal(status))
         {
-            return;
+            Clear();
+            return Task.FromResult(new AccountGuildbookRestoreResult(false, ids.Length, Array.Empty<string>(), Array.Empty<string>()));
+        }
+
+        var generation = status.Generation;
+        var loaded = new Dictionary<string, IReadOnlyDictionary<string, ForeverDbGuild>>(StringComparer.Ordinal);
+        var loadedIds = new List<string>();
+        var unreadableIds = new List<string>();
+
+        foreach (var installationId in ids)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromCanceled<AccountGuildbookRestoreResult>(cancellationToken);
+
+            var result = _store.Load(status.AccountId!, installationId);
+            if (result.Snapshot is { } snapshot)
+            {
+                loaded[installationId] = ToGuildDictionary(snapshot.Guilds);
+                loadedIds.Add(installationId);
+            }
+            else if (result.Status is LocalGuildbookReadStatus.Unreadable or LocalGuildbookReadStatus.IoError)
+            {
+                unreadableIds.Add(installationId);
+            }
+        }
+
+        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+        {
+            Clear();
+            return Task.FromResult(new AccountGuildbookRestoreResult(false, ids.Length, Array.Empty<string>(), Array.Empty<string>()));
         }
 
         lock (_gate)
         {
-            _lastObserved[snapshot.InstallationId] = capture;
+            _cacheByInstallation.Clear();
+            foreach (var pair in loaded)
+                _cacheByInstallation[pair.Key] = pair.Value;
+            _activeInstallationId = preferredInstallationId is { } preferred && loaded.ContainsKey(preferred)
+                ? preferred
+                : loadedIds.FirstOrDefault();
         }
+        Changed?.Invoke(CachedGuilds);
+        return Task.FromResult(new AccountGuildbookRestoreResult(true, ids.Length, loadedIds, unreadableIds));
     }
 
-    public async Task<AccountGuildbookSyncResult> SyncAsync(
+    public Task<AccountGuildbookSyncResult> SyncAsync(
         ForeverDbSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
         ObserveSnapshot(snapshot);
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<AccountGuildbookSyncResult>(cancellationToken);
 
-        if (_sessions.Status.State != SessionState.Registered)
+        var status = _sessions.Status;
+        if (!CanUseLocal(status))
+            return Task.FromResult(new AccountGuildbookSyncResult(false, false, false));
+        var generation = status.Generation;
+
+        var candidate = TryGetCapture(snapshot);
+        var accepted = false;
+        var stale = false;
+        if (candidate is { } capture)
         {
-            return new AccountGuildbookSyncResult(false, false, false);
+            if (IsFresh(snapshot.InstallationId, capture))
+            {
+                var saved = _store.Save(status.AccountId!, snapshot.InstallationId, snapshot);
+                accepted = saved.Status == LocalGuildbookSaveStatus.Saved;
+                stale = saved.Status == LocalGuildbookSaveStatus.OlderSnapshot;
+                if (accepted)
+                    lock (_gate) _lastAccepted[snapshot.InstallationId] = capture;
+            }
+            else
+            {
+                stale = true;
+            }
         }
 
-        var generation = _sessions.Generation;
-        CancellationToken identityToken;
-        lock (_gate)
+        var loaded = _store.Load(status.AccountId!, snapshot.InstallationId);
+        // A sign-out/switch can happen while local IO is in progress. Do not
+        // publish the old account's result after the session generation moved.
+        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
         {
-            identityToken = _identityCancellation.Token;
+            Clear();
+            return Task.FromResult(new AccountGuildbookSyncResult(false, false, true));
         }
-
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            identityToken);
-
-        try
+        if (loaded.Snapshot is { } local)
         {
-            var captureAccepted = false;
-            var capture = TryGetCapture(snapshot);
-            if (capture is { } candidate && IsFresh(snapshot.InstallationId, candidate))
-            {
-                var token = await _sessions.GetAccessTokenAsync(
-                    SlotRole.Primary,
-                    linked.Token).ConfigureAwait(false);
-
-                if (token.Ok && token.Generation == generation &&
-                    _sessions.Status.State == SessionState.Registered)
-                {
-                    var result = await _rpc.IngestAsync(
-                        token.AccessToken,
-                        new AccountGuildbookCapture(
-                            snapshot.InstallationId,
-                            candidate.CaptureId,
-                            candidate.CapturedAt,
-                            candidate.SourceCharacter,
-                            snapshot.Guilds),
-                        linked.Token).ConfigureAwait(false);
-
-                    if (result.Ok)
-                    {
-                        lock (_gate)
-                        {
-                            _lastAccepted[snapshot.InstallationId] = candidate;
-                        }
-
-                        captureAccepted = true;
-                    }
-                }
-            }
-
-            if (!captureAccepted)
-            {
-                lock (_gate)
-                {
-                    if (_lastLoaded.ContainsKey((snapshot.InstallationId, generation, snapshot.UpdatedAt)))
-                    {
-                        return new AccountGuildbookSyncResult(true, false, false);
-                    }
-                }
-            }
-
-            var readToken = await _sessions.GetAccessTokenAsync(
-                SlotRole.Primary,
-                linked.Token).ConfigureAwait(false);
-
-            if (!readToken.Ok ||
-                readToken.Generation != generation ||
-                _sessions.Status.State != SessionState.Registered)
-            {
-                return new AccountGuildbookSyncResult(false, captureAccepted, true);
-            }
-
-            var read = await _rpc.ReadAsync(
-                readToken.AccessToken,
-                snapshot.InstallationId,
-                linked.Token).ConfigureAwait(false);
-
-            if (_sessions.Generation != generation ||
-                _sessions.Status.State != SessionState.Registered)
-            {
-                return new AccountGuildbookSyncResult(false, captureAccepted, true);
-            }
-
-            if (!read.Ok || read.Value is null)
-            {
-                return new AccountGuildbookSyncResult(false, captureAccepted, false);
-            }
-
+            var guilds = ToGuildDictionary(local.Guilds);
             lock (_gate)
             {
-                _cache.Clear();
-                foreach (var guild in read.Value)
-                {
-                    if (!string.IsNullOrWhiteSpace(guild.GuildKey))
-                    {
-                        _cache[guild.GuildKey] = guild;
-                    }
-                }
-
-                _lastLoaded[(snapshot.InstallationId, generation, snapshot.UpdatedAt)] = true;
+                _cacheByInstallation[snapshot.InstallationId] = guilds;
+                _activeInstallationId = snapshot.InstallationId;
             }
-
             Changed?.Invoke(CachedGuilds);
-            return new AccountGuildbookSyncResult(true, captureAccepted, false);
+            return Task.FromResult(new AccountGuildbookSyncResult(true, accepted, stale));
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new AccountGuildbookSyncResult(false, false, true);
-        }
+
+        return Task.FromResult(new AccountGuildbookSyncResult(false, accepted, stale));
     }
+
+    private static IReadOnlyDictionary<string, ForeverDbGuild> ToGuildDictionary(IEnumerable<ForeverDbGuild> guilds) =>
+        guilds
+            .Where(guild => !string.IsNullOrWhiteSpace(guild.GuildKey))
+            .GroupBy(guild => guild.GuildKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(guild => guild.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
 
     public void Clear()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
+        if (_disposed) return;
         CancellationTokenSource previous;
         lock (_gate)
         {
-            _cache.Clear();
-            _lastLoaded.Clear();
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
             previous = _identityCancellation;
             _identityCancellation = new CancellationTokenSource();
         }
-
         try { previous.Cancel(); } finally { previous.Dispose(); }
         Changed?.Invoke(Array.Empty<ForeverDbGuild>());
     }
@@ -240,17 +236,13 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         {
             _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             _identityFloor.Clear();
-            foreach (var pair in _lastObserved)
-            {
-                _identityFloor[pair.Key] = pair.Value;
-            }
-
-            _cache.Clear();
-            _lastLoaded.Clear();
+            foreach (var pair in _lastObserved) _identityFloor[pair.Key] = pair.Value;
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
+            _lastAccepted.Clear();
             previous = _identityCancellation;
             _identityCancellation = new CancellationTokenSource();
         }
-
         try { previous.Cancel(); } finally { previous.Dispose(); }
         Changed?.Invoke(Array.Empty<ForeverDbGuild>());
     }
@@ -260,263 +252,45 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         lock (_gate)
         {
             if (_lastAccepted.TryGetValue(installationId, out var accepted) &&
-                string.Equals(accepted.CaptureId, candidate.CaptureId, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
+                string.Equals(accepted.CaptureId, candidate.CaptureId, StringComparison.Ordinal)) return false;
             if (_identityFloor.TryGetValue(installationId, out var floor) &&
                 (string.Equals(floor.CaptureId, candidate.CaptureId, StringComparison.Ordinal) ||
-                 candidate.CapturedAt <= floor.CapturedAt))
-            {
-                return false;
-            }
-
-            // A Companion restart has no in-memory observation floor. A
-            // capture predating the current account session is still a local
-            // snapshot of unknown ownership and must not be attributed to it.
-            if (candidate.CapturedAt <= _identityEnteredAt)
-            {
-                return false;
-            }
-
-            return true;
+                 candidate.CapturedAt <= floor.CapturedAt)) return false;
+            return candidate.CapturedAt > _identityEnteredAt;
         }
     }
+
+    private static bool CanUseLocal(AccountStatus status) =>
+        status.State == SessionState.Registered &&
+        status.IdentityVerified &&
+        status.PrimaryCredentialPresent &&
+        !status.PendingRevocation &&
+        status.AccountsEnabled &&
+        status.AccountId is not null &&
+        status.Fault is not (SessionFault.AuthRejected or SessionFault.LocalCredentialCorrupt or
+            SessionFault.StorageFailure or SessionFault.RegisteredVerificationFailed or SessionFault.FeatureDisabled);
 
     private static CaptureStamp? TryGetCapture(ForeverDbSnapshot snapshot)
     {
         if (string.IsNullOrWhiteSpace(snapshot.GuildbookCaptureId) ||
             snapshot.GuildbookCapturedAt is not > 0 ||
-            string.IsNullOrWhiteSpace(snapshot.GuildbookSourceCharacter))
-        {
-            return null;
-        }
-
-        return new CaptureStamp(
-            snapshot.GuildbookCaptureId,
-            snapshot.GuildbookCapturedAt.Value,
-            snapshot.GuildbookSourceCharacter);
+            string.IsNullOrWhiteSpace(snapshot.GuildbookSourceCharacter)) return null;
+        return new CaptureStamp(snapshot.GuildbookCaptureId, snapshot.GuildbookCapturedAt.Value, snapshot.GuildbookSourceCharacter);
     }
 
-    private readonly record struct CaptureStamp(
-        string CaptureId,
-        long CapturedAt,
-        string SourceCharacter);
+    private readonly record struct CaptureStamp(string CaptureId, long CapturedAt, string SourceCharacter);
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
+        if (_disposed) return;
         _disposed = true;
         _sessions.IdentityChanged -= OnIdentityChanged;
         lock (_gate)
         {
             _identityCancellation.Cancel();
             _identityCancellation.Dispose();
-            _cache.Clear();
-            _lastLoaded.Clear();
+            _cacheByInstallation.Clear();
+            _activeInstallationId = null;
         }
     }
-}
-
-/// <summary>
-/// Provisional transport adapter for Agent A's account Guildbook RPC family.
-/// Only this file should need signature changes if the final migration uses a
-/// different JSON argument name or read shape.
-/// </summary>
-public sealed class AccountGuildbookRpcAdapter : IAccountGuildbookRpc
-{
-    private static readonly JsonSerializerOptions GuildbookJson = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
-    private const string IngestRpc = "fdb_account_guildbook_ingest";
-    private const string GuildsRpc = "fdb_account_guildbook_guilds_scoped";
-    private const string MembersRpc = "fdb_account_guildbook_members_scoped";
-    private readonly OwnershipRpcClient _rpc;
-
-    public AccountGuildbookRpcAdapter(OwnershipRpcClient rpc) => _rpc = rpc;
-
-    public async Task<RpcResult<bool>> IngestAsync(
-        string accessToken,
-        AccountGuildbookCapture capture,
-        CancellationToken cancellationToken)
-    {
-        var body = JsonSerializer.Serialize(new
-        {
-            p_installation_id = capture.InstallationId,
-            p_capture_id = capture.CaptureId,
-            p_captured_at = capture.CapturedAt,
-            p_source_character = capture.SourceCharacter,
-            p_guilds = capture.Guilds
-        }, GuildbookJson);
-
-        var result = await _rpc.CallAsync(
-            IngestRpc,
-            body,
-            accessToken,
-            cancellationToken,
-            isIngest: true).ConfigureAwait(false);
-
-        if (!result.Ok)
-        {
-            return RpcResult<bool>.Fail(result.Failure, result.HttpStatus);
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(result.Value!);
-            if (document.RootElement.ValueKind == JsonValueKind.Object &&
-                document.RootElement.TryGetProperty("ok", out var ok) &&
-                ok.ValueKind == JsonValueKind.False)
-            {
-                return RpcResult<bool>.Fail(RpcFailure.InvalidRequest, result.HttpStatus);
-            }
-        }
-        catch (JsonException)
-        {
-            return RpcResult<bool>.Fail(RpcFailure.MalformedResponse, result.HttpStatus);
-        }
-
-        return RpcResult<bool>.Success(true, result.HttpStatus ?? 200);
-    }
-
-    public async Task<RpcResult<IReadOnlyList<ForeverDbGuild>>> ReadAsync(
-        string accessToken,
-        string installationId,
-        CancellationToken cancellationToken)
-    {
-        var guildsBody = JsonSerializer.Serialize(new { p_installation_id = installationId });
-        var guilds = await _rpc.CallAsync(
-            GuildsRpc,
-            guildsBody,
-            accessToken,
-            cancellationToken).ConfigureAwait(false);
-
-        if (!guilds.Ok)
-        {
-            return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(guilds.Failure, guilds.HttpStatus);
-        }
-
-        try
-        {
-            using var guildDocument = JsonDocument.Parse(guilds.Value!);
-            if (guildDocument.RootElement.ValueKind != JsonValueKind.Array)
-            {
-                return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(RpcFailure.MalformedResponse, guilds.HttpStatus);
-            }
-
-            var result = new List<ForeverDbGuild>();
-            foreach (var row in guildDocument.RootElement.EnumerateArray())
-            {
-                var guild = new ForeverDbGuild
-                {
-                    GuildKey = String(row, "guild_key"),
-                    Name = String(row, "guild_name"),
-                    RealmName = String(row, "realm_name"),
-                    CapturedAt = Long(row, "captured_at")
-                };
-
-                const int pageSize = 200;
-                var offset = 0;
-                while (true)
-                {
-                    var membersBody = JsonSerializer.Serialize(new
-                    {
-                        p_installation_id = installationId,
-                        p_guild_key = guild.GuildKey,
-                        p_limit = pageSize,
-                        p_offset = offset
-                    });
-                    var members = await _rpc.CallAsync(
-                        MembersRpc,
-                        membersBody,
-                        accessToken,
-                        cancellationToken).ConfigureAwait(false);
-
-                    if (!members.Ok)
-                    {
-                        return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(members.Failure, members.HttpStatus);
-                    }
-
-                    using var memberDocument = JsonDocument.Parse(members.Value!);
-                    if (memberDocument.RootElement.ValueKind != JsonValueKind.Array)
-                    {
-                        return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(RpcFailure.MalformedResponse, members.HttpStatus);
-                    }
-
-                    var count = 0;
-                    foreach (var member in memberDocument.RootElement.EnumerateArray())
-                    {
-                        count++;
-                        var parsedMember = new ForeverDbGuildMember
-                        {
-                            Guid = String(member, "member_guid"),
-                            Name = String(member, "member_name"),
-                            ClassName = String(member, "class_name"),
-                            ClassFile = String(member, "class_file"),
-                            Level = (int)Long(member, "level"),
-                            RankName = String(member, "rank_name"),
-                            RankIndex = (int)Long(member, "rank_index"),
-                            Online = Bool(member, "online"),
-                            Zone = String(member, "zone_name"),
-                            LastOnlineHours = Long(member, "last_online_hours")
-                        };
-
-                        if (member.TryGetProperty("professions", out var professions) &&
-                            professions.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (var profession in professions.EnumerateArray())
-                            {
-                                parsedMember.Professions.Add(new ForeverDbGuildProfession
-                                {
-                                    SkillLineId = (int)Long(profession, "skill_line_id"),
-                                    Name = String(profession, "name"),
-                                    Skill = (int)Long(profession, "skill"),
-                                    MaxSkill = (int)Long(profession, "max_skill"),
-                                    Source = String(profession, "source"),
-                                    IsSecondary = Bool(profession, "is_secondary")
-                                });
-                            }
-                        }
-
-                        guild.Members.Add(parsedMember);
-                    }
-
-                    if (count < pageSize)
-                    {
-                        break;
-                    }
-
-                    offset += count;
-                }
-
-                result.Add(guild);
-            }
-
-            return RpcResult<IReadOnlyList<ForeverDbGuild>>.Success(result, guilds.HttpStatus ?? 200);
-        }
-        catch (JsonException)
-        {
-            return RpcResult<IReadOnlyList<ForeverDbGuild>>.Fail(RpcFailure.MalformedResponse, guilds.HttpStatus);
-        }
-    }
-
-    private static string String(JsonElement row, string name) =>
-        row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
-
-    private static long Long(JsonElement row, string name) =>
-        row.TryGetProperty(name, out var value) && value.TryGetInt64(out var number)
-            ? number
-            : 0;
-
-    private static bool Bool(JsonElement row, string name) =>
-        row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 }

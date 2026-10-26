@@ -148,7 +148,7 @@ public partial class MainWindow : Window
             account.Device?.Sync,
             _guildbookSync = new AccountGuildbookSync(
                 account.Sessions,
-                new AccountGuildbookRpcAdapter(account.Rpc)));
+                new LocalGuildbookStore()));
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -190,8 +190,6 @@ public partial class MainWindow : Window
             _httpClient,
             effective,
             GetSearchTokenAsync);
-
-        await LoadSearchZonesAsync();
 
         if (_settings.AutoSync)
         {
@@ -237,9 +235,20 @@ public partial class MainWindow : Window
             }
         }
 
-        RefreshSyncHealthUi();
+        // Restore encrypted local Guildbook data before any optional network
+        // work. This path is independent of AutoSync and never calls the
+        // public synchronization workflow.
+        var discoveredInstallations = TryDiscoverInstallations();
+        if (_guildbookSync is not null)
+        {
+            await GuildbookStartupCoordinator.RestoreAsync(
+                _guildbookSync,
+                discoveredInstallations);
+        }
 
-        TryDiscoverInstallations();
+        await LoadSearchZonesAsync();
+
+        RefreshSyncHealthUi();
 
         _ = RunDeviceBackgroundAsync(account);
 
@@ -262,14 +271,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void TryDiscoverInstallations()
+    private IReadOnlyList<string> TryDiscoverInstallations()
     {
         try
         {
             if (_syncService is null ||
                 string.IsNullOrWhiteSpace(_settings.WowRoot))
             {
-                return;
+                return Array.Empty<string>();
             }
 
             var watcher = _watcher ??
@@ -277,7 +286,7 @@ public partial class MainWindow : Window
                     _settings.WowRoot,
                     (_, _) => Task.CompletedTask);
 
-            _syncService.DiscoverInstallations(
+            var discovered = _syncService.DiscoverInstallations(
                 watcher.FindExistingFiles());
 
             if (_watcher is null)
@@ -286,10 +295,12 @@ public partial class MainWindow : Window
             }
 
             RefreshAccountUi();
+            return discovered;
         }
         catch (Exception)
         {
             // Discovery only feeds the Account tab.
+            return Array.Empty<string>();
         }
     }
 
@@ -473,6 +484,23 @@ public partial class MainWindow : Window
             return;
         }
 
+        var canUseGuildbook = _guildbookSync is not null && _guildbookSync.IsAvailable;
+        GuildbookTab.Visibility = canUseGuildbook ? Visibility.Visible : Visibility.Collapsed;
+        if (!canUseGuildbook)
+        {
+            if (ReferenceEquals(MainTabs.SelectedItem, GuildbookTab))
+                MainTabs.SelectedIndex = 0;
+            GuildSelector.SelectedItem = null;
+            GuildFilterBox.Text = "";
+            GuildOnlineOnlyCheck.IsChecked = false;
+            GuildbookPanel.Visibility = Visibility.Collapsed;
+            GuildSelector.ItemsSource = null;
+            GuildMembersGrid.ItemsSource = null;
+            return;
+        }
+
+        GuildbookPanel.Visibility = Visibility.Visible;
+
         if (GuildSelector.SelectedItem is not ForeverDbGuild guild)
         {
             GuildMembersGrid.ItemsSource = null;
@@ -535,7 +563,7 @@ public partial class MainWindow : Window
                 : "unknown";
 
         GuildbookStatusText.Text =
-            $"Captured {captured}. Addon roster refresh runs every 30 minutes while logged in; disk/Supabase sync still follows SavedVariables writes. Recipe lookup is currently runtime-limited.";
+            $"Captured {captured}. Local only — Stored on this device. Addon roster refresh runs every 30 minutes while logged in.";
 
         GuildbookMembersText.Text =
             roster.MembersCountText;
@@ -1632,8 +1660,8 @@ public partial class MainWindow : Window
 
         LastSyncCountsText.Text =
             _syncHealth.LastSuccessfulSyncAt is null
-                ? "Sources — · Guild members —"
-                : $"Sources {_syncHealth.LastSourceCount} · Guild members {_syncHealth.LastGuildMemberCount} · via {_syncHealth.LastTrigger}";
+                ? "Public sources —"
+                : $"Public sources {_syncHealth.LastSourceCount} · via {_syncHealth.LastTrigger}";
 
         LastErrorHealthText.Text =
             string.IsNullOrWhiteSpace(_syncHealth.LastError)

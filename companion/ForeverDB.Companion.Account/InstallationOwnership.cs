@@ -55,10 +55,12 @@ public enum BlockReason
     PilotUploadDisabled,
     CredentialUnavailable,
     InvalidRequest,
-    /// <summary>The installation belongs to this computer's registered device: automatic upload is off, only Sync now uploads.</summary>
+    /// <summary>The installation belongs to this computer's registered collector credential.</summary>
     DeviceAutoSyncOff,
     /// <summary>The registered-device upload did not run or was refused; the Registered device line says why.</summary>
-    DeviceSyncNotCompleted
+    DeviceSyncNotCompleted,
+    /// <summary>This installation has no independent collector credential yet; sign in as its owner and enroll it once.</summary>
+    CollectorEnrollmentRequired
 }
 
 public sealed record SyncAttempt(

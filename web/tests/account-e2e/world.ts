@@ -29,12 +29,12 @@ export async function loginAgain(playwright: Playwright, u: Pick<WebUser, "email
 
 export interface Companion { id: Identity; installationId: string }
 
-/** An anonymous Companion identity that has really ingested one installation (sources, loot, locations, quest drops, Guildbook). */
+/** An anonymous Companion identity that has really ingested one installation's public observations. */
 export async function companionWithInstallation(o: { guilds?: number; members?: number; tag?: string; sources?: number } = {}): Promise<Companion> {
   await relaxFixtureCeilings();
   const id = await anonymous();
   const installationId = uniq("e2e");
-  const r = await ingest(id.token, snapshot(installationId, { updatedAt: 1000, sources: o.sources ?? 3, guilds: o.guilds ?? 2, members: o.members ?? 4, tag: o.tag ?? "M" }));
+  const r = await ingest(id.token, snapshot(installationId, { updatedAt: 1000, sources: o.sources ?? 3, guilds: o.guilds ?? 0, members: o.members ?? 4, tag: o.tag ?? "M" }));
   if (r.status !== 200 || r.body?.ok !== true) throw new Error(`ingest answered ${r.status} ${JSON.stringify(r.body)}`);
   return { id, installationId };
 }

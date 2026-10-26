@@ -44,14 +44,13 @@ function stub(handler: (c: Call) => Reply) {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); __setAccountStoreForTests(null); });
 
 describe("closed PostgREST client", () => {
-  it("offers exactly the four web functions, all from the reviewed registry; claim_start and link_status are unreachable", async () => {
-    expect([...WEB_RPCS].sort()).toEqual(["fdb_account_claim_redeem", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members", "fdb_account_installations"]);
+  it("offers only the non-Guildbook web functions; claim_start, link_status and Guildbook are unreachable", async () => {
+    expect([...WEB_RPCS].sort()).toEqual(["fdb_account_claim_redeem", "fdb_account_installations"]);
     for (const n of WEB_RPCS) expect(Object.keys(ACCOUNT_RPCS)).toContain(n);
     stub(() => ({ status: 200, body: {} }));
-    for (const bad of ["fdb_account_claim_start", "fdb_installation_link_status", "installations", "../fdb_account_installations", "pg_sleep", "constructor", "__proto__", ""]) {
+    for (const bad of ["fdb_account_claim_start", "fdb_installation_link_status", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members", "installations", "../fdb_account_installations", "pg_sleep", "constructor", "__proto__", ""]) {
       await expect(callWebRpc(cfg, bad as never, {} as never, TOKEN)).rejects.toThrow("rpc_not_allowed");
     }
-    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("sends exactly one fixed request: POST, /rest/v1/rpc/<name> on the validated origin, four headers, validated body, no redirects/cache", async () => {
@@ -77,7 +76,6 @@ describe("closed PostgREST client", () => {
     await expect(callWebRpc(cfg, "fdb_account_claim_redeem", { p_code: CODE.toLowerCase() } as never, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_claim_redeem", { p_code: CODE, extra: 1 } as never, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_installations", { p_user: UID } as never, TOKEN)).rejects.toThrow();
-    await expect(callWebRpc(cfg, "fdb_account_guildbook_members", { p_installation_id: "i", p_guild_key: "g", p_limit: 201, p_offset: 0 }, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_installations", {}, "short")).rejects.toThrow("rpc_bad_token");
     await expect(callWebRpc(cfg, "fdb_account_installations", {}, `${TOKEN}\r\nPrefer: tx=rollback`)).rejects.toThrow("rpc_bad_token");
     expect(fetch).not.toHaveBeenCalled();
@@ -109,8 +107,6 @@ describe("closed PostgREST client", () => {
     expect(await callWebRpc(cfg, "fdb_account_installations", {}, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
     stub(() => ({ status: 200, body: [{ ...row(1), owner_user_id: UID }] }));
     expect(await callWebRpc(cfg, "fdb_account_installations", {}, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
-    stub(() => ({ status: 200, body: [{ member_name: "x", member_guid: "Player-1-2" }] }));
-    expect(await callWebRpc(cfg, "fdb_account_guildbook_members", { p_installation_id: "i", p_guild_key: "g", p_limit: 50, p_offset: 0 }, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
   });
 });
 

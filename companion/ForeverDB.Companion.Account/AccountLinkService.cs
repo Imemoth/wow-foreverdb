@@ -62,12 +62,10 @@ public sealed class AccountLinkService
                 return new(AccountLinkOutcome.SignInRequired, false);
             }
 
-            // One local device identity can represent one installation. Prove that this computer can be enrolled before moving
-            // ownership; otherwise a second local installation could be transferred and left without its intended device path.
-            var stored = _device.Context.Store.Read();
-            if (stored.Status is DeviceCredentialStatus.Unreadable or DeviceCredentialStatus.IoError ||
-                (stored.Status == DeviceCredentialStatus.Ok &&
-                 !string.Equals(stored.Credential!.InstallationId, installationId, StringComparison.Ordinal)))
+            // Check only the requested installation. Other local collector credentials are independent and must not block
+            // enrollment or cause an ownership transfer.
+            var stored = _device.Context.Store.Read(installationId);
+            if (stored.Status is DeviceCredentialStatus.Unreadable or DeviceCredentialStatus.IoError)
             {
                 _device.Enrollment.LoadLocalState();
                 return new(AccountLinkOutcome.DeviceRegistrationRequired, false, _device.Status);

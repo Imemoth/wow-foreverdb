@@ -12,8 +12,6 @@ test.afterAll(async () => { await db.end(); });
 
 const PRIVATE_POSTS = [
   ["/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "x", confirm: true, accountId: "00000000-0000-4000-8000-000000000000" }],
-  ["/account/api/guildbook/guilds", { installationId: "some-installation-1" }],
-  ["/account/api/guildbook/members", { installationId: "some-installation-1", guildKey: "Realm:Guild1", page: 0 }],
 ] as const;
 
 test("CSRF / Origin / Fetch-Metadata / content-type matrix on every private POST route: each protection alone is enough to refuse", async ({ playwright }) => {
@@ -97,10 +95,10 @@ test("every private route and page: private no-store, noindex, path-hiding refer
 test("redirect allowlist: the new pages are valid return paths, everything else falls back to /account", async ({ playwright }) => {
   const users = [await webUser(playwright, "redir1"), await webUser(playwright, "redir2")]; // (sign-ins are throttled per address: 10 / 15 min)
   const cases: [string, string][] = [
-    ["/account/link", "/account/link"], ["/account/installations", "/account/installations"], ["/account/guildbook", "/account/guildbook"],
+    ["/account/link", "/account/link"], ["/account/installations", "/account/installations"],
     ["/account/link?code=ABCDEF0123456789ABCDEF0123456789", "/account/link"], ["/account/link#x", "/account/link"],
     ["//evil.example/account/link", "/account"], ["https://evil.example", "/account"], ["/\\evil.example", "/account"], ["/account/link/../../admin", "/account"],
-    ["/account/linkx", "/account"], ["/account/%2e%2e/api/me", "/account"], ["%2F%2Fevil.example", "/account"], ["/account/guildbook/", "/account/guildbook"],
+    ["/account/linkx", "/account"], ["/account/%2e%2e/api/me", "/account"], ["%2F%2Fevil.example", "/account"],
   ];
   for (const [i, [next, want]] of cases.entries()) {
     const c = await newClient(playwright);
@@ -110,11 +108,10 @@ test("redirect allowlist: the new pages are valid return paths, everything else 
     expect(await json(r), next).toEqual({ ok: true, redirect: want });
   }
   // the unauthenticated page redirect carries only the fixed, allowlisted return path
-  const anon = await (await newClient(playwright)).get("/account/guildbook", { maxRedirects: 0 });
-  expect(anon.headers().location).toBe("/account/login?next=%2Faccount%2Fguildbook");
+  expect((await (await newClient(playwright)).get("/account/guildbook")).status()).toBe(404);
 });
 
-test("XSS: hostile guild, member, zone and rank text is rendered as inert text on the Guildbook and the installation pages", async ({ browser, playwright }) => {
+test.skip("legacy cloud Guildbook XSS page is retired; the Companion local-only UI owns this surface", async ({ browser, playwright }) => {
   const a = await webUser(playwright, "xss");
   const id = await anonymous();
   const installationId = uniq("xss");
