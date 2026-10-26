@@ -9,3 +9,10 @@ sync-config.json
 # .NET build output
 bin/
 obj/
+
+# Map atlas pipeline: raw extraction bundles (DB2 CSVs + BLP textures) and build output stay out of Git (docs/web/map-atlas.md)
+map-atlas-bundle/
+map-atlas-out/
+__pycache__/
+*.pyc
+*.blp

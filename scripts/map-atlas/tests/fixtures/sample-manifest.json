@@ -1,0 +1,70 @@
+{
+  "calibration": {
+    "note": "Projection is the accepted ForeverDB normalized-percent model by construction; registration against known landmarks has not been visually verified.",
+    "status": "provisional"
+  },
+  "category": "zone",
+  "clientBuild": {
+    "buildKey": "abababababababababababababababab",
+    "buildNumber": 70450,
+    "product": "wow_classic_beta",
+    "version": "1.60.1.70450"
+  },
+  "floor": null,
+  "image": {
+    "bytes": 1,
+    "file": "overview.webp",
+    "format": "webp",
+    "height": 400,
+    "pixelSha256": "fdacda607682eca87518773fc220d8c8837612b2d003871934de5c0f270edc12",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "width": 600
+  },
+  "instanceType": null,
+  "mapArtId": 7005,
+  "mapIds": [],
+  "mapType": {
+    "name": "zone",
+    "raw": 3
+  },
+  "parentUiMapId": 1414,
+  "projection": {
+    "origin": "top-left",
+    "pixelX": "imageWidth * xPercent / 100",
+    "pixelY": "imageHeight * yPercent / 100",
+    "range": [
+      0,
+      100
+    ],
+    "type": "normalized-percent",
+    "xDirection": "right",
+    "yDirection": "down"
+  },
+  "provenance": {
+    "partial": false,
+    "source": "WoW: Forever client 1.60.1.70450 (wow_classic_beta) map tiles assembled from client BLP textures by FileDataID",
+    "warnings": []
+  },
+  "schemaVersion": 1,
+  "slug": "mount-hyjal",
+  "source": {
+    "assembledBy": "azerdex map-atlas 1.0.0",
+    "expectedTiles": 6,
+    "metadata": "client DB2 (UiMap, UiMapXMapArt, UiMapArt, UiMapArtStyleLayer, UiMapArtTile)",
+    "tileCount": 6,
+    "tilesSha256": "f8adf93fa86f159a733469b428914fa39193742454a30b553620a029d4e8b898"
+  },
+  "system": 0,
+  "uiMapId": 2023,
+  "variant": {
+    "isPrimary": true,
+    "layerIndex": 0,
+    "mapArtId": 7005,
+    "phaseId": 0,
+    "styleId": 705
+  },
+  "variants": [],
+  "version": "v1",
+  "zoneId": 2023,
+  "zoneName": "Mount Hyjal"
+}

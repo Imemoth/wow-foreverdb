@@ -6,7 +6,7 @@
  * and it is configured through a closed set of
  * variables validated here, separately from the public-site rules in `../env.ts`:
  *
- *   ACCOUNT_AUTH_MODE             disabled (default) | local | staging | production
+ *   ACCOUNT_AUTH_MODE             disabled (default) | local | staging | pilot | production
  *   ACCOUNT_AUTH_URL              origin of the Supabase Auth/API gateway (no path, no credentials)
  *   ACCOUNT_AUTH_PUBLISHABLE_KEY  publishable/anon key ONLY (public by design, never a secret)
  *   ACCOUNT_AUTH_PROJECT_REF      required for staging, pilot and production; must match Auth URL exactly
@@ -17,7 +17,8 @@
  *     No environment variable alone can enable either. Owner approval + security review required.
  *   - `local` only on a developer machine (not hosted, deployment=local) against a loopback origin.
  *   - `staging` only against an isolated project on protected Vercel Preview.
- *   - `pilot` only on protected Vercel Preview with the EXACT private project ref; the
+ *   - `pilot` only on a Vercel Preview with the EXACT private project ref, and only when either the
+ *     (OFF) global flag or the scoped public-beta approval below applies; the
  *     website's public adapter stays synthetic. `production` additionally requires actual
  *     ForeverDB production, Vercel Production and all global production environment gates.
  *   - A service-role / secret key is rejected (decoded JWT role must be `anon`, or an
@@ -38,6 +39,22 @@
  */
 export const SINGLE_PROJECT_PILOT_APPROVED = false as boolean;
 export const PRODUCTION_ACCOUNT_AUTH_APPROVED = false as boolean;
+
+/**
+ * Owner-approved PUBLIC BETA activation (2026-10-22). Unlike the global flags above, this is a SCOPED approval: it
+ * is compiled in but only ever true for the exact beta deployment, so merging this file into `main` (or running it
+ * on any other branch, on Vercel production or on an unrelated preview) leaves Account disabled / fail-closed.
+ * Every one of these must hold; none can be satisfied by an Account-specific variable:
+ *   - hosted Vercel deployment, FOREVERDB_DEPLOYMENT=preview, Vercel target `preview` (never production)
+ *   - the git branch being built (Vercel system variable VERCEL_GIT_COMMIT_REF) is exactly `web/azerdex-beta`
+ *   - SITE_URL is exactly https://beta.azerdex.com
+ * It only relaxes the "protected preview" assumption of pilot mode for this one scope; the private-project ref,
+ * modern publishable key, Upstash, Turnstile and CSRF requirements of pilot mode all still apply.
+ */
+export const PUBLIC_BETA_ACCOUNT_SCOPE = Object.freeze({
+  gitBranch: "web/azerdex-beta",
+  siteOrigin: "https://beta.azerdex.com",
+});
 
 /** The existing private Supabase project: only an approved account boundary may contact it. */
 export const PRIVATE_PRODUCTION_PROJECT_REF = "klxhikdlfwgxurdyexdi";
@@ -60,6 +77,8 @@ export interface AccountAuthContext {
   deployment: "local" | "preview" | "production";
   /** Vercel's own target (production | preview | development), if any. */
   platformEnv?: string;
+  /** Git branch being built (Vercel system variable VERCEL_GIT_COMMIT_REF), if any. */
+  gitBranch?: string;
 }
 
 export interface AccountAuthResult {
@@ -108,6 +127,19 @@ function mentionsPrivateProject(value: string): boolean {
   return false;
 }
 
+/** True only for the exact owner-approved public beta deployment (see PUBLIC_BETA_ACCOUNT_SCOPE). */
+export function isApprovedPublicBetaScope(ctx: AccountAuthContext, siteUrl: string | undefined): boolean {
+  if (!ctx.hosted || ctx.deployment !== "preview" || ctx.platformEnv !== "preview") return false;
+  if (ctx.gitBranch !== PUBLIC_BETA_ACCOUNT_SCOPE.gitBranch) return false;
+  if (!siteUrl) return false;
+  try {
+    const u = new URL(siteUrl);
+    return u.origin === PUBLIC_BETA_ACCOUNT_SCOPE.siteOrigin && !u.username && !u.password;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * approval is an injected pure-test seam. The actual runtime calls this with two arguments,
  * therefore ONLY the compiled, reviewed flags above determine live availability.
@@ -146,9 +178,11 @@ export function evaluateAccountAuth(
 
   // A private-project connection is never permitted by configuration alone.
   if (mode === "pilot") {
-    if (!approval.pilot) fail("ACCOUNT_AUTH_MODE=pilot requires a reviewed owner-approved code change");
+    if (!approval.pilot && !isApprovedPublicBetaScope(ctx, raw.SITE_URL)) {
+      fail("ACCOUNT_AUTH_MODE=pilot requires a reviewed owner-approved code change (approved only for the public beta deployment scope)");
+    }
     if (!ctx.hosted || ctx.deployment !== "preview" || ctx.platformEnv !== "preview") {
-      fail("ACCOUNT_AUTH_MODE=pilot requires a protected Vercel preview deployment");
+      fail("ACCOUNT_AUTH_MODE=pilot requires a Vercel preview deployment");
     }
   } else if (mode === "production") {
     if (!approval.production) fail("ACCOUNT_AUTH_MODE=production is not available in Account System V1 without a reviewed owner-approved code change");

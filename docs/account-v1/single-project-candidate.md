@@ -25,7 +25,7 @@ In both private-project modes: Auth URL must be a canonical HTTPS `<20-char-ref>
 ### Required Vercel environment — configure only after Supabase URL/templates are verified and explicit protected-pilot preflight succeeds
 
 - Pilot: `VERCEL_ENV=preview`, `FOREVERDB_DEPLOYMENT=preview`, `FOREVERDB_DATA_SOURCE=fixture`. Protected preview hostname selected and frozen; Vercel Authentication remains ON, no public alias and no search indexing.
-- Production: `VERCEL_ENV=production`, `FOREVERDB_DEPLOYMENT=production`, `FOREVERDB_DATA_SOURCE=postgres`, sanitized **PUBLIC** `PUBLIC_READ_DATABASE_URL`, `SITE_URL` matching Vercel production domain, full independent web go-live gates in `docs/web/go-live-checklist.md`.
+- Production: `VERCEL_ENV=production`, `FOREVERDB_DEPLOYMENT=production`, `FOREVERDB_DATA_SOURCE=postgres`, sanitized **PUBLIC** `AZERDEX_READ_DB_URL`, `SITE_URL` matching Vercel production domain, full independent web go-live gates in `docs/web/go-live-checklist.md`.
 - Account variables in the **selected** environment only: `ACCOUNT_AUTH_MODE`, `ACCOUNT_AUTH_URL`, `ACCOUNT_AUTH_PROJECT_REF`, `ACCOUNT_AUTH_PUBLISHABLE_KEY`, `ACCOUNT_CSRF_SECRET` (secret, not client-exposed). Keep them all **unset** while mode is disabled (stray fields fail closed).
 - Every hosted account route already demands **Upstash** distributed throttling and **server-side Turnstile**. The pilot environment validator additionally requires `RATE_LIMIT_BACKEND=upstash`, `RATE_LIMIT_SALT`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `CHALLENGE_COOKIE_SECRET`. These protect website endpoints, **not direct GoTrue** calls.
 

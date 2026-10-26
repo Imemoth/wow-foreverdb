@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "./zod";
 import { evaluateAccountAuth, type AccountAuthConfig } from "./account/config";
 
 /**
@@ -46,7 +46,7 @@ export type RawEnv = Record<string, string | undefined>;
 const Base = z.object({
   FOREVERDB_DEPLOYMENT: z.enum(["local", "preview", "production"]).optional(),
   FOREVERDB_DATA_SOURCE: z.enum(["fixture", "postgres"]).optional(),
-  PUBLIC_READ_DATABASE_URL: z.string().optional(),
+  AZERDEX_READ_DB_URL: z.string().optional(),
   SITE_URL: z.string().optional(),
   RATE_LIMIT_BACKEND: z.enum(["memory", "upstash"]).default("memory"),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
@@ -60,12 +60,16 @@ const Base = z.object({
   TURNSTILE_SECRET_KEY: z.string().min(10).optional(),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(10).optional(),
   CHALLENGE_COOKIE_SECRET: z.string().min(32).optional(),
+  // Public-beta homepage SEO exception (see isPublicBetaHomepage in lib/seo.ts). Its value must
+  // equal VERCEL_GIT_COMMIT_REF for the branch actually serving THIS deployment - a value copied to
+  // another branch's environment by mistake stays inert there, since the names will not match.
+  BETA_SEO_AUTHORIZED_BRANCH: z.string().min(1).optional(),
 });
 
 export interface ServerEnv {
   FOREVERDB_DEPLOYMENT: DeploymentKind;
   FOREVERDB_DATA_SOURCE: "fixture" | "postgres";
-  PUBLIC_READ_DATABASE_URL?: string;
+  AZERDEX_READ_DB_URL?: string;
   /** Resolved, normalised origin (no path). Always https on hosted deployments. */
   SITE_URL: string;
   RATE_LIMIT_BACKEND: "memory" | "upstash";
@@ -85,6 +89,12 @@ export interface ServerEnv {
   hosted: boolean;
   /** Vercel's own environment (production | preview), when hosted on Vercel. */
   platformEnv?: "production" | "preview";
+  /**
+   * True only when BETA_SEO_AUTHORIZED_BRANCH is set AND equals the git branch actually serving
+   * this deployment. By itself this indexes nothing - see isPublicBetaHomepage in lib/seo.ts,
+   * which also requires the exact beta.azerdex.com hostname, preview mode, fixture data and "/".
+   */
+  betaSeoBranchAuthorized: boolean;
 }
 
 export function detectHosting(raw: RawEnv): { onVercel: boolean; hosted: boolean; vercelEnv?: "production" | "preview" | "development" } {
@@ -161,9 +171,9 @@ export function evaluateEnv(
       ok: false,
       issues: parsed.error.issues.map((i) => {
         const where = i.path.join(".") || "environment";
-        if (i.code === "invalid_enum_value") return `${where}: must be one of ${i.options.join(" | ")}`;
+        if (i.code === "invalid_value") return `${where}: must be one of ${i.values.join(" | ")}`;
         if (i.code === "too_small") return `${where}: is too short`;
-        if (i.code === "invalid_string") return `${where}: is not a valid value`;
+        if (i.code === "invalid_format") return `${where}: is not a valid value`;
         return `${where}: is invalid`;
       }),
     };
@@ -212,22 +222,22 @@ export function evaluateEnv(
 
   // 3. Public read database --------------------------------------------------
   if (dataSource === "postgres") {
-    const url = b.PUBLIC_READ_DATABASE_URL;
-    if (!url) fail("PUBLIC_READ_DATABASE_URL is required for the postgres data source");
+    const url = b.AZERDEX_READ_DB_URL;
+    if (!url) fail("AZERDEX_READ_DB_URL is required for the postgres data source");
     else if (referencesPrivateProject(url)) {
-      fail("PUBLIC_READ_DATABASE_URL points at the PRIVATE production database; refusing to start");
+      fail("AZERDEX_READ_DB_URL points at the PRIVATE production database; refusing to start");
     } else {
       let user = "";
       try {
         user = decodeURIComponent(new URL(url).username);
       } catch {
-        fail("PUBLIC_READ_DATABASE_URL is not a valid URL");
+        fail("AZERDEX_READ_DB_URL is not a valid URL");
       }
       // Plain role name, or Supavisor pooler form "<role>.<project-ref>".
       if (user !== "foreverdb_web_reader" && !user.startsWith("foreverdb_web_reader.")) {
-        fail("PUBLIC_READ_DATABASE_URL must use the least-privilege foreverdb_web_reader role");
+        fail("AZERDEX_READ_DB_URL must use the least-privilege foreverdb_web_reader role");
       }
-      if (host.hosted && isLocalHost(hostOf(url))) fail("PUBLIC_READ_DATABASE_URL must not point at a local address on a hosted deployment");
+      if (host.hosted && isLocalHost(hostOf(url))) fail("AZERDEX_READ_DB_URL must not point at a local address on a hosted deployment");
     }
   }
 
@@ -244,7 +254,7 @@ export function evaluateEnv(
 
   // 4b. Closed, server-only Account Auth boundary (disabled unless a reviewed source flag approves).
   // Nothing in this exception relaxes the PUBLIC read adapter or NEXT_PUBLIC_* protections above.
-  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv }, accountApproval);
+  const account = evaluateAccountAuth(raw, { hosted: host.hosted, deployment, platformEnv: host.vercelEnv, gitBranch: raw.VERCEL_GIT_COMMIT_REF }, accountApproval);
   for (const issue of account.issues) fail(issue);
   if (account.config?.mode === "pilot") {
     // Preview designation normally permits memory limiting and no CAPTCHA, but the private-project
@@ -318,6 +328,19 @@ export function evaluateEnv(
     fail("Turnstile requires NEXT_PUBLIC_TURNSTILE_SITE_KEY and CHALLENGE_COOKIE_SECRET");
   }
 
+  // 7. Public-beta homepage SEO exception --------------------------------------
+  // Meaningful only in preview; carrying it into local or production is always a mistake, so it
+  // fails closed rather than silently doing nothing.
+  if (b.BETA_SEO_AUTHORIZED_BRANCH && deployment !== "preview") {
+    fail("BETA_SEO_AUTHORIZED_BRANCH is only meaningful in preview; refusing to carry it into this deployment mode");
+  }
+  const betaSeoBranchAuthorized = Boolean(
+    b.BETA_SEO_AUTHORIZED_BRANCH &&
+      deployment === "preview" &&
+      raw.VERCEL_GIT_COMMIT_REF &&
+      b.BETA_SEO_AUTHORIZED_BRANCH === raw.VERCEL_GIT_COMMIT_REF,
+  );
+
   if (issues.length) return { ok: false, issues };
   return {
     ok: true,
@@ -330,6 +353,7 @@ export function evaluateEnv(
       SITE_URL: siteUrl,
       hosted: host.hosted,
       platformEnv: host.vercelEnv === "production" || host.vercelEnv === "preview" ? host.vercelEnv : undefined,
+      betaSeoBranchAuthorized,
     },
   };
 }

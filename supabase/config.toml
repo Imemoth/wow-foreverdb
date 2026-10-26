@@ -15,3 +15,7 @@ verify_jwt = false
 # Called by the public confirmation page's server route (a visitor, not a Supabase user). The credential is the one-time e-mail token
 # (consumed only by this explicit POST), exactly as with Auth's own public /verify endpoint. Never copy this setting to another function.
 verify_jwt = false
+
+[functions.azerdex-news-collector]
+# Invoked by the database scheduler with a dedicated shared secret.
+verify_jwt = false

@@ -46,12 +46,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const top = d.drops.find((x) => x.confidence !== "insufficient") ?? d.drops[0];
   const description = top
     ? `${d.item.name} (item ${d.item.id}) observed from ${d.item.sourceCount} source${d.item.sourceCount === 1 ? "" : "s"} in WoW: Forever. Top: ${top.source.name}, ${LOOT_KIND_LABEL[top.lootKind]}, ${fmtRate(top.rate, top.confidence)} observed over ${fmtInt(top.observations)} loots.`
-    : `${d.item.name} (item ${d.item.id}) in the ForeverDB observed database.`;
+    : `${d.item.name} (item ${d.item.id}) in the AzerDex observed database.`;
   return {
     title: `${d.item.name} — Item ${d.item.id}`,
     description,
     alternates: { canonical: itemPath(d.item.id) },
-    openGraph: { title: `${d.item.name} · ForeverDB`, description, url: itemPath(d.item.id) },
+    openGraph: { title: `${d.item.name} · AzerDex`, description, url: itemPath(d.item.id) },
     robots: robotsFor(d.item.indexable),
   };
 }
@@ -69,7 +69,7 @@ export default async function ItemPage({ params }: { params: Params }) {
         <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database", href: "/database" }, { name: "Items", href: "/database?category=item" }, { name: v.name }]} />
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">Item · disenchanting input</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{v.name}</h1>
+          <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{v.name}</h1>
           <p className="mt-1 font-[family-name:var(--font-mono)] text-sm text-mist">Item ID {de.id} · {fmtInt(v.totalObservations)} observed disenchants</p>
         </header>
         <ObservedRateNote />
@@ -94,12 +94,12 @@ export default async function ItemPage({ params }: { params: Params }) {
     <article className="space-y-8">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Database", href: "/database" }, { name: "Items", href: "/database?category=item" }, { name: d.item.name }]} />
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bronze-400">Item</p>
-          <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{d.item.name}</h1>
+          <h1 className="mt-1 break-words font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300 sm:text-4xl">{d.item.name}</h1>
           <p className="mt-1 font-[family-name:var(--font-mono)] text-sm text-mist">Item ID {d.item.id}</p>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Sources" value={fmtInt(d.item.sourceCount)} />
           <StatTile label="Times seen" value={fmtInt(d.item.totalDrops)} />
           <StatTile label="Last observed" value={fmtDate(d.item.lastObservedAt)} />
@@ -132,7 +132,7 @@ export default async function ItemPage({ params }: { params: Params }) {
       <div className="grid gap-8 md:grid-cols-2">
         <section aria-labelledby="zones-title">
           <h2 id="zones-title" className="panel-title text-xl">Zones</h2>
-          <p className="mt-1 text-xs text-mist">Inferred: zones where a source of this item was observed. ForeverDB cannot prove the zone of any individual drop, so no zone-specific drop count is shown.</p>
+          <p className="mt-1 text-xs text-mist">Inferred: zones where a source of this item was observed. AzerDex cannot prove the zone of any individual drop, so no zone-specific drop count is shown.</p>
           {d.zones.length === 0 ? <p className="mt-3 text-sm text-mist">No located observations.</p> : (
             <ul className="mt-3 space-y-1.5">
               {d.zones.map((z) => (

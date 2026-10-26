@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:zone-maps": "playwright test -c playwright.zone-maps.config.ts",
     "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
     "fixture:refresh": "node scripts/refresh-fixture.mjs",
     "test:parity": "vitest run --config vitest.parity.config.ts"
@@ -22,7 +23,9 @@
     "@fontsource-variable/cinzel": "5.3.0",
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
-    "next": "16.4.0",
+    "@vercel/analytics": "2.0.1",
+    "leaflet": "1.9.4",
+    "next": "16.4.2",
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -30,19 +33,20 @@
     "remark-gfm": "4.0.1",
     "server-only": "0.0.1",
     "yaml": "2.9.1",
-    "zod": "3.25.76"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
+    "@types/leaflet": "1.9.21",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "3.2.7"

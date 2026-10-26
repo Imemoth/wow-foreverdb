@@ -196,9 +196,9 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(r.config).toMatchObject({
       mode: "pilot", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
     });
-    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
   });
 
   it("accepts production only after separate code approval and matching real Vercel Production signals", () => {
@@ -273,7 +273,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const prod: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
       FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
-      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
       SITE_URL: "https://wow-foreverdb.vercel.app",
       RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
       UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
@@ -287,7 +287,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
     expect(fixture.ok).toBe(false);
     expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);
-    const privateDb = evaluateEnv({ ...prod, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
+    const privateDb = evaluateEnv({ ...prod, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
     expect(privateDb.ok).toBe(false);
     expect(!privateDb.ok && privateDb.issues.join(" ")).toMatch(/PRIVATE production database/);
   });
@@ -296,7 +296,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const base: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
       FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
-      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
       SITE_URL: "https://wow-foreverdb.vercel.app",
       RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
       UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
@@ -307,7 +307,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
     const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
     expect(rp.ok).toBe(false);
-    expect(!rp.ok && rp.issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/Vercel preview deployment/);
     // The pilot's source-code approval must not create public access or a public backend credential.
     const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
     expect(x.ok).toBe(false);
@@ -338,7 +338,7 @@ describe("integration with the global environment validator", () => {
   });
   it("does NOT weaken the global guard: the private project is still refused everywhere else", () => {
     const ref = PRIVATE_PRODUCTION_PROJECT_REF;
-    const r1 = evaluateEnv({ ...demo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@db.${ref}.supabase.co/postgres` });
+    const r1 = evaluateEnv({ ...demo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: `postgresql://foreverdb_web_reader:pw@db.${ref}.supabase.co/postgres` });
     expect(!r1.ok && r1.issues.join(" ")).toMatch(/PRIVATE production database/);
     const r2 = evaluateEnv({ ...demo, NEXT_PUBLIC_API_BASE: `https://${ref}.supabase.co` });
     expect(!r2.ok && r2.issues.join(" ")).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);
