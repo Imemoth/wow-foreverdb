@@ -12,7 +12,7 @@ import { TrafficAnalytics } from "@/components/TrafficAnalytics";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
 import { isPublicAnalyticsHost } from "@/lib/analytics";
-import { BETA_SEO_HOSTNAME, isPublicBetaHost, requestHostname } from "@/lib/seo";
+import { BETA_SEO_HOSTNAME, isPublicBetaHost, isPublicBetaPresentationHomepage, requestHostname } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
   const env = serverEnv();
@@ -39,10 +39,11 @@ export const viewport: Viewport = { themeColor: "#07091c", colorScheme: "dark" }
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { nonce, db, baseUrl, env } = await pageContext();
   const meta = await db.meta().catch(() => null);
-  // Keep beta JSON-LD pointing at the beta host even though it is now noindex.
+  // Preserve the original publication-aware beta homepage JSON-LD URL, independently of indexing.
   const h = await headers();
   const hostname = (h.get("host") ?? "").split(":")[0]!.toLowerCase();
-  const jsonLdBase = isPublicBetaHost(env, hostname) ? `https://${BETA_SEO_HOSTNAME}` : baseUrl;
+  const pathname = h.get("x-request-pathname") ?? "";
+  const jsonLdBase = (await isPublicBetaPresentationHomepage(env, hostname, pathname)) ? `https://${BETA_SEO_HOSTNAME}` : baseUrl;
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">
