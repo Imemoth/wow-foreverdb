@@ -207,7 +207,7 @@ export function evaluateAccountAuth(
     }
   } else if (mode === "production") {
     if (!approval.production && !isApprovedPublicProductionScope(ctx, raw.SITE_URL)) {
-      fail("ACCOUNT_AUTH_MODE=production requires the owner-approved release branch and exact azerdex.com production scope");
+      fail("ACCOUNT_AUTH_MODE=production is not available in Account System V1 without a reviewed owner-approved code change (requires the owner-approved release branch and exact azerdex.com production scope)");
     }
     if (!ctx.hosted || ctx.deployment !== "production" || ctx.platformEnv !== "production") {
       fail("ACCOUNT_AUTH_MODE=production requires FOREVERDB_DEPLOYMENT=production on Vercel's production environment");
