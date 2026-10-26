@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "../zod";
 import { auth, type AuthFailure, type AuthSession, type AuthUser } from "./auth-client";
 import type { AccountAuthConfig } from "./config";
 import { seal, unseal, unverifiedJwtPayload } from "./crypto";
