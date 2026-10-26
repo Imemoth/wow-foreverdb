@@ -171,9 +171,9 @@ export function evaluateEnv(
       ok: false,
       issues: parsed.error.issues.map((i) => {
         const where = i.path.join(".") || "environment";
-        if (i.code === "invalid_value") return `${where}: must be one of ${i.options.join(" | ")}`;
+        if (i.code === "invalid_value") return `${where}: must be one of ${i.values.join(" | ")}`;
         if (i.code === "too_small") return `${where}: is too short`;
-        if (i.code === "invalid_string") return `${where}: is not a valid value`;
+        if (i.code === "invalid_format") return `${where}: is not a valid value`;
         return `${where}: is invalid`;
       }),
     };
