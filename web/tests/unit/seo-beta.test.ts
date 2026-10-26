@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const meta = vi.fn();
 vi.mock("@/lib/data", () => ({ data: () => ({ meta }) }));
 
-import { PUBLIC_BETA_INDEXING_ENABLED, hasGenuinePublication, isIndexablePublicBetaHomepage, isIndexablePublicBetaHost, isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
+import { PUBLIC_BETA_INDEXING_ENABLED, hasGenuinePublication, isIndexablePublicBetaHomepage, isIndexablePublicBetaHost, isPublicBetaPresentationHomepage, isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
 
 /**
  * Pure allow-list logic for the narrowly-scoped public-beta homepage SEO exception (see
@@ -80,6 +80,13 @@ describe("genuine active publication requirement (async)", () => {
     expect(await hasGenuinePublication()).toBe(false);
     meta.mockImplementation(async () => { throw new Error("public_data_unavailable"); });
     expect(await hasGenuinePublication()).toBe(false);
+  });
+  it("preserves publication-aware beta presentation while disabling indexability", async () => {
+    meta.mockResolvedValue(published);
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/")).toBe(true);
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/zones")).toBe(false);
+    meta.mockResolvedValue({ ...published, publicationId: null });
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/")).toBe(false);
   });
   it("never indexes the beta after production launch, even with an authorized live publication", async () => {
     meta.mockResolvedValue(published);
