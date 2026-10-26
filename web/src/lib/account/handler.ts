@@ -1,6 +1,6 @@
 import "server-only";
 import type { NextRequest, NextResponse } from "next/server";
-import type { ZodType } from "zod";
+import type { ZodType } from "@/lib/zod";
 import { readBoundedJson } from "@/lib/security/challenge";
 import { auth } from "./auth-client";
 import { FORM_CSRF_FIELD, verifyCsrf, verifyFormRequest, verifyFormToken } from "./csrf";

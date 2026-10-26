@@ -7,3 +7,4 @@ import { z } from "zod";
 z.config({ jitless: true });
 
 export { z };
+export type { ZodType } from "zod";
