@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 export const POST = accountApi({ route: "guildbook/guilds", mutating: true, body: INPUTS.guildbookGuilds }, async (c, body) => {
   const a = await authenticate(c, { read: true });
   if (!a.ok) return a.response;
+  // Fail closed for all hosted targets: Guildbook belongs exclusively to local Companion.
+  if (c.ac.env.FOREVERDB_DEPLOYMENT !== "local") return withSession(c, a.auth, readFailure({ ok: false, kind: "not_found" }));
   return guarded(c, a.auth, async () => {
   const out = await callWebRpc(c.ac.cfg, "fdb_account_guildbook_guilds", { p_installation_id: body.installationId }, a.auth.session.at);
   if (!out.ok) return withSession(c, a.auth, readFailure(out));
