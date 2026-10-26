@@ -1,5 +1,5 @@
 import { accountApi } from "@/lib/account/handler";
-import { jsonResponse } from "@/lib/account/http";
+import { failure, jsonResponse } from "@/lib/account/http";
 import { INPUTS } from "@/lib/account/inputs";
 import { authenticate, guarded, readFailure, withSession } from "@/lib/account/private";
 import { callWebRpc } from "@/lib/account/rpc-client";
@@ -16,7 +16,7 @@ export const POST = accountApi({ route: "guildbook/guilds", mutating: true, body
   const a = await authenticate(c, { read: true });
   if (!a.ok) return a.response;
   // Fail closed for all hosted targets: Guildbook belongs exclusively to local Companion.
-  if (c.ac.env.FOREVERDB_DEPLOYMENT !== "local") return withSession(c, a.auth, readFailure({ ok: false, kind: "not_found" }));
+  if (c.ac.env.FOREVERDB_DEPLOYMENT !== "local") return withSession(c, a.auth, failure(404, "not_found"));
   return guarded(c, a.auth, async () => {
   const out = await callWebRpc(c.ac.cfg, "fdb_account_guildbook_guilds", { p_installation_id: body.installationId }, a.auth.session.at);
   if (!out.ok) return withSession(c, a.auth, readFailure(out));
