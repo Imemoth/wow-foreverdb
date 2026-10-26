@@ -194,7 +194,9 @@ export async function proxy(request: NextRequest) {
   res.headers.set("Content-Security-Policy", csp);
   const htmlStamp = deploymentHeaders(kind, publicBetaHomepage);
   // The public beta must remain crawlable after launch so Google can read its noindex directive.
-  if (kind === "preview" && requestHost === BETA_SEO_HOSTNAME) htmlStamp["X-Robots-Tag"] = "noindex, follow";
+  if (kind === "preview" && requestHost === BETA_SEO_HOSTNAME && pathname !== "/verify" && !pathname.startsWith("/verify/")) {
+    htmlStamp["X-Robots-Tag"] = "noindex, follow";
+  }
   for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...htmlStamp, ...accountHeaders })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
   // The anonymous rate-limit cookie is for public browsing only: account pages neither receive nor issue it.
