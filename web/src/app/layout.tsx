@@ -8,8 +8,10 @@ import { DatasetBanner } from "@/components/DatasetBanner";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TrafficAnalytics } from "@/components/TrafficAnalytics";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
+import { isPublicAnalyticsHost } from "@/lib/analytics";
 import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -51,6 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <SiteHeader />
         <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">{children}</main>
         <SiteFooter />
+        {env.hosted && isPublicAnalyticsHost(hostname) && <TrafficAnalytics />}
         <JsonLd nonce={nonce} data={{
           "@context": "https://schema.org",
           "@type": "WebSite",
