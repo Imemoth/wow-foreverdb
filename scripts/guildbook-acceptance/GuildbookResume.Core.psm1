@@ -75,6 +75,7 @@ function Get-GuildbookResumeContext {
         artifact_sha256 = $ArtifactDigest.ToUpperInvariant()
         executable_sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256 -ErrorAction Stop).Hash
         settings_sha256 = (Get-FileHash -LiteralPath $SettingsPath -Algorithm SHA256 -ErrorAction Stop).Hash
+        store_inventory = @($store.Inventory.Keys | Sort-Object -CaseSensitive | ForEach-Object { [pscustomobject]@{ key = $_; sha256 = $store.Inventory[$_] } })
         guildbook_store_sha256 = $storeDigest
         guildbook_file_count = [int]$store.FileCount
         guildbook_account_count = [int]$store.AccountCount
@@ -217,12 +218,26 @@ function Add-GuildbookResumeCheck {
     $State.checks = @($State.checks) + @($Check)
 }
 
-Export-ModuleMember -Function Get-GuildbookResumePath, Get-GuildbookResumeContext, Assert-GuildbookResumeContext, Read-GuildbookResumeState, Write-GuildbookResumeState, New-GuildbookResumeState, Add-GuildbookResumeCheck, Test-SyntheticAccountStore, Test-OfflineRouteSafety
+Export-ModuleMember -Function Get-GuildbookResumePath, Get-GuildbookResumeContext, Assert-GuildbookResumeContext, Read-GuildbookResumeState, Write-GuildbookResumeState, New-GuildbookResumeState, Add-GuildbookResumeCheck, Test-SyntheticAccountStore, Test-OfflineRouteSafety, Test-PreservedSyntheticStoreFiles
 )) {
             $accountHashes[$Matches[1]] = $true
         }
     }
     return $accountHashes.Count -eq $ExpectedAccountCount
+}
+
+function Test-PreservedSyntheticStoreFiles {
+    param([Parameter(Mandatory=$true)]$Before,[Parameter(Mandatory=$true)]$After)
+    $newFiles = @{}
+    foreach ($item in @($After.store_inventory)) {
+        $newFiles[[string]$item.key] = [string]$item.sha256
+    }
+    foreach ($item in @($Before.store_inventory)) {
+        $key = [string]$item.key
+        if (-not $newFiles.ContainsKey($key) -or
+            $newFiles[$key] -cne [string]$item.sha256) { return $false }
+    }
+    return $true
 }
 
 function Test-OfflineRouteSafety {
