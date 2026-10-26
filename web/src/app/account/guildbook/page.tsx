@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { callWebRpc } from "@/lib/account/rpc-client";
 import { requirePageUser } from "@/lib/account/page-session";
 import { Unavailable } from "../_ui/Unavailable";
@@ -9,6 +10,9 @@ export const metadata = { title: "Guildbook" };
 export default async function GuildbookPage() {
   const p = await requirePageUser("/account/guildbook");
   if (!p.ok) return p.reason === "unavailable" ? <Unavailable /> : null;
+  // Hosted AzerDex is not a Guildbook reader. The feature is local-only in Companion.
+  // Local test-stack behavior remains until the dedicated DB migration retires legacy RPCs.
+  if (p.ac.env.FOREVERDB_DEPLOYMENT !== "local") notFound();
   const out = await callWebRpc(p.ac.cfg, "fdb_account_installations", {}, p.session.at);
   return (
     <div data-account-wide>
