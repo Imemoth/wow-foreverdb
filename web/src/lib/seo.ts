@@ -61,6 +61,14 @@ export async function hasGenuinePublication(): Promise<boolean> {
   }
 }
 
+/**
+ * Preserve the old beta presentation rules (copy and homepage JSON-LD) without
+ * re-enabling search indexing. The real publication requirement still applies.
+ */
+export async function isPublicBetaPresentationHomepage(env: BetaSeoEnv, hostname: string, pathname: string): Promise<boolean> {
+  return isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
+}
+
 /** isPublicBetaHost + the genuine-publication check (robots.txt / sitemap.xml). */
 export async function isIndexablePublicBetaHost(env: BetaSeoEnv, hostname: string): Promise<boolean> {
   return PUBLIC_BETA_INDEXING_ENABLED && isPublicBetaHost(env, hostname) && (await hasGenuinePublication());
