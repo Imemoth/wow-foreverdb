@@ -17,7 +17,6 @@ const MENU_LINKS = [
   { href: "/guides", label: "Guides" },
   { href: "/news", label: "News" },
   { href: "/blog", label: "Blog" },
-  { href: "/download", label: "Download" },
 ];
 
 export function MobileNav({ accountSlot }: { accountSlot?: React.ReactNode }) {

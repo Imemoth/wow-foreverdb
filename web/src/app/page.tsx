@@ -230,7 +230,7 @@ export default async function HomePage() {
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link href="/about/data" className="btn-primary">Data methodology</Link>
-            <Link href="/download" className="btn-ghost">Get the addon &amp; Companion</Link>
+            <Link href="/addon-companion" className="btn-ghost">Get the addon &amp; Companion</Link>
           </div>
         </section>
       </div>

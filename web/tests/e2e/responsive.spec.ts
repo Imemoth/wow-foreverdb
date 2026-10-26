@@ -47,9 +47,11 @@ test.describe("mobile-only UI", () => {
     const opened = page.getByRole("button", { name: "Close menu" });
     await expect(opened).toHaveAttribute("aria-expanded", "true");
     const nav = page.getByRole("navigation", { name: "Primary" }).last();
-    for (const name of ["Database", "Zones", "Guides", "News", "Blog", "Download"]) {
+    for (const name of ["Database", "Zones", "Guides", "News", "Blog"]) {
       await expect(nav.getByRole("link", { name })).toBeVisible();
     }
+    // The Addon/Companion are not released yet: no Download entry in the menu (the /download page itself is kept).
+    await expect(nav.getByRole("link", { name: "Download" })).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     const closed = page.getByRole("button", { name: "Open menu" });
