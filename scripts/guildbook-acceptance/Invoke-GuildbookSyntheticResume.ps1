@@ -91,10 +91,8 @@ function RequireOffline([string]$id) {
         $defaults = @(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop | Where-Object {
             $_.DestinationPrefix -in @('0.0.0.0/0','::/0')
         })
-        foreach ($route in $defaults) {
-            if (@($connected | Where-Object { $_.InterfaceIndex -eq $route.InterfaceIndex }).Count -gt 0) {
-                throw 'A connected default route exists'
-            }
+        if (-not (Test-OfflineRouteSafety -Interfaces $connected -Routes $defaults)) {
+            throw 'A connected default route exists'
         }
     } catch {
         Note $id 'NOT_VERIFIED' 'BLOCKED' 'ROUTE_PRESENT_OR_UNVERIFIABLE'
@@ -202,7 +200,8 @@ try {
                         if (StopIfNotPass 'local_a_ui' $choice) { break }
                         $after = CurrentContext
                         if ($after.guildbook_file_count -le $state.context.guildbook_file_count -or
-                            $after.guildbook_account_count -ne 1) {
+                            $after.guildbook_account_count -ne 1 -or
+                            -not (Test-SyntheticAccountStore -GuildbookStore $storeRoot -InstallationId $fixture.Manifest.installation_id -ExpectedAccountCount 1)) {
                             Note 'a_dpapi_file_created' 'AUTO' 'FAIL' 'EXPECTED_NEW_ACCOUNT_SNAPSHOT_MISSING'
                             $stopped = $true; break
                         }
@@ -252,7 +251,9 @@ try {
                         if (StopIfNotPass 'local_b_ui' $choice) { break }
                         $after = CurrentContext
                         if ($after.guildbook_account_count -ne ($state.context.guildbook_account_count + 1) -or
-                            $after.guildbook_file_count -le $state.context.guildbook_file_count) {
+                            $after.guildbook_file_count -le $state.context.guildbook_file_count -or
+                            -not (Test-SyntheticAccountStore -GuildbookStore $storeRoot -InstallationId $fixture.Manifest.installation_id -ExpectedAccountCount 2) -or
+                            -not (Test-PreservedSyntheticStoreFiles -Before $state.context -After $after)) {
                             Note 'b_account_namespace' 'AUTO' 'FAIL' 'NEW_ACCOUNT_NAMESPACE_NOT_OBSERVED'
                             $stopped = $true; break
                         }
