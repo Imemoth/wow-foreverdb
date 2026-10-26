@@ -1,0 +1,17 @@
+name: Guildbook Windows acceptance harness synthetic
+on:
+  pull_request:
+    paths:
+      - 'scripts/guildbook-acceptance/**'
+      - '.github/workflows/guildbook-acceptance-synthetic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Synthetic Windows DPAPI and report checks (no network or user data)
+        shell: powershell
+        run: .\scripts\guildbook-acceptance\Test-GuildbookAcceptance.Synthetic.ps1
