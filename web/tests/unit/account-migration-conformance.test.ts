@@ -411,15 +411,41 @@ describe("account migration conformance linter", () => {
     expect(rules(commented)).toContain("guard-first:public.fdb_account_claim_start");
   });
 
+  it("0018 local-only kill switch has a dedicated fail-closed security contract", () => {
+    // The 0012 account-registry linter intentionally forbids dynamic SQL. 0018's one-time
+    // catalog discovery must support optional Guildbook RPC overloads, so it is checked
+    // independently here AND executed against disposable 0012/0014 databases in CI.
+    const sql = readFileSync(resolve(__dirname, "../../../database/migrations/0018_disable_guildbook_cloud_sync.sql"), "utf8");
+    const body = sql.replace(/--[^\\n]*/g, "");
+    expect(body).toContain("create table if not exists private.guildbook_cloud_sync_guard");
+    expect(body).toContain("insert into private.guildbook_cloud_sync_guard");
+    expect(body).toContain("private.foreverdb_ingest_snapshot_impl_v1_legacy");
+    expect(body).toContain("create or replace function private.fdb_public_snapshot");
+    expect(body).toContain("create or replace function private.foreverdb_ingest_snapshot_impl_v1");
+    expect(body).toContain("p.proname like 'fdb_account_guildbook_%'");
+    expect(body).toContain("revoke all on function %s from public, anon, authenticated, service_role");
+    expect(body).toContain("raise exception '0018 post-condition: % remains callable by an API role'");
+    for (const key of ["guilds", "guildbook", "guildbookCapture", "guildbookCaptureId", "guildbookCapturedAt", "guildbookSourceCharacter"]) {
+      expect(body).toContain(`- '${key}'`);
+    }
+    for (const table of ["installation_guilds", "installation_guild_members", "installation_guild_professions"]) {
+      for (const operation of ["delete from", "truncate", "drop table"]) {
+        expect(body.toLowerCase()).not.toContain(`${operation} public.${table}`);
+      }
+    }
+    expect(body).not.toContain("grant execute on function public.fdb_account_guildbook");
+  });
+
   it("holds for the account migration, wherever it lives (PR C): every migration that mentions an account function is linted", () => {
     const dir = resolve(__dirname, "../../../database/migrations");
     const mentions = /fdb_account_|fdb_installation_link_status|fdb_caller|fdb_anonymous_caller|fdb_registered_caller/;
     const files = readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
       .sort()
-      // 0014 (zero-touch enrollment) is deliberately outside this tripwire: it has its own function set and guards (registered AND
-      // anonymous device callers) that are pinned by the SQL integration suite database/tests/enrollment, not by the 0012 registry.
-      .filter((f) => !f.startsWith("0014_"))
+      // 0014 (zero-touch enrollment) and ONLY the exact 0018 local-only kill-switch file have
+      // separate disposable SQL integration suites. All other account migrations stay under
+      // the strict 0012 registry-based tripwire; new files are never silently exempted.
+      .filter((f) => !f.startsWith("0014_") && f !== "0018_disable_guildbook_cloud_sync.sql")
       .filter((f) => mentions.test(readFileSync(resolve(dir, f), "utf8")));
     if (files.length === 0) {
       expect(existsSync(dir)).toBe(true); // no account migration yet (PR A is specification only)
