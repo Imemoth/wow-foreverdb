@@ -190,6 +190,32 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(issues(productionSpoof, releaseCtx)).toMatch(/owner-approved code change/);
   });
 
+  it("allows the owner-approved public Account release ONLY for release branch + canonical azerdex.com", () => {
+    const exact: AccountAuthContext = {
+      hosted: true, deployment: "production", platformEnv: "production", gitBranch: "release",
+    };
+    const approved = { ...production, SITE_URL: "https://azerdex.com" };
+    const ok = evaluateAccountAuth(approved, exact);
+    expect(ok.issues).toEqual([]);
+    expect(ok.config?.mode).toBe("production");
+
+    for (const ctx of [
+      { ...exact, gitBranch: "main" },
+      { ...exact, gitBranch: "web/azerdex-beta" },
+      { ...exact, gitBranch: undefined },
+      { ...exact, platformEnv: "preview" },
+      { ...exact, deployment: "preview" },
+      { ...exact, hosted: false },
+    ] as AccountAuthContext[]) {
+      expect(evaluateAccountAuth(approved, ctx).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    for (const site of [undefined, "https://beta.azerdex.com", "https://www.azerdex.com", "https://azerdex.com/path", "http://azerdex.com"]) {
+      expect(evaluateAccountAuth({ ...approved, SITE_URL: site }, exact).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_URL: STAGING_URL, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, exact).issues.join(" ")).toMatch(/approved PRIVATE production project/);
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_secret_" + "x".repeat(40) }, exact).issues.join(" ")).toMatch(/SECRET key/);
+  });
+
   it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
     const r = evaluateAccountAuth(pilot, previewCtx, ownerPilot);
     expect(r.issues).toEqual([]);
