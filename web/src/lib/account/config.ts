@@ -13,7 +13,8 @@
  *   ACCOUNT_CSRF_SECRET           >= 32 characters; signs the CSRF token (a server secret, NOT a Supabase credential)
  *
  * Rules (each one has a negative test in tests/unit/account-config.test.ts):
- *   - `pilot` and `production` have SEPARATE compile-time approval flags, both false.
+ *   - The global pilot/production approval flags remain OFF. Exact owner-approved beta and production
+ *     release scopes are separately compile-time defined and verified against Vercel metadata.
  *     No environment variable alone can enable either. Owner approval + security review required.
  *   - `local` only on a developer machine (not hosted, deployment=local) against a loopback origin.
  *   - `staging` only against an isolated project on protected Vercel Preview.
@@ -34,7 +35,8 @@
  * Owner-approved private pilot (2026-10-12) ran ONLY on a Vercel-SSO-protected Preview branch with the exact
  * existing private Supabase Auth project. The compiled approval is now OFF on the release line (reverted before
  * the merge to main, 2026-10-16 integration). Re-enabling it is a separate owner-approved code change; the
- * environment alone can never open it. Public production approval remains separate and OFF.
+ * environment alone can never open it. The GLOBAL production approval remains OFF; only the exact
+ * owner-approved release + azerdex.com scope below may enable production mode.
  * Do not promote a pilot build or its configuration to the production target.
  */
 export const SINGLE_PROJECT_PILOT_APPROVED = false as boolean;
@@ -54,6 +56,18 @@ export const PRODUCTION_ACCOUNT_AUTH_APPROVED = false as boolean;
 export const PUBLIC_BETA_ACCOUNT_SCOPE = Object.freeze({
   gitBranch: "web/azerdex-beta",
   siteOrigin: "https://beta.azerdex.com",
+});
+
+/**
+ * Owner-approved public Account release scope (2026-10-26).
+ * This is NOT a global flag: only the production build of the protected `release` branch
+ * for the exact https://azerdex.com origin can enable Auth production mode, and only when
+ * the independent private Auth project, public-read DB and abuse-control checks pass.
+ * Other branches, preview targets and the beta keep their existing independent policy.
+ */
+export const PUBLIC_PRODUCTION_ACCOUNT_SCOPE = Object.freeze({
+  gitBranch: "release",
+  siteOrigin: "https://azerdex.com",
 });
 
 /** The existing private Supabase project: only an approved account boundary may contact it. */
@@ -140,6 +154,13 @@ export function isApprovedPublicBetaScope(ctx: AccountAuthContext, siteUrl: stri
   }
 }
 
+/** True only for the owner-approved release deployment and canonical public origin. */
+export function isApprovedPublicProductionScope(ctx: AccountAuthContext, siteUrl: string | undefined): boolean {
+  return ctx.hosted && ctx.deployment === "production" && ctx.platformEnv === "production" &&
+    ctx.gitBranch === PUBLIC_PRODUCTION_ACCOUNT_SCOPE.gitBranch &&
+    siteUrl === PUBLIC_PRODUCTION_ACCOUNT_SCOPE.siteOrigin;
+}
+
 /**
  * approval is an injected pure-test seam. The actual runtime calls this with two arguments,
  * therefore ONLY the compiled, reviewed flags above determine live availability.
@@ -185,7 +206,9 @@ export function evaluateAccountAuth(
       fail("ACCOUNT_AUTH_MODE=pilot requires a Vercel preview deployment");
     }
   } else if (mode === "production") {
-    if (!approval.production) fail("ACCOUNT_AUTH_MODE=production is not available in Account System V1 without a reviewed owner-approved code change");
+    if (!approval.production && !isApprovedPublicProductionScope(ctx, raw.SITE_URL)) {
+      fail("ACCOUNT_AUTH_MODE=production is not available in Account System V1 without a reviewed owner-approved code change (requires the owner-approved release branch and exact azerdex.com production scope)");
+    }
     if (!ctx.hosted || ctx.deployment !== "production" || ctx.platformEnv !== "production") {
       fail("ACCOUNT_AUTH_MODE=production requires FOREVERDB_DEPLOYMENT=production on Vercel's production environment");
     }

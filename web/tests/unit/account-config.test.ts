@@ -190,6 +190,32 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(issues(productionSpoof, releaseCtx)).toMatch(/owner-approved code change/);
   });
 
+  it("allows the owner-approved public Account release ONLY for release branch + canonical azerdex.com", () => {
+    const exact: AccountAuthContext = {
+      hosted: true, deployment: "production", platformEnv: "production", gitBranch: "release",
+    };
+    const approved = { ...production, SITE_URL: "https://azerdex.com" };
+    const ok = evaluateAccountAuth(approved, exact);
+    expect(ok.issues).toEqual([]);
+    expect(ok.config?.mode).toBe("production");
+
+    for (const ctx of [
+      { ...exact, gitBranch: "main" },
+      { ...exact, gitBranch: "web/azerdex-beta" },
+      { ...exact, gitBranch: undefined },
+      { ...exact, platformEnv: "preview" },
+      { ...exact, deployment: "preview" },
+      { ...exact, hosted: false },
+    ] as AccountAuthContext[]) {
+      expect(evaluateAccountAuth(approved, ctx).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    for (const site of [undefined, "https://beta.azerdex.com", "https://www.azerdex.com", "https://azerdex.com/path", "http://azerdex.com"]) {
+      expect(evaluateAccountAuth({ ...approved, SITE_URL: site }, exact).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_URL: STAGING_URL, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, exact).issues.join(" ")).toMatch(/approved PRIVATE production project/);
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_secret_" + "x".repeat(40) }, exact).issues.join(" ")).toMatch(/SECRET key/);
+  });
+
   it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
     const r = evaluateAccountAuth(pilot, previewCtx, ownerPilot);
     expect(r.issues).toEqual([]);
@@ -284,6 +310,19 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const good = evaluateEnv(prod, ownerProduction);
     expect(good.ok).toBe(true);
     expect(good.ok && good.env.accountAuth?.mode).toBe("production");
+    const released: RawEnv = {
+      ...prod, SITE_URL: "https://azerdex.com", VERCEL_PROJECT_PRODUCTION_URL: "azerdex.com",
+      VERCEL_GIT_COMMIT_REF: "release",
+    };
+    const live = evaluateEnv(released); // Real code defaults; NO injected approval flag.
+    expect(live.ok).toBe(true);
+    expect(live.ok && live.env.accountAuth?.mode).toBe("production");
+    const wrongBranch = evaluateEnv({ ...released, VERCEL_GIT_COMMIT_REF: "main" });
+    expect(wrongBranch.ok).toBe(false);
+    expect(!wrongBranch.ok && wrongBranch.issues.join(" ")).toMatch(/owner-approved release branch/);
+    const noChallenge = evaluateEnv({ ...released, TURNSTILE_SECRET_KEY: undefined });
+    expect(noChallenge.ok).toBe(false);
+    expect(!noChallenge.ok && noChallenge.issues.join(" ")).toMatch(/production Account requires server-side Turnstile/);
     const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
     expect(fixture.ok).toBe(false);
     expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);

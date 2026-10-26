@@ -266,6 +266,14 @@ export function evaluateEnv(
     }
   }
 
+  // Live Account signup, recovery and login must keep the same anti-abuse challenge
+  // requirements as the scoped public-beta account pilot. Production browsing may
+  // operate without Turnstile, but production Account cannot.
+  if (account.config?.mode === "production" &&
+      (!b.TURNSTILE_SECRET_KEY || !b.NEXT_PUBLIC_TURNSTILE_SITE_KEY || !b.CHALLENGE_COOKIE_SECRET)) {
+    fail("production Account requires server-side Turnstile and challenge cookie configuration");
+  }
+
   // 5. Site URL --------------------------------------------------------------
   let siteUrlRaw = b.SITE_URL;
   if (!siteUrlRaw) {
