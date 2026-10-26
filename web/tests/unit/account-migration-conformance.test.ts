@@ -416,7 +416,7 @@ describe("account migration conformance linter", () => {
     // catalog discovery must support optional Guildbook RPC overloads, so it is checked
     // independently here AND executed against disposable 0012/0014 databases in CI.
     const sql = readFileSync(resolve(__dirname, "../../../database/migrations/0018_disable_guildbook_cloud_sync.sql"), "utf8");
-    const body = sql.replace(/--[^\\n]*/g, "");
+    const body = sql.replace(/--[^\n]*/g, "");
     expect(body).toContain("create table if not exists private.guildbook_cloud_sync_guard");
     expect(body).toContain("insert into private.guildbook_cloud_sync_guard");
     expect(body).toContain("private.foreverdb_ingest_snapshot_impl_v1_legacy");
