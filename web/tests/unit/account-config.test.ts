@@ -310,6 +310,19 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const good = evaluateEnv(prod, ownerProduction);
     expect(good.ok).toBe(true);
     expect(good.ok && good.env.accountAuth?.mode).toBe("production");
+    const released: RawEnv = {
+      ...prod, SITE_URL: "https://azerdex.com", VERCEL_PROJECT_PRODUCTION_URL: "azerdex.com",
+      VERCEL_GIT_COMMIT_REF: "release",
+    };
+    const live = evaluateEnv(released); // Real code defaults; NO injected approval flag.
+    expect(live.ok).toBe(true);
+    expect(live.ok && live.env.accountAuth?.mode).toBe("production");
+    const wrongBranch = evaluateEnv({ ...released, VERCEL_GIT_COMMIT_REF: "main" });
+    expect(wrongBranch.ok).toBe(false);
+    expect(!wrongBranch.ok && wrongBranch.issues.join(" ")).toMatch(/owner-approved release branch/);
+    const noChallenge = evaluateEnv({ ...released, TURNSTILE_SECRET_KEY: undefined });
+    expect(noChallenge.ok).toBe(false);
+    expect(!noChallenge.ok && noChallenge.issues.join(" ")).toMatch(/production Account requires server-side Turnstile/);
     const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
     expect(fixture.ok).toBe(false);
     expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);
