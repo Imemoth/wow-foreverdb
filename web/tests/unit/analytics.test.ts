@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { filterAnalyticsEvent } from "@/lib/analytics";
+import { filterAnalyticsEvent, isPublicAnalyticsHost } from "@/lib/analytics";
 
 const event = (url: string) => ({ type: "pageview" as const, url });
 
 describe("Vercel Analytics traffic policy", () => {
+  it("only enables the script on public AzerDex hosts", () => {
+    expect(isPublicAnalyticsHost("BETA.AZERDEX.COM")).toBe(true);
+    expect(isPublicAnalyticsHost("azerdex.com")).toBe(true);
+    expect(isPublicAnalyticsHost("www.azerdex.com")).toBe(true);
+    expect(isPublicAnalyticsHost("wow-foreverdb-abc.vercel.app")).toBe(false);
+  });
+
   it("counts public beta and production pageviews", () => {
     expect(filterAnalyticsEvent(event("https://beta.azerdex.com/zone/1420"))).toEqual(event("https://beta.azerdex.com/zone/1420"));
     expect(filterAnalyticsEvent(event("https://azerdex.com/database"))).toEqual(event("https://azerdex.com/database"));
