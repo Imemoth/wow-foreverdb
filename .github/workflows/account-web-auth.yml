@@ -1,0 +1,131 @@
+name: Account web auth (real GoTrue)
+
+# Account System V1, PR B acceptance: the website's account backend against a REAL, EPHEMERAL Auth stack
+# (GoTrue built from a pinned supabase/auth tag, a PostgreSQL service container, Mailpit for captured mail).
+# Nothing is mocked and nothing real is touched: no Supabase project, no production credential, no Vercel.
+# If the stack cannot start, this job FAILS (acceptance BLOCKED); it never falls back to stubs.
+#
+# Like web-ci.yml there is deliberately no `paths:` filter, so the check reports on every PR.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: account-web-auth-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  GOTRUE_TAG: v2.197.0     # supabase/auth release the suite is verified against; bump deliberately and re-run
+  MAILPIT_TAG: v1.31.5
+
+jobs:
+  account-web-auth:
+    name: Account web auth (real GoTrue)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults: { run: { working-directory: web } }
+    env:
+      STACK_BIN: ${{ github.workspace }}/.stack-bin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Node.js is the pinned major (24)
+        run: test "$(node -p "process.versions.node.split('.')[0]")" = "$(tr -d '[:space:]' < ../.node-version)"
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: false }
+      - name: Restore GoTrue and Mailpit binaries
+        id: bin
+        uses: actions/cache@v4
+        with:
+          path: .stack-bin
+          key: stack-bin-${{ env.GOTRUE_TAG }}-${{ env.MAILPIT_TAG }}-v1
+      - name: Build GoTrue (supabase/auth ${{ env.GOTRUE_TAG }}) and Mailpit from source
+        if: steps.bin.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p .stack-bin
+          git clone --depth 1 --branch "$GOTRUE_TAG" https://github.com/supabase/auth.git /tmp/supabase-auth
+          (cd /tmp/supabase-auth && go build -o "$GITHUB_WORKSPACE/.stack-bin/gotrue" . && cp -r migrations "$GITHUB_WORKSPACE/.stack-bin/migrations")
+          GOBIN="$GITHUB_WORKSPACE/.stack-bin" go install "github.com/axllent/mailpit@$MAILPIT_TAG"
+      - run: npm ci
+      - name: Start the ephemeral Auth stack (real GoTrue + PostgreSQL + Mailpit)
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          GOTRUE_BIN: ${{ env.STACK_BIN }}/gotrue
+          MAILPIT_BIN: ${{ env.STACK_BIN }}/mailpit
+          GOTRUE_DIR: ${{ env.STACK_BIN }}
+          STACK_DIR: ${{ github.workspace }}/.stack
+        run: ./tests/auth-stack/up.sh
+      - name: Record the real Auth server under test
+        run: |
+          set -a; . "$GITHUB_WORKSPACE/.stack/env"; set +a
+          {
+            echo "### Real Auth stack"
+            echo "- GoTrue: supabase/auth \`$GOTRUE_TAG\` (built from source), PostgreSQL \`$(psql -h 127.0.0.1 -U postgres -Atc 'show server_version' 2>/dev/null || true)\`, Mailpit \`$MAILPIT_TAG\`"
+            echo "- Auth settings under test: confirm e-mail ON, anonymous sign-in ON, refresh-token rotation ON (reuse interval 10 s), access-token lifetime ${STACK_JWT_EXP} s; CAPTCHA, single-session-per-user, session time-box and inactivity timeout OFF"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PGPASSWORD: postgres
+      - name: Unit tests and static boundary tests (account libraries, edge rules, zone checks)
+        run: npx vitest run tests/unit/account-contracts.test.ts tests/unit/account-config.test.ts tests/unit/account-boundary.test.ts tests/unit/account-web-lib.test.ts tests/unit/account-web-static.test.ts
+      - name: Production build (account configuration and canary secrets present in the build environment)
+        env:
+          FOREVERDB_DEPLOYMENT: local
+          ACCOUNT_AUTH_MODE: local
+          ACCOUNT_CSRF_SECRET: CANARY-csrf-secret-0123456789abcdefghijklmnopqrstuvwxyz
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
+          RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
+        run: |
+          set -a; . "$GITHUB_WORKSPACE/.stack/env"; set +a
+          export ACCOUNT_AUTH_URL="$ACCOUNT_STACK_URL" ACCOUNT_AUTH_PUBLISHABLE_KEY="$ACCOUNT_STACK_ANON_KEY"
+          npm run build
+          npm run check:bundle-secrets
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Real-GoTrue acceptance (registration, confirmation, login, logout, recovery, sessions, CSRF, redirects, Turnstile, cookies, headers, leakage, public regression, fail-closed modes, browser UI, accessibility, client bundle)
+        env:
+          ACCOUNT_STACK_ENV_FILE: ${{ github.workspace }}/.stack/env
+        run: npx playwright test -c playwright.account.config.ts
+      - name: Summarise
+        if: always()
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("test-results/account-results.json","utf8"));
+            let t=0,p=0,f=0,s=0;
+            (function w(x){ for (const sp of x.specs??[]) for (const tt of sp.tests) { t++; const st = tt.results.at(-1)?.status; if (st==="passed") p++; else if (st==="skipped") s++; else f++; } for (const c of x.suites??[]) w(c); })({suites:r.suites});
+            console.log(`### Account acceptance (real GoTrue)\n- ${t} tests: ${p} passed, ${f} failed, ${s} skipped`);
+          ' >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Upload traces, results and stack logs (test data only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-web-auth-evidence
+          path: |
+            web/test-results/
+            .stack/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Stop the stack
+        if: always()
+        env:
+          STACK_DIR: ${{ github.workspace }}/.stack
+        run: ./tests/auth-stack/down.sh

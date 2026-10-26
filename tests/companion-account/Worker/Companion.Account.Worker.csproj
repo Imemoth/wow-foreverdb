@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Out-of-process helper: a second "Companion instance" for the cross-process coordination tests. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../companion/ForeverDB.Companion.Account/ForeverDB.Companion.Account.csproj" />
+  </ItemGroup>
+
+</Project>

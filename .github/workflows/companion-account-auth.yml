@@ -1,0 +1,116 @@
+name: Companion account auth
+
+# Stable check name for a future required status check: "Companion account auth (Windows)".
+# Deliberately NO `paths:` filter, so it can be made universally required without blocking unrelated PRs.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: companion-account-auth-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  # The standard binary supports account linking, but this test process stays explicitly offline: tests use an in-process fake
+  # (and a loopback fake for the multi-process cases) and never contact hosted Supabase.
+  FOREVERDB_ACCOUNT_MODE: "disabled"
+
+jobs:
+  windows:
+    name: Companion account auth (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Version consistency, secret/logging and production-separation checks
+        shell: bash
+        run: python3 scripts/check-companion-account.py
+
+      - name: Restore
+        run: |
+          dotnet restore companion/ForeverDB.Companion/ForeverDB.Companion.csproj
+          dotnet restore tests/companion-account/Companion.Account.Tests.csproj
+
+      - name: Build Companion (Release, WPF)
+        run: dotnet build companion/ForeverDB.Companion/ForeverDB.Companion.csproj -c Release --no-restore
+
+      - name: Account V1 Windows tests (real DPAPI, real multi-process)
+        run: >
+          dotnet test tests/companion-account/Companion.Account.Tests.csproj
+          -c Release
+          --logger "trx;LogFileName=companion-account.trx"
+          --results-directory TestResults
+
+      - name: Verify the Windows-only tests really ran
+        shell: pwsh
+        run: |
+          [xml]$trx = Get-Content TestResults/companion-account.trx
+          $c = $trx.TestRun.ResultSummary.Counters
+          Write-Host "total=$($c.total) executed=$($c.executed) passed=$($c.passed) failed=$($c.failed) notExecuted=$($c.notExecuted)"
+          if ([int]$c.failed -ne 0) { throw "failures" }
+          if ([int]$c.notExecuted -ne 0) { throw "tests were skipped on Windows (DPAPI acceptance must run)" }
+          if ([int]$c.total -lt 150) { throw "suite is unexpectedly small ($($c.total))" }
+          $dpapi = $trx.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*Real_DPAPI*' }
+          if (@($dpapi).Count -lt 2) { throw "real DPAPI tests did not run" }
+          $mp = $trx.TestRun.Results.UnitTestResult | Where-Object { $_.testName -like '*CrossProcessTests*' -and $_.outcome -eq 'Passed' }
+          if (@($mp).Count -lt 5) { throw "cross-process tests did not all run" }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: companion-account-test-results
+          path: TestResults/
+
+      - name: Sync health regression checks
+        run: dotnet run --project tests/companion-health/Companion.Health.Tests.csproj -c Release
+
+      - name: Guildbook filter regression checks
+        run: dotnet run --project tests/companion-guildbook/Companion.Guildbook.Tests.csproj -c Release
+
+      - name: Search zone regression checks
+        run: dotnet run --project tests/companion-search-zone/Companion.SearchZone.Tests.csproj -c Release
+
+      - name: Fully revealed map art regression checks
+        run: dotnet run --project tests/companion-map-reveal/Companion.MapReveal.Tests.csproj -c Release
+
+      - name: Publish verification (win-x64, Release)
+        run: >
+          dotnet publish companion/ForeverDB.Companion/ForeverDB.Companion.csproj
+          -c Release
+          -r win-x64
+          --self-contained false
+          -o artifacts/publish-check
+
+      - name: Published assembly carries the expected version and the account library
+        shell: pwsh
+        run: |
+          $dir = "artifacts/publish-check"
+          if (-not (Test-Path "$dir/ForeverDB.Companion.Account.dll")) { throw "account library missing from publish output" }
+          $v = (Get-Item "$dir/ForeverDB.Companion.dll").VersionInfo.ProductVersion
+          Write-Host "ProductVersion=$v"
+          if (-not $v.StartsWith("0.9.0-alpha")) { throw "unexpected version $v" }
+
+      - name: git diff --check
+        shell: pwsh
+        run: |
+          $base = git merge-base origin/main HEAD
+          git diff --check $base HEAD

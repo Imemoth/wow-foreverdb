@@ -1,19 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink-950: #090b10;
-  --color-ink-900: #0f1218;
-  --color-ink-850: #141821;
-  --color-ink-800: #1a1f2a;
-  --color-ink-700: #262d3b;
-  --color-ink-600: #364055;
-  --color-parchment: #ece4d3;
-  --color-mist: #a7b0bf;
-  --color-gold-300: #f3d38a;
-  --color-gold-400: #e6b95c;
-  --color-gold-500: #c9973d;
-  --color-bronze-400: #c58a52;
-  --color-bronze-600: #8a5a2e;
+  /* AzerDex "Dark Arcane Fantasy" foundation. Token NAMES are kept stable (ink-*, gold-*, bronze-*)
+     so every existing Tailwind utility class (bg-ink-950, text-gold-300, ...) re-skins from here;
+     only the VALUES change. Void/Abyss/Arcane map onto the ink-950/900/800 ramp. */
+  --color-ink-950: #07091c; /* Void — page background */
+  --color-ink-900: #0d0f33; /* Abyss — header / recessed surfaces */
+  --color-ink-850: #11133b; /* Abyss, slightly raised (sticky table headers, etc.) */
+  --color-ink-800: #191a47; /* Arcane — cards and panels */
+  --color-ink-700: #2c2d66; /* Arcane border */
+  --color-ink-600: #3c3d7d; /* Arcane border, raised (inputs, dividers) */
+  --color-parchment: #ece6d9;
+  --color-mist: #a8a9c8;
+  --color-gold-300: #f0dfae; /* Runic Gold, bright — headings, values */
+  --color-gold-400: #d9b978; /* Runic Gold — brand accent */
+  --color-gold-500: #c29a52;
+  --color-bronze-400: #ad8249;
+  --color-bronze-600: #7a5a30;
+  --color-violet-300: #c3aef2; /* primary-interaction family: links, focus, primary buttons */
+  --color-violet-400: #9b74e6;
+  --color-violet-500: #6c41c7; /* Arcane Violet — primary CTA */
+  --color-violet-600: #55339e;
+  --color-violet-700: #402878;
   --color-conf-high: #74cf92;
   --color-conf-medium: #e6c766;
   --color-conf-low: #eba066;
@@ -41,29 +49,33 @@
   html {
     background: var(--color-ink-950);
     -webkit-text-size-adjust: 100%;
+    /* Required by .hero-bleed's full-viewport-width technique below: 100vw can be a few
+       pixels wider than the visible viewport when a vertical scrollbar is present, which
+       would otherwise introduce horizontal scroll site-wide. */
+    overflow-x: hidden;
   }
   body {
     min-height: 100vh;
     color: var(--color-parchment);
     font-family: var(--font-sans);
     background:
-      radial-gradient(1200px 520px at 50% -180px, rgb(201 151 61 / 0.16), transparent 70%),
-      radial-gradient(800px 400px at 100% 0, rgb(110 69 36 / 0.12), transparent 70%),
+      radial-gradient(1100px 480px at 50% -160px, rgb(108 65 199 / 0.22), transparent 70%),
+      radial-gradient(900px 420px at 100% 0, rgb(201 151 61 / 0.1), transparent 70%),
       var(--color-ink-950);
     font-feature-settings: "cv11", "ss01";
   }
   ::selection {
-    background: rgb(230 185 92 / 0.35);
+    background: rgb(155 116 230 / 0.35);
   }
   a {
-    color: var(--color-gold-300);
+    color: var(--color-violet-300);
     text-underline-offset: 3px;
   }
   a:hover {
-    color: #fff1c9;
+    color: #e3d6fb;
   }
   :focus-visible {
-    outline: 2px solid var(--color-gold-400);
+    outline: 2px solid var(--color-violet-400);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -78,15 +90,162 @@
 
 @layer components {
   .panel {
-    background: linear-gradient(180deg, rgb(26 31 42 / 0.92), rgb(20 24 33 / 0.92));
+    background: linear-gradient(180deg, rgb(25 26 71 / 0.92), rgb(17 19 59 / 0.92));
     border: 1px solid var(--color-ink-700);
     border-radius: 0.75rem;
-    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 30px -18px rgb(0 0 0 / 0.8);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 12px 30px -18px rgb(0 0 0 / 0.8);
   }
   .panel-title {
     font-family: var(--font-display);
     letter-spacing: 0.04em;
     color: var(--color-gold-300);
+  }
+  /* Shared News visual variants. Content components stay shared; the category only changes
+     the atmosphere, accents, and source treatment. */
+  .news-card,
+  .news-detail__header {
+    position: relative;
+    isolation: isolate;
+  }
+  .news-card--bluepost {
+    background:
+      radial-gradient(120% 90% at 8% -18%, rgb(104 190 255 / 0.16), transparent 54%),
+      linear-gradient(145deg, rgb(16 43 88 / 0.98), rgb(7 15 37 / 0.98) 72%);
+    border-color: rgb(123 198 255 / 0.4);
+    box-shadow: 0 1px 0 rgb(222 244 255 / 0.09) inset, 0 14px 34px -20px rgb(35 133 214 / 0.52);
+  }
+  .news-card--official {
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 14px 32px -20px rgb(108 65 199 / 0.42);
+  }
+  .news-card--editorial {
+    background: linear-gradient(180deg, rgb(31 29 76 / 0.94), rgb(17 19 59 / 0.94));
+    border-color: rgb(108 65 199 / 0.42);
+  }
+  .news-card--bluepost::before,
+  .news-detail__header--bluepost::before {
+    position: absolute;
+    content: "";
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(166 225 255 / 0.95), transparent);
+    box-shadow: 0 0 18px 2px rgb(91 186 255 / 0.42);
+    pointer-events: none;
+  }
+  .news-card--bluepost::after,
+  .news-detail__header--bluepost::after {
+    position: absolute;
+    content: "";
+    inset: 0;
+    z-index: -1;
+    opacity: 0.18;
+    background:
+      linear-gradient(115deg, transparent 18%, rgb(118 203 255 / 0.14) 18.2%, transparent 18.6%),
+      linear-gradient(25deg, transparent 54%, rgb(118 203 255 / 0.1) 54.2%, transparent 54.6%),
+      radial-gradient(circle at 82% 18%, rgb(145 219 255 / 0.2) 0 1px, transparent 1.5px);
+    background-size: 180px 140px, 220px 180px, 120px 120px;
+    pointer-events: none;
+  }
+  .news-card > *,
+  .news-detail__header > * {
+    position: relative;
+    z-index: 1;
+  }
+  .news-card__eyebrow--bluepost,
+  .news-detail__eyebrow--bluepost {
+    color: rgb(168 224 255 / 0.94);
+  }
+  .news-card__mark {
+    display: inline-flex;
+    width: 1rem;
+    height: 1rem;
+    align-items: center;
+    justify-content: center;
+    color: #a8e2ff;
+    filter: drop-shadow(0 0 5px rgb(88 186 255 / 0.5));
+  }
+  .news-card__mark svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 0.9;
+  }
+  .news-card--bluepost .news-card__title,
+  .news-card--bluepost .news-card__title a {
+    color: #d9f2ff;
+    text-shadow: 0 0 18px rgb(91 186 255 / 0.2);
+  }
+  .news-card--bluepost .news-card__title a:hover {
+    color: #fff;
+  }
+  .news-card--bluepost .news-card__region {
+    color: rgb(203 234 255 / 0.86);
+  }
+  .news-card--bluepost .news-card__source,
+  .news-detail__header--bluepost .news-detail__title {
+    color: #a8ddff;
+  }
+  .news-card--bluepost .news-card__source:hover {
+    color: #e5f7ff;
+  }
+  .news-detail__header {
+    border-radius: 0.9rem;
+    padding: 1.5rem;
+  }
+  .news-detail__header--bluepost {
+    overflow: hidden;
+    background:
+      radial-gradient(90% 130% at 88% 0%, rgb(80 164 229 / 0.18), transparent 58%),
+      linear-gradient(145deg, rgb(14 38 78 / 0.96), rgb(7 15 37 / 0.98) 76%);
+    border: 1px solid rgb(123 198 255 / 0.38);
+    box-shadow: 0 1px 0 rgb(222 244 255 / 0.08) inset, 0 22px 42px -30px rgb(35 133 214 / 0.56);
+  }
+  .news-detail__header--official {
+    background: linear-gradient(145deg, rgb(42 27 77 / 0.35), transparent 70%);
+  }
+  .news-detail__header--editorial {
+    background: linear-gradient(145deg, rgb(108 65 199 / 0.1), transparent 70%);
+  }
+  .news-detail__header--bluepost .news-detail__dek,
+  .news-detail__header--bluepost .news-detail__title {
+    color: #d9f2ff;
+  }
+  .news-detail__announcement {
+    border-left: 2px solid var(--color-violet-500);
+    padding: 0.5rem 0 0.5rem 1.25rem;
+  }
+  .news-detail__announcement--bluepost {
+    border-left-color: rgb(112 199 255 / 0.82);
+    background: linear-gradient(90deg, rgb(21 61 112 / 0.26), transparent 72%);
+    padding: 1.1rem 1.25rem;
+    border-radius: 0 0.6rem 0.6rem 0;
+  }
+  .news-detail__body {
+    max-width: 68ch;
+  }
+  .news-detail__source {
+    border: 1px solid rgb(60 61 125 / 0.72);
+    border-radius: 0.65rem;
+    padding: 1rem 1.15rem;
+    background: rgb(13 15 51 / 0.3);
+  }
+  .news-detail__source--bluepost {
+    border-color: rgb(107 178 229 / 0.32);
+    background: rgb(8 28 57 / 0.34);
+  }
+  .news-source-action {
+    width: fit-content;
+    border-color: rgb(128 202 255 / 0.55);
+    color: #bce9ff;
+    background: transparent;
+  }
+  .news-source-action:hover {
+    border-color: rgb(178 229 255 / 0.9);
+    color: #f2fbff;
+    background: rgb(81 169 231 / 0.1);
   }
   .rule-ornament {
     height: 1px;
@@ -119,7 +278,7 @@
     vertical-align: middle;
   }
   .data-table tbody tr:hover td {
-    background: rgb(230 185 92 / 0.045);
+    background: rgb(108 65 199 / 0.08);
   }
   .data-table .num {
     text-align: right;
@@ -135,9 +294,33 @@
     min-height: 2.5rem;
   }
   .field:focus-visible {
-    outline: 2px solid var(--color-gold-400);
+    outline: 2px solid var(--color-violet-400);
     outline-offset: 0;
   }
+  /* Primary CTA — Arcane Violet. The main interactive action color across the site. */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(180deg, var(--color-violet-400), var(--color-violet-600));
+    border: 1px solid var(--color-violet-300);
+    text-decoration: none;
+  }
+  .btn-primary:hover {
+    color: #fff;
+    filter: brightness(1.08);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    filter: none;
+  }
+  /* Accent — Runic Gold. Reserved for brand/decorative emphasis, not primary actions. */
   .btn-gold {
     display: inline-flex;
     align-items: center;
@@ -165,12 +348,37 @@
     border-radius: 0.5rem;
     border: 1px solid var(--color-ink-600);
     color: var(--color-parchment);
-    background: rgb(15 18 24 / 0.6);
+    background: rgb(13 15 51 / 0.6);
     text-decoration: none;
   }
   .btn-ghost:hover {
-    border-color: var(--color-gold-500);
+    border-color: var(--color-violet-400);
     color: #fff;
+  }
+  /* Account dropdown item (header menu, desktop and mobile) and its sign-out action: icon + label row. */
+  .account-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    color: var(--color-parchment);
+    text-decoration: none;
+    text-align: left;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .account-menu-item:hover {
+    background: rgb(108 65 199 / 0.18);
+    color: #fff;
+  }
+  .account-menu-item:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .prose-fdb {
     line-height: 1.75;
@@ -232,4 +440,156 @@
     font-weight: 700;
   }
   .skip-link:focus { top: 1rem; color: #1b1206; }
+
+  /* Homepage hero: session-rotating atmospheric background (Phase 1).
+     The section's own background (set inline where it is used) is the permanent,
+     always-rendered fallback gradient; .hero-bg layers sit above it and only one
+     becomes visible once HeroThemeScript sets data-hero-theme on .hero-bg itself. */
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .hero-theme-layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .hero-theme-layer svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .hero-bg[data-hero-theme="arcane-ruins"] .hero-theme-layer--arcane-ruins,
+  .hero-bg[data-hero-theme="violet-moon"] .hero-theme-layer--violet-moon,
+  .hero-bg[data-hero-theme="floating-city"] .hero-theme-layer--floating-city {
+    opacity: 1;
+  }
+  /* Phase 2 integration point: an owner-approved photo for the resolved theme, layered
+     above the SVG/gradient art (still z-index 0, same stacking context; DOM order puts
+     it on top) and below .hero-vignette/content. Renders only when HeroImageLayer finds
+     both a resolved theme and a configured asset - see themes.ts HERO_ASSET_SRC. */
+  .hero-photo-layer {
+    z-index: 0;
+    object-fit: cover;
+    pointer-events: none;
+  }
+  .hero-vignette {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.32), rgb(7 9 28 / 0.78) 85%);
+    pointer-events: none;
+  }
+  /* violet-moon's moon sits bright and large in the upper-right (see HERO_IMAGE_FOCAL),
+     close enough to the text-safe zone that the base vignette alone left it reducing
+     headline contrast there. An extra patch centered on the moon's actual position
+     (not just a uniformly stronger vignette, which would needlessly darken the rest of
+     this theme's art) fixes it without touching the other two themes. */
+  .hero-bg[data-hero-theme="violet-moon"] ~ .hero-vignette {
+    background:
+      radial-gradient(42% 50% at 78% 20%, rgb(7 9 28 / 0.6), transparent 72%),
+      radial-gradient(60% 75% at 50% 35%, rgb(7 9 28 / 0.4), rgb(7 9 28 / 0.82) 85%);
+  }
+
+  /* Phase 1 visual polish: breaks a region out of <main>'s max-w-7xl/px-4 constraint
+     to span the full viewport width, edge-to-edge - see the `overflow-x: hidden` on
+     html above for why this is safe. The negative margin-top cancels main's own py-8
+     top padding (2rem) so the wrapped content sits flush under the header with no
+     gap, matching only its own first-child position - it does not affect main's
+     padding for any other page. Originally just the hero section; the homepage
+     later reused it as the outer wrapper for the whole page (hero plus every section
+     below it), each with its own inner `mx-auto max-w-[...]` content container, so a
+     homepage-only wider max-width doesn't require touching layout.tsx's global
+     max-w-7xl (see src/app/page.tsx). */
+  .hero-bleed {
+    position: relative;
+    left: 50%;
+    width: 100vw;
+    margin-left: -50vw;
+    margin-top: -2rem;
+  }
+  /* Gradual fade from the hero artwork into the standard page background, so the
+     section below starts on solid --color-ink-950 with no visible rectangular image
+     edge. Sits above the photo/vignette layers (z-index 1, same as .hero-vignette)
+     and below the centered content (z-index 10). */
+  .hero-fade-bottom {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 1;
+    height: 10rem;
+    background: linear-gradient(to bottom, transparent, var(--color-ink-950));
+    pointer-events: none;
+  }
+
+  /* Scroll lock for modal overlays (e.g. the /download screenshot lightbox). A stylesheet-backed
+     class toggled via classList, not a per-element inline `style` mutation, so there is no
+     ambiguity about the page's style-src CSP - the rule lives in this stylesheet, loaded like any
+     other, and JS only ever adds/removes the class name. */
+  .body-scroll-locked {
+    overflow: hidden;
+  }
+
+  /*
+   * Database "Advanced filters" disclosure (see database/page.tsx). The toggle is a native
+   * <details>/<summary> for free keyboard/AT support, but its controlled fields are rendered as
+   * an ADJACENT SIBLING div, not as children of <details> - deliberately, after a real regression:
+   * browsers hide a closed <details>'s children through their own UA mechanism (historically
+   * `display: none`, but some engines instead use `content-visibility: hidden` or an internal
+   * shadow-tree slot), and author CSS overriding one of those (e.g. `display: contents`) does
+   * nothing against the others. A sibling is never subject to any of that, so these two rules -
+   * entirely our own, with no UA mechanism to out-fight - are the only thing governing visibility.
+   */
+  .db-filters-body {
+    display: none;
+  }
+  .db-filters-toggle[open] + .db-filters-body {
+    display: grid;
+  }
+  @media (min-width: 768px) {
+    .db-filters-toggle {
+      display: none;
+    }
+    /*
+     * !important, deliberately: `.db-filters-toggle[open] + .db-filters-body` above is MORE
+     * specific (two classes + an attribute selector) than a plain `.db-filters-body` rule would
+     * be, so without this, a search that already has a filter applied (details rendered `open`)
+     * would win the specificity fight at desktop widths too and paint the fields as a nested grid
+     * instead of dissolving them into the form's own columns. This must always win outright,
+     * regardless of the toggle's open/closed state, so !important beats the mental arithmetic.
+     */
+    .db-filters-body {
+      display: contents !important;
+    }
+  }
 }
+
+/* Interactive map POC: Leaflet tooltips in the AzerDex palette (unlayered so they win over leaflet.css). */
+.leaflet-tooltip.azd-tooltip {
+  background: var(--color-ink-900);
+  color: var(--color-parchment);
+  border: 1px solid var(--color-violet-400);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 14px rgba(7, 9, 28, 0.6);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.leaflet-tooltip-top.azd-tooltip::before { border-top-color: var(--color-violet-400); }
+.azd-tip-title { font-weight: 600; color: var(--color-parchment); }
+.azd-tip-line { color: var(--color-mist); }
+/* Letterbox area around the map image (phones are narrower than the image aspect): AzerDex dark, not Leaflet's #ddd. */
+.azd-map.leaflet-container { background: var(--color-ink-900); }
+
+/* Cinematic zone hero crop (object-position), one class per configured position. A class instead of an inline style attribute because the
+   nonce-based CSP (style-src without 'unsafe-inline') blocks style attributes. Mapping + how to add a position: lib/maps/hero-position.ts.
+   Keep in step with CINEMATIC_ZONE_ARTWORK[*].objectPosition (unit-tested). Unlayered on purpose: it must win over the centred default. */
+.hero-pos-85-50 { object-position: 85% 50%; }
+.hero-pos-85-45 { object-position: 85% 45%; }

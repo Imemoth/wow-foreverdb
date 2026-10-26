@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "../zod";
 
 /**
  * Layered, distributed fixed-window rate limiting.
@@ -14,7 +14,7 @@ import { z } from "zod";
  * website traffic never reaches the production database at all.
  */
 
-export const RULE_NAMES = ["api_search", "api_detail", "page_db", "api_challenge"] as const;
+export const RULE_NAMES = ["api_search", "api_detail", "page_db", "api_challenge", "account_auth", "account_light"] as const;
 export type RuleName = (typeof RULE_NAMES)[number];
 
 const Rule = z.object({
@@ -40,11 +40,22 @@ export const DEFAULT_RULES: Record<RuleName, Rule> = {
    * is client-controlled and must not be an identity here).
    */
   api_challenge: { windowSec: 600, perIp: 6, perSession: 6, global: 600 },
+  /**
+   * POST /account/api/{register,login,confirm,forgot-password,resend,reset-password}: each allowed request makes a
+   * server-side call to Supabase Auth. Strict, per hashed IP only (the session cookie is never an identity here), and
+   * deliberately STRICTER than the Auth per-IP limits recorded in docs/account-v1 (L-2: <= 30 per 5 min), because the
+   * website calls Auth from shared egress addresses (L-8): the website as a whole must never exceed Auth's bucket, so the GLOBAL
+   * ceiling (25 per 5 min) is below it. Trade-off accepted and documented: a distributed flood can hold the ceiling (web-auth.md W-2).
+   * `perSession` is part of the shared schema but is never consulted for this rule.
+   */
+  account_auth: { windowSec: 300, perIp: 10, perSession: 10, global: 25 },
+  /** Cheap account routes: CSRF token, profile, session refresh, logout. Strict two-phase check as well. */
+  account_light: { windowSec: 60, perIp: 60, perSession: 60, global: 6_000 },
 };
 
 export function loadRules(json: string | undefined): Record<RuleName, Rule> {
   if (!json) return DEFAULT_RULES;
-  const parsed = z.record(z.enum(RULE_NAMES), Rule.partial()).parse(JSON.parse(json));
+  const parsed = z.partialRecord(z.enum(RULE_NAMES), Rule.partial()).parse(JSON.parse(json));
   const out = { ...DEFAULT_RULES };
   for (const name of RULE_NAMES) out[name] = Rule.parse({ ...DEFAULT_RULES[name], ...(parsed[name] ?? {}) });
   return out;
@@ -62,8 +73,32 @@ export function classify(pathname: string): RuleName | null {
  * The rule (if any) that protects a request. Data routes are limited on
  * GET/HEAD; the challenge endpoint is limited on POST (its only method).
  */
+/**
+ * Account routes that call Supabase Auth with a caller-supplied credential, token or address. `link` is one of them: its fresh-password
+ * confirmation makes a password grant (plus a user check and a revocation) per attempt, so it shares the strict `account_auth` budget
+ * (global ceiling below Auth's own per-IP limit, finding L-8).
+ */
+const ACCOUNT_STRICT_ROUTES = new Set(["register", "login", "confirm", "forgot-password", "resend", "reset-password", "reset-password/revoke", "link"]);
+
+/** True for the whole account namespace: pages (/account, /account/...) and the backend-for-frontend (/account/api/...). */
+export function isAccountPath(pathname: string): boolean {
+  return pathname === "/account" || pathname.startsWith("/account/");
+}
+export function isAccountApiPath(pathname: string): boolean {
+  return pathname.startsWith("/account/api/");
+}
+/** Rules that are enforced with the strict, fail-closed, IP-only two-phase check. */
+export function isStrictRule(rule: RuleName | null): boolean {
+  return rule === "api_challenge" || rule === "account_auth" || rule === "account_light";
+}
+
 export function classifyRequest(pathname: string, method: string): RuleName | null {
   if (pathname === "/api/v1/challenge") return method === "POST" ? "api_challenge" : null;
+  if (isAccountApiPath(pathname)) {
+    const route = pathname.slice("/account/api/".length).replace(/\/+$/, "");
+    if (method === "POST") return ACCOUNT_STRICT_ROUTES.has(route) ? "account_auth" : "account_light";
+    return method === "GET" || method === "HEAD" ? "account_light" : null;
+  }
   return method === "GET" || method === "HEAD" ? classify(pathname) : null;
 }
 

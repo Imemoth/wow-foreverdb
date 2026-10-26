@@ -62,6 +62,8 @@ describe("rate limiting", () => {
 
   it("validates rule overrides and session ids", () => {
     expect(loadRules('{"api_search":{"perIp":10}}').api_search.perIp).toBe(10);
+    expect(loadRules('{"account_auth":{"global":20}}').account_auth).toMatchObject({ windowSec: 300, perIp: 10, global: 20 });
+    expect(loadRules('{"api_search":{"perIp":11},"page_db":{"global":150}}').page_db.global).toBe(150);
     expect(() => loadRules('{"api_search":{"perIp":0}}')).toThrow();
     expect(() => loadRules('{"evil":{}}')).toThrow();
     expect(validSessionId("AAAAAAAAAAAAAAAAAAAAAA")).toBeTruthy();

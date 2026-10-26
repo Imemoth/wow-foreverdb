@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { serverEnv } from "@/lib/env";
 import { API_CSP } from "@/lib/security/headers";
 import { MAX_CHALLENGE_BODY_BYTES, isSameOriginJson, readBoundedJson } from "@/lib/security/challenge";

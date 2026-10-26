@@ -2,7 +2,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./fixtures";
 
 const PAGES = ["/", "/database", "/database?q=copper", "/item/2770", "/creature/1554", "/object/-184513", "/fishing/1420",
-  "/zone/1420", "/zones", "/news", "/guides/reading-observed-drop-rates", "/about/data", "/download", "/item/987654321"];
+  "/zone/1420", "/zones", "/news", "/news/introducing-foreverdb-web", "/blog", "/blog/building-a-safe-public-database",
+  "/guides", "/guides/reading-observed-drop-rates", "/about/data", "/download", "/item/987654321"];
 
 for (const path of PAGES) {
   test(`WCAG 2.2 AA automated checks: ${path}`, async ({ page }) => {

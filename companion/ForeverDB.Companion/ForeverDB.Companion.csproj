@@ -9,13 +9,16 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>ForeverDB.Companion</AssemblyName>
     <RootNamespace>ForeverDB.Companion</RootNamespace>
-    <Version>0.8.2-alpha</Version>
+    <Version>0.9.0-alpha</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="CascLib.NET" Version="1.50.0.206-alpha.3" />
     <PackageReference Include="War3Net.Drawing.Blp" Version="6.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForeverDB.Companion.Account/ForeverDB.Companion.Account.csproj" />
   </ItemGroup>
 
   <ItemGroup>

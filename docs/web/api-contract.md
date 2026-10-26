@@ -8,6 +8,8 @@ All endpoints are `GET` unless noted. Methods not listed return 405. Unknown or 
 | `/api/v1/item/{id}` | id: canonical decimal 1–999,999,999 | 404 if not published |
 | `/api/v1/source/{type}/{id}` | type ∈ creature/gameobject/fishing/item; negative id only for gameobject | All level variants, buckets, drops (≤300), locations (≤2000) |
 | `/api/v1/zone/{mapId}` | `q`, `type`, `kind`, `page` (≤41, 50/page) | Zone summary plus bounded directory. **Row semantics below** |
+| `/api/v1/zones/{mapId}/map-points` | `kind` ∈ located loot kinds (not disenchant), `limit` 1–max | Published location cells of one zone (UiMapID), floor of 2 observations per published cell, 1 % grid, deterministic order, bounded; `totalCells`/`truncated` reported. No item/disenchant locations |
+| `/api/v1/sources/{type}/{id}/map-points` | `zone` (UiMapID), `kind`, `level` 0–255, `limit`; type ∈ creature/gameobject/fishing (items have no locations → 404) | Same privacy floor and rules as the zone read, for one source; rows carry `mapId`. Backed by `web_api.source_map_points` (public-read migration 0005) |
 | `/api/v1/tooltip/item/{id}`, `/api/v1/tooltip/source/{type}/{id}` | — | Compact text-only tooltip |
 | `/api/v1/meta` | — | Publication id/time, counts, thresholds |
 | `POST /api/v1/challenge` | JSON `{token}` (10–2048 chars, no extra keys), same-origin `Origin`, `Content-Type: application/json`, body ≤ **4096 bytes counted as read** | 404 unless Turnstile configured. Order of checks: origin/content-type (403, nothing counted) → strict per-IP then global budget (429, before any outbound call) → bounded body read (413 oversize, 400 malformed/invalid `Content-Length`/bad JSON/schema) → Cloudflare Siteverify (403 failed, 503 unavailable). Sets `fdb_pass` (HttpOnly, SameSite=Strict, 30 min, IP-bound HMAC) |
@@ -47,6 +49,10 @@ Every DB call maps 1:1 to a `web_api.*` function. The functions re-validate the 
 | `api_detail` | other `/api/v1/*` (incl. tooltips) | 120 | 120 | 10,000 | — |
 | `page_db` | `/database`, `/item/*`, `/creature/*`, `/object/*`, `/fishing/*`, `/zone/*` | 90 | 90 | 15,000 | 60 |
 | `api_challenge` | `POST /api/v1/challenge` only | 6 / **10 min** | not used | 600 / 10 min | — |
+| `account_auth` | `POST /account/api/{register,login,confirm,forgot-password,resend,reset-password}` (Account System V1; off unless accounts are enabled) | 10 / **5 min** | not used | 25 / 5 min | — |
+| `account_light` | other `/account/api/*` (CSRF token, profile, refresh, logout) | 60 | not used | 6,000 | — |
+
+`account_auth` and `account_light` use the strict two-phase check of `api_challenge` (hashed IP only, fail closed with 503 when the store is down, cross-site POSTs refused before counting); see [account-v1/web-auth.md](../account-v1/web-auth.md).
 
 Exceeding any counter returns **429** with `Retry-After` (seconds to the window end). API calls get JSON. HTML gets a minimal static page.
 

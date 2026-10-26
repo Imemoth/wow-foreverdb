@@ -53,13 +53,13 @@ jobs:
         run: npx vitest run tests/unit/env.test.ts tests/unit/env-matrix.test.ts
       - name: Production build (canary secrets present in the build environment)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run build
       - name: Bundle-secret scan (no canaries, DB URLs, private project reference or source maps in browser bundles)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run check:bundle-secrets
@@ -89,6 +89,22 @@ jobs:
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
       - name: Responsive layout (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
+      # Zone atlas maps (feature-gated, off by default): needs a second build WITH the CDN origin baked in. Runs against a real local HTTPS
+      # server standing in for the CDN host (synthetic atlas generated from the bundled catalog snapshot): wiring, scaling, CSP and CORS
+      # are enforced by the real browser; no private artwork and no network access to the real CDN are involved.
+      - name: Zone atlas maps (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+        run: |
+          npm run build
+          npx playwright test -c playwright.zone-maps.config.ts
+      # Same build, cinematic heroes served from the CDN host's zone-heroes/ namespace (AZERDEX_ZONE_HERO_SOURCE=cdn, default is same-origin).
+      # The stand-in CDN serves the public watermarked derivatives with the headers of the unified _headers; checks headers, 404s, CSP, CORS, timing.
+      - name: Zone atlas maps with CDN-served cinematic heroes (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+          E2E_HERO_SOURCE: cdn
+        run: npx playwright test -c playwright.zone-maps.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }
@@ -120,18 +136,33 @@ jobs:
       - name: Publisher unit tests
         working-directory: publisher
         run: npm ci && npm run typecheck && npm test
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.1.4 }  # the Supabase Edge runtime's Deno-compatible version
+      - name: Supabase Edge Function type-check (the function is a thin adapter over publisher/src/core)
+        run: |
+          node scripts/sync-edge-core.mjs --check
+          cd supabase/functions/publish-observations && deno check index.ts
+      - name: Public-read migrations 0001-0005 applied as a NON-superuser admin (hosted-like), publication, ops and security SQL tests
+        run: ./scripts/public-hosted-compat.sh
+      - name: Failure, recovery, idempotency and concurrency of the publication pipeline (isolated, hosted-like database)
+        run: ./scripts/public-failure-recovery-tests.sh
       - name: End-to-end publication pipeline on ephemeral PostgreSQL
         run: ./scripts/public-pipeline-integration.sh
       - name: Website against the published public read model (Postgres adapter)
         working-directory: web
         env:
           FOREVERDB_DATA_SOURCE: postgres
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
         run: |
           npm ci
           npm run build
           npx playwright install --with-deps chromium
           npx playwright test --project=desktop tests/e2e/journeys.spec.ts tests/e2e/security.spec.ts
+      - name: Public-beta SEO against a published read model (genuine active publication, real HTTP, beta.azerdex.com Host)
+        working-directory: web
+        env:
+          BETA_SEO_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+        run: npx playwright test --project=desktop tests/e2e/beta-seo.spec.ts
       - name: Fixture <-> PostgreSQL adapter parity (zone semantics regression dataset)
         working-directory: web
         env:

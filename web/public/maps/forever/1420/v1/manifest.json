@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "zoneId": 1420,
+  "slug": "tirisfal-glades",
+  "zoneName": "Tirisfal Glades",
+  "version": "v1",
+  "image": {
+    "file": "tirisfal-glades.webp",
+    "format": "webp",
+    "width": 1002,
+    "height": 668,
+    "bytes": 255442,
+    "sha256": "a2856ed85f2545f2604e0a7e7fc41e9f270c78e84bf6c08885f43dd500b97678"
+  },
+  "projection": {
+    "type": "normalized-percent",
+    "origin": "top-left",
+    "xDirection": "right",
+    "yDirection": "down",
+    "range": [0, 100],
+    "pixelX": "imageWidth * xPercent / 100",
+    "pixelY": "imageHeight * yPercent / 100"
+  },
+  "provenance": {
+    "source": "Supplied by the AzerDex owner for the P2-D proof of concept (uploaded image of the Tirisfal Glades world map).",
+    "receivedFormat": "webp",
+    "note": "The brief described a PNG source; the file actually received was WebP (1002x668) and is stored unmodified. No separate PNG source was provided.",
+    "mapArtId": null,
+    "clientBuild": null,
+    "licenseStatus": "unreviewed",
+    "licenseNote": "The artwork appears to be Blizzard map art. docs/web/maps-and-assets.md currently forbids hosting it. Owner decision required before any public deployment or CDN publication."
+  },
+  "calibration": {
+    "status": "provisional",
+    "note": "Projection is exact by construction; registration against known landmarks has not been visually verified in a browser by the owner."
+  }
+}

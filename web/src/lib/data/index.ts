@@ -38,7 +38,12 @@ function cached(inner: PublicDataAdapter): PublicDataAdapter {
     zones: () => c.get(k("zones", []), () => inner.zones()),
     zone: (id) => c.get(k("zone", [id]), () => inner.zone(id)),
     zoneEntities: (q) => c.get(k("zoneEntities", [q]), () => inner.zoneEntities(q)),
+    zoneMapPoints: (id, kind, lim) => c.get(k("zoneMapPoints", [id, kind, lim]), () => inner.zoneMapPoints(id, kind, lim)),
+    sourceMapPoints: (q) => c.get(k("sourceMapPoints", [q]), () => inner.sourceMapPoints(q)),
     recent: (n) => c.get(k("recent", [n]), () => inner.recent(n)),
+    newsList: (q) => c.get(k("newsList", [q]), () => inner.newsList(q)),
+    newsFeatured: (n) => c.get(k("newsFeatured", [n]), () => inner.newsFeatured(n)),
+    newsEntry: (slug) => c.get(k("newsEntry", [slug]), () => inner.newsEntry(slug)),
     sitemap: (e, o, l) => c.get(k("sitemap", [e, o, l]), () => inner.sitemap(e, o, l)),
   };
 }
@@ -49,7 +54,7 @@ export function data(): PublicDataAdapter {
   if (adapter) return adapter;
   const env = serverEnv();
   const inner = env.FOREVERDB_DATA_SOURCE === "postgres"
-    ? new PostgresAdapter(env.PUBLIC_READ_DATABASE_URL!)
+    ? new PostgresAdapter(env.AZERDEX_READ_DB_URL!)
     : new FixtureAdapter();
   adapter = cached(inner);
   return adapter;

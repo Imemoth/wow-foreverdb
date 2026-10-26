@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
-import { BASE_SECURITY_HEADERS, HSTS, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
-import { isSameOriginJson } from "@/lib/security/challenge";
+import { assetOriginForPage, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
+import { isIndexablePublicBetaHomepage } from "@/lib/seo";
+import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
+import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
 import {
   MemoryStore,
@@ -9,6 +12,9 @@ import {
   checkRateLimit,
   checkStrictLimit,
   classifyRequest,
+  isAccountApiPath,
+  isAccountPath,
+  isStrictRule,
   loadRules,
   validSessionId,
   type CounterStore,
@@ -39,12 +45,13 @@ function log(event: string, data: Record<string, unknown>) {
   console.info(JSON.stringify({ at: new Date().toISOString(), event, ...data }));
 }
 
-function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean, kind: DeploymentKindName): NextResponse {
+function tooMany(isApi: boolean, retryAfter: number, reason: string, https: boolean, kind: DeploymentKindName, extra: Record<string, string> = {}): NextResponse {
   const headers: Record<string, string> = {
     ...BASE_SECURITY_HEADERS,
     ...deploymentHeaders(kind),
     "Retry-After": String(retryAfter),
     "Cache-Control": "no-store",
+    ...extra,
   };
   if (https) headers["Strict-Transport-Security"] = HSTS;
   if (isApi) {
@@ -53,7 +60,7 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
       { status: 429, headers: { ...headers, "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" } },
     );
   }
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slow down - ForeverDB</title><meta name="robots" content="noindex"></head><body style="background:#0e1116;color:#e8e2d4;font:16px system-ui,sans-serif;padding:3rem;max-width:40rem;margin:auto"><h1>Too many requests</h1><p>You are browsing the database faster than our fair-use limit allows. Please wait about ${retryAfter} seconds and try again.</p>${reason === "challenge_required" ? '<p><a style="color:#e0b45b" href="/verify">Verify you are human</a> to continue at a higher rate.</p>' : ""}</body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slow down - AzerDex</title><meta name="robots" content="noindex"></head><body style="background:#07091c;color:#ece6d9;font:16px system-ui,sans-serif;padding:3rem;max-width:40rem;margin:auto"><h1>Too many requests</h1><p>You are browsing the database faster than our fair-use limit allows. Please wait about ${retryAfter} seconds and try again.</p>${reason === "challenge_required" ? '<p><a style="color:#9b74e6" href="/verify">Verify you are human</a> to continue at a higher rate.</p>' : ""}</body></html>`;
   return new NextResponse(html, {
     status: 429,
     headers: {
@@ -67,10 +74,35 @@ function tooMany(isApi: boolean, retryAfter: number, reason: string, https: bool
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   const { pathname } = request.nextUrl;
-  const isApi = pathname.startsWith("/api/");
+  // Synthetic e2e harness pages: refused before any page code runs unless the strict local-fixture gate holds (see lib/e2e-fixtures.ts).
+  if ((pathname === E2E_FIXTURE_PATH_PREFIX || pathname.startsWith(`${E2E_FIXTURE_PATH_PREFIX}/`)) && !e2eFixturesAllowed()) {
+    return new NextResponse("Not found", { status: 404, headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "text/plain; charset=utf-8" } });
+  }
+  const isAccountApi = isAccountApiPath(pathname);
+  const isApi = pathname.startsWith("/api/") || isAccountApi;
+  // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
+  // deployment, production included), never leaks an account path/query in Referer, and never receives the anonymous rate-limit cookie.
+  const isAccount = isAccountPath(pathname);
+  const accountHeaders: Record<string, string> = isAccount
+    ? {
+        "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",
+        "Referrer-Policy": isAccountApi ? "no-referrer" : SENSITIVE_PAGE_REFERRER_POLICY,
+        // API responses carry no markup; pages get the nonce CSP below.
+        ...(isAccountApi ? { "Content-Security-Policy": API_CSP } : {}),
+      }
+    : {};
   const https = env.SITE_URL.startsWith("https://");
   const kind = env.FOREVERDB_DEPLOYMENT;
   const stamp = deploymentHeaders(kind);
+  // The one narrowly-scoped page allowed to drop the blocking tag - see lib/seo.ts. Computed from
+  // the request's own parsed hostname/pathname, never from anything a client can set; pathname "/"
+  // alone already rules out /api/* and /account/*, so this can never apply to either.
+  // request.nextUrl.hostname is NOT the incoming Host header on a self-hosted (non-Vercel-routed)
+  // Next.js server - it reports "localhost" regardless of what the client sent. The Host header
+  // itself (as Vercel's own edge routing sets it for the domain actually requested) is the only
+  // reliable signal here, exactly like requestHostname() in lib/seo.ts uses for every other surface.
+  const requestHost = (request.headers.get("host") ?? "").split(":")[0]!.toLowerCase();
+  const publicBetaHomepage = await isIndexablePublicBetaHomepage(env, requestHost, pathname);
   // The __Host- prefix (and Secure) follows the real origin: never a Secure-less cookie on an https site.
   const sidCookie = https ? "__Host-fdb_sid" : "fdb_sid";
 
@@ -78,34 +110,35 @@ export async function proxy(request: NextRequest) {
   const sessionId = validSessionId(request.cookies.get(sidCookie)?.value);
 
   const ruleName = classifyRequest(pathname, request.method);
-  if (ruleName === "api_challenge") {
-    // Outbound-call endpoint (Cloudflare Siteverify). Nothing below may reach
-    // the route handler without first passing the origin pre-check and the
-    // strict per-IP + global budget. Not applicable until Turnstile is
-    // configured (the route answers 404 for free).
-    if (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET) {
-      // Cross-site POSTs are refused BEFORE counting so a hostile page cannot
-      // burn a victim's budget from their browser.
-      if (!isSameOriginJson(request.headers, env.SITE_URL)) {
+  if (ruleName && isStrictRule(ruleName)) {
+    // Endpoints with costly side effects (outbound calls to Cloudflare Siteverify or to Supabase Auth). Nothing below
+    // may reach the route handler without first passing the origin pre-check and the strict per-IP + global budget.
+    // api_challenge applies only once Turnstile is configured (the route answers 404 for free otherwise); the account
+    // rules always apply (a disabled account area answers 404 after the handler, which costs nothing outbound).
+    const account = ruleName !== "api_challenge";
+    if (account || (env.TURNSTILE_SECRET_KEY && env.CHALLENGE_COOKIE_SECRET)) {
+      // Cross-site POSTs are refused BEFORE counting so a hostile page cannot burn a victim's budget from their browser.
+      const sameOrigin = account
+        ? request.method !== "POST" || isSameOriginRequest(request.headers, env.SITE_URL)
+        : isSameOriginJson(request.headers, env.SITE_URL);
+      if (!sameOrigin) {
         return NextResponse.json({ error: "forbidden" }, {
           status: 403,
-          headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
+          headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Cache-Control": account ? "private, no-store" : "no-store", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'" },
         });
       }
       try {
-        // Identity: trusted-header IP hash only. The session cookie is
-        // client-controlled and deliberately NOT part of this decision.
+        // Identity: trusted-header IP hash only. The session cookie is client-controlled and deliberately NOT part of this decision.
         const decision = await checkStrictLimit(counterStore(), ruleName, rules[ruleName], ipHash);
         if (!decision.allowed) {
           log("rate_limited", { rule: ruleName, reason: decision.reason, client: ipHash.slice(0, 8) });
-          return tooMany(true, decision.retryAfterSec, decision.reason, https, kind);
+          return tooMany(true, decision.retryAfterSec, decision.reason, https, kind, accountHeaders);
         }
       } catch (e) {
-        // FAIL CLOSED: without a working limiter we must not expose the
-        // outbound Siteverify call. Data routes are unaffected.
+        // FAIL CLOSED: without a working limiter we must not expose the outbound call. Data routes are unaffected.
         log("rate_limit_store_error", { rule: ruleName, error: e instanceof Error ? e.message : "unknown" });
         return NextResponse.json({ error: "temporarily_unavailable" }, {
-          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": "no-store" },
+          status: 503, headers: { ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders, ...(https ? { "Strict-Transport-Security": HSTS } : {}), "Retry-After": "30", "Cache-Control": account ? "private, no-store" : "no-store" },
         });
       }
     }
@@ -134,7 +167,7 @@ export async function proxy(request: NextRequest) {
 
   if (isApi) {
     const res = NextResponse.next();
-    for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
+    for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp, ...accountHeaders })) res.headers.set(k, v);
     if (https) res.headers.set("Strict-Transport-Security", HSTS);
     return res;
   }
@@ -145,15 +178,25 @@ export async function proxy(request: NextRequest) {
     dev: process.env.NODE_ENV !== "production",
     turnstile: Boolean(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
     https,
+    // The validated asset origin (img-src + connect-src only) is on EVERY HTML document while the zone-map experience is on, because a
+    // client-side navigation keeps the CSP of the page the visitor first loaded (see assetOriginForPage). Off => strict policy everywhere.
+    assetOrigin: assetOriginForPage(pathname, process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL),
+    // img-src only, and only when AZERDEX_ZONE_HERO_SOURCE=cdn (default: same-origin heroes, CSP unchanged).
+    heroImgOrigin: heroImgOrigin(),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  // Lets the root layout (which wraps every route and cannot otherwise see the current path) build
+  // correct canonical/JSON-LD URLs on the one eligible page without affecting any other route.
+  requestHeaders.set("x-request-pathname", pathname);
   requestHeaders.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
-  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...stamp })) res.headers.set(k, v);
+  const htmlStamp = deploymentHeaders(kind, publicBetaHomepage);
+  for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...htmlStamp, ...accountHeaders })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
-  if (!sessionId && request.method === "GET") {
+  // The anonymous rate-limit cookie is for public browsing only: account pages neither receive nor issue it.
+  if (!isAccount && !sessionId && request.method === "GET") {
     res.cookies.set(sidCookie, newSessionId(), {
       httpOnly: true, secure: https, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30,
     });

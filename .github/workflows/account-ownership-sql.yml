@@ -1,0 +1,97 @@
+name: ForeverDB account ownership backend (SQL + real GoTrue)
+
+# Account System V1, PR C (migration 0012). Disposable PostgreSQL + a real GoTrue built from the pinned upstream release tag; never a real
+# Supabase project. See database/tests/account/README.md. No production migration is applied or authorised by this workflow.
+# Designed to be a REQUIRED status check (check name: "Account ownership SQL + real GoTrue"): like web-ci.yml and
+# account-web-auth.yml there is deliberately NO `paths:` filter, so it reports on every pull request and every push to main and can
+# never leave a required check pending. The slow mutation suite stays manual (workflow_dispatch); the core SQL acceptance is mandatory.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mutation_check:
+        description: 'Also run the 27-mutant check (slow)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: account-ownership-sql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  account-ownership-sql:
+    name: Account ownership SQL + real GoTrue
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-password
+      FDB_REQUIRE_GOTRUE: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disposable PostgreSQL 16 (commit timestamps on, for the LS-11 ordering proof)
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-password postgres:16 \
+            -c track_commit_timestamp=on -c max_connections=300
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+          pg_isready -h 127.0.0.1 -U postgres
+
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }   # upstream requires a newer toolchain; GOTOOLCHAIN=auto fetches it
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+
+      - name: Install web dependencies (pg driver used by the suite)
+        working-directory: web
+        run: npm ci
+
+      - name: Build real GoTrue (pinned upstream release tag, same as the web-auth suite)
+        run: database/tests/account/build-gotrue.sh
+
+      - name: Stack up (roles, real GoTrue, repository migrations 0001-0011 as a non-superuser migration role)
+        run: database/tests/account/stack.sh up
+
+      - name: Apply 0012 (pre-flight, forward migration, in-migration privilege assertions)
+        run: database/tests/account/stack.sh apply
+
+      - name: Re-apply the 0012 body (idempotent body; the CI ledger fixture has no 0012 entry; a real ledger refuses a second run, see test 09)
+        run: database/tests/account/stack.sh apply
+
+      - name: Conformance tripwire (LS-10) on the real migration
+        working-directory: web
+        run: npx vitest run tests/unit/account-migration-conformance.test.ts
+
+      - name: Integration suite (LS-1..LS-9, LS-11, claims, concurrency, preservation, rollback/recovery rehearsal, existing regressions)
+        run: node --test --test-concurrency=1 database/tests/account/*.test.mjs
+
+      # Zero-touch enrollment (migration 0014, ADR-017). Applied AFTER the 0012 suite on purpose: that suite asserts that exactly the 0012
+      # functions exist. Nothing here touches a real Supabase project.
+      - name: Apply 0014 (zero-touch enrollment; pre-flight, forward migration, in-migration privilege assertions)
+        run: database/tests/account/stack.sh apply14
+
+      - name: Re-apply the 0014 body (idempotent objects)
+        run: database/tests/account/stack.sh apply14
+
+      - name: Enrollment suite (privileges, tickets, flows, races, credentials, failure/recovery, preservation, real GoTrue, rollback rehearsal)
+        run: node --test --test-concurrency=1 database/tests/enrollment/*.test.mjs
+
+      - name: Mutation check 0014 (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
+        run: node database/tests/enrollment/mutation_check.mjs
+
+      - name: Mutation check (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mutation_check }}
+        run: node database/tests/account/mutation_check.mjs
+
+      - name: GoTrue log (on failure)
+        if: failure()
+        run: tail -n 200 database/tests/account/.run/gotrue.log || true

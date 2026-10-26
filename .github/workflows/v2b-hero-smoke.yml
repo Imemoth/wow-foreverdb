@@ -1,0 +1,91 @@
+name: V2-B hero smoke (read-only)
+
+# READ-ONLY smoke test and performance probe of the cinematic zone heroes on the deployed website (HTTP GET only; no secrets, no deployment, no variable changes).
+# Run from Actions -> "V2-B hero smoke (read-only)" -> Run workflow:
+#   expect = local  BEFORE the Vercel beta variable AZERDEX_ZONE_HERO_SOURCE=cdn is set (same-origin heroes: the rollback state)
+#   expect = cdn    AFTER it is set and the beta redeployed (heroes from https://azerdex-assets.pages.dev)
+# A FAIL means the site does not match; an unreachable URL is never a PASS. Evidence JSON files are uploaded as artifacts (90 days).
+on:
+  workflow_dispatch:
+    inputs:
+      expect:
+        description: "local (before activation) or cdn (after activation)"
+        type: choice
+        options: [local, cdn]
+        default: local
+      site:
+        description: "Website origin (beta.azerdex.com, azerdex.com or a *.vercel.app deployment)"
+        default: "https://beta.azerdex.com"
+      perf_runs:
+        description: "Sequential requests per file and origin for the Vercel-vs-Cloudflare probe (0 = skip)"
+        default: "5"
+  # also runs (with the defaults: expect cdn (the beta's state since the V2-B activation), site https://beta.azerdex.com) when this workflow or its scripts change; this is also what registers the workflow for manual dispatch before it is on the default branch
+  pull_request:
+    paths:
+      - ".github/workflows/v2b-hero-smoke.yml"
+      - "web/scripts/hero-cdn-smoke.mjs"
+      - "web/scripts/hero-perf-probe.mjs"
+      - "web/scripts/hero-browser-check.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v2b-hero-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Hero smoke (${{ github.event.inputs.expect || 'cdn' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECT: ${{ github.event.inputs.expect || 'cdn' }}
+      SITE: ${{ github.event.inputs.site || 'https://beta.azerdex.com' }}
+      PERF_RUNS: ${{ github.event.inputs.perf_runs || '5' }}
+      CDN: https://azerdex-assets.pages.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version }
+      - name: Hero smoke on ${{ env.SITE }} (expect ${{ env.EXPECT }})
+        run: node web/scripts/hero-cdn-smoke.mjs --site "$SITE" --expect "$EXPECT" --cdn "$CDN" --out "$PWD/smoke-$EXPECT.json"
+      - name: Vercel vs Cloudflare hero probe (informational, no thresholds)
+        if: always() && env.PERF_RUNS != '0'
+        run: node web/scripts/hero-perf-probe.mjs --vercel "$SITE" --cloudflare "$CDN" --runs "$PERF_RUNS" --out "$PWD/probe-$EXPECT.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2b-hero-smoke-${{ github.event.inputs.expect || 'cdn' }}
+          path: |
+            smoke-*.json
+            probe-*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  browser:
+    name: Real-browser hero check (${{ github.event.inputs.expect || 'cdn' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECT: ${{ github.event.inputs.expect || 'cdn' }}
+      SITE: ${{ github.event.inputs.site || 'https://beta.azerdex.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Install web dependencies (Playwright library only; the runner's preinstalled Google Chrome is used, no browser download)
+        working-directory: web
+        run: npm ci --ignore-scripts
+      - name: Chrome ${{ env.EXPECT }} check on ${{ env.SITE }} (desktop + mobile, Hillsbrad + Duskwood)
+        working-directory: web
+        run: node scripts/hero-browser-check.mjs --site "$SITE" --expect "$EXPECT" --out "$GITHUB_WORKSPACE/browser-$EXPECT.json" --shots "$GITHUB_WORKSPACE/shots"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2b-hero-browser-${{ github.event.inputs.expect || 'cdn' }}
+          path: |
+            browser-*.json
+            shots/*.png
+          if-no-files-found: warn
+          retention-days: 90

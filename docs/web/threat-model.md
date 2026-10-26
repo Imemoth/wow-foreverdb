@@ -61,3 +61,7 @@ Tampered export (extra column) · flood of hostile names · drop > observations 
 | **Unintended effect on the live demo when the change merges** | Explicit owner precondition (set two non-secret variables first); previous deployment restorable with Instant Rollback; refusal is fail-closed (HTTP 500), never fail-open | `release-gates.md` §3 | The connector cannot set environment variables, so this is an owner step |
 
 Additional abuse cases tested: hosted missing designation, production + fixture, production without Upstash/trusted-IP/salt, `http` or localhost `SITE_URL` on a hosted deployment, public DB URL referencing the private project, wrong database role, `SUPABASE_*` variables, secrets echoed in error messages, preview metadata allowing indexing.
+
+## Account System V1 (added 2026-10-11)
+
+Accounts introduce a second trust zone (the Auth-only `/account` boundary) and ownership of private Companion data. They have their own threat model, abuse-prevention review and negative-test matrix: [docs/account-v1/security.md](../account-v1/security.md). Standing rules from this document that still apply to the account zone: nonce CSP, no secrets or private identifiers in bundles or responses, noindex outside production, fail-closed configuration. New rules: no service-role credential in the website, no private-project reference outside the closed Auth validator, no account code on Vercel's production target, no tokens or PII in logs or public caches.

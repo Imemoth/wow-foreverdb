@@ -4,6 +4,66 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
+
+- [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.
+- [x] Bootstrap TTL: **7 days (168 hours)**, single use, independently revocable. After redemption, persist a distinct **device-scoped** credential, not a packaged account refresh token. A lapsed ticket can be replaced from the signed-in website without re-downloading the binary.
+- [x] Anon download and existing historical anonymous installations remain supported. A previously owned anonymous installation still needs one-time explicit claim; new registered installations must never auto-claim an already owned ID.
+- [x] Owner's 2026-10-13 visual acceptance: web Guildbook correctly shows both linked Guilds (25 + 21 = 46 members); after sign-out the private Guildbook requested sign-in. Registered cross-account negative test remains separately pending.
+- [x] Independent ADR for account-bound ticket -> device-scoped authentication -> owned-installation ingest, including legacy JWT compatibility, race-safe first enrollment and 7-day bearer leakage risk.
+- [x] (implemented on PR #56, draft; **Windows/staging acceptance NOT executed**, see [acceptance-zero-touch.md](account-v1/acceptance-zero-touch.md)) Website protected download/activation issue + revoke, Companion first-run device credential storage and enrollment, registered manual ingest, multi-PC independence and revocation.
+- [ ] A/B/C/D negative, race, access control, Windows and browser CI; 6 historical anonymous owner fingerprints unchanged; no automatic public activation.
+- [x] **Owner UX decision (2026-10-13):** personalized registered downloads must be **one click / one download**; no separate activation-file download, code entry, Companion login, or manual placement in the public release. Existing split-file `.fdbact` activation is acceptable **only for the #57 private owner pilot**.
+- [ ] **Public Account V1 release blocker — one-download installer integration:** supply one signed/reproducible generic installer with securely handled account-bound 168-hour bootstrap; installer-to-Companion handoff automatic, no raw token in signed/public bundle, logs, URL or web cache. Complete Windows 10+11 E2E (first PC, second PC, anon mode, offline/recovery, ticket expiry, no additional login) before release. A single ZIP needing manual movement of two files does **not** satisfy the gate. See [specification §A-release](account-v1/zero-touch-enrollment-registered-sync.md).
+- [x] **Owner pilot (2026-10-16, owner-reported):** #59 Preview `strict-origin` + activation download 200; one `.fdbact` consumed (#57); one registered device visible; Companion 0.9.0-alpha sign-in and registered-device manual Sync Now OK, AutoSync OFF, Last Error None. **Empty payload only (0 sources, 0 Guildbook members): non-empty ingest NOT TESTED.** Record: [zero-touch-pilot-closure.md](account-v1/zero-touch-pilot-closure.md).
+- [x] Companion installation panel stayed `Not checked yet` after a successful device upload: UI/state defect, fixed (display only, no authorization change); Windows CI PASS on `92d8e80`; owner on-screen check pending.
+- [ ] Open: non-empty device ingest, 6/140/46 preservation re-check, Z4–Z10, merge-time `check-pilot-flags.py --require-off`, Z13 (public-release blocker). #57 stays owner-only and unmerged.
+- [ ] Separate integration/release gate: disable temporary code-level pilot flags and complete security reviews before any main/release merge, preserving the protected active preview during transition.
+
+Specification: [7-day Zero-Touch Enrollment + Registered Sync](account-v1/zero-touch-enrollment-registered-sync.md). Decision: [ADR-017](account-v1/adr-017-zero-touch-enrollment.md). Merge order and pilot-flag gate: [integration-and-release-order.md](account-v1/integration-and-release-order.md).
+
+## Account V1 — owner-approved single-installation claim pilot (PR #55, draft)
+
+- [x] Owner approved lifting the existing single-project Companion claim-code restriction, scoped to a private pilot (2026-10-12).
+- [x] PR #55 draft on PR #54: a separate private-claim-pilot process mode accepts ONE explicitly selected installation ID; default production and login-only modes remain unchanged.
+- [x] The original anonymous DPAPI credential is only read and copied into an isolated legacy slot; refresh and revocation of the copy are blocked. Code issuance requires live server proof of anonymous ownership. Full ingest, automatic sync, owner selection and new anonymous identity creation remain blocked.
+- [x] Website password-confirmed one-time code redeemed successfully on 2026-10-13 for owner-approved historical installation `2f8df8ba69345d0a14c8d56ac86d4b2e`; one claim consumed and one registered ownership link confirmed by read-only production SQL. No migration or unrelated owner transfer executed.
+- [x] Prior PR #55 pilot build at `f0ea09f` passed Windows account auth tests, CodeQL and GitHub CI; owner-run claim success verified on that installed build.
+- [ ] Independent release-oriented code/security review and CI on the FINAL revised PR head, including negative cases; do not merge draft PR with temporary private-pilot source flags enabled.
+- [x] Owner accepted using one existing historical installation instead of provisioning a disposable one (2026-10-12). Read-only Supabase inspection confirms scoped ID `2f8df8ba69345d0a14c8d56ac86d4b2e` is anonymously owned, with 140 source-stat rows and 46 Guildbook-member rows.
+- [x] Pre-claim baseline read-only verified (0 links/claims, exact target anonymously owned, 140 source rows/46 members, other-six ownership fingerprint `1bd16ed087b98f0632b5f01a39c760ba`); post-claim other-six fingerprint unchanged.
+- [x] Windows/web owner transfer E2E: initial credential-unavailable recovery followed by successful one-time code issue and protected web redemption; live SQL confirms 1 registered link, consumed claim, 140 source-stat rows and 46 member rows retained, six other owners unchanged (2026-10-13).
+- [ ] Finish owner-run **Your installations** + **Private Guildbook** UI/RLS verification and Companion post-transfer `Check status` (no Sync now). Registered snapshot ingest/AutoSync remains disabled; old anonymous ingest to the transferred installation must not be retried.
+- [ ] Only after explicit review and acceptance, design protected post-claim registered snapshot ingestion. Keep all public pilot flags OFF for main/release.
+
+Runbook: [private claim pilot](account-v1/private-claim-pilot.md).
+
+## Companion — registered sign-in for existing private Supabase (PR #54, draft)
+
+- [x] Owner explicitly approved lifting the blanket existing-project registration ban **for a private Companion pilot only** (2026-10-12).
+- [x] Draft PR [#54](https://github.com/Imemoth/wow-foreverdb/pull/54) (base: draft PR #53): `FOREVERDB_ACCOUNT_MODE=private-pilot` exact-host connection, separate DPAPI test vault, **registered sign-in/sign-out enabled**. The public production flag stays OFF, and default anonymous Companion is unchanged.
+- [x] Pilot code disables anonymous account creation, claim-code generation, snapshot ingest, owner selection, and automatic post-login sync at multiple independent layers. No live ownership data changed.
+- [ ] Windows Companion CI and independent safety review on the final PR #54 head.
+- [ ] Owner-run isolated-vault login/logout/refresh verification, original credential hash check, and read-only Supabase preservation baseline; **W1a, W4 and W7/W8 are not yet accepted**.
+- [x] `PrivateProjectPilotApproved` reverted to `false` before the merge to `main` (2026-10-16); gate tests use an injected-approval seam and assert the compiled default is closed. Public `ProductionAccountAuthApproved=false`.
+- [ ] Separately review and explicitly approve **throwaway-installation** claim/ingest support only after the login-only pilot passes, never with one of the 7 valuable historical installations first.
+
+Runbook: [Private project Companion pilot](account-v1/private-project-companion-pilot.md).
+
+## Account V1 — single existing Supabase project candidate (2026-10-12)
+
+- [x] Separate code-only branch for a **protected, owner-only account pilot** using the existing private Supabase Auth project and for eventual production-compatible Auth configuration.
+- [x] Owner-authorized guarded Preview **pilot flag temporarily ON in draft PR #53** (`SINGLE_PROJECT_PILOT_APPROVED = true`); public production flag remains OFF. **The account is now ACTIVE only in the SSO-protected branch Preview**: verified account creation, confirmation email received in Gmail Inbox, account profile, sign-out and fresh password sign-in (2026-10-12). **Pilot flag reverted to `false` before the merge to `main` (2026-10-16 integration); CI re-run on the reverted head.**
+- [x] Scoped Auth-only publishable-key boundary and fail-closed pilot/production configuration matrix; public data isolation unchanged.
+- [ ] CI on final PR head and independent security review (no merge or deployment until approved).
+- [x] Existing private Supabase `0012_account_ownership_claims` applied (2026-10-12) after owner-led local archive check; all 9 functions and 3 RLS-protected tables verified, ledger recorded, pre-existing installation and Guildbook hashes unchanged.
+- [ ] Owner-run hosted abuse, email/DMARC, Auth URL, **migration recovery rehearsal**, remaining Windows and cross-account acceptance.
+- [x] Owner authorized and activated an SSO-protected personal **Preview pilot** against the existing private Supabase Auth instance; URL/confirmation template and all five branch-scoped Auth Vercel variables configured. **Owner runtime registration/email confirmation/log out/new login: PASS (2026-10-12)**; 7 previous installations and 46 Guildbook member records remain unchanged, and no installation has been linked. Hosted password reset, session refresh, account isolation, claim/ownership transfer and direct-GoTrue-abuse gates remain OPEN.
+- [ ] **Account profile — Last sign-in (near-term enhancement):** show the most recent successful sign-in from the server-verified Supabase Auth `last_sign_in_at` field (already in the AccountUser contract). Format an unambiguous date, clock time and timezone (Hungary / Europe/Budapest, with DST respected); support missing timestamps; never trust a client-provided date or show another user's metadata. Add UI and formatter tests. Does not require a new database table.
+- [ ] **Account security — Recent sign-ins (later milestone):** provide a bounded, per-account history of successful sign-ins, and consider current/other-session overview and revocation only after dedicated design. Investigate Supabase Auth audit/session retention first; collect the minimum necessary metadata, define retention/deletion and timezone rules, protect all reads server-side with verified user/session ownership and RLS/least privilege, exclude raw IPs/tokens from UI, and test multi-account isolation and session invalidation. **No new production tables or cross-account API exposure during the current pilot.**
+- [ ] Separate explicit approval and independent security gate for any public production activation.
+- See [single-project candidate runbook](account-v1/single-project-candidate.md) and [Issue #52](https://github.com/Imemoth/wow-foreverdb/issues/52). Prior isolated-staging runbook remains an available safer alternative.
+
 ## Current baseline
 
 ### Addon
@@ -24,7 +84,7 @@ polish and distribution work.
   detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
-- Version: **0.8.2-alpha**
+- Version: **0.9.0-alpha** (Account System V1 authentication; account features OFF by default, production blocked)
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing
@@ -411,6 +471,8 @@ Research note: [Guildbook API options](GUILDBOOK-API.md)
 
 PR #22 merged to `main` (2026-10-10). **Website status: repo-complete foundation MVP on synthetic sample data; separate public infrastructure not provisioned and web publication/export (`0010`) not deployed.** Docs: [docs/web/](web/README.md).
 
+**This section is a historical foundation record and is not updated for later work.** The website was rebranded to AzerDex and has since shipped a `web/azerdex-beta` public-beta track (homepage/brand, Database & Zones, Guides, News & Blog, an interactive-cartography proof of concept, and this Addon & Companion presentation) entirely separate from the `main`/`release` Production gates and milestones tracked below. The current, authoritative AzerDex website milestone ledger — scope, PR references, verified state, deployment state, outstanding acceptance criteria and dependencies for every one of those milestones — is [docs/web/azerdex-roadmap.md](web/azerdex-roadmap.md). Nothing in the public beta changes the Production/`main`/`release` blockers or the Account System V1 gate documented in this file.
+
 - [x] Repository audit, production ledger (read-only) and threat model. Finding F-3: the Companion stats RPCs previously under-counted the observed-rate denominator for multi-installation buckets. **F3_FULLY_VERIFIED (2026-10-10): production SQL PASS and Windows Companion acceptance 5/5 PASS** (see below).
 - [x] Isolated public read model (`database/public-read/`) with least-privilege `web_reader`/`publisher` roles, RLS-guarded staging, versioned atomic activation and rollback.
 - [x] Allowlisted production export `0010_public_projection_export.sql`. **Prepared, NOT applied; needs owner approval.**
@@ -420,15 +482,32 @@ PR #22 merged to `main` (2026-10-10). **Website status: repo-complete foundation
 - [x] PR #22 hardening (implemented, locally tested): dedicated fail-closed rate limit + bounded body for `POST /api/v1/challenge`; zone item statistics no longer present global drop counts as zone-specific (item↔zone is *inferred*, count *not measured*).
 - [x] GitHub CI on PR #22 hardening commit `3e463f3` and documentation head `66ae5c3` verified green; merged as `b972431d`.
 - [x] **Vercel preview hardening (PR `web/vercel-preview-hardening`, 2026-10-10):** explicit, fail-closed `FOREVERDB_DEPLOYMENT` designation (hosted deployments never fall back to `local`; Vercel's production target is not ForeverDB production), noindex on every non-production response, `X-ForeverDB-Deployment` header, `Secure`/`__Host-` session cookie keyed to the real https origin, private-backend credentials rejected, CI split into `Web code quality` / `Web E2E (Playwright)` / `publisher-and-pipeline` / `codeql` plus the aggregate `Web release gate`, Node.js pinned to 24.x (`.node-version`, `engines`, CI check), reusable `web/scripts/verify-deployment.mjs`. Docs: [vercel-environments](web/vercel-environments.md), [release-gates](web/release-gates.md). **Status: PREVIEW HARDENED (code and CI) / PRODUCTION STILL BLOCKED.**
-- [ ] **Owner actions for the hardening PR (PENDING):** set `FOREVERDB_DEPLOYMENT=preview` + `FOREVERDB_DATA_SOURCE=fixture` on Vercel Production and Preview *before merging*; import the ruleset and prove a failing PR is unmergeable; run the unauthenticated protection test from outside; decide the Production Branch / `release` branch promotion control.
+- [x] **PR #45 merged (2026-10-11):** `6b49a3f`; post-merge CI 7/7 PASS; Vercel deployment READY under Node 24 and All Deployments Authentication; configured as synthetic Preview mode. Existing GitHub ruleset #24853899 protects `main` with six GitHub Actions-origin checks.
+- [ ] **Release promotion gate:** `release` created from `6b49a3f`; owner must include `release` in the existing active GitHub ruleset and set Vercel Environments → Production → Branch Tracking to `release`, then verify. This is the prerequisite for merging incomplete Account System V1 work into `main`.
+- [ ] **Separate optional security acceptance:** automated external protection test and controlled failing-check PR to demonstrate enforcement. Manual incognito checks of production alias, API meta and branch preview PASS.
 - [ ] Provision public DB, Upstash, WAF ([infrastructure setup](web/infrastructure-setup.md)). The Vercel project already exists.
 - [ ] Production 0010 approval + first real publication.
 - [ ] Staging load test; manual accessibility pass; editorial review of sample articles.
 - [ ] Phase D: map layer with licensed/original backgrounds, comparisons, account features (separate security gate).
 
-### Next milestone — ForeverDB Account System V1 (planned; not started)
+### Milestone — ForeverDB Account System V1 (specification in review; production BLOCKED)
 
-Separate PR(s) after the hardening PR is merged and accepted. Scope: real user registration, email confirmation, login and logout, password recovery, a secure session lifecycle, a basic account profile, and preparation for **verified Companion installation linking** (ownership proven by a claim code from the Companion, never inferred from an installation or guild ID). Architecture (ADR-012): two physically separate databases (private Supabase `wow-forever` for Companion data, authentication, installation ownership, Guildbook and account-bound data; a separate public PostgreSQL for sanitised aggregates). Accounts use the existing private Supabase Auth **through a separately reviewed security boundary** (own origin or route group, `private, no-store`, its own threat model, a deliberate and reviewed relaxation of the "no Supabase variables on the website" rule). Public loot browsing stays anonymous and keeps using the isolated public read database. **Prerequisites:** hardening PR merged; Vercel Production Branch moved to a `release` branch so incomplete account features cannot reach the public alias; Supabase Auth signup throttling/CAPTCHA reviewed.
+Unified identity for the website and the Windows Companion with independent sessions, verified installation ownership and account-scoped Guildbook access. Specification and ledger: [docs/account-v1/](account-v1/README.md). Five independently reviewable PRs, none merged automatically:
+
+- [x] **PR A — specification and security foundation** (`account/v1-spec-foundation`): audit of `main`, ADR-015..018, threat model, claim protocol and migration `0012` plan, Auth-only configuration validator (`production` hard-blocked), closed endpoint/RPC/redirect contracts, static boundary tests. **IMPLEMENTED; CI VERIFIED when the PR checks pass; independent review recorded in the PR.**
+- [ ] **PR B — Web Auth:** registration, verification, login/logout, recovery, sessions, profile; real-GoTrue CI job. BLOCKED on PR A.
+- [ ] **PR C — Ownership and Guildbook backend:** forward-only `0012`, claim/consume, account RPCs, SQL negative matrix. BLOCKED on PR A.
+- [x] **PR D — Companion registered accounts** (`account/v1-companion-auth`, [companion.md](account-v1/companion.md)): fixed the anonymous identity-loss defect, six session states, DPAPI slots with atomic writes and a machine-wide lock, registered sign-in/sign-out, ownership-aware per-installation sync, claim initiation, closed feature gate (production OFF), Windows regression suite and workflow, Companion `0.9.0-alpha`. **IMPLEMENTED; CI VERIFIED when `Companion account auth (Windows)` passes on the final head; real-Windows UI acceptance PENDING; redemption on the website and end-to-end acceptance remain PR E.**
+- [x] **PR E — Website linking, private Guildbook and integrated acceptance** (`account/v1-end-to-end-integration`, [report](account-v1/integration-and-acceptance-report.md)): `/account/link` with fresh-password + same-UID reauthentication, closed PostgREST client, installation list, private Guildbook, integrated real GoTrue + real PostgREST + SQL suite (`Account end-to-end (GoTrue + PostgREST)`), staging runbook and Windows checklist. **IMPLEMENTED; CI VERIFIED when the checks pass. STAGING VERIFIED / WINDOWS VERIFIED: pending (owner). Password reset now revokes every session of the account (owner decision, verified in CI).**
+- [ ] **Production activation: BLOCKED** (owner approval, dry-run, rollback; code constant `PRODUCTION_ACCOUNT_AUTH_APPROVED` is false). Migration `0010` stays unapplied; registered quota tiers are a separate later milestone.
+
+### Milestone — AzerDex welcome e-mail V1 (secure outbox + Resend worker; **sending OFF, nothing applied or deployed**)
+
+One transactional welcome after a person's first genuine registration e-mail verification. Spec (approved): [design spec](https://github.com/Imemoth/wow-foreverdb/blob/docs/azerdex-welcome-outbox-design-20261013/docs/superpowers/specs/2026-10-13-azerdex-welcome-outbox-design.md) (design branch); implementation plan: [plan](superpowers/plans/2026-10-13-azerdex-welcome-implementation.md); docs, runbook and evidence: [docs/azerdex-welcome-email/](azerdex-welcome-email/README.md). Independent of the #53–#56 chain (migration `0015`; `0014` zero-touch enrollment from #56 is merged to `main`; `0015` is verified compatible with it in both orders).
+
+- [x] **Implemented (draft PR, unmerged):** private outbox + candidates, forced RLS, no API-role grants, hashed recipient, FK-cascade erasure; `auth.users` triggers with a **real-GoTrue-proven provenance rule** (a recovery link confirms unconfirmed signups, so the bare `email_confirmed_at` transition is *not* trusted); bounded reconciler; service-role-only claim/finish RPCs (skip-locked, 180 s lease, 20 h idempotency window, ≤ 6 attempts, re-verification at dispatch); Edge Function worker (secret-authenticated, fail-closed flag, circuit breaker); Resend client with an explicit outcome taxonomy; CID emblem validation; kill switch + rollback + scheduler scripts.
+- [x] **Local integration verified** (disposable PostgreSQL 16 + real GoTrue v2.197.0 + mocked Resend): see [acceptance.md](azerdex-welcome-email/acceptance.md). CI-verified: see the PR's `AzerDex welcome outbox SQL + real GoTrue + worker` check.
+- [ ] **Release blockers / owner gates (status 2026-10-16):** **PASS:** G-1 emblem committed, hash-pinned and *embedded* in the function bundle; **G-4 Resend published template + CID attachment (owner-run real provider test, Gmail desktop; the direct API path only: the deployed worker send path, Gmail mobile and Outlook remain OPEN)**; G-5 Resend domain verified, open/click tracking OFF (owner-attested). **OPEN:** B-1 `azerdex.com` is assigned/verified on the Vercel project but Vercel Authentication (SSO) protects all deployments, the apex serves an old ForeverDB-branded synthetic-data preview, and anonymous reachability is unverified; G-2 provenance on the hosted Auth version (harness ready); G-3 hosted staging (needs one owner approval for a free staging project, [staging plan](azerdex-welcome-email/staging-plan.md)); hosted G-7; Gmail mobile / Outlook rendering; G-6 two explicit approvals. **Production approved: NO.** Account chain #53–#56 is merged to `main`; `0015` is verified compatible with `0014` in both orders.
 
 ### F-3 — Companion observed drop-rate denominator (F3_FULLY_VERIFIED — 2026-10-10)
 
