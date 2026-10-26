@@ -35,7 +35,7 @@ const SearchParams = z
     zone: intIn(1, 999_999).optional(),
     kind: z.enum(LOOT_KINDS).optional(),
     sort: z.enum(["relevance", "name", "observations"]).optional().default("relevance"),
-    page: intIn(1, 1000).default("1"),
+    page: intIn(1, 1000).default(1),
     limit: intIn(1, MAX_API_PAGE_SIZE).optional(),
   })
   .strict();
@@ -88,7 +88,7 @@ const ZoneParams = z
     q: queryText.optional().default(""),
     type: z.enum(DISPLAY_KINDS).optional(),
     kind: z.enum(LOOT_KINDS).optional(),
-    page: intIn(1, 100).default("1"),
+    page: intIn(1, 100).default(1),
   })
   .strict();
 
