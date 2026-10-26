@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "../zod";
 import { ACCOUNT_RPCS, isAccountRpc, type AccountRpcName } from "./contracts";
 import { ENROLLMENT_RPCS, isEnrollmentRpc, type EnrollmentRpcName } from "./contracts-enrollment";
 import type { AccountAuthConfig } from "./config";

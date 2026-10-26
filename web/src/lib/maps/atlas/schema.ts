@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "../../zod";
 
 /**
  * Schema of the PUBLISHED atlas catalog `atlas/index.json` (azerdex-atlas-index, schemaVersion 1) as served from the

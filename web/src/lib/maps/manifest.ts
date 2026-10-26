@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "../zod";
 
 /** Versioned map asset manifest (public/maps/forever/<zoneId>/<version>/manifest.json). */
 const Manifest = z.object({
