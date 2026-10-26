@@ -9,6 +9,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TrafficAnalytics } from "@/components/TrafficAnalytics";
+import { TrafficSpeedInsights } from "@/components/TrafficSpeedInsights";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
 import { isPublicAnalyticsHost } from "@/lib/analytics";
@@ -52,7 +53,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <SiteHeader />
         <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">{children}</main>
         <SiteFooter />
-        {env.hosted && isPublicAnalyticsHost(hostname) && <TrafficAnalytics />}
+        {env.hosted && isPublicAnalyticsHost(hostname) && (
+          <>
+            <TrafficAnalytics />
+            <TrafficSpeedInsights />
+          </>
+        )}
         <JsonLd nonce={nonce} data={{
           "@context": "https://schema.org",
           "@type": "WebSite",
