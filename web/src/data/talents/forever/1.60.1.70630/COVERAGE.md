@@ -505,4 +505,3 @@ Reason codes: **curve** - This number depends on the talent's rank and its per-r
 ## Icons
 
 Valid icons: 0/466. No icon file data id for this build is available in any accessible source: Everloot's published catalog omits them and the client files cannot be read from this environment. See docs/web/class-guides-talents.md for the extraction steps.
-

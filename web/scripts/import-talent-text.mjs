@@ -244,5 +244,5 @@ if (checkOnly) {
 }
 writeFileSync(join(datasetDir, "text.json"), JSON.stringify(textFile, null, 1) + "\n");
 writeFileSync(join(datasetDir, "coverage.json"), JSON.stringify(coverage, null, 1) + "\n");
-writeFileSync(join(datasetDir, "COVERAGE.md"), md.join("\n") + "\n");
+writeFileSync(join(datasetDir, "COVERAGE.md"), md.join("\n").trimEnd() + "\n");
 console.log("written: text.json, coverage.json, COVERAGE.md");
