@@ -123,16 +123,24 @@ describe("talent icons", () => {
   });
 
   it("the icon origin reaches img-src only, and only when configured", () => {
+    // Compare exact source tokens per directive instead of pattern-matching the policy text.
+    const directives = (csp: string) => new Map(csp.split("; ").map((d) => { const [name, ...tokens] = d.split(" "); return [name!, tokens] as const; }));
     const opts = { dev: false, turnstile: false, https: true };
-    const off = buildPageCsp("n", opts);
-    expect(off).not.toContain("assets.azerdex.com");
-    const on = buildPageCsp("n", { ...opts, iconImgOrigin: base });
-    expect(on).toMatch(/img-src 'self' data: https:\/\/assets\.azerdex\.com;/);
-    expect(on.match(/https:\/\/assets\.azerdex\.com/g)).toHaveLength(1);
-    expect(on).toMatch(/connect-src 'self';/);
-    expect(on).toMatch(/script-src 'self' 'nonce-n' 'strict-dynamic'/);
-    // Not duplicated when the map asset origin is the same host.
-    expect(buildPageCsp("n", { ...opts, assetOrigin: base, iconImgOrigin: base }).match(/https:\/\/assets\.azerdex\.com/g)).toHaveLength(2); // img-src + connect-src from the map origin
+
+    const off = directives(buildPageCsp("n", opts));
+    expect(off.get("img-src")).toEqual(["'self'", "data:"]);
+
+    const on = directives(buildPageCsp("n", { ...opts, iconImgOrigin: base }));
+    expect(on.get("img-src")).toEqual(["'self'", "data:", base]);
+    // Nothing else gains the origin, and the script policy is untouched.
+    for (const [name, tokens] of on) if (name !== "img-src") expect(tokens, name).not.toContain(base);
+    expect(on.get("connect-src")).toEqual(["'self'"]);
+    expect(on.get("script-src")).toEqual(off.get("script-src"));
+
+    // Not duplicated within img-src when the map asset origin is the same host (that origin also reaches connect-src, as before).
+    const both = directives(buildPageCsp("n", { ...opts, assetOrigin: base, iconImgOrigin: base }));
+    expect(both.get("img-src")!.filter((t) => t === base)).toHaveLength(1);
+    expect(both.get("connect-src")).toContain(base);
   });
 });
 
