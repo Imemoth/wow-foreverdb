@@ -1,6 +1,26 @@
+import { Fragment } from "react";
 import { REFUSAL_TEXT, type TalentEngine } from "@/lib/talents/engine";
-import type { Allocation, Talent, TalentTree } from "@/lib/talents/types";
+import { textForRank } from "@/lib/talents/text";
+import { GAP_TEXT } from "@/lib/talents/tooltip";
+import type { Allocation, Talent, TalentTree, TextSegment } from "@/lib/talents/types";
 import { CardIcon } from "./TalentIcon";
+
+/** Description text with every unresolved number shown as an explicit, labelled "?" - never as a guessed value. */
+function Segments({ segments }: { segments: TextSegment[] }) {
+  return (
+    <>
+      {segments.map((g, i) =>
+        typeof g === "string" ? (
+          <Fragment key={i}>{g}</Fragment>
+        ) : (
+          <span key={i} role="img" aria-label={`value not available: ${GAP_TEXT[g.c]}`} title={GAP_TEXT[g.c]} data-gap={g.c} className="mx-0.5 inline-block rounded border border-dashed border-gold-500/60 px-1 font-mono text-[10px] leading-4 text-gold-300">
+            ?
+          </span>
+        ),
+      )}
+    </>
+  );
+}
 
 /**
  * Tooltip/detail body for one talent. Shows only what the data holds: name, rank, tier, the real requirements
@@ -16,6 +36,8 @@ export function TalentCard({ engine, alloc, talent, tree, icon, compact = false 
   const anyOf = talentReqs.filter((r) => r.anyOf);
   const add = engine.canAdd(alloc, talent.id);
   const descriptions = talent.descriptions;
+  const built = textForRank(talent, rank);
+  const gapCodes = built ? [...new Set(built.segments.flatMap((g) => (typeof g === "string" ? [] : [g.c])))] : [];
 
   return (
     <div className="space-y-2 text-sm text-parchment">
@@ -60,7 +82,19 @@ export function TalentCard({ engine, alloc, talent, tree, icon, compact = false 
         </ul>
       )}
 
-      {descriptions ? (
+      {built ? (
+        <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs" data-testid="talent-description" data-complete={built.complete ? "true" : "false"}>
+          <p className="whitespace-pre-line">
+            <Segments segments={built.segments} />
+          </p>
+          {gapCodes.length > 0 && (
+            <p className="text-[11px] text-mist" data-testid="talent-description-gaps">
+              <span className="font-mono text-gold-300">?</span> marks a number that is not available for this game build yet
+              {compact ? "." : `: ${gapCodes.map((c) => GAP_TEXT[c]).join(" ")}`}
+            </p>
+          )}
+        </div>
+      ) : descriptions ? (
         <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs" data-testid="talent-description">
           {rank > 0 && <p>{descriptions[rank - 1]}</p>}
           {rank < talent.maxRank && (
@@ -73,7 +107,7 @@ export function TalentCard({ engine, alloc, talent, tree, icon, compact = false 
         <p className="border-t border-ink-700 pt-2 text-xs" data-testid="talent-description">{talent.description}</p>
       ) : (
         <p className="border-t border-ink-700 pt-2 text-xs italic text-mist">
-          Rank descriptions are not yet verified for this game build, so none are shown.
+          No description could be verified for this game build, so none is shown.
         </p>
       )}
 

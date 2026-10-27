@@ -52,8 +52,8 @@ export function PriestShadowGuide({ data, tree, calculator }: GuideBodyProps) {
 
         <h3 className="text-lg font-semibold text-parchment">Playstyle, strengths, weaknesses and role</h3>
         <DataNote tone="warn">
-          <strong className="text-parchment">Not verified yet.</strong> The game data tells us which talents exist and how they connect, but
-          not what they do or how well. AzerDex does not carry Classic-era behaviour over to Forever or copy other sites&apos; guides, so this
+          <strong className="text-parchment">Not verified yet.</strong> The game data tells us which talents exist and how they connect, and
+          the calculator shows each talent&apos;s own game text where it could be verified for this build, but nothing says how well they work together. AzerDex does not carry Classic-era behaviour over to Forever or copy other sites&apos; guides, so this
           guide does not describe playstyle, strengths and weaknesses, or the Shadow Priest&apos;s role until those can be backed by verified
           Forever text. The rest of this page is limited to what the data does show.
         </DataNote>
@@ -113,7 +113,8 @@ export function PriestShadowGuide({ data, tree, calculator }: GuideBodyProps) {
           )}
         </ul>
         <p className="text-sm text-mist">
-          What each talent <em>does</em> is not shown here for the same reason as above: no verified Forever description text is available yet.
+          What each talent <em>does</em> is shown by its description in the calculator: the game&apos;s own text for this build, where it could be verified. A
+          <span className="font-mono text-gold-300"> ? </span> marks a number that is not available for this build yet, and talents whose text could not be verified show none.
         </p>
       </section>
 

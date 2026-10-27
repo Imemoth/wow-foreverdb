@@ -1,4 +1,5 @@
 import { z } from "../zod";
+import { GAP_CODES } from "./tooltip";
 import type { TalentClassData } from "./types";
 
 const talent = z
@@ -16,6 +17,17 @@ const talent = z
       .optional(),
     descriptions: z.array(z.string().min(1)).optional(),
     description: z.string().min(1).max(1200).optional(),
+    rankText: z
+      .array(
+        z
+          .object({
+            segments: z.array(z.union([z.string(), z.object({ g: z.string().min(1), c: z.enum(GAP_CODES) }).strict()])).min(1),
+            complete: z.boolean(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
   })
   .strict();
 
@@ -67,6 +79,7 @@ export function validateTalentClass(data: TalentClassData): string[] {
       if (x.row >= t.rows || x.col >= t.cols) problems.push(`${t.name}/${x.name}: outside the ${t.rows}x${t.cols} grid`);
       if ((x.pointsRequired === undefined) !== (x.pointsRequiredScope === undefined)) problems.push(`${t.name}/${x.name}: pointsRequired and its scope must be set together`);
       if (x.descriptions && x.descriptions.length !== x.maxRank) problems.push(`${t.name}/${x.name}: needs ${x.maxRank} rank descriptions`);
+      if (x.rankText && x.rankText.length !== 1 && x.rankText.length !== x.maxRank) problems.push(`${t.name}/${x.name}: rankText needs 1 or ${x.maxRank} entries`);
       for (const r of x.requires ?? []) {
         const target = local.get(r.talentId);
         if (!target) problems.push(`${t.name}/${x.name}: requires ${r.talentId}, which is not in this tree`);

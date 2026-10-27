@@ -22,7 +22,7 @@ Everything is stateless and client-side: a build lives in the page URL (`?b=<cod
 
 Contains: talent name, spell id, tier/column, maximum rank, prerequisites, tier requirement, the point budget (51 points: one per level, levels 10-60).
 
-Does **not** contain, and the UI says so instead of inventing it: **rank descriptions** and **icons** (both need the Forever client data, which was not reachable when this was built; see "Descriptions", "Icons" and "Verified vs unverified" below), and gameplay advice.
+Descriptions are an optional, build-verified overlay (`text.json`, see "Descriptions" and "Coverage"): **394 of 466 talents** have a verified description, **25** with every number resolved; the rest show "?" for numbers the available data cannot supply, or no text at all. **Icons are not included** (0 of 466): no source of the build's icon file ids is reachable (see "Icons"). Gameplay advice is not included.
 
 ### Rules the calculator applies (and how sure we are)
 
@@ -85,11 +85,46 @@ Two **independent** states:
 
 ## Descriptions (rank text)
 
-- **Format:** `src/data/talents/forever/<build>/text.json`, schema `azerdex.talent-text/1`: `{ build, source: { name, reference, extractedAt }, talents: { "<talentId>": { descriptions: [rank 1.. rank N] } | { description } } }`. Text must be **resolved** (no `$s1`-style tokens): token resolution is the extractor's job.
-- **Merge rules** (`src/lib/talents/text.ts`, tested): the overlay is used only if `build` equals the dataset build; otherwise it is ignored as a whole (reported as "mismatch" in the source note), never mixed in. Per talent, `descriptions` must have exactly `maxRank` non-empty entries, else a single non-empty `description` is used, else the talent keeps the honest "not yet verified" message. Text is rendered as plain text.
-- **Display:** per-rank text shows the current rank and "Next rank:" (or "Rank 1:" at rank 0); a single description is shown as is; the source note reports source, build, extraction date and coverage.
-- **Source policy:** the same Forever client build as the tree (`Spell.Description_lang` with rank-specific spell effects resolved), or official Blizzard publications that explicitly match that build. Third-party tooltips for other builds (e.g. 1.60.1.70532) may help cross-checking but are never presented as verified for the current build. Never import scraped guide prose. Record source, build, extraction date and the redistribution review.
-- **Status today:** `text.json` is an empty placeholder (`build: null`). No build-matched, redistributable description text was obtainable: the Blizzard CDN and the data sites were unreachable from the build environment, and Everloot's published catalog deliberately omits text.
+### What is shown
+
+`src/data/talents/forever/<build>/text.json` (schema `azerdex.talent-text/2`) holds, per talent, the **client's own description template rendered with only the values the data holds**. Every value that cannot be filled in is kept as an explicit gap segment `{ g: "$m1", c: "curve" }` with a stable reason code and shown as a labelled **?** (never a guessed number). The text is the same at every rank; a rank-dependent number is a gap, so adding points never invents numbers.
+
+| Code | Meaning (shown to the user via `GAP_TEXT`) |
+| --- | --- |
+| `curve` | The number is the talent's per-rank value (`TraitDefinitionEffectPoints` -> `Curve`/`CurvePoint`); it is not in the available data for this build. |
+| `spell` | The number belongs to another spell (`$12345s1`, `$@spelldesc...`) whose rows are not in the available data. |
+| `proc`, `named`, `conditional`, `plural`, `effect`, `dice`, `zero`, `expr` | Proc data, named variable, player-state conditional, plural of a missing number, missing effect/period/radius/duration, die range with an unverified display rule, a 0 in the spell table whose number lives elsewhere, expression over unavailable values. |
+
+### How a description is accepted (`scripts/import-talent-text.mjs`)
+
+1. **Template proof.** The raw client template must reproduce the target build's own text hash, `sha256(description + "\0" + aura)[0:12]`, which Everloot records per spell in `web/src/data/game-data/spell-values.json` for 1.60.1.70630. A template that does not reproduce it is **not shown** (it may belong to another build). This is what keeps older-build text out.
+2. **Same spell data.** When the templates come from another build (today: the TalentForge export of 70532), the spell's effect rows and duration must be identical in both builds' spell values; otherwise the talent is not shown.
+3. **Target-build values only.** Numbers come from the target build's spell rows. Per-rank (curve) values are used **only** when the templates come from the target build itself; the importer never reuses another build's curve values. (The client table digest for `TraitDefinitionEffectPoints` differs between 70532 and 70630, so they cannot be assumed equal.)
+4. **Own resolver.** `src/lib/talents/tooltip.ts` (shared by the importer and the site; no code from other projects). It was validated rank by rank against an independent implementation (TalentForge's resolved 70532 tooltips): 1012 of 1012 comparable ranks (313 talents) are identical, and every disagreement found during development was fixed in the resolver.
+5. **Whole-result validation, atomic write.** Ids, spell ids, hashes, segment shapes, gap codes, no leaked `$` syntax, 466 talents. On any failure nothing is written and the previous files stay in place. Output is deterministic (timestamps are the target build's extraction time).
+
+### Merge and display
+
+- `src/lib/talents/text.ts` merges the overlay only if its `build` equals the dataset build (else "mismatch", ignored as a whole); each entry must belong to the talent (same spell id, valid hash, 1 or `maxRank` texts, known gap codes) or it is skipped. v1 overlays (`descriptions` / `description`) still work. The merge never changes `id` or `maxRank`, so **build codes (layout hash) stay valid**; this is tested.
+- **Tooltip and panel** (`TalentCard`): the hover tooltip and the selected-talent panel show the same text; the gap legend explains the reasons. Talents without verified text say "No description could be verified for this game build".
+- **Publication gate:** the text is Blizzard game text. It is merged everywhere **except a production deployment**, where it is withheld unless `AZERDEX_TALENT_TEXT=1` (`talentTextPublished`). Beta, preview and local show it. This is an owner decision to make before production.
+
+### Provenance of the shipped overlay
+
+Templates: TalentForge `data/normalized/forever/1.60.1.70532` @ `e07d7825d3ddbe5de3a68d5536595dbe8ab9d048` (wago.tools DB2 exports; **no licence is stated in that repository**). Spell values and text hashes: Everloot @ `65eec218831d8735823fe237f51abb8bafa5934c` (client build 1.60.1.70630, extracted 2026-10-27T06:57:32Z). `text.json.source` records both with the sha256 of every input.
+
+### Coverage
+
+`src/data/talents/forever/1.60.1.70630/COVERAGE.md` (and `coverage.json`) list **every one of the 466 talents** with node id, name, class/tree, spell id, ranks resolved and the exact reason. `tests/unit/talents-overlays.test.ts` asserts the report matches what is shipped. Summary for build 1.60.1.70630: 9 classes, 27 trees, 466 talents; **394** (84.5%) with a verified description; **25** (5.4%) with every rank fully resolved (25 of 1313 ranks); **369** verified but with unresolved numbers (347 contain `curve`, 79 `spell`, 11 `expr`, 6 `plural`, 3 `proc`, 3 `named`, 1 `zero`, 1 `effect`); **72** without a verified description (60 whose template does not reproduce the build's text hash, 11 whose text changed after 70532, 1 whose spell data changed); **0** icons.
+
+### Why the rest is missing, and how to unblock it
+
+The Forever client data (CDN / wago.tools / Everloot's asset bucket) was not reachable from the build environment, and Everloot's published catalog omits text and icons. What would complete it, in order of value:
+
+1. **Per-rank values (fixes ~347 talents):** extract `TraitDefinitionEffectPoints` -> `Curve`/`CurvePoint` for build 1.60.1.70630 and provide them in the normalized template format (`effects[].perRank` with `perRankStatus: "resolved"`) with `--templates-build 1.60.1.70630`. The importer then fills every rank. Everloot's `client-extract` reads the same client; it needs those three tables added and `definitionId` carried through (the catalog already has it).
+2. **Other spells' values (79 talents):** add the referenced spells' `SpellEffect` rows to `spell-values.json` and extend the resolver's `spell` gap.
+3. **The 72 unverified talents:** extract `Spell.Description_lang` / `AuraDescription_lang` for 70630 (Everloot's `client-extract`, which already hashes them) so the real templates replace the 70532 ones.
+4. **To run it:** allow the client CDN / data hosts in the environment's network access, or run Everloot's extractor (`kb/src/client-extract.ts`, see its `client-catalog` / `client-assets` workflows for the supported flow) with network access or against an authorised local client install. Nothing here bypasses authentication or encryption.
 
 ## Icons
 
@@ -97,7 +132,7 @@ Two **independent** states:
 - **Switch:** `AZERDEX_TALENT_ICONS=cdn` **and** `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://<allow-listed host>` (`src/lib/maps/asset-url.ts`). Anything else (unset, other value, non-allow-listed or same-origin base) means no icons. The CSP gains that origin in `img-src` **only** when the switch is on (`talentIconImgOrigin`, `buildPageCsp`).
 - **Manifest:** `icons.json`, schema `azerdex.talent-icons/1`: `{ build, icons: { "<spellId>": <iconFileDataId> } }`. URLs are `<base>/talent-icons/<build>/<fileDataId>.webp`. The manifest is used only if `build` equals the dataset build.
 - **Rendering:** `NodeFace` shows the icon with the name on a strip; a missing URL, a failed request or a broken image falls back to the plain name plate (also pre-hydration errors are caught). The tooltip and the panel header show a small icon with the same fallback. Icons are decorative (`alt=""`); the name is always real text.
-- **Status today:** `icons.json` is an empty placeholder. No icon files or ids were obtainable here, and nothing is uploaded to a host.
+- **Status today:** `icons.json` is an empty placeholder: **0 of 466 icons**. An icon needs the spell's `SpellMisc.SpellIconFileDataID` **for this build** (`SpellMisc` differs between 70532 and 70630, so another build's ids cannot be assumed) and the image file from the client's encrypted-at-rest game files; neither is reachable here, nothing is guessed by name, and nothing is uploaded to a host. Unblock: run Everloot `client-extract`/`client-assets` (or an equivalent against an authorised install) to produce `<spellId> -> iconFileDataId` for 70630 and the WebP files, write `icons.json`, upload under `talent-icons/1.60.1.70630/` on the allow-listed asset host, then set `AZERDEX_TALENT_ICONS=cdn`. Publication also needs the owner's rights decision (maps-and-assets.md lists spell icons as not licensed).
 
 ## Background art
 
@@ -113,21 +148,29 @@ Two **independent** states:
 | Talent structure, ranks, positions, prerequisites, gates | Yes (1.60.1.70630) | Client-extracted by Everloot, cross-checked against an independent extraction of the previous build |
 | Point budget, tier rule amounts | Yes | From the client data |
 | Gate scope for 35 talents; full-rank prerequisites | Yes | **Inferred, not confirmed in game**; flagged in the UI |
-| Rank descriptions | Yes (`text.json.build` must match) | **Unverified / absent** |
+| Rank descriptions | Yes (`text.json.build` must match; templates must reproduce the build's text hash) | **Verified for 394/466 (hash-proven templates); numbers not in the data are marked "?"; 72 absent** |
 | Icons | Yes (`icons.json.build` must match; URL contains the build) | **Absent** |
 | Background art | No (original, build-independent) | n/a (decorative) |
 | Class colours, names, motifs, copy | No | Fixed facts / decorative |
 
 ## Verified vs unverified
 
-Verified (data-backed): everything in the first two rows above; the Shadow guide's numbers (computed from the data). **Unverified or absent:** descriptions, icons, the two inferred rules, and all gameplay claims (playstyle, strengths, weaknesses), which the guide states as "not verified yet".
+Verified (data-backed): everything in the first two rows above; the Shadow guide's numbers (computed from the data). Verified: the description templates that reproduce the build's text hash (see "Coverage"). **Unverified or absent:** per-rank numbers (marked "?"), the 72 talents without text, icons, the two inferred rules, and all gameplay claims (playstyle, strengths, weaknesses), which the guide states as "not verified yet".
 
 ## Refreshing for a new build
 
 1. Regenerate the structure (see "Updating the talent data"); point the registry at the new folder.
-2. Extract resolved description text and icon file ids **from the same client build** (the Everloot-style extractor `client-extract` / `client-assets` flow is the model; it needs the client CDN). Write `text.json` and `icons.json` stamped with that build.
+2. Regenerate the description overlay for **that** build:
+   ```bash
+   cd web
+   node scripts/import-talent-text.mjs --dataset src/data/talents/forever/<build> \
+     --templates <normalized templates dir> --templates-build <build of the templates> --templates-ref <repo@commit> \
+     --spell-values <Everloot spell-values.json at <build>> --spell-values-ref <repo@commit:path> \
+     [--spell-values-prev <spell-values.json of the templates' build>] [--check]
+   ```
+   It prints the added/removed/changed talents against the previous overlay, refuses (exit 1, nothing written) if validation fails, and rewrites `text.json`, `coverage.json`, `COVERAGE.md`. Keep the current dataset until it passes; never mix builds. Icon ids come from the client's `SpellMisc` for the same build (Everloot `client-extract` / `client-assets`); write `icons.json` stamped with that build.
 3. Upload the icon files (never to git) to the allow-listed asset host under `talent-icons/<build>/<fileDataId>.webp`, and set `AZERDEX_TALENT_ICONS=cdn` for the deployment (owner decision; see Icons).
-4. `npm test`: the overlay tests assert that shipped overlays are empty or match the dataset build; diff the per-rank text against the previous build before publishing.
+4. `npm test`: the overlay tests assert that the shipped overlays match the dataset build, that the coverage report accounts for all talents and equals what is shipped, and that the layout hash is unchanged by text. Review the importer's diff before publishing. Existing share links keep working across text-only or icon-only refreshes because the layout hash covers only class, build, tree/talent ids and max ranks.
 5. Update the E2E canaries and the Shadow guide if names changed.
 
 ## Tests
@@ -135,5 +178,6 @@ Verified (data-backed): everything in the first two rows above; the Shadow guide
 - `tests/unit/talents-engine.test.ts`, `talents-build-code.test.ts` - rules and codec on a small synthetic fixture (never shipped).
 - `tests/unit/talents-data.test.ts` - schema, structure, tier rule, reachability of every talent, point budget, manifest hashes for all nine classes.
 - `tests/unit/classes.test.ts` - registry, copy and the rendered Shadow guide.
-- `tests/unit/talents-overlays.test.ts` - build-guarded text merge, icon resolution and CSP origin, card rendering of descriptions/icons, backdrop theme coverage.
-- `tests/e2e/talents.spec.ts` - navigation, allocation/removal, max rank, tiers, prerequisites, shared budget, reset, share/restore, invalid links, keyboard, the hover-vs-selected model, descriptions and icons (via the E2E-only `/test-fixtures/talents` page, which overlays *synthetic* text and icons on the real Priest tree), backgrounds, axe, mobile/touch. Also covered by the shared a11y/responsive specs.
+- `tests/unit/talents-tooltip.test.ts` - the template resolver: values, formats, curve handling, coded gaps, no leaked `$` tokens, escapes. `tests/unit/talents-import-text.test.ts` - the real importer on a synthetic dataset (acceptance rules, per-rank values only from the target build, determinism, `--check`, atomic failure).
+- `tests/unit/talents-overlays.test.ts` - shipped overlay provenance and coverage report consistency, production gate, layout-hash invariance, build-guarded text merge (v1 and v2), icon resolution and CSP origin, card rendering of descriptions/icons, backdrop theme coverage.
+- `tests/e2e/talents.spec.ts` - navigation, allocation/removal, max rank, tiers, prerequisites, shared budget, reset, share/restore, invalid links, keyboard, the hover-vs-selected model, real build-verified descriptions (complete text, labelled gaps, unverified fallback; also on touch), and icon rendering (via the E2E-only `/test-fixtures/talents` page, which overlays *synthetic* text and icons on the structural Priest data), backgrounds, axe, mobile/touch. Also covered by the shared a11y/responsive specs.

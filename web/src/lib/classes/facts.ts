@@ -21,16 +21,20 @@ export function classIntro(className: string, data: TalentClassData | null): str
  * Provenance line shown under every calculator: where the structure comes from and exactly what is and is not present
  * (description text, icons), so the page never implies more than the data supports.
  */
-export function talentSourceNote(classId: string, iconCount = 0): string {
+export function talentSourceNote(classId: string, iconCount = 0, env: Readonly<Record<string, string | undefined>> = process.env): string {
   const { build, source } = TALENT_MANIFEST;
-  const text = getTextStatus(classId);
+  const text = getTextStatus(classId, env);
   const parts = [
     `Talent structure (names, ranks, grid positions, prerequisites, tier requirements) from the WoW: Forever beta client, build ${build.version}, as extracted by the Everloot project (commit ${source.commit.slice(0, 7)}).`,
   ];
   if (text.state === "none" && iconCount === 0) {
     parts.push("Rank descriptions and icons are not included because no verified, build-matched source is available yet.");
   } else {
-    if (text.state === "applied") parts.push(`Descriptions: ${text.source.name}, build ${text.build}, extracted ${text.source.extractedAt}; ${text.covered} of ${text.total} talents have one.`);
+    if (text.state === "applied") {
+      parts.push(
+        `Descriptions: ${text.source.name}, build ${text.build} (client data extracted ${text.source.extractedAt}). ${text.covered} of ${text.total} talents have a verified description and ${text.complete} of them have every number resolved; "?" marks a number that is not available for this build yet. The other ${text.total - text.covered} have no verified description.`,
+      );
+    } else if (text.state === "withheld") parts.push("Description text is withheld on this deployment.");
     else if (text.state === "mismatch") parts.push(`Description text supplied for build ${text.textBuild ?? "unknown"} was ignored because it does not match build ${build.version}.`);
     else parts.push("Rank descriptions are not included because no verified, build-matched source is available yet.");
     parts.push(iconCount > 0 ? `Icons: client art for ${iconCount} talents, served from the AzerDex asset host (build ${build.version}).` : "Icons are not included; talents show their names.");

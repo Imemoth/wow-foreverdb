@@ -59,7 +59,13 @@ describe("class copy only states what the data supports", () => {
     const note = talentSourceNote("priest");
     expect(note).toContain("1.60.1.70630");
     expect(note).toMatch(/beta/i);
-    expect(note).toMatch(/descriptions and icons are not included/);
+    expect(note).toMatch(/Icons are not included/);
+    expect(note).toMatch(/\d+ of \d+ talents have a verified description/);
+    expect(note).toMatch(/not available for this build yet/);
+  });
+
+  it("says when description text is withheld or absent", () => {
+    expect(talentSourceNote("priest", 0, { FOREVERDB_DEPLOYMENT: "production" })).toMatch(/withheld/);
   });
 });
 

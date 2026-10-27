@@ -4,6 +4,8 @@
  * so data can be refreshed (or another game version added) without touching components.
  */
 
+import type { GapCode } from "./tooltip";
+
 export interface TalentPrerequisite {
   /** Another talent of the same tree. */
   talentId: number;
@@ -38,6 +40,11 @@ export interface Talent {
   descriptions?: string[];
   /** One resolved description for the whole talent, for sources that do not provide per-rank text. */
   description?: string;
+  /**
+   * Description built from the client's own template for this build (text.json v2). One entry = the same text at every
+   * rank; otherwise maxRank entries. A number the data cannot supply is an explicit gap segment, never a guess.
+   */
+  rankText?: TalentRankText[];
 }
 
 export interface TalentTree {
@@ -78,14 +85,35 @@ export interface TalentManifest {
   output: { sha256: Record<string, string> };
 }
 
+/** Text, or a value that could not be resolved (`g` = source token, `c` = reason code, see GAP_TEXT in tooltip.ts). */
+export type TextSegment = string | { g: string; c: GapCode };
+export interface TalentRankText {
+  segments: TextSegment[];
+  /** True when no gap remains in `segments`. */
+  complete: boolean;
+}
+
+export interface TalentTextEntry {
+  descriptions?: string[];
+  description?: string;
+  spellId?: number;
+  templateHash?: string;
+  segments?: TextSegment[];
+  ranks?: Array<{ segments: TextSegment[]; complete: boolean }>;
+  complete?: boolean;
+}
+
 /** Optional text overlay (text.json), produced by the client extraction and merged by applyTalentText. */
 export interface TalentTextFile {
-  schema: "azerdex.talent-text/1";
+  schema: "azerdex.talent-text/1" | "azerdex.talent-text/2";
   /** Game build the text was extracted from. null = no text available. Must equal the dataset build to be used. */
   build: string | null;
-  source: { name: string; reference: string; extractedAt: string } | null;
-  /** By talent id (string keys in JSON). Resolved text only. */
-  talents: Record<string, { descriptions?: string[]; description?: string }>;
+  source: { name: string; reference: string; extractedAt: string; verification?: string } | null;
+  /**
+   * By talent id (string keys in JSON). v1: resolved strings. v2: `segments` (same text at every rank) or `ranks`, plus the
+   * spell id and the text hash of the build, which the merge checks against the talent.
+   */
+  talents: Record<string, TalentTextEntry>;
 }
 
 /** Optional icon overlay (icons.json): talent spell id -> client icon file data id. Images are never in git. */

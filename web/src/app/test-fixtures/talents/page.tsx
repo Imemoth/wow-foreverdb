@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import { TalentCalculator } from "@/components/talents/TalentCalculator";
 import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
-import { getTalentData, TALENT_BUILD } from "@/lib/talents/registry";
+import priestRaw from "@/data/talents/forever/1.60.1.70630/priest.json";
+import { TALENT_BUILD } from "@/lib/talents/registry";
 import { applyTalentText } from "@/lib/talents/text";
-import type { TalentTextFile } from "@/lib/talents/types";
+import type { TalentClassData, TalentTextFile } from "@/lib/talents/types";
 
 /**
- * Internal Playwright-only harness for the talent calculator's optional layers. The real dataset ships no description text
- * and no icons (none is available for the build), so this page overlays SYNTHETIC ones onto the real Priest tree to drive
+ * Internal Playwright-only harness for the talent calculator's optional layers. The real dataset ships build-verified text with
+ * gaps and no icons (none is available for the build), so this page overlays SYNTHETIC ones onto the real Priest tree to drive
  * rendering and fallback behaviour: per-rank text, a single description, a working icon, and an icon whose URL fails.
  * Everything synthetic says so in its own text. Fail-closed exactly like the other /test-fixtures pages (e2eFixturesAllowed),
  * and always noindex.
@@ -19,7 +20,8 @@ const svg = (fill: string) =>
 
 export default function TalentFixturePage() {
   if (!e2eFixturesAllowed()) notFound();
-  const base = getTalentData("priest")!;
+  // The structural data WITHOUT the shipped text, so the synthetic overlay below is the only text on this page.
+  const base = priestRaw as unknown as TalentClassData;
   const id = (name: string) => base.trees.flatMap((t) => t.talents).find((x) => x.name === name)!.id;
 
   const text: TalentTextFile = {

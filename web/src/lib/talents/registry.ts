@@ -11,7 +11,7 @@ import warrior from "@/data/talents/forever/1.60.1.70630/warrior.json";
 import iconsFile from "@/data/talents/forever/1.60.1.70630/icons.json";
 import textFile from "@/data/talents/forever/1.60.1.70630/text.json";
 import { resolveTalentIcons, talentIconBase } from "./icons";
-import { applyTalentText, type TextStatus } from "./text";
+import { applyTalentText, talentTextPublished, type TextStatus } from "./text";
 import type { TalentClassData, TalentIconManifest, TalentManifest, TalentTextFile } from "./types";
 
 /**
@@ -27,21 +27,31 @@ export const TALENT_BUILD = TALENT_MANIFEST.build;
 export const TALENT_TEXT = textFile as unknown as TalentTextFile;
 export const TALENT_ICONS = iconsFile as unknown as TalentIconManifest;
 
-// Description text is merged in once, and only when its build equals the dataset build (see text.ts).
-const MERGED = new Map<string, { data: TalentClassData; text: TextStatus }>(
-  Object.entries(FILES).map(([id, raw]) => {
-    const { data, status } = applyTalentText(raw as TalentClassData, TALENT_TEXT);
-    return [id, { data, text: status }];
-  }),
-);
+// Description text is merged in once per publication state, and only when its build equals the dataset build (see text.ts).
+type Merged = Map<string, { data: TalentClassData; text: TextStatus }>;
+const MERGED_CACHE = new Map<boolean, Merged>();
+function merged(env: Readonly<Record<string, string | undefined>>): Merged {
+  const published = talentTextPublished(env);
+  let m = MERGED_CACHE.get(published);
+  if (!m) {
+    m = new Map(
+      Object.entries(FILES).map(([id, raw]) => {
+        const { data, status } = applyTalentText(raw as TalentClassData, TALENT_TEXT, published);
+        return [id, { data, text: status }];
+      }),
+    );
+    MERGED_CACHE.set(published, m);
+  }
+  return m;
+}
 
-export function getTalentData(classId: string): TalentClassData | null {
-  return MERGED.get(classId)?.data ?? null;
+export function getTalentData(classId: string, env: Readonly<Record<string, string | undefined>> = process.env): TalentClassData | null {
+  return merged(env).get(classId)?.data ?? null;
 }
 
 /** Whether description text is merged for the class, was refused (build mismatch) or does not exist. */
-export function getTextStatus(classId: string): TextStatus {
-  return MERGED.get(classId)?.text ?? { state: "none" };
+export function getTextStatus(classId: string, env: Readonly<Record<string, string | undefined>> = process.env): TextStatus {
+  return merged(env).get(classId)?.text ?? { state: "none" };
 }
 
 /** Icon URLs for a class (talent id -> URL). Empty unless the CDN icon source is switched on and the manifest matches the build. */
