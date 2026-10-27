@@ -1,0 +1,592 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "hunter",
+  "className": "Hunter",
+  "gameClassId": 3,
+  "build": {
+    "version": "1.60.1.70630",
+    "buildId": 70630
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11372,
+      "name": "Beast Mastery",
+      "slug": "beast-mastery",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104960,
+          "name": "Deadly Aspects",
+          "spellId": 19552,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104976,
+          "name": "Endurance Training",
+          "spellId": 19583,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104975,
+          "name": "Focused Fire",
+          "spellId": 1223755,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104974,
+          "name": "Improved Aspect of the Monkey",
+          "spellId": 19549,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104973,
+          "name": "Pathfinding",
+          "spellId": 19559,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104972,
+          "name": "Improved Revive Pet",
+          "spellId": 24443,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104970,
+          "name": "Bestial Swiftness",
+          "spellId": 19596,
+          "row": 2,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104969,
+          "name": "Unleashed Fury",
+          "spellId": 19616,
+          "row": 2,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104968,
+          "name": "Improved Mend Pet",
+          "spellId": 19572,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104967,
+          "name": "Ferocity",
+          "spellId": 19598,
+          "row": 3,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104966,
+          "name": "Summon Hawk",
+          "spellId": 1293241,
+          "row": 3,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104965,
+          "name": "Spirit Bond",
+          "spellId": 19578,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104964,
+          "name": "Intimidation",
+          "spellId": 19577,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104961,
+              "rule": "any"
+            },
+            {
+              "talentId": 104970,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104963,
+          "name": "Bestial Discipline",
+          "spellId": 19590,
+          "row": 4,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104962,
+          "name": "Frenzy",
+          "spellId": 19621,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104967,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104961,
+          "name": "Bestial Wrath",
+          "spellId": 19574,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104964,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11371,
+      "name": "Marksmanship",
+      "slug": "marksmanship",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105013,
+          "name": "Hawk Eye",
+          "spellId": 19498,
+          "row": 0,
+          "col": 0,
+          "maxRank": 3
+        },
+        {
+          "id": 105012,
+          "name": "Improved Concussive Shot",
+          "spellId": 19407,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105011,
+          "name": "Lethal Attacks",
+          "spellId": 19426,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 110870,
+          "name": "Improved Stings",
+          "spellId": 1310661,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105009,
+          "name": "Efficiency",
+          "spellId": 19416,
+          "row": 1,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105008,
+          "name": "Careful Aim",
+          "spellId": 1223984,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105005,
+          "name": "Rapid Killing",
+          "spellId": 415405,
+          "row": 2,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105006,
+          "name": "Improved Arcane Shot",
+          "spellId": 19454,
+          "row": 2,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105007,
+          "name": "Lone Wolf",
+          "spellId": 415370,
+          "row": 2,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105004,
+          "name": "Trueshot Aura",
+          "spellId": 1299346,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105002,
+          "name": "Mortal Shots",
+          "spellId": 19485,
+          "row": 3,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105008,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105003,
+          "name": "Improved Serpent Sting",
+          "spellId": 19464,
+          "row": 3,
+          "col": 3,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104999,
+          "name": "Rapid Recuperation",
+          "spellId": 1223987,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105005,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105001,
+          "name": "Barrage",
+          "spellId": 19461,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105000,
+          "name": "Scatter Shot",
+          "spellId": 19503,
+          "row": 4,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 104998,
+          "name": "Ranged Weapon Specialization",
+          "spellId": 19507,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 104997,
+          "name": "Sniper Shot",
+          "spellId": 1310687,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105004,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11370,
+      "name": "Survival",
+      "slug": "survival",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104996,
+          "name": "Improved Tracking",
+          "spellId": 24293,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104995,
+          "name": "Deflection",
+          "spellId": 19295,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104994,
+          "name": "Entrapment",
+          "spellId": 19184,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104993,
+          "name": "Savage Strikes",
+          "spellId": 19159,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104992,
+          "name": "Survivalist",
+          "spellId": 19255,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104990,
+          "name": "Improved Wing Clip",
+          "spellId": 19228,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104991,
+          "name": "Clever Traps",
+          "spellId": 19239,
+          "row": 2,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104987,
+          "name": "Surefooted",
+          "spellId": 19290,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104986,
+          "name": "Deterrence",
+          "spellId": 19263,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104988,
+          "name": "Survival Tactics",
+          "spellId": 19376,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110861,
+          "name": "Predator's Edge",
+          "spellId": 1310627,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104989,
+          "name": "Counterattack",
+          "spellId": 19306,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104986,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104983,
+          "name": "Resourcefulness",
+          "spellId": 440529,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104985,
+          "name": "Expose Prey",
+          "spellId": 1310532,
+          "row": 4,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110860,
+          "name": "Survivalist's Discipline",
+          "spellId": 1310496,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104981,
+          "name": "Strider Kick",
+          "spellId": 1317257,
+          "row": 4,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110859,
+          "name": "Lightning Reflexes",
+          "spellId": 19168,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104984,
+          "name": "Lacerating Strikes",
+          "spellId": 1310533,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104985,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

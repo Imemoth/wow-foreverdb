@@ -1,0 +1,618 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "druid",
+  "className": "Druid",
+  "gameClassId": 11,
+  "build": {
+    "version": "1.60.1.70630",
+    "buildId": 70630
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11328,
+      "name": "Balance",
+      "slug": "balance",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104923,
+          "name": "Improved Wrath",
+          "spellId": 16814,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104924,
+          "name": "Genesis",
+          "spellId": 1223081,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104925,
+          "name": "Moonglow",
+          "spellId": 16845,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104931,
+          "name": "Improved Moonfire",
+          "spellId": 16821,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104927,
+          "name": "Nature's Majesty",
+          "spellId": 1223082,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104929,
+          "name": "Nature's Reach",
+          "spellId": 16819,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104926,
+          "name": "Improved Entangling Roots",
+          "spellId": 16918,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104928,
+          "name": "Nature's Splendor",
+          "spellId": 1223083,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104927,
+              "rule": "all"
+            }
+          ]
+        },
+        {
+          "id": 104930,
+          "name": "Insect Swarm",
+          "spellId": 5570,
+          "row": 3,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104932,
+          "name": "Vengeance",
+          "spellId": 16909,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104931,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104933,
+          "name": "Improved Starfire",
+          "spellId": 16850,
+          "row": 3,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110844,
+          "name": "Overgrowth",
+          "spellId": 17245,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104934,
+          "name": "Nature's Grace",
+          "spellId": 16880,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104935,
+          "name": "Eclipse",
+          "spellId": 408248,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104936,
+          "name": "Moonfury",
+          "spellId": 16896,
+          "row": 5,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104937,
+          "name": "Moonkin Form",
+          "spellId": 24858,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree"
+        }
+      ]
+    },
+    {
+      "id": 11347,
+      "name": "Feral Combat",
+      "slug": "feral-combat",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104938,
+          "name": "Ferocity",
+          "spellId": 16934,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104939,
+          "name": "Heart of the Wild",
+          "spellId": 17003,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104943,
+          "name": "Feral Swiftness",
+          "spellId": 17002,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104940,
+          "name": "Feral Instinct",
+          "spellId": 16947,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104941,
+          "name": "Brutal Impact",
+          "spellId": 16940,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104942,
+          "name": "Thick Hide",
+          "spellId": 16929,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104945,
+          "name": "Shredding Attacks",
+          "spellId": 16966,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104948,
+          "name": "Savage Fury",
+          "spellId": 16998,
+          "row": 2,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104944,
+          "name": "Feral Charge",
+          "spellId": 1238122,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104946,
+          "name": "Sharpened Claws",
+          "spellId": 16942,
+          "row": 2,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104951,
+          "name": "Shifting Power",
+          "spellId": 1322605,
+          "row": 3,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104945,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104949,
+          "name": "Primal Bite",
+          "spellId": 407995,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104948,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104952,
+          "name": "Predatory Strikes",
+          "spellId": 16972,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104947,
+          "name": "Blood Frenzy",
+          "spellId": 16958,
+          "row": 3,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104946,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 113563,
+          "name": "Improved Shifting Power",
+          "spellId": 1322670,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104951,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104955,
+          "name": "Leader of the Pack",
+          "spellId": 17007,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104950,
+          "name": "Natural Instinct",
+          "spellId": 1223242,
+          "row": 4,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104954,
+          "name": "Natural Reaction",
+          "spellId": 417051,
+          "row": 5,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104953,
+          "name": "Rend and Tear",
+          "spellId": 1223246,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104952,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104956,
+          "name": "Berserk",
+          "spellId": 417141,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104955,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11340,
+      "name": "Restoration",
+      "slug": "restoration",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104957,
+          "name": "Nature's Focus",
+          "spellId": 17063,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104958,
+          "name": "Furor",
+          "spellId": 17056,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104922,
+          "name": "Naturalist",
+          "spellId": 17069,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104920,
+          "name": "Subtlety",
+          "spellId": 17118,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104919,
+          "name": "Natural Shapeshifter",
+          "spellId": 16833,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104917,
+          "name": "Reflection",
+          "spellId": 17106,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104916,
+          "name": "Gift of Nature",
+          "spellId": 17104,
+          "row": 2,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104918,
+          "name": "Gift of the Earthmother",
+          "spellId": 414673,
+          "row": 2,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104915,
+          "name": "Tranquil Spirit",
+          "spellId": 24968,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104914,
+          "name": "Improved Rejuvenation",
+          "spellId": 17111,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104912,
+          "name": "Swiftmend",
+          "spellId": 18562,
+          "row": 3,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104921,
+          "name": "Nature's Swiftness",
+          "spellId": 17116,
+          "row": 4,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104922,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104911,
+          "name": "Living Spirit",
+          "spellId": 1309631,
+          "row": 4,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104909,
+          "name": "Improved Tranquility",
+          "spellId": 17123,
+          "row": 4,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104913,
+          "name": "Improved Regrowth",
+          "spellId": 17074,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104914,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104910,
+          "name": "Wild Growth",
+          "spellId": 408120,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104911,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

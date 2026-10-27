@@ -1,0 +1,572 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "shaman",
+  "className": "Shaman",
+  "gameClassId": 7,
+  "build": {
+    "version": "1.60.1.70630",
+    "buildId": 70630
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11326,
+      "name": "Elemental Combat",
+      "slug": "elemental-combat",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104773,
+          "name": "Convection",
+          "spellId": 16039,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104772,
+          "name": "Concussion",
+          "spellId": 16035,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104769,
+          "name": "Elemental Devastation",
+          "spellId": 30160,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104767,
+          "name": "Reverberation",
+          "spellId": 16040,
+          "row": 1,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104771,
+          "name": "Elemental Alacrity",
+          "spellId": 16578,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104770,
+          "name": "Call of Flame",
+          "spellId": 16038,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104768,
+          "name": "Elemental Focus",
+          "spellId": 16164,
+          "row": 2,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104765,
+          "name": "Elemental Warding",
+          "spellId": 28996,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104764,
+          "name": "Trial by Fire",
+          "spellId": 16086,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104763,
+          "name": "Eye of the Storm",
+          "spellId": 29062,
+          "row": 3,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104762,
+          "name": "Earthbound",
+          "spellId": 1222988,
+          "row": 3,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104761,
+          "name": "Elemental Reach",
+          "spellId": 28999,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104760,
+          "name": "Lava Burst",
+          "spellId": 408490,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104759,
+          "name": "Lightning Overload",
+          "spellId": 408438,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104771,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104766,
+          "name": "Elemental Fury",
+          "spellId": 16089,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104759,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104758,
+          "name": "Elemental Mastery",
+          "spellId": 16166,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104760,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11363,
+      "name": "Enhancement",
+      "slug": "enhancement",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104757,
+          "name": "Earth's Grasp",
+          "spellId": 16043,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 104753,
+          "name": "Thundering Strikes",
+          "spellId": 16255,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104756,
+          "name": "Ancestral Knowledge",
+          "spellId": 17485,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104754,
+          "name": "Guardian Totems",
+          "spellId": 16258,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104755,
+          "name": "Mental Dexterity",
+          "spellId": 415140,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104752,
+          "name": "Improved Ghost Wolf",
+          "spellId": 16262,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104751,
+          "name": "Improved Lightning Shield",
+          "spellId": 16261,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104750,
+          "name": "Elemental Weapons",
+          "spellId": 16266,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104749,
+          "name": "Shamanistic Focus",
+          "spellId": 1223030,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104748,
+          "name": "Anticipation",
+          "spellId": 16254,
+          "row": 2,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104746,
+          "name": "Toughness",
+          "spellId": 16252,
+          "row": 3,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104747,
+          "name": "Flurry",
+          "spellId": 16256,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104755,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104743,
+          "name": "Stormstrike",
+          "spellId": 17364,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104745,
+          "name": "Spirit Weapons",
+          "spellId": 16268,
+          "row": 4,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104744,
+          "name": "Mental Quickness",
+          "spellId": 30812,
+          "row": 4,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104742,
+          "name": "Improved Stormstrike",
+          "spellId": 1223031,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104743,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 104741,
+          "name": "Maelstrom Weapon",
+          "spellId": 408498,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104740,
+          "name": "Rage of the Farseer",
+          "spellId": 425336,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104744,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11362,
+      "name": "Restoration",
+      "slug": "restoration",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 104739,
+          "name": "Improved Healing Wave",
+          "spellId": 16182,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 104729,
+          "name": "Tidal Focus",
+          "spellId": 16179,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 104734,
+          "name": "Mindfulness",
+          "spellId": 1223033,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104736,
+          "name": "Natural Grace",
+          "spellId": 29187,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104735,
+          "name": "Totemic Focus",
+          "spellId": 16173,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104737,
+          "name": "Improved Reincarnation",
+          "spellId": 16184,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104731,
+          "name": "Ancestral Healing",
+          "spellId": 16176,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104733,
+          "name": "Healing Focus",
+          "spellId": 16181,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104732,
+          "name": "Water Shield",
+          "spellId": 408510,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104738,
+          "name": "Tidal Mastery",
+          "spellId": 16194,
+          "row": 3,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104730,
+          "name": "Restorative Totems",
+          "spellId": 16187,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104728,
+          "name": "Mana Tide Totem",
+          "spellId": 16190,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104727,
+          "name": "Healing Way",
+          "spellId": 29206,
+          "row": 4,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104726,
+          "name": "Nature's Swiftness",
+          "spellId": 16188,
+          "row": 4,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104725,
+          "name": "Purification",
+          "spellId": 16178,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104724,
+          "name": "Riptide",
+          "spellId": 408521,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 104727,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

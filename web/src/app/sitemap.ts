@@ -1,4 +1,6 @@
 import type { MetadataRoute } from "next";
+import { SPEC_GUIDES } from "@/components/classes/spec-guides";
+import { CLASSES, classPath, specPath } from "@/lib/classes/classes";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { data } from "@/lib/data";
 import { isIndexable, serverEnv } from "@/lib/env";
@@ -33,7 +35,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
   return [
     { url: u("/"), changeFrequency: "daily", priority: 1 },
-    ...["/database", "/zones", "/news", "/guides", "/blog", "/download", "/about/data"].map((p) => ({ url: u(p) })),
+    ...["/database", "/zones", "/news", "/guides", "/guides/classes", "/blog", "/download", "/about/data"].map((p) => ({ url: u(p) })),
+    ...CLASSES.map((c) => ({ url: u(classPath(c.id)) })),
+    ...Object.keys(SPEC_GUIDES).map((key) => { const [cls, spec] = key.split("/") as [string, string]; return { url: u(specPath(cls, spec)) }; }),
     ...news.map((entry) => ({ url: u(`/news/entry/${entry.slug}`), lastModified: entry.modifiedAt ?? entry.publishedAt })),
     ...visibleArticles().filter((a) => a.status === "published" && !a.sample).map((a) => ({ url: u(articlePath(a)), lastModified: a.updatedAt ?? a.publishedAt })),
     ...items.map((r) => ({ url: u(itemPath(r.itemId!)), lastModified: r.updatedAt ?? undefined })),

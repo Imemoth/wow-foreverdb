@@ -1,0 +1,352 @@
+import AxeBuilder from "@axe-core/playwright";
+import type { Locator, Page } from "@playwright/test";
+import { BUILD_PARAM, encodeBuild, layoutHash } from "../../src/lib/talents/build-code";
+import { createEngine } from "../../src/lib/talents/engine";
+import { getTalentData } from "../../src/lib/talents/registry";
+import { expect, test } from "./fixtures";
+
+/**
+ * Class Guides + Talent Calculator V1. Talent data is the real shipped dataset; expectations that name talents
+ * (Priest) are therefore also data-version canaries: if a data update changes them, update the spec with it.
+ */
+
+const CLASS_IDS = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
+
+function priest() {
+  const data = getTalentData("priest")!;
+  return { data, engine: createEngine(data), byName: (n: string) => data.trees.flatMap((t) => t.talents).find((x) => x.name === n)! };
+}
+
+/** A legal build code made by buying the given talents (name, ranks) in order through the engine. */
+function codeFor(picks: Array<[string, number]>): string {
+  const { data, engine, byName } = priest();
+  let alloc = engine.reset();
+  for (const [name, n] of picks) {
+    for (let i = 0; i < n; i++) {
+      const v = engine.canAdd(alloc, byName(name).id);
+      if (!v.ok) throw new Error(`fixture: cannot buy ${name} #${i + 1}: ${v.reason}`);
+      alloc = engine.add(alloc, byName(name).id);
+    }
+  }
+  return encodeBuild(data, alloc);
+}
+
+const tree = (page: Page, slug: string) => page.getByTestId(`tree-${slug}`);
+const talent = (page: Page, treeSlug: string, name: string): Locator => tree(page, treeSlug).getByRole("button", { name: new RegExp(`^${name}, rank`) });
+/** A locked talent is aria-disabled (still focusable and clickable, so it can explain itself); Playwright would otherwise wait for it to be "enabled". */
+const clickLocked = (l: Locator) => l.click({ force: true });
+const spent = (page: Page) => page.getByTestId("points-spent");
+const remaining = (page: Page) => page.getByTestId("points-remaining");
+
+test.describe("Class Guides navigation", () => {
+  test("Guides -> Classes -> class -> specialization guide, with breadcrumbs back", async ({ page }) => {
+    await page.goto("/guides");
+    const entry = page.getByTestId("class-guides-entry");
+    await expect(entry).toBeVisible();
+    await entry.getByRole("link", { name: "Browse classes" }).click();
+    await expect(page).toHaveURL(/\/guides\/classes$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Choose your class" })).toBeVisible();
+    for (const id of CLASS_IDS) await expect(page.getByTestId(`class-card-${id}`)).toBeVisible();
+    await expect(page.locator('[data-testid^="class-card-"]')).toHaveCount(9);
+
+    await page.getByTestId("class-card-priest").getByRole("heading", { level: 2 }).getByRole("link").click();
+    await expect(page).toHaveURL(/\/guides\/classes\/priest$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Priest" })).toBeVisible();
+    const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(crumbs.getByRole("link", { name: "Classes" })).toBeVisible();
+    for (const [slug, name] of [["discipline", "Discipline"], ["holy", "Holy"], ["shadow", "Shadow Magic"]]) {
+      await expect(page.getByTestId(`spec-${slug}`).getByRole("heading", { level: 3, name })).toBeVisible();
+    }
+    await expect(page.getByTestId("spec-discipline")).toContainText("Guide not available yet");
+
+    await page.getByRole("link", { name: "Read the Shadow Magic guide" }).click();
+    await expect(page).toHaveURL(/\/guides\/classes\/priest\/shadow$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Shadow Priest guide" })).toBeVisible();
+    for (const name of ["Overview", "Talents", "Beginner guide"]) await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+    await expect(page.getByTestId("talent-calculator")).toBeVisible();
+
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Priest" }).click();
+    await expect(page).toHaveURL(/\/guides\/classes\/priest$/);
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Classes" }).click();
+    await expect(page).toHaveURL(/\/guides\/classes$/);
+  });
+
+  for (const id of CLASS_IDS) {
+    test(`${id}: class page shows three trees and the calculator`, async ({ page }) => {
+      await page.goto(`/guides/classes/${id}`);
+      await expect(page.getByTestId("talent-calculator")).toBeVisible();
+      await expect(page.locator('[data-testid^="tree-"]')).toHaveCount(3);
+      await expect(page.getByTestId("points-remaining")).toHaveText("51");
+    });
+  }
+
+  test("unknown classes and specializations without a guide are 404", async ({ page }) => {
+    expect((await page.goto("/guides/classes/death-knight"))?.status()).toBe(404);
+    expect((await page.goto("/guides/classes/priest/holy"))?.status()).toBe(404);
+    expect((await page.goto("/guides/classes/priest/nope"))?.status()).toBe(404);
+  });
+
+  test("SEO: canonical URL and no indexing on non-production builds", async ({ page }) => {
+    await page.goto("/guides/classes/priest/shadow?b=anything");
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/guides\/classes\/priest\/shadow$/);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  });
+});
+
+test.describe("Talent calculator (pointer and keyboard)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "pointer/keyboard behaviour; touch is covered in the mobile block");
+  });
+
+  test("left-click adds, right-click and Shift+click remove, maximum rank is enforced", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light"); // max rank 5
+    for (let i = 1; i <= 5; i++) {
+      await pil.click();
+      await expect(spent(page)).toHaveText(`${i}/51`);
+    }
+    await expect(pil).toHaveAccessibleName("Power in Light, rank 5 of 5");
+    await pil.click(); // already maxed
+    await expect(spent(page)).toHaveText("5/51");
+
+    await pil.click({ button: "right" });
+    await expect(spent(page)).toHaveText("4/51");
+    await pil.click({ modifiers: ["Shift"] });
+    await expect(spent(page)).toHaveText("3/51");
+    await expect(remaining(page)).toHaveText("48");
+    await expect(page.getByTestId("required-level")).toHaveText("12"); // level 10 gives the first point
+  });
+
+  test("tier rows unlock from points in the same tree only", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const silent = talent(page, "discipline", "Silent Resolve"); // tier 2: needs 5 points above, in Discipline
+    await expect(silent).toHaveAttribute("aria-disabled", "true");
+    await clickLocked(silent);
+    await expect(spent(page)).toHaveText("0/51");
+
+    // Five points in the Holy tree must not unlock a Discipline tier.
+    for (const n of ["Twilight Focus", "Twilight Focus", "Twilight Focus", "Improved Renew", "Improved Renew"]) await talent(page, "holy", n).click();
+    await expect(spent(page)).toHaveText("5/51");
+    await expect(silent).toHaveAttribute("aria-disabled", "true");
+
+    for (let i = 0; i < 5; i++) await talent(page, "discipline", "Power in Light").click();
+    await expect(silent).not.toHaveAttribute("aria-disabled", "true");
+    await silent.click();
+    await expect(silent).toHaveAccessibleName("Silent Resolve, rank 1 of 3");
+
+    // A point that an opened tier depends on cannot be taken back.
+    await talent(page, "discipline", "Power in Light").click({ button: "right" });
+    await expect(talent(page, "discipline", "Power in Light")).toHaveAccessibleName("Power in Light, rank 5 of 5");
+    await expect(page.getByTestId("announcer")).toContainText("Another talent depends on this point");
+  });
+
+  test("a talent needs its prerequisite at full rank", async ({ page }) => {
+    const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Twin Disciplines", 5], ["Silent Resolve", 3], ["Improved Power Word: Shield", 2]]);
+    await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
+    const soul = talent(page, "discipline", "Soul Warding");
+    await expect(soul).toHaveAttribute("aria-disabled", "true");
+    await clickLocked(soul);
+    await expect(soul).toHaveAccessibleName(/rank 0 of 1/);
+
+    await talent(page, "discipline", "Improved Power Word: Shield").click(); // third and last rank
+    await expect(soul).not.toHaveAttribute("aria-disabled", "true");
+    await soul.click();
+    await expect(soul).toHaveAccessibleName("Soul Warding, rank 1 of 1");
+  });
+
+  test("the point budget is shared by all trees and stops at the total", async ({ page }) => {
+    const { engine, data } = priest();
+    // Fill 50 of 51 points in data order through the engine, then play the last points in the browser.
+    let alloc = engine.reset();
+    for (const t of data.trees) for (const x of t.talents) while (engine.spent(alloc) < 50 && engine.canAdd(alloc, x.id).ok) alloc = engine.add(alloc, x.id);
+    expect(engine.spent(alloc)).toBe(50);
+    await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${encodeBuild(data, alloc)}`);
+    await expect(spent(page)).toHaveText("50/51");
+
+    const all = data.trees.flatMap((t) => t.talents);
+    const last = all.find((x) => engine.canAdd(alloc, x.id).ok)!;
+    await page.locator(`[data-talent-id="${last.id}"]`).click();
+    await expect(spent(page)).toHaveText("51/51");
+    await expect(remaining(page)).toHaveText("0");
+
+    alloc = engine.add(alloc, last.id);
+    // Anything that would otherwise be buyable is now refused for lack of points.
+    const blocked = all.find((x) => {
+      const v = engine.canAdd(alloc, x.id);
+      return !v.ok && v.reason === "no-points";
+    });
+    expect(blocked, "expected an unlocked but unaffordable talent").toBeTruthy();
+    await clickLocked(page.locator(`[data-talent-id="${blocked!.id}"]`));
+    await expect(spent(page)).toHaveText("51/51");
+    await expect(page.getByTestId("announcer")).toContainText("No talent points remaining");
+  });
+
+  test("Reset build clears everything and the build link", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    await expect(page.getByTestId("reset-build")).toBeDisabled();
+    await talent(page, "discipline", "Power in Light").click();
+    await expect(page).toHaveURL(new RegExp(`[?&]${BUILD_PARAM}=`));
+    await page.getByTestId("reset-build").click();
+    await expect(spent(page)).toHaveText("0/51");
+    await expect(remaining(page)).toHaveText("51");
+    await expect(page).not.toHaveURL(new RegExp(`[?&]${BUILD_PARAM}=`));
+    await expect(page.getByTestId("reset-build")).toBeDisabled();
+  });
+
+  test("the URL is the share link: it restores the build on reload and in a new page", async ({ page, context }) => {
+    await page.goto("/guides/classes/priest");
+    for (const [tr, n, times] of [["discipline", "Power in Light", 3], ["shadow-magic", "Shadow Focus", 5], ["shadow-magic", "Spirit Tap", 2]] as const) {
+      for (let i = 0; i < times; i++) await talent(page, tr, n).click();
+    }
+    await expect(spent(page)).toHaveText("10/51");
+    await page.getByTestId("share-build").click();
+    const link = await page.getByLabel("Build link").inputValue();
+    expect(link).toBe(page.url());
+    expect(new URL(link).searchParams.get(BUILD_PARAM)).toBe(codeFor([["Power in Light", 3], ["Shadow Focus", 5], ["Spirit Tap", 2]]));
+
+    await page.reload();
+    await expect(spent(page)).toHaveText("10/51");
+    await expect(talent(page, "shadow-magic", "Shadow Focus")).toHaveAccessibleName("Shadow Focus, rank 5 of 5");
+
+    const other = await context.newPage();
+    await other.goto(link);
+    await expect(spent(other)).toHaveText("10/51");
+    await expect(talent(other, "discipline", "Power in Light")).toHaveAccessibleName("Power in Light, rank 3 of 5");
+    await expect(other.getByTestId("link-error")).toHaveCount(0);
+  });
+
+  test("the same build also restores on the Shadow guide page", async ({ page }) => {
+    const code = codeFor([["Shadow Focus", 5], ["Blackout", 5]]);
+    await page.goto(`/guides/classes/priest/shadow?${BUILD_PARAM}=${code}`);
+    await expect(spent(page)).toHaveText("10/51");
+  });
+
+  test.describe("invalid build links are refused and explained", () => {
+    const hash = layoutHash(getTalentData("priest")!);
+    const cases: Array<[string, string, string, RegExp]> = [
+      ["garbage", "/guides/classes/priest", "not-a-code", /not valid/],
+      ["script-like input", "/guides/classes/priest", "<script>alert(1)</script>", /not valid/],
+      ["a different data version", "/guides/classes/priest", "zzzzzz.1--", /different version/],
+      ["another class's link", "/guides/classes/warrior", codeFor([["Shadow Focus", 5]]), /different version/],
+      ["ranks above the maximum", "/guides/classes/priest", `${hash}.9--`, /ranks that do not exist/],
+      ["a locked talent without its requirements", "/guides/classes/priest", `${hash}.0001--`, /break|breaks/],
+    ];
+    for (const [name, path, code, message] of cases) {
+      test(name, async ({ page }) => {
+        await page.goto(`${path}?${BUILD_PARAM}=${encodeURIComponent(code)}`);
+        await expect(page.getByTestId("link-error")).toContainText(message);
+        await expect(spent(page)).toHaveText("0/51");
+        // The bad parameter is cleaned from the address bar and the calculator stays usable.
+        await expect(page).not.toHaveURL(new RegExp(`[?&]${BUILD_PARAM}=`));
+        await page.getByRole("button", { name: /rank 0 of/ }).first().click();
+        await expect(spent(page)).toHaveText("1/51");
+        await expect(page.getByTestId("link-error")).toHaveCount(0);
+      });
+    }
+  });
+
+  test("keyboard: Enter adds, Backspace removes, arrows move, one tab stop per tree", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const disc = tree(page, "discipline");
+    await expect(disc.locator('[data-talent-id][tabindex="0"]')).toHaveCount(1);
+
+    const first = talent(page, "discipline", "Power in Light");
+    await first.focus();
+    await page.keyboard.press("Enter");
+    await expect(spent(page)).toHaveText("1/51");
+    await page.keyboard.press("Space");
+    await expect(spent(page)).toHaveText("2/51");
+    await page.keyboard.press("Backspace");
+    await expect(spent(page)).toHaveText("1/51");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(talent(page, "discipline", "Wand Specialization")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(talent(page, "discipline", "Holy Precision")).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(talent(page, "discipline", "Silent Resolve")).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(first).toBeFocused();
+    // Roving tabindex follows focus.
+    await expect(first).toHaveAttribute("tabindex", "0");
+    await expect(talent(page, "discipline", "Silent Resolve")).toHaveAttribute("tabindex", "-1");
+    // Status changes are announced to assistive technology.
+    await expect(page.getByTestId("announcer")).toContainText("points remaining");
+  });
+
+  test("tooltips show name, rank, requirements and say when descriptions are unverified", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const silent = talent(page, "discipline", "Silent Resolve");
+    await silent.hover();
+    const tip = page.getByRole("tooltip");
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText("Silent Resolve");
+    await expect(tip).toContainText("Rank 0/3");
+    await expect(tip).toContainText("Requires 5 points in Discipline (0/5)");
+    await expect(tip).toContainText("Rank descriptions are not yet verified");
+    await expect(tip).toContainText("Spell ID 14523");
+
+    await talent(page, "discipline", "Soul Warding").hover();
+    await expect(page.getByRole("tooltip")).toContainText("Requires Improved Power Word: Shield at rank 3");
+
+    // Moving away closes it; focusing with the keyboard opens it again.
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await talent(page, "discipline", "Power in Light").focus();
+    await expect(page.getByRole("tooltip")).toContainText("Power in Light");
+  });
+
+  test("accessibility (axe WCAG 2.2 AA) with points allocated, a talent selected and a tooltip open", async ({ page }) => {
+    const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Shadow Focus", 3], ["Blackout", 5]]);
+    await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
+    await talent(page, "discipline", "Silent Resolve").click();
+    await talent(page, "shadow-magic", "Improved Psychic Scream").hover();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+    expect(r.violations.map((v) => `${v.id}: ${v.nodes.length} node(s) - ${v.help}`)).toEqual([]);
+  });
+
+  test("the Shadow guide page lists the tree and keeps the Shadow tree outlined", async ({ page }) => {
+    await page.goto("/guides/classes/priest/shadow");
+    await expect(page.getByRole("table", { name: "Talents of the Shadow Magic tree by tier" })).toBeVisible();
+    await expect(page.getByRole("rowheader", { name: "Shadowform" })).toBeVisible();
+    await expect(page.getByText("Not verified yet.")).toBeVisible();
+  });
+});
+
+test.describe("Talent calculator (touch / mobile)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "touch layout");
+  });
+
+  for (const path of ["/guides/classes", "/guides/classes/priest", "/guides/classes/priest/shadow"]) {
+    test(`no horizontal page scroll: ${path}`, async ({ page }) => {
+      await page.goto(path);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+    });
+  }
+
+  test("tap adds a point, the detail panel removes it, targets are large enough", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    const box = await pil.boundingBox();
+    expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(44);
+
+    await pil.scrollIntoViewIfNeeded();
+    await pil.tap();
+    await pil.tap();
+    await expect(spent(page)).toHaveText("2/51");
+    const panel = page.getByTestId("talent-detail");
+    await expect(panel).toContainText("Power in Light");
+    await expect(panel).toContainText("Rank 2/5");
+
+    await panel.getByRole("button", { name: /Remove a point from Power in Light/ }).tap();
+    await expect(spent(page)).toHaveText("1/51");
+    await panel.getByRole("button", { name: /Remove a point/ }).tap();
+    await expect(spent(page)).toHaveText("0/51");
+    await expect(panel.getByRole("button", { name: /Remove a point/ })).toBeDisabled();
+    await panel.getByRole("button", { name: /Add a point to Power in Light/ }).tap();
+    await expect(spent(page)).toHaveText("1/51");
+  });
+});

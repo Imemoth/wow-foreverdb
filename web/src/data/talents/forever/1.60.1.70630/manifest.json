@@ -1,0 +1,44 @@
+{
+  "schema": "azerdex.talent-manifest/1",
+  "game": "World of Warcraft: Forever",
+  "build": {
+    "version": "1.60.1.70630",
+    "buildId": 70630,
+    "buildConfig": "644ffedb0d59bb0da2af9011b36f44db",
+    "extractedAt": "2026-10-27T06:57:32.302Z",
+    "tableDefinitions": "05e242b6acdc"
+  },
+  "source": {
+    "name": "Everloot talent catalog (trimmed game-data files)",
+    "repository": "https://github.com/Everloot/everloot",
+    "commit": "65eec218831d8735823fe237f51abb8bafa5934c",
+    "path": "web/src/data/game-data/talents/<class>.json",
+    "schema": "everloot.talent-catalog/2",
+    "label": "found in game files, unconfirmed",
+    "note": "Read by the source project from the Forever client's trait tables. Game data (c) Blizzard Entertainment, Inc.; not covered by this repository's licence.",
+    "sha256": {
+      "warrior": "c700966b4638b02afe9ddf66f7afba626134759c345998be9119498fa32782bb",
+      "paladin": "7c4b4b9e55b65d0662d48672843d64a6dc902ca9b55a7d72287554190596eed1",
+      "hunter": "7f46435cccd6db261337597e9b85d3f812b41142ed13ef95c405fcac12510632",
+      "rogue": "db9304d6ca5bda95b3cb5b8ec5318fa73fc9c5b4a1b46f841ca1881a8924dce4",
+      "priest": "b35a5648199a26e1d988ebc0fd440b6182f071dda494a0719e1fb0df9bb2c473",
+      "shaman": "708212a4c13ed1ea06bf788ab8cc2c9e7abbf477f96a27ea8499ba5579abb544",
+      "mage": "20cff6cd2988b9634292bff5809aa6ce510f500efc5e148d210ac83c650b77e2",
+      "warlock": "a2c5378fdb776dbbd5f5f1bcd1660d1a68334c1ff9ee6a7147efd76056f39e9e",
+      "druid": "7b9cf8c8fcfbdabbbf579391c26d7747ca8209d2990bfc969b99e35a5c3a3076"
+    }
+  },
+  "output": {
+    "sha256": {
+      "warrior": "b26b64a36e15ca60c59d8a0133170ee44727c8253a827965a7bb80d2de372bb1",
+      "paladin": "08c15f7486ce7bb5707d5a41d88cd839043f204480967c352b658658da7f022e",
+      "hunter": "5dfa272bab61134185f09d486a3df41410a56a49c9672691b94d5464a4c9c22a",
+      "rogue": "08fc25c1c0cf4bddef9c64c7b398fcc6845dd6e05f5876785b7dc31ab18522cb",
+      "priest": "f43d83b9ac1951062a618ceecc56304181562048f010fcac5a719d3bd2cc3110",
+      "shaman": "50a0663adc883ed17262460962bfbf2dfda6a7145d90c6c6ba219f0c3d0c60d6",
+      "mage": "5e71b7a3f675c275b8d5273b4b0c500a468626e1a4c3880a258aaa7dadaf9906",
+      "warlock": "42ba7004cc6895c90518dd34e8c3190499334e01c61ac15de96948616b5c7b97",
+      "druid": "c2b6661a4df08fa75fb7df63bc0376bd0082743864af3389b29f309a2863058f"
+    }
+  }
+}
