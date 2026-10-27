@@ -48,7 +48,7 @@ npm test                      # tests/unit/talents-data.test.ts re-checks every 
 
 Then update the E2E canaries in `tests/e2e/talents.spec.ts` (they name real Priest talents) and, if talent names changed, `PriestShadowGuide`. Old build codes stop working on purpose: the code embeds a hash of the layout and is refused on mismatch.
 
-To add rank descriptions later: add `descriptions: string[]` (one entry per rank) to a talent once you have a source whose text is verified for the same build and may be redistributed. `TalentCard` then shows the current and next rank; no UI change is needed.
+**Rank descriptions — source policy:** source the English per-rank text from the same WoW: Forever client build as the tree (`Spell.Description_lang` + rank-specific spell effects), or from official Blizzard publications that explicitly match that build. Existing third-party 1.60.1.70532 tooltips can help cross-check, but they must not be silently presented as verified for 1.60.1.70630. The current Everloot `spell-values.json` gives numeric effects and hashes, **not** the text or the complete per-rank spell mapping, so it is not sufficient to fabricate descriptions. Once available, add `descriptions: string[]` (one verified entry per rank, in rank order) to a talent; `TalentCard` displays the current and next rank in the lower panel without UI changes. Record source, build, extraction date, and redistribution review for the enriched dataset; regenerate on build changes and check a per-rank diff before publication. Do not import scraped third-party guide prose.
 
 To add another game version, add a new folder and a second registry (the class pages are written against `TalentClassData`, not against a build).
 
@@ -70,7 +70,7 @@ All nine classes ship. A class missing from `registry.ts` renders "Talent data n
 
 ## Interaction
 
-Click/tap/Enter/Space adds a point; right-click, Shift+click, Backspace/Delete or the **Remove** button in the detail panel removes one; arrow keys move between talents (one tab stop per tree); status changes are announced through a polite live region. No inline styles are used (page CSP), grid placement uses literal Tailwind classes.
+Click/tap/Enter/Space adds a point; right-click, Shift+click, Backspace/Delete or the **Remove** button in the detail panel removes one. Keyboard focus inspects a talent without spending points; arrow keys move between talents (one tab stop per tree). All descriptions and requirements are shown exclusively in the selected-talent detail panel below the trees: **there are no floating/hover tooltips**. Escape dismisses the selection; Reset clears it. Status changes are announced through a polite live region. No inline styles are used (page CSP), grid placement uses literal Tailwind classes.
 
 ## Tests
 

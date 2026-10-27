@@ -274,34 +274,46 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
     await expect(page.getByTestId("announcer")).toContainText("points remaining");
   });
 
-  test("tooltips show name, rank, requirements and say when descriptions are unverified", async ({ page }) => {
+  test("details appear only in the bottom panel, never in a floating tooltip", async ({ page }) => {
     await page.goto("/guides/classes/priest");
     const silent = talent(page, "discipline", "Silent Resolve");
+    const detail = page.getByTestId("talent-detail");
     await silent.hover();
-    const tip = page.getByRole("tooltip");
-    await expect(tip).toBeVisible();
-    await expect(tip).toContainText("Silent Resolve");
-    await expect(tip).toContainText("Rank 0/3");
-    await expect(tip).toContainText("Requires 5 points in Discipline (0/5)");
-    await expect(tip).toContainText("Rank descriptions are not yet verified");
-    await expect(tip).toContainText("Spell ID 14523");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(detail).toContainText("Select a talent to see its details");
 
-    await talent(page, "discipline", "Soul Warding").hover();
-    await expect(page.getByRole("tooltip")).toContainText("Requires Improved Power Word: Shield at rank 3");
+    // Clicking a locked talent selects it without spending a point.
+    await clickLocked(silent);
+    await expect(spent(page)).toHaveText("0/51");
+    await expect(detail).toContainText("Silent Resolve");
+    await expect(detail).toContainText("Rank 0/3");
+    await expect(detail).toContainText("Requires 5 points in Discipline (0/5)");
+    await expect(detail).toContainText("Rank descriptions are not yet verified");
+    await expect(detail).toContainText("Spell ID 14523");
 
-    // Moving away closes it; focusing with the keyboard opens it again.
+    // Hovering elsewhere never overlays the grid or changes the selected talent.
+    await talent(page, "discipline", "Power in Light").hover();
     await page.mouse.move(0, 0);
     await expect(page.getByRole("tooltip")).toHaveCount(0);
-    await talent(page, "discipline", "Power in Light").focus();
-    await expect(page.getByRole("tooltip")).toContainText("Power in Light");
+    await expect(detail).toContainText("Silent Resolve");
+
+    // Keyboard focus inspects a talent without allocating points; Escape dismisses it.
+    await talent(page, "discipline", "Soul Warding").focus();
+    await expect(detail).toContainText("Soul Warding");
+    await expect(detail).toContainText("Requires Improved Power Word: Shield at rank 3");
+    await expect(spent(page)).toHaveText("0/51");
+    await page.keyboard.press("Escape");
+    await expect(detail).toContainText("Select a talent to see its details");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
   });
 
-  test("accessibility (axe WCAG 2.2 AA) with points allocated, a talent selected and a tooltip open", async ({ page }) => {
+  test("accessibility (axe WCAG 2.2 AA) with points allocated and a talent selected in the bottom panel", async ({ page }) => {
     const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Shadow Focus", 3], ["Blackout", 5]]);
     await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
     await talent(page, "discipline", "Silent Resolve").click();
     await talent(page, "shadow-magic", "Improved Psychic Scream").hover();
-    await expect(page.getByRole("tooltip")).toBeVisible();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(page.getByTestId("talent-detail")).toContainText("Silent Resolve");
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(r.violations.map((v) => `${v.id}: ${v.nodes.length} node(s) - ${v.help}`)).toEqual([]);
   });

@@ -29,8 +29,6 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
   });
   const [alloc, setAlloc] = useState<Allocation>(initial.alloc);
   const [linkError, setLinkError] = useState<string | null>(initial.error);
-  const [hoverId, setHoverId] = useState<number | null>(null);
-  const [focusId, setFocusId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [announce, setAnnounce] = useState("");
   const [shareText, setShareText] = useState<string | null>(null);
@@ -79,6 +77,7 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
   }, [alloc, engine]);
 
   function reset() {
+    setSelectedId(null);
     setAlloc(engine.reset());
     setLinkError(null);
     setShareText(null);
@@ -99,12 +98,21 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
     }
   }
 
-  const tipId = hoverId ?? focusId;
   const selected = selectedId !== null ? engine.talent(selectedId) : undefined;
   const selectedTree = selected ? engine.treeOf(selected.id) : undefined;
 
   return (
-    <section aria-labelledby="calc-title" className="space-y-4" data-testid="talent-calculator">
+    <section
+      aria-labelledby="calc-title"
+      className="space-y-4"
+      data-testid="talent-calculator"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && selectedId !== null) {
+          e.preventDefault();
+          setSelectedId(null);
+        }
+      }}
+    >
       <div className="panel flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
         <div className="min-w-0">
           <h2 id="calc-title" className="panel-title text-xl">{data.className} talent calculator</h2>
@@ -145,7 +153,7 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
       )}
 
       <p className="text-xs text-mist">
-        <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add a point · right-click, Shift+click, Backspace or the Remove button to take one back · arrow keys move between talents.
+        <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add a point · right-click, Shift+click, Backspace or the Remove button to take one back · arrow keys move between talents. Select or focus a talent for details below; Escape clears the selection.
       </p>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -168,20 +176,17 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
                 engine={engine}
                 alloc={alloc}
                 tabbableId={tabbableId}
-                tipId={tipId}
                 selectedId={selectedId}
                 onAdd={add}
                 onRemove={remove}
-                onHover={setHoverId}
-                onFocusTalent={(id) => { setFocusId(id); setTabbable((t) => ({ ...t, [tree.id]: id })); }}
-                onBlurTalent={() => setFocusId(null)}
+                onFocusTalent={(id) => { setSelectedId(id); setTabbable((t) => ({ ...t, [tree.id]: id })); }}
               />
             </section>
           );
         })}
       </div>
 
-      <div className={selected ? "sticky bottom-3 z-20" : ""} data-testid="talent-detail">
+      <div id="selected-talent-details" role="region" aria-label="Selected talent details" className={selected ? "sticky bottom-3 z-20" : ""} data-testid="talent-detail">
         <div className="panel max-h-[40vh] overflow-y-auto border-gold-500/40 p-3 shadow-2xl sm:p-4">
           {selected && selectedTree ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

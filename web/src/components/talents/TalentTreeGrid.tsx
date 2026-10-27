@@ -1,7 +1,6 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import type { TalentEngine } from "@/lib/talents/engine";
 import type { Allocation, Talent, TalentTree } from "@/lib/talents/types";
-import { TalentCard } from "./TalentCard";
 
 // Grid placement uses these literal class names (Tailwind must see them; the page CSP forbids inline styles).
 const GRID_COLS: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5", 6: "grid-cols-6", 7: "grid-cols-7", 8: "grid-cols-8" };
@@ -33,17 +32,13 @@ interface Props {
   alloc: Allocation;
   /** The one talent of this tree that is in the tab order (roving tabindex). */
   tabbableId: number;
-  /** Talent whose tooltip is open (hover or focus). */
-  tipId: number | null;
   selectedId: number | null;
   onAdd(id: number): void;
   onRemove(id: number): void;
-  onHover(id: number | null): void;
   onFocusTalent(id: number): void;
-  onBlurTalent(): void;
 }
 
-export function TalentTreeGrid({ tree, engine, alloc, tabbableId, tipId, selectedId, onAdd, onRemove, onHover, onFocusTalent, onBlurTalent }: Props) {
+export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, onAdd, onRemove, onFocusTalent }: Props) {
   const byCell = new Map<string, Talent>(tree.talents.map((x) => [`${x.row}:${x.col}`, x]));
   const byId = new Map(tree.talents.map((x) => [x.id, x]));
 
@@ -141,17 +136,14 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, tipId, selecte
           const locked = !add.ok && rank < x.maxRank;
           const lockNote = !add.ok && add.reason === "no-points" ? "no points remaining" : "requirements not met";
           const aria = `${x.name}, rank ${rank} of ${x.maxRank}${locked ? `, locked: ${lockNote}` : ""}`;
-          const tipOpen = tipId === x.id;
-          const hAlign = col < tree.cols / 2 ? "left-0" : "right-0";
-          const vAlign = row < tree.rows / 2 ? "top-full mt-1" : "bottom-full mb-1";
 
           return (
-            <div key={x.id} className={`relative flex aspect-square items-center justify-center ${place} ${tipOpen ? "z-30" : "z-10"}`}>
+            <div key={x.id} className={`relative z-10 flex aspect-square items-center justify-center ${place}`}>
               <button
                 type="button"
                 id={talentDomId(x.id)}
                 aria-label={aria}
-                aria-describedby={tipOpen ? `${talentDomId(x.id)}-tip` : undefined}
+                aria-controls="selected-talent-details"
                 aria-disabled={locked || undefined}
                 tabIndex={x.id === tabbableId ? 0 : -1}
                 data-talent-id={x.id}
@@ -160,10 +152,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, tipId, selecte
                 onClick={(e) => onClick(e, x)}
                 onContextMenu={(e) => onContextMenu(e, x)}
                 onKeyDown={(e) => onKeyDown(e, x)}
-                onPointerEnter={() => onHover(x.id)}
-                onPointerLeave={() => onHover(null)}
                 onFocus={() => onFocusTalent(x.id)}
-                onBlur={onBlurTalent}
                 className={`relative flex h-[80%] w-[92%] items-center justify-center rounded-lg border-2 px-0.5 text-center text-[10px] font-semibold leading-tight transition-colors ${NODE_CLASS[state]} ${selectedId === x.id ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-ink-950" : ""} ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
               >
                 <span aria-hidden="true" className="line-clamp-3 break-words">{x.name}</span>
@@ -174,15 +163,6 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, tipId, selecte
                   {rank}/{x.maxRank}
                 </span>
               </button>
-              {tipOpen && (
-                <div
-                  id={`${talentDomId(x.id)}-tip`}
-                  role="tooltip"
-                  className={`pointer-events-none absolute hidden w-72 rounded-lg border border-gold-500/40 bg-ink-900 p-3 shadow-xl md:block ${hAlign} ${vAlign}`}
-                >
-                  <TalentCard engine={engine} alloc={alloc} talent={x} tree={tree} />
-                </div>
-              )}
             </div>
           );
         })}
