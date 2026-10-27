@@ -1,12 +1,13 @@
 import { REFUSAL_TEXT, type TalentEngine } from "@/lib/talents/engine";
 import type { Allocation, Talent, TalentTree } from "@/lib/talents/types";
+import { CardIcon } from "./TalentIcon";
 
 /**
  * Tooltip/detail body for one talent. Shows only what the data holds: name, rank, tier, the real requirements
  * with their live progress, and - when the dataset carries verified rank text - the current and next rank
  * descriptions. When it does not, it says so rather than inventing text.
  */
-export function TalentCard({ engine, alloc, talent, tree, compact = false }: { engine: TalentEngine; alloc: Allocation; talent: Talent; tree: TalentTree; compact?: boolean }) {
+export function TalentCard({ engine, alloc, talent, tree, icon, compact = false }: { engine: TalentEngine; alloc: Allocation; talent: Talent; tree: TalentTree; icon?: string; compact?: boolean }) {
   const rank = engine.rank(alloc, talent.id);
   const reqs = engine.requirements(alloc, talent.id);
   const points = reqs.find((r) => r.kind === "points");
@@ -18,16 +19,21 @@ export function TalentCard({ engine, alloc, talent, tree, compact = false }: { e
 
   return (
     <div className="space-y-2 text-sm text-parchment">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-[family-name:var(--font-display)] text-base font-semibold text-gold-300">{talent.name}</p>
-        <p className="shrink-0 font-mono text-xs text-mist">
-          Rank {rank}/{talent.maxRank}
-        </p>
+      <div className="flex items-start gap-3">
+        <CardIcon src={icon} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-[family-name:var(--font-display)] text-base font-semibold text-gold-300">{talent.name}</p>
+            <p className="shrink-0 font-mono text-xs text-mist">
+              Rank {rank}/{talent.maxRank}
+            </p>
+          </div>
+          <p className="text-xs text-mist">
+            {tree.name} · Tier {talent.row + 1}
+            {compact ? ` · Spell ID ${talent.spellId}` : ""}
+          </p>
+        </div>
       </div>
-      <p className="text-xs text-mist">
-        {tree.name} · Tier {talent.row + 1}
-        {compact ? ` · Spell ID ${talent.spellId}` : ""}
-      </p>
 
       {(points || talentReqs.length > 0) && (
         <ul className="space-y-0.5 text-xs">
@@ -55,14 +61,16 @@ export function TalentCard({ engine, alloc, talent, tree, compact = false }: { e
       )}
 
       {descriptions ? (
-        <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs">
+        <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs" data-testid="talent-description">
           {rank > 0 && <p>{descriptions[rank - 1]}</p>}
           {rank < talent.maxRank && (
-            <p className="text-mist">
-              <span className="font-semibold">Next rank:</span> {descriptions[rank]}
+            <p className={rank > 0 ? "text-mist" : undefined}>
+              <span className="font-semibold">{rank > 0 ? "Next rank:" : "Rank 1:"}</span> {descriptions[rank]}
             </p>
           )}
         </div>
+      ) : talent.description ? (
+        <p className="border-t border-ink-700 pt-2 text-xs" data-testid="talent-description">{talent.description}</p>
       ) : (
         <p className="border-t border-ink-700 pt-2 text-xs italic text-mist">
           Rank descriptions are not yet verified for this game build, so none are shown.

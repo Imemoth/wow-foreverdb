@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ClassBackdrop, CLASS_MOTIF } from "@/components/classes/backdrops";
 import { ClassEmblem } from "@/components/classes/ClassEmblem";
 import { classStyle } from "@/components/classes/class-style";
 import { getSpecGuide } from "@/components/classes/spec-guides";
@@ -11,7 +12,7 @@ import { CLASSES, classPath, getClass, getSpecs, specPath } from "@/lib/classes/
 import { classIntro, talentSourceNote, treeRankCount } from "@/lib/classes/facts";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
-import { getTalentData } from "@/lib/talents/registry";
+import { getTalentData, getTalentIcons } from "@/lib/talents/registry";
 
 type Params = Promise<{ class: string }>;
 
@@ -36,6 +37,7 @@ export default async function Page({ params }: { params: Params }) {
   if (!info) notFound();
   const { nonce, baseUrl } = await pageContext();
   const data = getTalentData(info.id);
+  const icons = data ? getTalentIcons(data) : {};
   const specs = getSpecs(info.id);
   const s = classStyle(info.id);
 
@@ -43,9 +45,10 @@ export default async function Page({ params }: { params: Params }) {
     <div className="space-y-10">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Guides", href: "/guides" }, { name: "Classes", href: "/guides/classes" }, { name: info.name }]} />
 
-      <header className={`panel flex flex-col gap-5 border-l-4 p-6 sm:flex-row sm:items-center ${s.border}`}>
+      <header className={`panel relative flex flex-col gap-5 border-l-4 p-6 sm:flex-row sm:items-center sm:p-8 ${s.border}`} data-testid="class-hero">
+        <ClassBackdrop classId={info.id} motif={CLASS_MOTIF[info.id] ?? "halo"} variant="hero" uid={`${info.id}-hero`} />
         <ClassEmblem classId={info.id} name={info.name} size="lg" />
-        <div className="min-w-0 space-y-2">
+        <div className="relative min-w-0 space-y-2">
           <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold text-parchment">{info.name}</h1>
           <p className="max-w-3xl text-mist">{classIntro(info.name, data)}</p>
           {data && <a href="#talents" className="btn-primary mt-2 inline-flex">Open the talent calculator</a>}
@@ -77,7 +80,7 @@ export default async function Page({ params }: { params: Params }) {
           </section>
 
           <div id="talents" className="scroll-mt-6">
-            <TalentCalculator data={data} sourceNote={talentSourceNote()} />
+            <TalentCalculator data={data} icons={icons} sourceNote={talentSourceNote(info.id, Object.keys(icons).length)} />
           </div>
         </>
       ) : (

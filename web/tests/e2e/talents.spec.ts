@@ -274,45 +274,235 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
     await expect(page.getByTestId("announcer")).toContainText("points remaining");
   });
 
-  test("details appear only in the bottom panel, never in a floating tooltip", async ({ page }) => {
-    await page.goto("/guides/classes/priest");
-    const silent = talent(page, "discipline", "Silent Resolve");
-    const detail = page.getByTestId("talent-detail");
-    await silent.hover();
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
-    await expect(detail).toContainText("Select a talent to see its details");
+  test.describe("hover tooltip and selected-talent panel are separate states", () => {
+    const tooltip = (page: Page) => page.getByTestId("talent-tooltip");
+    const detail = (page: Page) => page.getByTestId("talent-detail");
 
-    // Clicking a locked talent selects it without spending a point.
-    await clickLocked(silent);
-    await expect(spent(page)).toHaveText("0/51");
-    await expect(detail).toContainText("Silent Resolve");
-    await expect(detail).toContainText("Rank 0/3");
-    await expect(detail).toContainText("Requires 5 points in Discipline (0/5)");
-    await expect(detail).toContainText("Rank descriptions are not yet verified");
-    await expect(detail).toContainText("Spell ID 14523");
+    test("the tooltip appears only while hovering and disappears immediately on mouse leave", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await expect(tooltip(page)).toHaveCount(0);
 
-    // Hovering elsewhere never overlays the grid or changes the selected talent.
-    await talent(page, "discipline", "Power in Light").hover();
-    await page.mouse.move(0, 0);
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
-    await expect(detail).toContainText("Silent Resolve");
+      await talent(page, "discipline", "Silent Resolve").hover();
+      await expect(tooltip(page)).toBeVisible();
+      await expect(tooltip(page)).toContainText("Silent Resolve");
+      await expect(tooltip(page)).toContainText("Rank 0/3");
+      await expect(tooltip(page)).toContainText("Requires 5 points in Discipline (0/5)");
+      await expect(tooltip(page)).toContainText("Rank descriptions are not yet verified");
+      await expect(tooltip(page)).toContainText("Spell ID 14523");
 
-    // Keyboard focus inspects a talent without allocating points; Escape dismisses it.
-    await talent(page, "discipline", "Soul Warding").focus();
-    await expect(detail).toContainText("Soul Warding");
-    await expect(detail).toContainText("Requires Improved Power Word: Shield at rank 3");
-    await expect(spent(page)).toHaveText("0/51");
-    await page.keyboard.press("Escape");
-    await expect(detail).toContainText("Select a talent to see its details");
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
+      // Moving to another talent swaps the tooltip; leaving every talent removes it at once.
+      await talent(page, "discipline", "Soul Warding").hover();
+      await expect(tooltip(page)).toHaveCount(1);
+      await expect(tooltip(page)).toContainText("Requires Improved Power Word: Shield at rank 3");
+      await page.mouse.move(0, 0);
+      await expect(tooltip(page)).toHaveCount(0);
+    });
+
+    test("hovering never selects: the panel stays empty and the build is untouched", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await talent(page, "discipline", "Power in Light").hover();
+      await expect(tooltip(page)).toBeVisible();
+      await expect(detail(page)).toContainText("Select a talent to see its details");
+      await expect(spent(page)).toHaveText("0/51");
+    });
+
+    test("selecting does not keep a tooltip open: the selection lives only in the bottom panel", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      const silent = talent(page, "discipline", "Silent Resolve");
+      await silent.hover();
+      await clickLocked(silent); // selects without spending a point
+      await expect(spent(page)).toHaveText("0/51");
+      await expect(detail(page)).toContainText("Silent Resolve");
+      await expect(detail(page)).toContainText("Requires 5 points in Discipline (0/5)");
+      await expect(detail(page)).toContainText("Spell ID 14523");
+
+      await page.mouse.move(0, 0);
+      await expect(tooltip(page)).toHaveCount(0);
+      await expect(detail(page)).toContainText("Silent Resolve");
+    });
+
+    test("hover and selection are independent: hovering B shows B's tooltip while the panel keeps A", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await clickLocked(talent(page, "discipline", "Silent Resolve"));
+      await page.mouse.move(0, 0);
+      await talent(page, "discipline", "Soul Warding").hover();
+      await expect(tooltip(page)).toContainText("Soul Warding");
+      await expect(detail(page)).toContainText("Silent Resolve");
+      await expect(detail(page)).not.toContainText("Soul Warding");
+      await page.mouse.move(0, 0);
+      await expect(tooltip(page)).toHaveCount(0);
+      await expect(detail(page)).toContainText("Silent Resolve");
+    });
+
+    test("keyboard focus selects into the panel but never opens a floating tooltip", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await talent(page, "discipline", "Soul Warding").focus();
+      await expect(detail(page)).toContainText("Soul Warding");
+      await expect(detail(page)).toContainText("Requires Improved Power Word: Shield at rank 3");
+      await expect(tooltip(page)).toHaveCount(0);
+      await expect(spent(page)).toHaveText("0/51");
+    });
+
+    test("Escape closes the tooltip and clears the selection, leaving nothing behind", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      const silent = talent(page, "discipline", "Silent Resolve");
+      await clickLocked(silent);
+      await expect(detail(page)).toContainText("Silent Resolve");
+      await talent(page, "discipline", "Power in Light").hover();
+      await expect(tooltip(page)).toBeVisible();
+
+      await page.keyboard.press("Escape");
+      await expect(tooltip(page)).toHaveCount(0);
+      await expect(detail(page)).toContainText("Select a talent to see its details");
+      await expect(page.locator('[role="tooltip"]')).toHaveCount(0);
+      // The pointer is still over the talent; the tooltip must not come back until it re-enters.
+      await page.waitForTimeout(150);
+      await expect(tooltip(page)).toHaveCount(0);
+    });
   });
 
-  test("accessibility (axe WCAG 2.2 AA) with points allocated and a talent selected in the bottom panel", async ({ page }) => {
+  test("Escape closes a hover-only tooltip even when focus is outside the calculator", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    await talent(page, "discipline", "Power in Light").hover();
+    await expect(page.getByTestId("talent-tooltip")).toBeVisible();
+    await expect(page.getByTestId("talent-detail")).toContainText("Select a talent to see its details");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("talent-tooltip")).toHaveCount(0);
+  });
+
+  test.describe("descriptions and icons (synthetic overlay on the real Priest tree)", () => {
+    const fixture = "/test-fixtures/talents";
+
+    test("per-rank descriptions render in the tooltip and the panel; rank changes the text", async ({ page }) => {
+      await page.goto(fixture);
+      const pil = talent(page, "discipline", "Power in Light");
+      await pil.hover();
+      await expect(page.getByTestId("talent-tooltip").getByTestId("talent-description")).toContainText("Rank 1: SYNTHETIC rank 1 text");
+      await pil.click();
+      await pil.click();
+      await expect(page.getByTestId("talent-detail").getByTestId("talent-description")).toContainText("SYNTHETIC rank 2 text for Power in Light.");
+      await expect(page.getByTestId("talent-detail").getByTestId("talent-description")).toContainText("Next rank: SYNTHETIC rank 3 text");
+      // A talent at maximum rank shows only its current text.
+      for (let i = 0; i < 3; i++) await pil.click();
+      await expect(page.getByTestId("talent-detail").getByTestId("talent-description")).toContainText("SYNTHETIC rank 5 text");
+      await expect(page.getByTestId("talent-detail").getByTestId("talent-description")).not.toContainText("Next rank");
+    });
+
+    test("a single description is surfaced cleanly, and an entry that does not fit stays honestly empty", async ({ page }) => {
+      await page.goto(fixture);
+      await talent(page, "shadow-magic", "Shadow Focus").hover();
+      await expect(page.getByTestId("talent-tooltip").getByTestId("talent-description")).toHaveText("SYNTHETIC single description for Shadow Focus.");
+      await talent(page, "shadow-magic", "Blackout").hover();
+      const tip = page.getByTestId("talent-tooltip");
+      await expect(tip).toContainText("Rank descriptions are not yet verified");
+      await expect(tip).not.toContainText("SYNTHETIC only one entry");
+    });
+
+    test("icons render when present and degrade to the name plate when absent or broken", async ({ page }) => {
+      await page.goto(fixture);
+      const withIcon = talent(page, "discipline", "Power in Light");
+      await expect(withIcon.getByTestId("talent-icon")).toHaveCount(1);
+      await expect(withIcon.getByTestId("talent-icon")).toBeVisible();
+      // The icon is decorative; the name is still real text on the button.
+      await expect(withIcon).toHaveAccessibleName("Power in Light, rank 0 of 5");
+
+      // Broken URL: the img fails to load and the node falls back to its plain name plate.
+      const broken = talent(page, "shadow-magic", "Blackout");
+      await expect(broken.getByTestId("talent-icon")).toHaveCount(0);
+      await expect(broken).toContainText("Blackout");
+
+      // No icon known for this talent at all.
+      const none = talent(page, "discipline", "Wand Specialization");
+      await expect(none.getByTestId("talent-icon")).toHaveCount(0);
+      await expect(none).toContainText("Wand Specialization");
+
+      // The calculator stays fully usable around them.
+      await broken.click();
+      await expect(spent(page)).toHaveText("1/51");
+    });
+
+    test("the icon also appears in the tooltip and the panel header", async ({ page }) => {
+      await page.goto(fixture);
+      const pil = talent(page, "discipline", "Power in Light");
+      await pil.hover();
+      await expect(page.getByTestId("talent-tooltip").getByTestId("card-icon")).toBeVisible();
+      await pil.click();
+      await page.mouse.move(0, 0);
+      await expect(page.getByTestId("talent-detail").getByTestId("card-icon")).toBeVisible();
+    });
+
+    test("the real dataset ships without icons or text, and says so", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await expect(page.getByTestId("talent-icon")).toHaveCount(0);
+      await expect(page.getByTestId("talent-calculator")).toContainText("Rank descriptions and icons are not included");
+      // Name plates: every talent still names itself.
+      await expect(talent(page, "shadow-magic", "Shadowform")).toContainText("Shadowform");
+    });
+  });
+
+  test.describe("background art", () => {
+    test("class hero, tree and card backdrops are decorative, inert and do not block the page", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      const hero = page.getByTestId("class-hero").getByTestId("backdrop-hero");
+      await expect(hero).toHaveAttribute("aria-hidden", "true");
+      await expect(hero).toHaveCSS("pointer-events", "none");
+      for (const slug of ["discipline", "holy", "shadow-magic"]) {
+        const b = tree(page, slug).getByTestId("backdrop-tree");
+        await expect(b).toHaveCount(1);
+        await expect(b).toHaveAttribute("aria-hidden", "true");
+        await expect(b).toHaveCSS("pointer-events", "none");
+      }
+      // Themed per tree (decorative motif only).
+      await expect(tree(page, "shadow-magic").getByTestId("backdrop-tree")).toHaveAttribute("data-motif", "vortex");
+      await expect(tree(page, "holy").getByTestId("backdrop-tree")).toHaveAttribute("data-motif", "rays");
+      // Interaction is unaffected: the title, link and nodes beneath/above the art stay clickable.
+      await expect(page.getByRole("link", { name: "Open the talent calculator" })).toBeVisible();
+      await talent(page, "shadow-magic", "Shadow Focus").click();
+      await expect(spent(page)).toHaveText("1/51");
+      // The art adds no focusable or text content of its own.
+      await expect(page.getByTestId("class-hero").locator("svg a, svg button, svg [tabindex]")).toHaveCount(0);
+    });
+
+    test("class cards carry a backdrop behind readable, clickable content", async ({ page }) => {
+      await page.goto("/guides/classes");
+      for (const id of ["warrior", "priest", "druid"]) {
+        const card = page.getByTestId(`class-card-${id}`);
+        await expect(card.getByTestId("backdrop-card")).toHaveAttribute("aria-hidden", "true");
+        await expect(card.getByRole("link", { name: "Talent calculator" })).toBeVisible();
+      }
+      await expect(page.locator('[data-testid="backdrop-card"]')).toHaveCount(9);
+      await page.getByTestId("class-card-druid").getByRole("link", { name: "Druid" }).click();
+      await expect(page).toHaveURL(/\/guides\/classes\/druid$/);
+    });
+
+    test("tooltips are not clipped: no ancestor of the tooltip hides overflow", async ({ page }) => {
+      await page.goto("/guides/classes/priest");
+      await talent(page, "discipline", "Martyrdom").hover();
+      const tip = page.getByTestId("talent-tooltip");
+      await expect(tip).toBeVisible();
+      const clipping = await tip.evaluate((el) => {
+        const bad: string[] = [];
+        for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+          const o = getComputedStyle(n);
+          if (o.overflowX !== "visible" || o.overflowY !== "visible") bad.push(`${n.tagName}.${n.className}`);
+        }
+        return bad;
+      });
+      expect(clipping).toEqual([]);
+      // And it stays inside the viewport.
+      const box = await tip.boundingBox();
+      const vp = page.viewportSize()!;
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width);
+    });
+  });
+
+  test("accessibility (axe WCAG 2.2 AA) with points allocated, a talent selected and a tooltip open", async ({ page }) => {
     const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Shadow Focus", 3], ["Blackout", 5]]);
     await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
     await talent(page, "discipline", "Silent Resolve").click();
     await talent(page, "shadow-magic", "Improved Psychic Scream").hover();
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(page.getByTestId("talent-tooltip")).toBeVisible();
     await expect(page.getByTestId("talent-detail")).toContainText("Silent Resolve");
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(r.violations.map((v) => `${v.id}: ${v.nodes.length} node(s) - ${v.help}`)).toEqual([]);

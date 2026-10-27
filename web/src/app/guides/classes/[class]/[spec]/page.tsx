@@ -9,7 +9,7 @@ import { classPath, getClass, getSpec, specPath } from "@/lib/classes/classes";
 import { talentSourceNote } from "@/lib/classes/facts";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
-import { getTalentData } from "@/lib/talents/registry";
+import { getTalentData, getTalentIcons } from "@/lib/talents/registry";
 
 type Params = Promise<{ class: string; spec: string }>;
 
@@ -45,6 +45,7 @@ export default async function Page({ params }: { params: Params }) {
   if (!info || !data || !spec || !guide) notFound();
   const { nonce, baseUrl } = await pageContext();
   const { Body } = guide;
+  const icons = getTalentIcons(data);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -74,7 +75,7 @@ export default async function Page({ params }: { params: Params }) {
       <Body
         data={data}
         tree={spec.tree}
-        calculator={<TalentCalculator data={data} sourceNote={talentSourceNote()} highlightTreeId={spec.tree.id} />}
+        calculator={<TalentCalculator data={data} icons={icons} sourceNote={talentSourceNote(info.id, Object.keys(icons).length)} highlightTreeId={spec.tree.id} />}
       />
     </div>
   );

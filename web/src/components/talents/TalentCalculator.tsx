@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILD_PARAM, DECODE_FAILURE_TEXT, decodeBuild, encodeBuild } from "@/lib/talents/build-code";
 import { createEngine, REFUSAL_TEXT } from "@/lib/talents/engine";
 import type { Allocation, TalentClassData } from "@/lib/talents/types";
+import { TreeBackdrop } from "@/components/classes/backdrops";
 import { TalentCard } from "./TalentCard";
 import { TalentTreeGrid } from "./TalentTreeGrid";
 
@@ -14,9 +15,13 @@ interface Props {
   sourceNote: string;
   /** Tree to emphasise, e.g. on a specialization page. */
   highlightTreeId?: number;
+  /** talent id -> icon URL. Empty/absent: nodes show their name (no icons are available for this build or deployment). */
+  icons?: Readonly<Record<number, string>>;
 }
 
-export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
+const NO_ICONS: Readonly<Record<number, string>> = {};
+
+export function TalentCalculator({ data, sourceNote, highlightTreeId, icons = NO_ICONS }: Props) {
   const engine = useMemo(() => createEngine(data), [data]);
   // A shared build in ?b= is decoded once, while rendering (on the server too, so a shared link renders with its build and
   // never flashes an empty one). An invalid link falls back to an empty build with an explanation.
@@ -29,7 +34,10 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
   });
   const [alloc, setAlloc] = useState<Allocation>(initial.alloc);
   const [linkError, setLinkError] = useState<string | null>(initial.error);
+  // Two independent states: `selectedId` is persistent and shown only in the detail panel; `hoverId` is the talent under the
+  // mouse and drives only the floating tooltip. Neither is derived from the other.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [hoverId, setHoverId] = useState<number | null>(null);
   const [announce, setAnnounce] = useState("");
   const [shareText, setShareText] = useState<string | null>(null);
   const [tabbable, setTabbable] = useState<Record<number, number>>({});
@@ -42,6 +50,20 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
     else url.searchParams.delete(BUILD_PARAM);
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
   }, [alloc, engine, data]);
+
+  // Escape clears the selection and any open tooltip, wherever keyboard focus is (a hover-only tooltip has no focus to hang a handler on).
+  const hasTransient = selectedId !== null || hoverId !== null;
+  useEffect(() => {
+    if (!hasTransient) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setSelectedId(null);
+      setHoverId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [hasTransient]);
 
   const spent = engine.spent(alloc);
   const remaining = engine.remaining(alloc);
@@ -78,6 +100,7 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
 
   function reset() {
     setSelectedId(null);
+    setHoverId(null);
     setAlloc(engine.reset());
     setLinkError(null);
     setShareText(null);
@@ -106,12 +129,6 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
       aria-labelledby="calc-title"
       className="space-y-4"
       data-testid="talent-calculator"
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && selectedId !== null) {
-          e.preventDefault();
-          setSelectedId(null);
-        }
-      }}
     >
       <div className="panel flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
         <div className="min-w-0">
@@ -153,7 +170,7 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
       )}
 
       <p className="text-xs text-mist">
-        <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add a point · right-click, Shift+click, Backspace or the Remove button to take one back · arrow keys move between talents. Select or focus a talent for details below; Escape clears the selection.
+        <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add a point · right-click, Shift+click, Backspace or the Remove button to take one back · arrow keys move between talents. Hover a talent for a quick look; select or focus one for details below; Escape clears the selection.
       </p>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -164,34 +181,41 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId }: Props) {
             <section
               key={tree.id}
               aria-labelledby={`tree-${tree.id}`}
-              className={`panel p-3 sm:p-4 ${highlightTreeId === tree.id ? "ring-1 ring-gold-400/60" : ""}`}
+              className={`panel relative p-3 sm:p-4 ${highlightTreeId === tree.id ? "ring-1 ring-gold-400/60" : ""}`}
               data-testid={`tree-${tree.slug}`}
             >
-              <h3 id={`tree-${tree.id}`} className="mb-3 flex items-baseline justify-between font-[family-name:var(--font-display)] text-lg text-gold-300">
-                <span>{tree.name}</span>
-                <span className="font-mono text-sm text-parchment" aria-label={`${pts} points spent in ${tree.name}`}>{pts}</span>
-              </h3>
-              <TalentTreeGrid
-                tree={tree}
-                engine={engine}
-                alloc={alloc}
-                tabbableId={tabbableId}
-                selectedId={selectedId}
-                onAdd={add}
-                onRemove={remove}
-                onFocusTalent={(id) => { setSelectedId(id); setTabbable((t) => ({ ...t, [tree.id]: id })); }}
-              />
+              {/* Decorative, non-interactive. It clips itself, so the panel does not (tooltips may overflow it) and no stacking context is created. */}
+              <TreeBackdrop classId={data.classId} treeSlug={tree.slug} />
+              <div className="relative">
+                <h3 id={`tree-${tree.id}`} className="mb-3 flex items-baseline justify-between font-[family-name:var(--font-display)] text-lg text-gold-300">
+                  <span>{tree.name}</span>
+                  <span className="font-mono text-sm text-parchment" aria-label={`${pts} points spent in ${tree.name}`}>{pts}</span>
+                </h3>
+                <TalentTreeGrid
+                  tree={tree}
+                  engine={engine}
+                  alloc={alloc}
+                  tabbableId={tabbableId}
+                  selectedId={selectedId}
+                  hoverId={hoverId}
+                  icons={icons}
+                  onAdd={add}
+                  onRemove={remove}
+                  onFocusTalent={(id) => { setSelectedId(id); setTabbable((t) => ({ ...t, [tree.id]: id })); }}
+                  onHover={setHoverId}
+                />
+              </div>
             </section>
           );
         })}
       </div>
 
       <div id="selected-talent-details" role="region" aria-label="Selected talent details" className={selected ? "sticky bottom-3 z-20" : ""} data-testid="talent-detail">
-        <div className="panel max-h-[40vh] overflow-y-auto border-gold-500/40 p-3 shadow-2xl sm:p-4">
+        <div className="panel max-h-[40vh] overflow-y-auto border-gold-500/40 bg-ink-900 bg-none p-3 shadow-2xl sm:p-4">
           {selected && selectedTree ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <TalentCard engine={engine} alloc={alloc} talent={selected} tree={selectedTree} compact />
+                <TalentCard engine={engine} alloc={alloc} talent={selected} tree={selectedTree} icon={icons[selected.id]} />
               </div>
               <div className="flex shrink-0 gap-2">
                 <button type="button" className="btn-ghost min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => remove(selected.id)} disabled={!engine.canRemove(alloc, selected.id).ok} aria-label={`Remove a point from ${selected.name}`}>

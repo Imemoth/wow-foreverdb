@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
 import { assetOriginForPage, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
+import { talentIconImgOrigin } from "@/lib/talents/icons";
 import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
@@ -183,6 +184,8 @@ export async function proxy(request: NextRequest) {
     assetOrigin: assetOriginForPage(pathname, process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL),
     // img-src only, and only when AZERDEX_ZONE_HERO_SOURCE=cdn (default: same-origin heroes, CSP unchanged).
     heroImgOrigin: heroImgOrigin(),
+    // img-src only, and only when AZERDEX_TALENT_ICONS=cdn on an allow-listed https asset host (default: CSP unchanged).
+    iconImgOrigin: talentIconImgOrigin(),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

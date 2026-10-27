@@ -11,7 +11,7 @@ export function ClassEmblem({ classId, name, size = "md" }: { classId: string; n
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-full border-2 ${s.border} ${s.tint} ${s.glyph} ${SIZE[size]} font-[family-name:var(--font-display)] font-bold shadow-[0_0_18px_-6px_currentColor]`}
+      className={`relative inline-flex shrink-0 items-center justify-center rounded-full border-2 ${s.border} ${s.tint} ${s.glyph} ${SIZE[size]} font-[family-name:var(--font-display)] font-bold shadow-[0_0_18px_-6px_currentColor]`}
     >
       {name.charAt(0)}
     </span>

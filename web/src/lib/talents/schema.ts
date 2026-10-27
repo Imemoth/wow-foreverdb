@@ -15,6 +15,7 @@ const talent = z
       .array(z.object({ talentId: z.number().int().positive(), rule: z.enum(["all", "any"]), minRank: z.number().int().min(1).optional() }).strict())
       .optional(),
     descriptions: z.array(z.string().min(1)).optional(),
+    description: z.string().min(1).max(1200).optional(),
   })
   .strict();
 

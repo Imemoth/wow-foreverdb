@@ -1,4 +1,5 @@
 import { getTalentData } from "@/lib/talents/registry";
+import { CLASS_COLORS } from "./colors";
 import type { TalentTree } from "@/lib/talents/types";
 
 /**
@@ -13,17 +14,12 @@ export interface ClassInfo {
   color: string;
 }
 
-export const CLASSES: readonly ClassInfo[] = [
-  { id: "warrior", name: "Warrior", color: "#C79C6E" },
-  { id: "paladin", name: "Paladin", color: "#F58CBA" },
-  { id: "hunter", name: "Hunter", color: "#ABD473" },
-  { id: "rogue", name: "Rogue", color: "#FFF569" },
-  { id: "priest", name: "Priest", color: "#FFFFFF" },
-  { id: "shaman", name: "Shaman", color: "#0070DE" },
-  { id: "mage", name: "Mage", color: "#69CCF0" },
-  { id: "warlock", name: "Warlock", color: "#9482C9" },
-  { id: "druid", name: "Druid", color: "#FF7D0A" },
+const NAMES: ReadonlyArray<readonly [string, string]> = [
+  ["warrior", "Warrior"], ["paladin", "Paladin"], ["hunter", "Hunter"], ["rogue", "Rogue"], ["priest", "Priest"],
+  ["shaman", "Shaman"], ["mage", "Mage"], ["warlock", "Warlock"], ["druid", "Druid"],
 ];
+
+export const CLASSES: readonly ClassInfo[] = NAMES.map(([id, name]) => ({ id, name, color: CLASS_COLORS[id]! }));
 
 export function getClass(id: string): ClassInfo | null {
   return CLASSES.find((c) => c.id === id) ?? null;

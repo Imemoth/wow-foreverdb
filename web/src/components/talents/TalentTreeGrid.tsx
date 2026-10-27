@@ -1,6 +1,8 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import type { TalentEngine } from "@/lib/talents/engine";
 import type { Allocation, Talent, TalentTree } from "@/lib/talents/types";
+import { TalentCard } from "./TalentCard";
+import { NodeFace } from "./TalentIcon";
 
 // Grid placement uses these literal class names (Tailwind must see them; the page CSP forbids inline styles).
 const GRID_COLS: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5", 6: "grid-cols-6", 7: "grid-cols-7", 8: "grid-cols-8" };
@@ -32,13 +34,19 @@ interface Props {
   alloc: Allocation;
   /** The one talent of this tree that is in the tab order (roving tabindex). */
   tabbableId: number;
+  /** Selected talent (persistent; shown in the detail panel only). Independent of hover. */
   selectedId: number | null;
+  /** Talent under the mouse pointer (temporary; drives the floating tooltip only). Independent of selection. */
+  hoverId: number | null;
+  /** talent id -> icon URL (empty when icons are not available; nodes then show their name). */
+  icons: Readonly<Record<number, string>>;
   onAdd(id: number): void;
   onRemove(id: number): void;
   onFocusTalent(id: number): void;
+  onHover(id: number | null): void;
 }
 
-export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, onAdd, onRemove, onFocusTalent }: Props) {
+export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, hoverId, icons, onAdd, onRemove, onFocusTalent, onHover }: Props) {
   const byCell = new Map<string, Talent>(tree.talents.map((x) => [`${x.row}:${x.col}`, x]));
   const byId = new Map(tree.talents.map((x) => [x.id, x]));
 
@@ -145,9 +153,12 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, on
           const locked = !add.ok && rank < x.maxRank;
           const lockNote = !add.ok && add.reason === "no-points" ? "no points remaining" : "requirements not met";
           const aria = `${x.name}, rank ${rank} of ${x.maxRank}${locked ? `, locked: ${lockNote}` : ""}`;
+          const tipOpen = hoverId === x.id;
+          const hAlign = col < tree.cols / 2 ? "left-0" : "right-0";
+          const vAlign = row < tree.rows / 2 ? "top-full mt-1" : "bottom-full mb-1";
 
           return (
-            <div key={x.id} className={`relative z-10 flex aspect-square items-center justify-center ${place}`}>
+            <div key={x.id} className={`relative flex aspect-square items-center justify-center ${place} ${tipOpen ? "z-30" : "z-10"}`}>
               <button
                 type="button"
                 id={talentDomId(x.id)}
@@ -163,9 +174,13 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, on
                 onContextMenu={(e) => onContextMenu(e, x)}
                 onKeyDown={(e) => onKeyDown(e, x)}
                 onFocus={() => onFocusTalent(x.id)}
+                // Hover is for a mouse (or pen) only: touch has no hover, and its emulated enter would leave a tooltip stuck open.
+                onPointerEnter={(e) => { if (e.pointerType !== "touch") onHover(x.id); }}
+                onPointerLeave={() => onHover(null)}
+                onPointerCancel={() => onHover(null)}
                 className={`relative flex h-[80%] w-[92%] items-center justify-center rounded-lg border-2 px-0.5 text-center text-[10px] font-semibold leading-tight transition-colors ${NODE_CLASS[state]} ${selectedId === x.id ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-ink-950" : ""} ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
               >
-                <span aria-hidden="true" className="line-clamp-3 break-words">{x.name}</span>
+                <NodeFace name={x.name} src={icons[x.id]} />
                 <span
                   aria-hidden="true"
                   className={`absolute -bottom-1.5 -right-1.5 rounded border bg-ink-950 px-1 font-mono text-[11px] leading-4 ${BADGE_CLASS[state]}`}
@@ -173,6 +188,15 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, on
                   {rank}/{x.maxRank}
                 </span>
               </button>
+              {tipOpen && (
+                <div
+                  role="tooltip"
+                  data-testid="talent-tooltip"
+                  className={`pointer-events-none absolute hidden w-72 rounded-lg border border-gold-500/40 bg-ink-900 p-3 shadow-xl md:block ${hAlign} ${vAlign}`}
+                >
+                  <TalentCard engine={engine} alloc={alloc} talent={x} tree={tree} icon={icons[x.id]} />
+                </div>
+              )}
             </div>
           );
         })}

@@ -32,7 +32,7 @@ export default async function Page() {
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Classes">
         {CLASSES.map((c) => <ClassCard key={c.id} info={c} />)}
       </ul>
-      <DataNote>{talentSourceNote()}</DataNote>
+      <DataNote>{talentSourceNote("priest")}</DataNote>
     </div>
   );
 }

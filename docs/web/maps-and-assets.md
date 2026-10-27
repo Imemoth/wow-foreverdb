@@ -7,7 +7,8 @@
 | cjber/tweaks-forever overlay data | Comparison evidence only | Not imported | Not used |
 | Fonts: Cinzel, Inter, JetBrains Mono | Fontsource npm packages | SIL OFL 1.1 | Self-hosted |
 | ForeverDB logo, category glyphs, location plots | Original SVG in `web/src/components` | Project-owned | Used |
-| Item/spell icons | Blizzard | Not licensed | **Not used** |
+| Item/spell icons | Blizzard | Not licensed | **Not used.** The Class Guides talent calculator has an optional, **off-by-default** path for talent icons from the allow-listed asset host only (never git); see [`class-guides-talents.md`](class-guides-talents.md#icons) |
+| Class/tree backdrops (Class Guides) | Original inline SVG in `web/src/components/classes/backdrops.tsx` | Project-owned | Used |
 
 ## V1 decision
 Location data is shown as **coordinate plots on a neutral 0–100 % grid**, aggregated to 1 % cells with cells below 2 observations hidden. A text table of the densest cells goes with each plot for accessibility. This delivers useful "where" information without proprietary imagery.

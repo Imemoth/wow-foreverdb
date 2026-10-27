@@ -56,7 +56,7 @@ describe("class copy only states what the data supports", () => {
   });
 
   it("names the data build and states what is missing", () => {
-    const note = talentSourceNote();
+    const note = talentSourceNote("priest");
     expect(note).toContain("1.60.1.70630");
     expect(note).toMatch(/beta/i);
     expect(note).toMatch(/descriptions and icons are not included/);

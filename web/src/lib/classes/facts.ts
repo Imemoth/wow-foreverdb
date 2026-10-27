@@ -1,4 +1,4 @@
-import { TALENT_MANIFEST } from "@/lib/talents/registry";
+import { getTextStatus, TALENT_MANIFEST } from "@/lib/talents/registry";
 import type { TalentClassData, TalentTree } from "@/lib/talents/types";
 
 /** "A", "A and B", "A, B and C". */
@@ -17,8 +17,24 @@ export function classIntro(className: string, data: TalentClassData | null): str
   return `${className} has ${data.trees.length} talent trees in WoW: Forever - ${joinNames(data.trees.map((t) => t.name))}. Talent points arrive one per level from level ${firstPointLevel} to level ${lastPointLevel}: ${total} points in total, shared across all three trees.`;
 }
 
-/** Provenance line shown under every calculator. */
-export function talentSourceNote(): string {
+/**
+ * Provenance line shown under every calculator: where the structure comes from and exactly what is and is not present
+ * (description text, icons), so the page never implies more than the data supports.
+ */
+export function talentSourceNote(classId: string, iconCount = 0): string {
   const { build, source } = TALENT_MANIFEST;
-  return `Talent structure (names, ranks, grid positions, prerequisites, tier requirements) from the WoW: Forever beta client, build ${build.version}, as extracted by the Everloot project (commit ${source.commit.slice(0, 7)}). Rank descriptions and icons are not included because no verified source is available yet. Beta data: not confirmed for the release client and subject to change.`;
+  const text = getTextStatus(classId);
+  const parts = [
+    `Talent structure (names, ranks, grid positions, prerequisites, tier requirements) from the WoW: Forever beta client, build ${build.version}, as extracted by the Everloot project (commit ${source.commit.slice(0, 7)}).`,
+  ];
+  if (text.state === "none" && iconCount === 0) {
+    parts.push("Rank descriptions and icons are not included because no verified, build-matched source is available yet.");
+  } else {
+    if (text.state === "applied") parts.push(`Descriptions: ${text.source.name}, build ${text.build}, extracted ${text.source.extractedAt}; ${text.covered} of ${text.total} talents have one.`);
+    else if (text.state === "mismatch") parts.push(`Description text supplied for build ${text.textBuild ?? "unknown"} was ignored because it does not match build ${build.version}.`);
+    else parts.push("Rank descriptions are not included because no verified, build-matched source is available yet.");
+    parts.push(iconCount > 0 ? `Icons: client art for ${iconCount} talents, served from the AzerDex asset host (build ${build.version}).` : "Icons are not included; talents show their names.");
+  }
+  parts.push("Beta data: not confirmed for the release client and subject to change.");
+  return parts.join(" ");
 }
