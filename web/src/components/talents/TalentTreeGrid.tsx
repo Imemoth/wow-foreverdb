@@ -84,14 +84,23 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, on
     }
   }
 
+  // Focusing a talent selects it (keyboard inspection). A mouse press must not focus on mousedown: that would swap the detail
+  // panel to its sticky overlay between mousedown and mouseup and could swallow the click. The click handlers select instead
+  // and then move focus to the talent, so Backspace and the arrow keys keep working after a click.
+  function settle(e: MouseEvent<HTMLButtonElement>) {
+    e.currentTarget.focus({ preventScroll: true });
+  }
+
   function onClick(e: MouseEvent<HTMLButtonElement>, x: Talent) {
     if (e.shiftKey) onRemove(x.id);
     else onAdd(x.id);
+    settle(e);
   }
 
   function onContextMenu(e: MouseEvent<HTMLButtonElement>, x: Talent) {
     e.preventDefault();
     onRemove(x.id);
+    settle(e);
   }
 
   return (
@@ -149,6 +158,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, on
                 data-talent-id={x.id}
                 data-state={state}
                 data-selected={selectedId === x.id || undefined}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={(e) => onClick(e, x)}
                 onContextMenu={(e) => onContextMenu(e, x)}
                 onKeyDown={(e) => onKeyDown(e, x)}
