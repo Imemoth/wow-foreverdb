@@ -1,0 +1,577 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "paladin",
+  "className": "Paladin",
+  "gameClassId": 2,
+  "build": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11486,
+      "name": "Holy",
+      "slug": "holy",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105639,
+          "name": "Divine Strength",
+          "spellId": 20262,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105332,
+          "name": "Divine Intellect",
+          "spellId": 20257,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105333,
+          "name": "Healing Light",
+          "spellId": 20237,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105335,
+          "name": "Spiritual Focus",
+          "spellId": 20205,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105334,
+          "name": "Improved Seals",
+          "spellId": 20224,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105331,
+          "name": "Unyielding Faith",
+          "spellId": 9453,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105330,
+          "name": "Voice of Truth",
+          "spellId": 1310897,
+          "row": 2,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110871,
+          "name": "Reverence",
+          "spellId": 1310899,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105327,
+          "name": "Purifying Power",
+          "spellId": 429144,
+          "row": 2,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110873,
+          "name": "Infusion of Light",
+          "spellId": 426065,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105329,
+          "name": "Illumination",
+          "spellId": 20210,
+          "row": 3,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 110871,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105325,
+          "name": "Divine Favor",
+          "spellId": 20216,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105324,
+          "name": "Divine Precision",
+          "spellId": 1310904,
+          "row": 4,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105323,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105323,
+          "name": "Holy Shock",
+          "spellId": 1311606,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110872,
+          "name": "Consecrated Ground",
+          "spellId": 1310905,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105321,
+          "name": "Holy Power",
+          "spellId": 5923,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105320,
+          "name": "Light's Vigil",
+          "spellId": 1310911,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105323,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11541,
+      "name": "Protection",
+      "slug": "protection",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105630,
+          "name": "Toughness",
+          "spellId": 20143,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105626,
+          "name": "Redoubt",
+          "spellId": 20127,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105638,
+          "name": "Precision",
+          "spellId": 20189,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105637,
+          "name": "Guardian's Favor",
+          "spellId": 20174,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105636,
+          "name": "Anticipation",
+          "spellId": 20096,
+          "row": 1,
+          "col": 3,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110875,
+          "name": "Improved Seal of Fury",
+          "spellId": 1314103,
+          "row": 2,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105634,
+          "name": "Improved Righteous Fury",
+          "spellId": 20468,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110874,
+          "name": "Shield Specialization",
+          "spellId": 20150,
+          "row": 2,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105626,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105632,
+          "name": "Sacred Duty",
+          "spellId": 1224697,
+          "row": 2,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110878,
+          "name": "Swift Judgement",
+          "spellId": 1310994,
+          "row": 3,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 110875,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105629,
+          "name": "One-Handed Weapon Specialization",
+          "spellId": 20196,
+          "row": 3,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105633,
+          "name": "Improved Hammer of Justice",
+          "spellId": 20487,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105625,
+          "name": "Templar's Bulwark",
+          "spellId": 1311015,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105627,
+          "name": "Reckoning",
+          "spellId": 20177,
+          "row": 4,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110879,
+          "name": "Iron Creed",
+          "spellId": 1311034,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105628,
+          "name": "Holy Shield",
+          "spellId": 20925,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105625,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11559,
+      "name": "Retribution",
+      "slug": "retribution",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105707,
+          "name": "Deflection",
+          "spellId": 20060,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105706,
+          "name": "Benediction",
+          "spellId": 20101,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105705,
+          "name": "Improved Judgement",
+          "spellId": 25956,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105704,
+          "name": "Holy Conduit",
+          "spellId": 1237268,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105703,
+          "name": "Conviction",
+          "spellId": 20117,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105702,
+          "name": "Vindication",
+          "spellId": 9452,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105701,
+          "name": "Sanctified Judgement",
+          "spellId": 1311074,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105696,
+          "name": "Seal of Command",
+          "spellId": 20375,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105699,
+          "name": "Pursuit of Justice",
+          "spellId": 26022,
+          "row": 2,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105698,
+          "name": "Eye for an Eye",
+          "spellId": 9799,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105700,
+          "name": "Sacred Arbiter",
+          "spellId": 1311087,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105697,
+          "name": "Two-Handed Weapon Specialization",
+          "spellId": 20111,
+          "row": 4,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105693,
+          "name": "Vengeance",
+          "spellId": 20049,
+          "row": 4,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105701,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105694,
+          "name": "Repentance",
+          "spellId": 20066,
+          "row": 4,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110882,
+          "name": "Champion of the Light",
+          "spellId": 1311084,
+          "row": 5,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110880,
+          "name": "Instrument of Law",
+          "spellId": 1311085,
+          "row": 5,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105692,
+          "name": "Twist of Light",
+          "spellId": 1310735,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree"
+        }
+      ]
+    }
+  ]
+}

@@ -87,6 +87,8 @@ jobs:
         run: npx playwright test --project=preview
       - name: Accessibility regression (axe WCAG 2.2 AA) and SEO
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
+      - name: Class guides and talent calculator (desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/talents.spec.ts
       - name: Responsive layout (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
       # Zone atlas maps (feature-gated, off by default): needs a second build WITH the CDN origin baked in. Runs against a real local HTTPS

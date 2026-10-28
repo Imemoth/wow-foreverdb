@@ -1,0 +1,595 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "warlock",
+  "className": "Warlock",
+  "gameClassId": 9,
+  "build": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11629,
+      "name": "Affliction",
+      "slug": "affliction",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105921,
+          "name": "Improved Life Tap",
+          "spellId": 18182,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105925,
+          "name": "Suppression",
+          "spellId": 18174,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105924,
+          "name": "Improved Corruption",
+          "spellId": 17810,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105923,
+          "name": "Grim Reach",
+          "spellId": 18218,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105922,
+          "name": "Soul Harvest",
+          "spellId": 437032,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105920,
+          "name": "Improved Drains",
+          "spellId": 403511,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105919,
+          "name": "Improved Bane of Agony",
+          "spellId": 18827,
+          "row": 2,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105918,
+          "name": "Fel Concentration",
+          "spellId": 17783,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105916,
+          "name": "Amplify Curse",
+          "spellId": 18288,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105917,
+          "name": "Pandemic",
+          "spellId": 427712,
+          "row": 2,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110876,
+          "name": "Malevolence",
+          "spellId": 1310949,
+          "row": 3,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105914,
+          "name": "Nightfall",
+          "spellId": 18094,
+          "row": 3,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105913,
+          "name": "Curse of Exhaustion",
+          "spellId": 18223,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105916,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105912,
+          "name": "Siphon Life",
+          "spellId": 18265,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105911,
+          "name": "Soul Siphon",
+          "spellId": 17804,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105910,
+          "name": "Shadow Mastery",
+          "spellId": 18271,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105909,
+          "name": "Wrack",
+          "spellId": 1316697,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105912,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11636,
+      "name": "Demonology",
+      "slug": "demonology",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105905,
+          "name": "Improved Health Funnel",
+          "spellId": 18703,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105908,
+          "name": "Improved Imp",
+          "spellId": 18694,
+          "row": 0,
+          "col": 1,
+          "maxRank": 3
+        },
+        {
+          "id": 105907,
+          "name": "Demonic Embrace",
+          "spellId": 18697,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105906,
+          "name": "Unholy Power",
+          "spellId": 18769,
+          "row": 0,
+          "col": 3,
+          "maxRank": 5
+        },
+        {
+          "id": 105902,
+          "name": "Demonic Aegis",
+          "spellId": 1235316,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105904,
+          "name": "Improved Voidwalker",
+          "spellId": 18705,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105903,
+          "name": "Fel Vitality",
+          "spellId": 18731,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105899,
+          "name": "Demonic Energies",
+          "spellId": 1225214,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105901,
+          "name": "Improved Sayaad",
+          "spellId": 18754,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105900,
+          "name": "Demonic Sacrifice",
+          "spellId": 18788,
+          "row": 2,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105898,
+          "name": "Master Summoner",
+          "spellId": 18709,
+          "row": 2,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105897,
+          "name": "Decimation",
+          "spellId": 440870,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105895,
+          "name": "Fel Domination",
+          "spellId": 18708,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105898,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105896,
+          "name": "Demonic Brand",
+          "spellId": 1293695,
+          "row": 3,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105894,
+          "name": "Improved Felhunter",
+          "spellId": 1225217,
+          "row": 4,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105892,
+          "name": "Soul Link",
+          "spellId": 19028,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105900,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105893,
+          "name": "Demonic Knowledge",
+          "spellId": 412732,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105891,
+          "name": "Master Demonologist",
+          "spellId": 23785,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105890,
+          "name": "Demonic Pact",
+          "spellId": 425464,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105892,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11637,
+      "name": "Destruction",
+      "slug": "destruction",
+      "rows": 7,
+      "cols": 3,
+      "talents": [
+        {
+          "id": 105881,
+          "name": "Destructive Reach",
+          "spellId": 17917,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105889,
+          "name": "Improved Shadow Bolt",
+          "spellId": 17793,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105888,
+          "name": "Bane",
+          "spellId": 17788,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105885,
+          "name": "Molten Skin",
+          "spellId": 1225220,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105887,
+          "name": "Cataclysm",
+          "spellId": 17778,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105886,
+          "name": "Aftermath",
+          "spellId": 18119,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105883,
+          "name": "Ruin",
+          "spellId": 17959,
+          "row": 2,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105884,
+          "name": "Shadowburn",
+          "spellId": 17877,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105882,
+          "name": "Intensity",
+          "spellId": 18135,
+          "row": 3,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105879,
+          "name": "Agonizing Flames",
+          "spellId": 17927,
+          "row": 3,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105880,
+          "name": "Conflagrate",
+          "spellId": 1293817,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105878,
+          "name": "Pyroclasm",
+          "spellId": 18073,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105882,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105876,
+          "name": "Bane of Havoc",
+          "spellId": 1225228,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105877,
+          "name": "Fire and Brimstone",
+          "spellId": 412751,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105880,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105875,
+          "name": "Shadow and Flame",
+          "spellId": 426316,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105874,
+          "name": "Incinerate",
+          "spellId": 412758,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105876,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

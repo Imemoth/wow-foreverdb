@@ -15,4 +15,5 @@
 - [Vercel environments, deployment protection and release controls](vercel-environments.md) — environment matrix, owner steps, Node decision, promotion control.
 - [CI structure and release gates](release-gates.md) — check names, aggregate gate, required-check ruleset (enforcement PENDING).
 - [AzerDex website roadmap](azerdex-roadmap.md) — the authoritative P1–P3 milestone ledger for the public AzerDex website (brand, Database/Zones, Guides, News/Blog, cartography POC, Addon & Companion presentation). `docs/ROADMAP.md` tracks the Addon/Companion/Account System separately.
+- [Class Guides & Talent Calculator (V1)](class-guides-talents.md) — routes, talent data source/version and rule confidence, how to update data and add guides, build-code format, tests.
 - [Markdown documentation audit (2026-10-20)](markdown-audit-2026-10-20.md) — full tracked-file inventory, classification and prioritized gap register.

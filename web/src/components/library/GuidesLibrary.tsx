@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { filterGuides, guideCategories, guideTags, isEmptyGuidesQuery, parseGuidesQuery, sortGuides, type GuidesQuery } from "@/lib/content/guides-query";
 import { pageContext } from "@/lib/page";
+import { ClassGuidesEntry } from "@/components/classes/ClassGuidesEntry";
 import { ArcaneLibraryBanner } from "./ArcaneLibraryBanner";
 import { GuideCard } from "./GuideCard";
 
@@ -96,6 +97,8 @@ export async function GuidesLibrary({ searchParams }: { searchParams: SP }) {
           </div>
         </section>
       </div>
+
+      <ClassGuidesEntry />
 
       <form action="/guides" method="get" role="search" aria-label="Search the Arcane Library" autoComplete="off"
         className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
