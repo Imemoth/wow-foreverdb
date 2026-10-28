@@ -237,7 +237,7 @@ test.describe("illustrated class detail hero", () => {
       await expect(art).toHaveAttribute("srcset", `/class-cards/${id}-640.webp 640w, /class-cards/${id}.webp 1024w`);
       await expect(art).toHaveAttribute("aria-hidden", "true");
       const loaded = await imagesLoaded(page, '[data-testid="class-hero-art"]');
-      expect(loaded[0]!.w, id).toBeGreaterThanOrEqual(480);
+      expect(loaded[0]!.w, id).toBeGreaterThanOrEqual(300); // density-corrected width of a srcset image, so only "real pixels arrived"
       expect(loaded[0]!.src, id).toMatch(new RegExp(`/class-cards/${id}(-640)?\\.webp$`));
       // Old presentation removed: no letter emblem, no SVG motif; name, intro and CTA kept.
       await expect(hero.locator("svg")).toHaveCount(0);

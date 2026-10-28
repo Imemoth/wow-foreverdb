@@ -36,8 +36,8 @@ export const CARD_ART_POSITION: Record<string, string> = {
  * serves both: x steers the phone crop, y the desktop crop. Chosen so faces, weapons and spell effects stay in frame.
  */
 export const HERO_ART_POSITION: Record<string, string> = {
-  druid: "object-[50%_30%]", // antlered helm and casting hands
-  hunter: "object-[80%_15%]", // face, drawn bow and arrow
+  druid: "object-[50%_15%]", // antlered helm and casting hands
+  hunter: "object-[45%_15%]", // face, drawn bow and arrow
   mage: "object-[50%_12%]", // face and both spell rings
   paladin: "object-[50%_10%]", // raised hammer and face
   priest: "object-[30%_8%]", // staff, face and casting hand

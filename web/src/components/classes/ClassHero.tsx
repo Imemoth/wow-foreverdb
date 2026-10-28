@@ -36,7 +36,7 @@ export function ClassHero({ info, intro, hasCalculator }: { info: ClassInfo; int
       {/* Readability: bottom-up on phones, left-to-right from sm. The character on the right stays untouched. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-4/5 bg-gradient-to-t from-ink-950 via-ink-950/85 to-transparent sm:hidden" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 -z-10 hidden w-3/5 bg-gradient-to-r from-ink-950/95 via-ink-950/70 to-transparent sm:block" />
-      <div className="max-w-xl space-y-2 p-6 sm:p-10">
+      <div className="max-w-xl space-y-2 p-6 sm:max-w-md sm:p-10 lg:max-w-lg">
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-parchment [text-shadow:0_2px_12px_rgb(0_0_0/0.8)] sm:text-5xl">{info.name}</h1>
         <p className="text-sm text-parchment/90 [text-shadow:0_1px_6px_rgb(0_0_0/0.9)] sm:text-base">{intro}</p>
         {hasCalculator && <a href="#talents" className="btn-primary mt-2 inline-flex min-h-11 items-center">Open the talent calculator</a>}
