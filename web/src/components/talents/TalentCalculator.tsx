@@ -11,8 +11,6 @@ import { TalentTreeGrid } from "./TalentTreeGrid";
 
 interface Props {
   data: TalentClassData;
-  /** Short provenance line shown under the calculator (source, build, what is not verified). */
-  sourceNote: string;
   /** Tree to emphasise, e.g. on a specialization page. */
   highlightTreeId?: number;
   /** talent id -> icon URL. Empty/absent: nodes show their name (no icons are available for this build or deployment). */
@@ -21,7 +19,16 @@ interface Props {
 
 const NO_ICONS: Readonly<Record<number, string>> = {};
 
-export function TalentCalculator({ data, sourceNote, highlightTreeId, icons = NO_ICONS }: Props) {
+// Legend for the node states (same borders as the nodes; the state is also in each node's accessible name and in the detail panel).
+const LEGEND: ReadonlyArray<{ label: string; swatch: string }> = [
+  { label: "Available", swatch: "border-gold-500 bg-ink-800" },
+  { label: "In progress", swatch: "border-violet-300 bg-violet-700/60" },
+  { label: "Maxed", swatch: "border-gold-300 bg-gold-400/60" },
+  { label: "Locked", swatch: "border-ink-700 bg-ink-900" },
+  { label: "Selected", swatch: "border-ink-700 bg-ink-900 ring-2 ring-parchment ring-offset-1 ring-offset-ink-950" },
+];
+
+export function TalentCalculator({ data, highlightTreeId, icons = NO_ICONS }: Props) {
   const engine = useMemo(() => createEngine(data), [data]);
   // A shared build in ?b= is decoded once, while rendering (on the server too, so a shared link renders with its build and
   // never flashes an empty one). An invalid link falls back to an empty build with an explanation.
@@ -169,9 +176,19 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId, icons = NO
         </p>
       )}
 
-      <p className="text-xs text-mist">
-        <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add a point · right-click, Shift+click, Backspace or the Remove button to take one back · arrow keys move between talents. Hover a talent for a quick look; select or focus one for details below; Escape clears the selection.
-      </p>
+      <div className="flex flex-col gap-2 text-xs text-mist lg:flex-row lg:items-center lg:justify-between" data-testid="talent-legend">
+        <ul aria-label="Talent states" className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {LEGEND.map((l) => (
+            <li key={l.label} className="flex items-center gap-1.5">
+              <span aria-hidden="true" className={`h-4 w-4 rounded-[4px] border-2 ${l.swatch}`} />
+              {l.label}
+            </li>
+          ))}
+        </ul>
+        <p className="max-w-3xl">
+          <span className="font-semibold text-parchment">Controls:</span> click, tap or press Enter to add · right-click, Shift+click or Backspace to remove · arrow keys move between talents · hover for a quick look, select for details below · Escape clears.
+        </p>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {data.trees.map((tree) => {
@@ -211,17 +228,20 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId, icons = NO
       </div>
 
       <div id="selected-talent-details" role="region" aria-label="Selected talent details" className={selected ? "sticky bottom-3 z-20" : ""} data-testid="talent-detail">
-        <div className="panel max-h-[40vh] overflow-y-auto border-gold-500/40 bg-ink-900 bg-none p-3 shadow-2xl sm:p-4">
+        <div className="panel max-h-[42vh] overflow-y-auto border-gold-500/40 bg-ink-900 bg-none p-3 shadow-2xl sm:p-4">
           {selected && selectedTree ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5">
               <div className="min-w-0 flex-1">
                 <TalentCard engine={engine} alloc={alloc} talent={selected} tree={selectedTree} icon={icons[selected.id]} />
               </div>
-              <div className="flex shrink-0 gap-2">
-                <button type="button" className="btn-ghost min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => remove(selected.id)} disabled={!engine.canRemove(alloc, selected.id).ok} aria-label={`Remove a point from ${selected.name}`}>
+              <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-stretch" data-testid="panel-controls">
+                <button type="button" className="btn-ghost min-h-11 min-w-11 flex-1 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => remove(selected.id)} disabled={!engine.canRemove(alloc, selected.id).ok} aria-label={`Remove a point from ${selected.name}`}>
                   − Remove
                 </button>
-                <button type="button" className="btn-primary min-h-11 min-w-11 disabled:cursor-not-allowed" onClick={() => add(selected.id)} disabled={!engine.canAdd(alloc, selected.id).ok} aria-label={`Add a point to ${selected.name}`}>
+                <p className="min-w-16 text-center font-mono text-lg font-bold tabular-nums text-parchment sm:order-first" data-testid="panel-rank" aria-hidden="true">
+                  {engine.rank(alloc, selected.id)}<span className="text-mist">/{selected.maxRank}</span>
+                </p>
+                <button type="button" className="btn-primary min-h-11 min-w-11 flex-1 disabled:cursor-not-allowed" onClick={() => add(selected.id)} disabled={!engine.canAdd(alloc, selected.id).ok} aria-label={`Add a point to ${selected.name}`}>
                   + Add
                 </button>
               </div>
@@ -233,7 +253,6 @@ export function TalentCalculator({ data, sourceNote, highlightTreeId, icons = NO
       </div>
 
       <p role="status" aria-live="polite" className="sr-only" data-testid="announcer">{announce}</p>
-      <p className="text-xs text-mist">{sourceNote}</p>
     </section>
   );
 }

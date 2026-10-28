@@ -29,7 +29,7 @@ the manifests and are not redistributed here.
 
 - Site footer (every page): independent, free, non-commercial fan project; not affiliated with or endorsed by Blizzard; trademark and
   (c) notice; Blizzard's ownership of map images, talent names, descriptions and icons.
-- Class Guides calculator source note: build, extraction source and the same ownership/non-affiliation statement.
+- `/about/data#class-guides`: build, extraction sources, conversion and the same ownership/non-affiliation statement (the calculator pages no longer carry a technical source panel).
 
 ## Blizzard's published terms (what could be verified)
 

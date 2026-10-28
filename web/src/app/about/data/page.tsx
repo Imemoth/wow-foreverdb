@@ -19,8 +19,9 @@ export default async function AboutDataPage() {
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">How the data works</h1>
       <div className="prose-fdb">
         <p>
-          AzerDex is an <strong>observation database</strong>. Nothing here is datamined or copied from game files: every
-          number comes from what players running the ForeverDB addon actually saw while playing World of Warcraft: Forever.
+          AzerDex is an <strong>observation database</strong>. Its loot, gathering and drop data is not datamined or copied from game
+          files: every number comes from what players running the ForeverDB addon actually saw while playing World of Warcraft:
+          Forever. The class guides are the one exception, see <a href="#class-guides">Class guides and the talent calculator</a>.
         </p>
 
         <h2 id="pipeline">From your bags to this page</h2>
@@ -66,6 +67,22 @@ export default async function AboutDataPage() {
           <strong>Map calibration is provisional.</strong> Markers are positioned from the game&apos;s own normalized map coordinates.
           That the artwork loads does not prove the markers are geographically verified; registration against independently
           identifiable landmarks is still pending.
+        </p>
+
+        <h2 id="class-guides">Class guides and the talent calculator</h2>
+        <p>
+          The class guides are the one part of AzerDex that is <em>not</em> built from player observations. Their talent trees,
+          ranks, grid positions, prerequisites, tier requirements, description text and icons are World of Warcraft: Forever game
+          data read from the game client (beta build 1.60.1.70634): the talent structure through the Everloot project&apos;s
+          extraction of the client files, and the description text, per-rank numbers and icons from a local client export.
+          Description templates are accepted only where they reproduce the client&apos;s own text hash for that build; a number the
+          data cannot supply is shown as a <strong>?</strong> instead of a guess. The game data is unconfirmed for the release client
+          and may change.
+        </p>
+        <p>
+          Talent names, descriptions and icons are &copy; Blizzard Entertainment, Inc. and remain Blizzard&apos;s property; AzerDex
+          claims no rights to them. Icons were converted from the game&apos;s BLP format to WebP for browser compatibility. AzerDex
+          is an independent, free, non-commercial fan site and is not affiliated with or endorsed by Blizzard Entertainment.
         </p>
 
         <h2 id="preview">Test builds and sample data</h2>

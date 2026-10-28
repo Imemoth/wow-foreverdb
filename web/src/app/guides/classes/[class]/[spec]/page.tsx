@@ -6,7 +6,6 @@ import { ClassEmblem } from "@/components/classes/ClassEmblem";
 import { SPEC_GUIDES, getSpecGuide } from "@/components/classes/spec-guides";
 import { TalentCalculator } from "@/components/talents/TalentCalculator";
 import { classPath, getClass, getSpec, specPath } from "@/lib/classes/classes";
-import { talentSourceNote } from "@/lib/classes/facts";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
 import { getTalentData, getTalentIcons } from "@/lib/talents/registry";
@@ -75,7 +74,7 @@ export default async function Page({ params }: { params: Params }) {
       <Body
         data={data}
         tree={spec.tree}
-        calculator={<TalentCalculator data={data} icons={icons} sourceNote={talentSourceNote(info.id, Object.keys(icons).length)} highlightTreeId={spec.tree.id} />}
+        calculator={<TalentCalculator data={data} icons={icons} highlightTreeId={spec.tree.id} />}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CLASS_MOTIF, TREE_MOTIF, treeMotif } from "@/components/classes/backdrops";
 import { TalentCard } from "@/components/talents/TalentCard";
+import { NodeFace, type NodeState } from "@/components/talents/TalentIcon";
 import { CLASS_COLORS } from "@/lib/classes/colors";
 import rawPriest from "@/data/talents/forever/1.60.1.70634/priest.json";
 import { layoutHash } from "@/lib/talents/build-code";
@@ -339,12 +340,29 @@ describe("TalentCard", () => {
     expect(html).toContain("% more damage.");
     expect(html).toContain('data-gap="curve"');
     expect(html).toContain('data-complete="false"');
-    expect(html).toContain("marks a number that is not available");
+    expect(html).toContain("marks a value that is not available");
     expect(html).not.toContain("$m1");
     expect(html).not.toContain("No description could be verified");
-    // The hover tooltip keeps the short note; the panel gives the full reason.
-    expect(render(talent, { compact: true })).not.toContain("yet: This number depends");
-    expect(html).toContain("yet: This number depends");
+    // The panel explains the reason behind a collapsed "Why?"; the hover tooltip keeps only the one-line note.
+    expect(html).toContain('data-testid="talent-description-gap-reasons"');
+    expect(html).toContain("per-rank value is not available");
+    const tip = render(talent, { variant: "tooltip" });
+    expect(tip).not.toContain("talent-description-gap-reasons");
+    expect(tip).not.toContain("Why?");
+    expect(tip).toContain("not available for this build yet");
+    expect(tip).toContain('data-gap="curve"');
+  });
+
+  it("has a clear hierarchy: name, tier and spell id, a rank summary with pips, requirements as a checklist, then the status", () => {
+    const talent = byName("Silent Resolve");
+    const html = render(talent, {}, { [talent.id]: 1 });
+    expect(html).toContain("Silent Resolve");
+    expect(html).toContain("Spell ID " + talent.spellId);
+    expect(html).toContain('data-testid="rank-summary"');
+    expect(html).toMatch(/Rank <!-- -->1<!-- -->\/<!-- -->3|Rank 1\/3/);
+    expect(html.match(/rounded-sm/g)).toHaveLength(talent.maxRank); // one pip per rank
+    expect(html).toContain('aria-label="Requirements"');
+    expect(html).toContain('data-testid="talent-status"');
   });
 
   it("shows fully resolved text without any gap note, and the right rank of per-rank text", () => {
@@ -402,6 +420,33 @@ describe("TalentCard", () => {
     const html = render(byName("Power in Light"), { icon: "https://assets.azerdex.com/talent-icons/x/1.webp" });
     expect(html).toContain('src="https://assets.azerdex.com/talent-icons/x/1.webp"');
     expect(html).toContain('aria-hidden="true"');
+  });
+});
+
+describe("NodeFace states", () => {
+  const face = (state: NodeState, src?: string) => renderToStaticMarkup(createElement(NodeFace, { name: "Power in Light", src, state }));
+  const icon = "https://assets.azerdex.com/talent-icons/1.60.1.70634/135972.webp";
+
+  it("keeps the icon bright for available/in-progress/maxed, muted when no points are left, dark and locked while requirements are unmet", () => {
+    for (const state of ["maxed", "partial", "available"] as const) {
+      const html = face(state, icon);
+      expect(html, state).not.toContain("grayscale");
+      expect(html, state).not.toContain("saturate-[.6]");
+      expect(html, state).not.toContain("<svg");
+    }
+    expect(face("waiting", icon)).toContain("saturate-[.6]");
+    const locked = face("locked", icon);
+    expect(locked).toContain("grayscale");
+    expect(locked).toContain("<svg"); // lock glyph: the state is not carried by colour alone
+  });
+
+  it("always keeps the talent name as text, with or without an icon, and renders the icon URL unchanged", () => {
+    for (const state of ["maxed", "partial", "available", "waiting", "locked"] as const) {
+      expect(face(state, icon)).toContain("Power in Light");
+      expect(face(state)).toContain("Power in Light");
+    }
+    expect(face("available", icon)).toContain(`src="${icon}"`);
+    expect(face("available")).not.toContain("<img");
   });
 });
 

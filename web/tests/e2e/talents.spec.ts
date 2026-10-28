@@ -10,7 +10,8 @@ import { expect, test } from "./fixtures";
  * (Priest) are therefore also data-version canaries: if a data update changes them, update the spec with it.
  */
 
-const CLASS_IDS = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
+// Alphabetical, the order of the class chooser.
+const CLASS_IDS = ["druid", "hunter", "mage", "paladin", "priest", "rogue", "shaman", "warlock", "warrior"];
 
 function priest() {
   const data = getTalentData("priest")!;
@@ -413,7 +414,12 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       const gap = panel.locator('[data-gap="spell"]').first();
       await expect(gap).toHaveAttribute("role", "img");
       await expect(gap).toHaveAccessibleName(/value not available: .*another spell/);
-      await expect(panel.getByTestId("talent-description-gaps")).toContainText("another spell whose data is not available for this build yet");
+      await expect(panel.getByTestId("talent-description-gaps")).toContainText("marks a value that is not available for this build yet");
+      // The reasons are one click away instead of always on screen.
+      const reasons = panel.getByTestId("talent-description-gap-reasons");
+      await expect(reasons).not.toHaveAttribute("open", "");
+      await reasons.getByText("Why?").click();
+      await expect(reasons).toContainText("another spell whose data is not available for this build yet");
     });
   });
 
@@ -478,11 +484,9 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       await expect(page.getByTestId("talent-detail").getByTestId("card-icon")).toBeVisible();
     });
 
-    test("the real dataset ships verified text (with marked gaps) but no icons, and says so", async ({ page }) => {
+    test("without the icon switch every talent shows its name plate (no icons are requested)", async ({ page }) => {
       await page.goto("/guides/classes/priest");
       await expect(page.getByTestId("talent-icon")).toHaveCount(0);
-      await expect(page.getByTestId("talent-calculator")).toContainText("have a verified description");
-      await expect(page.getByTestId("talent-calculator")).toContainText("Icons are not included");
       // Name plates: every talent still names itself.
       await expect(talent(page, "shadow-magic", "Shadowform")).toContainText("Shadowform");
     });
@@ -561,6 +565,146 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
     await expect(page.getByRole("table", { name: "Talents of the Shadow Magic tree by tier" })).toBeVisible();
     await expect(page.getByRole("rowheader", { name: "Shadowform" })).toBeVisible();
     await expect(page.getByText("Not verified yet.")).toBeVisible();
+  });
+});
+
+test.describe("Talent calculator UI V2 (desktop)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop interactions; the mobile project has its own tests below");
+  });
+
+  test("the technical provenance panel is gone everywhere, and the legal notice stays in the footer", async ({ page }) => {
+    for (const url of ["/guides/classes", "/guides/classes/priest", "/guides/classes/priest/shadow"]) {
+      await page.goto(url);
+      await expect(page.getByText("Talent structure (names, ranks", { exact: false })).toHaveCount(0);
+      await expect(page.getByText("as extracted by the Everloot project")).toHaveCount(0);
+      await expect(page.getByText("have a verified description")).toHaveCount(0);
+      const footer = page.getByRole("contentinfo");
+      await expect(footer).toContainText("independent, free, non-commercial fan project");
+      await expect(footer).toContainText("not affiliated with or endorsed by Blizzard Entertainment");
+      await expect(footer).toContainText("Blizzard Entertainment, Inc. All rights reserved");
+      await expect(footer).toContainText("talent names, descriptions and icons");
+    }
+    // The provenance itself is documented on the data page.
+    await page.goto("/about/data");
+    await expect(page.locator("#class-guides")).toBeVisible();
+    await expect(page.locator("#class-guides").locator("xpath=following-sibling::p[1]")).toContainText("Everloot");
+  });
+
+  test("the class chooser lists the classes alphabetically", async ({ page }) => {
+    await page.goto("/guides/classes");
+    const names = await page.locator('[data-testid^="class-card-"] h2').allTextContents();
+    expect(names.map((n) => n.trim())).toEqual(["Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]);
+    await page.goto("/guides");
+    const entry = await page.getByTestId("class-guides-entry").getByRole("link").allTextContents();
+    const order = entry.map((t) => t.trim()).filter((t) => CLASS_IDS.map((c) => c[0]!.toUpperCase() + c.slice(1)).includes(t));
+    expect(order).toEqual([...order].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test("node states are distinct: available, locked, in progress, maxed, plus a separate selected mark", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    const wand = talent(page, "discipline", "Wand Specialization");
+    const silent = talent(page, "discipline", "Silent Resolve");
+    await expect(pil).toHaveAttribute("data-state", "available");
+    await expect(silent).toHaveAttribute("data-state", "locked");
+    // Only locked nodes carry the lock glyph; every node shows its rank as text in a badge.
+    await expect(silent.locator("svg")).toHaveCount(1);
+    await expect(pil.locator("svg")).toHaveCount(0);
+    await expect(pil.getByTestId("rank-badge")).toHaveText("0/5");
+    await pil.click();
+    await expect(pil).toHaveAttribute("data-state", "partial");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    for (let i = 0; i < 4; i++) await pil.click();
+    await expect(pil).toHaveAttribute("data-state", "maxed");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("5/5");
+    // The badge is bigger than the old 11px mono: readable on a node.
+    const size = await pil.getByTestId("rank-badge").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeGreaterThanOrEqual(12);
+    // Selection is its own mark (data-selected), independent of the state.
+    await expect(pil).toHaveAttribute("data-selected", "true");
+    await expect(wand).not.toHaveAttribute("data-selected", "true");
+    await wand.click();
+    await expect(wand).toHaveAttribute("data-selected", "true");
+    await expect(pil).not.toHaveAttribute("data-selected", "true");
+    await expect(pil).toHaveAttribute("data-state", "maxed");
+    // The five states are listed in a legend.
+    await expect(page.getByTestId("talent-legend").getByRole("listitem")).toHaveText(["Available", "In progress", "Maxed", "Locked", "Selected"]);
+  });
+
+  test("prerequisite connections: unmet are dashed, met are solid, and the selected talent's lines are emphasised", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const disc = tree(page, "discipline");
+    // Soul Warding needs Improved Power Word: Shield at rank 3: that connection starts unmet.
+    const links = disc.locator("[data-link-state]");
+    expect(await links.count()).toBeGreaterThan(5);
+    await expect(disc.locator('[data-link-state="met"]')).toHaveCount(0);
+    expect(await disc.locator('[data-link-state="unmet"]').count()).toBeGreaterThan(0);
+    await expect(disc.locator("[data-link-focus]")).toHaveCount(0);
+    const target = talent(page, "discipline", "Soul Warding");
+    await clickLocked(target);
+    const focused = await disc.locator("[data-link-focus]").count();
+    expect(focused).toBeGreaterThan(0);
+    // Buying the prerequisite chain makes a connection met (build from a known-legal code).
+    const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Twin Disciplines", 5], ["Silent Resolve", 3]]);
+    await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
+    expect(await tree(page, "discipline").locator('[data-link-state="met"]').count()).toBeGreaterThan(0);
+  });
+
+  test("the detail panel shows the selected rank as text and pips, and the buttons follow the rules", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const panel = page.getByTestId("talent-detail");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 1/5");
+    await expect(panel.getByTestId("panel-rank")).toHaveText("1/5");
+    await expect(panel.getByTestId("rank-pips").locator("span")).toHaveCount(5);
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-violet-300")).toHaveCount(1);
+    await panel.getByRole("button", { name: /Add a point to Power in Light/ }).click();
+    await expect(panel.getByTestId("panel-rank")).toHaveText("2/5");
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-violet-300")).toHaveCount(2);
+    await panel.getByRole("button", { name: /Remove a point from Power in Light/ }).click();
+    await expect(panel.getByTestId("panel-rank")).toHaveText("1/5");
+    for (let i = 0; i < 4; i++) await panel.getByRole("button", { name: /Add a point/ }).click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 5/5");
+    await expect(panel.getByRole("button", { name: /Add a point/ })).toBeDisabled();
+    await expect(panel.getByTestId("talent-status")).toHaveText("Maximum rank");
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-gold-300")).toHaveCount(5);
+  });
+
+  test("tooltip: compact and hover-only; the panel keeps the long form with the reasons behind 'Why?'", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    await clickLocked(talent(page, "discipline", "Penance"));
+    await page.mouse.move(0, 0);
+    const panel = page.getByTestId("talent-detail");
+    await expect(panel.getByTestId("talent-description-gap-reasons")).toBeVisible();
+    // Hovering another talent with gaps: the tooltip has no 'Why?' block, only the one-line note, and it vanishes on leave.
+    const mart = talent(page, "discipline", "Martyrdom");
+    await mart.hover();
+    const tip = page.getByTestId("talent-tooltip");
+    await expect(tip).toBeVisible();
+    await expect(tip.getByTestId("talent-description-gap-reasons")).toHaveCount(0);
+    await expect(tip.getByTestId("talent-description-gaps")).toContainText("not available for this build yet");
+    await expect(tip.getByTestId("rank-summary")).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(tip).toHaveCount(0);
+    // The panel still shows Penance, not Martyrdom (hover never selects).
+    await expect(panel).toContainText("Penance");
+  });
+
+  test("keyboard still works: arrows move, Enter adds, Backspace removes, Escape clears", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.focus();
+    await page.keyboard.press("Enter");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("talent-detail")).toContainText("Wand Specialization");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Backspace");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("0/5");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("talent-detail")).toContainText("Select a talent");
   });
 });
 
