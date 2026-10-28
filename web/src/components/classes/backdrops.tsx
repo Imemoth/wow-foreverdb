@@ -1,3 +1,4 @@
+import { treeBackgroundArt } from "@/lib/classes/art";
 import { CLASS_COLORS } from "@/lib/classes/colors";
 import { classStyle } from "./class-style";
 
@@ -102,7 +103,38 @@ export function ClassBackdrop({ classId, motif, variant, uid }: { classId: strin
   );
 }
 
-/** Backdrop for a talent tree panel (themed by the tree). */
-export const TreeBackdrop = ({ classId, treeSlug }: { classId: string; treeSlug: string }) => (
-  <ClassBackdrop classId={classId} motif={treeMotif(classId, treeSlug)} variant="tree" uid={`${classId}-${treeSlug}`} />
-);
+/**
+ * Backdrop for a talent tree panel. The vector backdrop (themed by the tree) is always rendered; when the tree has an approved
+ * illustration (see TREE_BACKGROUNDS) it is laid over it, behind a dark scrim that keeps the nodes, connectors and badges
+ * readable. If the image is missing or fails to load, the vector backdrop shows through unchanged.
+ */
+export function TreeBackdrop({ classId, treeSlug }: { classId: string; treeSlug: string }) {
+  const art = treeBackgroundArt(classId, treeSlug);
+  return (
+    <>
+      <ClassBackdrop classId={classId} motif={treeMotif(classId, treeSlug)} variant="tree" uid={`${classId}-${treeSlug}`} />
+      {art && (
+        <div aria-hidden="true" data-testid="backdrop-photo" data-tree={`${classId}/${treeSlug}`} className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static same-origin asset; plain srcset keeps the page CSP (no inline styles) */}
+          <img
+            src={art.src}
+            srcSet={art.srcSet}
+            sizes="(min-width: 1024px) 420px, 100vw"
+            alt=""
+            aria-hidden="true"
+            width={900}
+            height={1200}
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            data-testid="backdrop-photo-image"
+            className="absolute inset-0 h-full w-full object-cover object-[50%_35%]"
+          />
+          {/* Scrim: even darkening so icons and lines keep their contrast, heavier behind the tree itself. */}
+          <div className="absolute inset-0 bg-ink-950/55" />
+          <div className="absolute inset-0 bg-gradient-to-b from-ink-950/35 via-transparent to-ink-950/40" />
+        </div>
+      )}
+    </>
+  );
+}
