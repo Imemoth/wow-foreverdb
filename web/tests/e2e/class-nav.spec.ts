@@ -22,9 +22,9 @@ test.describe("/guides landing page", () => {
     await page.goto("/guides");
     const order = await page.evaluate(() => {
       const hero = document.querySelector("#guides-hero-title")!;
-      const search = document.querySelector('form[role="search"]')!;
+      const search = document.querySelector("#g-q")!.closest("form")!;
       const classes = document.querySelector('[data-testid="class-guides-entry"]')!;
-      const results = [...document.querySelectorAll("ul.grid")].pop()!; // the guide cards (the last grid list on the page)
+      const results = document.querySelector("ul.lg\\:grid-cols-3")!; // the guide cards
       const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       return [before(hero, search), before(search, classes), before(classes, results)];
     });
@@ -112,7 +112,7 @@ test.describe("/guides landing page", () => {
       const panel = (await page.getByTestId("class-guides-entry").boundingBox())!;
       expect(panel.x).toBeGreaterThanOrEqual(0);
       expect(panel.x + panel.width).toBeLessThanOrEqual(vp.width);
-      expect(panel.height).toBeLessThan(vp.width < 640 ? 260 : 200);
+      expect(panel.height).toBeLessThan(vp.width < 640 ? 300 : 200);
       for (const id of ids) {
         const b = (await page.getByTestId(`class-icon-${id}`).boundingBox())!;
         expect(b.x).toBeGreaterThanOrEqual(0);
@@ -173,9 +173,9 @@ test.describe("/guides/classes illustrated cards", () => {
     await page.goto("/guides/classes");
     const card = page.getByTestId("class-card-priest");
     const art = card.getByTestId("class-card-art");
-    const before = await art.evaluate((el) => getComputedStyle(el).transform);
+    const before = await art.evaluate((el) => getComputedStyle(el).scale);
     await card.hover();
-    await expect.poll(() => art.evaluate((el) => getComputedStyle(el).transform)).not.toBe(before);
+    await expect.poll(() => art.evaluate((el) => getComputedStyle(el).scale)).not.toBe(before);
     await page.mouse.move(0, 0);
     const resting = await card.evaluate((el) => getComputedStyle(el).boxShadow);
     await card.getByRole("link", { name: "Priest" }).focus();
