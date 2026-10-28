@@ -46,3 +46,22 @@ export const HERO_ART_POSITION: Record<string, string> = {
   warlock: "object-[30%_25%]", // skull face and fel hand
   warrior: "object-[90%_20%]", // face and spiked pauldron
 };
+
+/**
+ * Talent tree backgrounds (owner-approved illustrations), `<class>/<tree slug>` -> file stem under `/public/tree-backgrounds/`.
+ * Each tree has two encodes of one 3:4 image: `<stem>.webp` (900 px wide) and `<stem>-600.webp` (600 px wide). A tree with no
+ * entry keeps its vector backdrop (the SVG layer is always rendered underneath, so it is also the fallback if an image fails).
+ * Priest is the reference implementation; the other classes' trees are added here as their art arrives.
+ */
+export const TREE_BACKGROUNDS: Readonly<Record<string, string>> = {
+  "priest/discipline": "priest-discipline",
+  "priest/holy": "priest-holy",
+  "priest/shadow-magic": "priest-shadow",
+};
+
+export const treeBackgroundArt = (classId: string, treeSlug: string) => {
+  const stem = TREE_BACKGROUNDS[`${classId}/${treeSlug}`];
+  return stem
+    ? { src: `/tree-backgrounds/${stem}.webp`, srcSet: `/tree-backgrounds/${stem}-600.webp 600w, /tree-backgrounds/${stem}.webp 900w` }
+    : null;
+};
