@@ -440,9 +440,10 @@ describe("NodeFace states", () => {
     expect(locked).toContain("<svg"); // lock glyph: the state is not carried by colour alone
   });
 
-  it("always keeps the talent name as text, with or without an icon, and renders the icon URL unchanged", () => {
+  it("shows the name plate only when there is no icon (the name is always the button's accessible name), and renders the icon URL unchanged", () => {
     for (const state of ["maxed", "partial", "available", "waiting", "locked"] as const) {
-      expect(face(state, icon)).toContain("Power in Light");
+      // With an icon the artwork fills the frame: no text strip over it. Without one the name plate stands in for it.
+      expect(face(state, icon)).not.toContain("Power in Light");
       expect(face(state)).toContain("Power in Light");
     }
     expect(face("available", icon)).toContain(`src="${icon}"`);

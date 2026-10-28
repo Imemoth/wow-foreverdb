@@ -1,31 +1,63 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import { useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import type { TalentEngine } from "@/lib/talents/engine";
 import type { Allocation, Talent, TalentTree } from "@/lib/talents/types";
 import { TalentCard } from "./TalentCard";
 import { NodeFace, type NodeState } from "./TalentIcon";
 
-// Grid placement uses these literal class names (Tailwind must see them; the page CSP forbids inline styles).
-const GRID_COLS: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5", 6: "grid-cols-6", 7: "grid-cols-7", 8: "grid-cols-8" };
+// Grid placement uses these literal class names (Tailwind must see them; the page CSP forbids inline styles). One cell is
+// `--cell` square (a CSS variable set on the tree, see below): the node button fills the whole cell, so its hit area is the
+// cell, while the visible frame is a little smaller and centred in it. Connectors are drawn in cell units, so they always end
+// at the frame centres whatever the cell size.
+const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-[repeat(1,var(--cell))]", 2: "grid-cols-[repeat(2,var(--cell))]", 3: "grid-cols-[repeat(3,var(--cell))]", 4: "grid-cols-[repeat(4,var(--cell))]",
+  5: "grid-cols-[repeat(5,var(--cell))]", 6: "grid-cols-[repeat(6,var(--cell))]", 7: "grid-cols-[repeat(7,var(--cell))]", 8: "grid-cols-[repeat(8,var(--cell))]",
+};
 const COL_START = ["col-start-1", "col-start-2", "col-start-3", "col-start-4", "col-start-5", "col-start-6", "col-start-7", "col-start-8"];
 const ROW_START = ["row-start-1", "row-start-2", "row-start-3", "row-start-4", "row-start-5", "row-start-6", "row-start-7", "row-start-8", "row-start-9", "row-start-10", "row-start-11", "row-start-12", "row-start-13", "row-start-14", "row-start-15", "row-start-16"];
+// 48px cells (42px frames, a ≥44px hit area) on small screens, 56px cells (46px frames) from `sm` up.
+const CELL_VARS = "[--cell:3rem] sm:[--cell:3.5rem]";
 
 export const talentDomId = (id: number) => `talent-${id}`;
 
-// Node frames: one square frame per talent. Border colour, glow and the rank badge change with the state; the icon treatment is in TalentIcon.
+// Node frames: one square frame per talent, thin border, quiet glow. The state is in border colour, glow, icon treatment, the rank
+// badge and (locked) the lock glyph; selection is a separate ring (group-data-[selected]) so it never reads as an allocation state.
 const NODE_CLASS: Record<NodeState, string> = {
-  maxed: "border-gold-300 bg-gold-500/20 text-gold-300 shadow-[0_0_0_1px_rgb(0_0_0/0.7),0_0_16px_-2px_rgb(240_223_174/0.6)]",
-  partial: "border-violet-300 bg-violet-700/40 text-parchment shadow-[0_0_0_1px_rgb(0_0_0/0.7),0_0_14px_-3px_rgb(195_174_242/0.65)]",
-  available: "border-gold-500 bg-ink-800 text-gold-300 shadow-[0_0_0_1px_rgb(0_0_0/0.7)] hover:border-gold-300 hover:shadow-[0_0_0_1px_rgb(0_0_0/0.7),0_0_10px_-3px_rgb(240_223_174/0.5)]",
-  waiting: "border-ink-600 bg-ink-850 text-mist shadow-[0_0_0_1px_rgb(0_0_0/0.7)] hover:border-ink-600",
-  locked: "border-ink-700 bg-ink-900 text-mist shadow-[0_0_0_1px_rgb(0_0_0/0.7)]",
+  maxed: "border-gold-300/80 bg-gold-500/15 text-gold-300 shadow-[0_0_0_1px_rgb(0_0_0/0.6),0_0_8px_-2px_rgb(240_223_174/0.4)]",
+  partial: "border-violet-300/70 bg-violet-700/30 text-parchment shadow-[0_0_0_1px_rgb(0_0_0/0.6),0_0_8px_-2px_rgb(195_174_242/0.4)]",
+  available: "border-gold-500/70 bg-ink-800 text-gold-300 shadow-[0_0_0_1px_rgb(0_0_0/0.6)] group-hover:border-gold-300",
+  waiting: "border-ink-600 bg-ink-850 text-mist shadow-[0_0_0_1px_rgb(0_0_0/0.5)]",
+  locked: "border-ink-700/80 bg-ink-900 text-mist/80 shadow-[0_0_0_1px_rgb(0_0_0/0.4)]",
 };
 const BADGE_CLASS: Record<NodeState, string> = {
-  maxed: "border-gold-300 bg-gold-400 text-ink-950",
-  partial: "border-violet-300 bg-violet-700 text-parchment",
-  available: "border-gold-500 bg-ink-950 text-gold-300",
-  waiting: "border-ink-600 bg-ink-950 text-mist",
-  locked: "border-ink-700 bg-ink-950 text-mist",
+  maxed: "border-gold-300/70 bg-gold-500 text-ink-950",
+  partial: "border-violet-300/60 bg-violet-700 text-parchment",
+  available: "border-gold-500/60 bg-ink-950 text-gold-300",
+  waiting: "border-ink-700 bg-ink-950/90 text-mist/80",
+  locked: "border-ink-800 bg-ink-950/80 text-mist/60",
 };
+
+/**
+ * Hover tooltip, anchored beside its node. After layout it is nudged back inside the viewport (CSSOM, not an inline style
+ * attribute, so the page CSP is not involved), so a node near either edge never gets a clipped tooltip.
+ */
+function Tooltip({ className, children }: { className: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.transform = "";
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    const dx = Math.max(0, margin - r.left) + Math.min(0, window.innerWidth - margin - r.right);
+    const dy = Math.max(0, margin - r.top) + Math.min(0, window.innerHeight - margin - r.bottom);
+    if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
+  return (
+    <div ref={ref} role="tooltip" data-testid="talent-tooltip" className={className}>
+      {children}
+    </div>
+  );
+}
 
 interface Props {
   tree: TalentTree;
@@ -113,7 +145,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
   }
 
   return (
-    <div className="relative">
+    <div className={`relative mx-auto w-fit ${CELL_VARS}`} data-testid="talent-grid" data-cols={tree.cols} data-rows={tree.rows}>
       <svg
         viewBox={`0 0 ${tree.cols} ${tree.rows}`}
         preserveAspectRatio="none"
@@ -122,31 +154,32 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
         className="pointer-events-none absolute inset-0 h-full w-full"
       >
         {/* Three strokes per connector: a dark underlay (contrast against the backdrop), an optional glow, and the line itself. A
-            met requirement is solid, an unmet one dashed, and a line touching the selected/hovered talent is violet and heavier. */}
+            met requirement is a thin solid gold line, an unmet one a faint dotted line, and a line touching the selected/hovered
+            talent is violet and heavier so a talent's chain is easy to follow. */}
         {links.map((l) => {
           const pos = { x1: l.from.col + 0.5, y1: l.from.row + 0.5, x2: l.to.col + 0.5, y2: l.to.row + 0.5 };
           return (
             <g key={l.key} data-link-state={l.active ? "met" : "unmet"} data-link-focus={l.focus || undefined}>
-              <line {...pos} strokeLinecap="round" strokeWidth={l.focus ? 9 : 7} className="stroke-ink-950 [vector-effect:non-scaling-stroke]" />
-              {l.active && <line {...pos} strokeLinecap="round" strokeWidth={l.focus ? 10 : 8} className={`[vector-effect:non-scaling-stroke] ${l.focus ? "stroke-violet-300/25" : "stroke-gold-400/20"}`} />}
+              <line {...pos} strokeLinecap="round" strokeWidth={l.focus ? 6 : l.active ? 4.5 : 3} className="stroke-ink-950/80 [vector-effect:non-scaling-stroke]" />
+              {l.active && <line {...pos} strokeLinecap="round" strokeWidth={l.focus ? 8 : 6} className={`[vector-effect:non-scaling-stroke] ${l.focus ? "stroke-violet-300/20" : "stroke-gold-400/10"}`} />}
               <line
                 {...pos}
                 strokeLinecap="round"
-                strokeWidth={l.focus ? 4.5 : 3.5}
-                className={`[vector-effect:non-scaling-stroke] ${l.active ? (l.focus ? "stroke-violet-300" : "stroke-gold-400") : l.focus ? "stroke-violet-300/80 [stroke-dasharray:2_6]" : "stroke-mist/45 [stroke-dasharray:2_6]"}`}
+                strokeWidth={l.focus ? 3 : l.active ? 2 : 1.5}
+                className={`[vector-effect:non-scaling-stroke] ${l.active ? (l.focus ? "stroke-violet-300" : "stroke-gold-400/80") : l.focus ? "stroke-violet-300/70 [stroke-dasharray:1.5_5]" : "stroke-mist/30 [stroke-dasharray:1.5_5]"}`}
               />
             </g>
           );
         })}
       </svg>
 
-      <div role="group" aria-label={`${tree.name} talents`} className={`relative grid ${GRID_COLS[tree.cols] ?? "grid-cols-4"}`}>
+      <div role="group" aria-label={`${tree.name} talents`} className={`relative grid auto-rows-[var(--cell)] ${GRID_COLS[tree.cols] ?? "grid-cols-[repeat(4,var(--cell))]"}`}>
         {Array.from({ length: tree.rows * tree.cols }, (_, i) => {
           const row = Math.floor(i / tree.cols);
           const col = i % tree.cols;
           const x = byCell.get(`${row}:${col}`);
           const place = `${ROW_START[row] ?? ""} ${COL_START[col] ?? ""}`;
-          if (!x) return <div key={`${row}:${col}`} aria-hidden="true" className={`aspect-square ${place}`} />;
+          if (!x) return <div key={`${row}:${col}`} aria-hidden="true" className={place} />;
 
           const rank = engine.rank(alloc, x.id);
           const add = engine.canAdd(alloc, x.id);
@@ -164,7 +197,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
           const vAlign = row < tree.rows / 2 ? "top-full mt-1" : "bottom-full mb-1";
 
           return (
-            <div key={x.id} className={`relative flex aspect-square items-center justify-center ${place} ${tipOpen ? "z-30" : "z-10"}`}>
+            <div key={x.id} className={`relative ${place} ${tipOpen ? "z-30" : "z-10"}`}>
               <button
                 type="button"
                 id={talentDomId(x.id)}
@@ -184,25 +217,27 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
                 onPointerEnter={(e) => { if (e.pointerType !== "touch") onHover(x.id); }}
                 onPointerLeave={() => onHover(null)}
                 onPointerCancel={() => onHover(null)}
-                className={`relative flex aspect-square w-[82%] items-center justify-center rounded-md border-2 text-center text-[10px] font-semibold leading-tight transition-[border-color,box-shadow,background-color] ${NODE_CLASS[state]} ${selectedId === x.id ? "ring-2 ring-parchment ring-offset-2 ring-offset-ink-950" : ""} ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+                // The button is the whole cell (the hit area); the visible frame inside it is smaller. The focus ring is drawn on the frame.
+                className={`group relative flex h-full w-full scroll-mb-44 items-center justify-center focus-visible:outline-none ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
               >
-                <NodeFace name={x.name} src={icons[x.id]} state={state} />
                 <span
-                  aria-hidden="true"
-                  data-testid="rank-badge"
-                  className={`absolute -right-2 -top-2 min-w-[2.15rem] rounded-md border-2 px-1 text-center font-mono text-xs font-bold leading-[18px] tabular-nums shadow-[0_1px_3px_rgb(0_0_0/0.8)] ${BADGE_CLASS[state]}`}
+                  data-testid="node-frame"
+                  className={`pointer-events-none relative size-[2.625rem] rounded-[5px] border text-center font-semibold transition-[border-color,box-shadow] sm:size-[2.875rem] ${NODE_CLASS[state]} group-data-[selected]:ring-2 group-data-[selected]:ring-parchment group-data-[selected]:ring-offset-1 group-data-[selected]:ring-offset-ink-950 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-violet-400`}
                 >
-                  {rank}/{x.maxRank}
+                  <NodeFace name={x.name} src={icons[x.id]} state={state} />
+                  <span
+                    aria-hidden="true"
+                    data-testid="rank-badge"
+                    className={`absolute -bottom-[3px] -right-[3px] min-w-[1.5rem] rounded-[4px] border px-[3px] text-center font-mono text-[10px] font-semibold leading-[13px] tabular-nums shadow-[0_1px_2px_rgb(0_0_0/0.7)] ${BADGE_CLASS[state]}`}
+                  >
+                    {rank}/{x.maxRank}
+                  </span>
                 </span>
               </button>
               {tipOpen && (
-                <div
-                  role="tooltip"
-                  data-testid="talent-tooltip"
-                  className={`pointer-events-none absolute hidden w-80 rounded-lg border border-gold-500/50 bg-ink-900 p-3.5 shadow-2xl ring-1 ring-black/40 md:block ${hAlign} ${vAlign}`}
-                >
+                <Tooltip className={`pointer-events-none absolute hidden w-72 rounded-lg border border-gold-500/50 bg-ink-900 p-3 shadow-2xl ring-1 ring-black/40 md:block ${hAlign} ${vAlign}`}>
                   <TalentCard engine={engine} alloc={alloc} talent={x} tree={tree} icon={icons[x.id]} variant="tooltip" />
-                </div>
+                </Tooltip>
               )}
             </div>
           );
