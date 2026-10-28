@@ -10,7 +10,8 @@ import { expect, test } from "./fixtures";
  * (Priest) are therefore also data-version canaries: if a data update changes them, update the spec with it.
  */
 
-const CLASS_IDS = ["warrior", "paladin", "hunter", "rogue", "priest", "shaman", "mage", "warlock", "druid"];
+// Alphabetical, the order of the class chooser.
+const CLASS_IDS = ["druid", "hunter", "mage", "paladin", "priest", "rogue", "shaman", "warlock", "warrior"];
 
 function priest() {
   const data = getTalentData("priest")!;
@@ -413,7 +414,12 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       const gap = panel.locator('[data-gap="spell"]').first();
       await expect(gap).toHaveAttribute("role", "img");
       await expect(gap).toHaveAccessibleName(/value not available: .*another spell/);
-      await expect(panel.getByTestId("talent-description-gaps")).toContainText("another spell whose data is not available for this build yet");
+      await expect(panel.getByTestId("talent-description-gaps")).toContainText("marks a value that is not available for this build yet");
+      // The reasons are one click away instead of always on screen.
+      const reasons = panel.getByTestId("talent-description-gap-reasons");
+      await expect(reasons).not.toHaveAttribute("open", "");
+      await reasons.getByText("Why?").click();
+      await expect(reasons).toContainText("another spell whose data is not available for this build yet");
     });
   });
 
@@ -478,11 +484,9 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       await expect(page.getByTestId("talent-detail").getByTestId("card-icon")).toBeVisible();
     });
 
-    test("the real dataset ships verified text (with marked gaps) but no icons, and says so", async ({ page }) => {
+    test("without the icon switch every talent shows its name plate (no icons are requested)", async ({ page }) => {
       await page.goto("/guides/classes/priest");
       await expect(page.getByTestId("talent-icon")).toHaveCount(0);
-      await expect(page.getByTestId("talent-calculator")).toContainText("have a verified description");
-      await expect(page.getByTestId("talent-calculator")).toContainText("Icons are not included");
       // Name plates: every talent still names itself.
       await expect(talent(page, "shadow-magic", "Shadowform")).toContainText("Shadowform");
     });
@@ -566,6 +570,146 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
   });
 });
 
+test.describe("Talent calculator UI V2 (desktop)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop interactions; the mobile project has its own tests below");
+  });
+
+  test("the technical provenance panel is gone everywhere, and the legal notice stays in the footer", async ({ page }) => {
+    for (const url of ["/guides/classes", "/guides/classes/priest", "/guides/classes/priest/shadow"]) {
+      await page.goto(url);
+      await expect(page.getByText("Talent structure (names, ranks", { exact: false })).toHaveCount(0);
+      await expect(page.getByText("as extracted by the Everloot project")).toHaveCount(0);
+      await expect(page.getByText("have a verified description")).toHaveCount(0);
+      const footer = page.getByRole("contentinfo");
+      await expect(footer).toContainText("independent, free, non-commercial fan project");
+      await expect(footer).toContainText("not affiliated with or endorsed by Blizzard Entertainment");
+      await expect(footer).toContainText("Blizzard Entertainment, Inc. All rights reserved");
+      await expect(footer).toContainText("talent names, descriptions and icons");
+    }
+    // The provenance itself is documented on the data page.
+    await page.goto("/about/data");
+    await expect(page.locator("#class-guides")).toBeVisible();
+    await expect(page.locator("#class-guides").locator("xpath=following-sibling::p[1]")).toContainText("Everloot");
+  });
+
+  test("the class chooser lists the classes alphabetically", async ({ page }) => {
+    await page.goto("/guides/classes");
+    const names = await page.locator('[data-testid^="class-card-"] h2').allTextContents();
+    expect(names.map((n) => n.trim())).toEqual(["Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]);
+    await page.goto("/guides");
+    const entry = await page.getByTestId("class-guides-entry").getByRole("link").allTextContents();
+    const order = entry.map((t) => t.trim()).filter((t) => CLASS_IDS.map((c) => c[0]!.toUpperCase() + c.slice(1)).includes(t));
+    expect(order).toEqual([...order].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test("node states are distinct: available, locked, in progress, maxed, plus a separate selected mark", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    const wand = talent(page, "discipline", "Wand Specialization");
+    const silent = talent(page, "discipline", "Silent Resolve");
+    await expect(pil).toHaveAttribute("data-state", "available");
+    await expect(silent).toHaveAttribute("data-state", "locked");
+    // Only locked nodes carry the lock glyph; every node shows its rank as text in a badge.
+    await expect(silent.locator("svg")).toHaveCount(1);
+    await expect(pil.locator("svg")).toHaveCount(0);
+    await expect(pil.getByTestId("rank-badge")).toHaveText("0/5");
+    await pil.click();
+    await expect(pil).toHaveAttribute("data-state", "partial");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    for (let i = 0; i < 4; i++) await pil.click();
+    await expect(pil).toHaveAttribute("data-state", "maxed");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("5/5");
+    // The badge is compact (10-11px) but still readable text.
+    const size = await pil.getByTestId("rank-badge").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeGreaterThanOrEqual(10);
+    expect(size).toBeLessThanOrEqual(11);
+    // Selection is its own mark (data-selected), independent of the state.
+    await expect(pil).toHaveAttribute("data-selected", "true");
+    await expect(wand).not.toHaveAttribute("data-selected", "true");
+    await wand.click();
+    await expect(wand).toHaveAttribute("data-selected", "true");
+    await expect(pil).not.toHaveAttribute("data-selected", "true");
+    await expect(pil).toHaveAttribute("data-state", "maxed");
+    // The five states are listed in a legend.
+    await expect(page.getByRole("list", { name: "Talent states" }).getByRole("listitem")).toHaveText(["Available", "In progress", "Maxed", "Locked", "Selected"]);
+  });
+
+  test("prerequisite connections: unmet are dashed, met are solid, and the selected talent's lines are emphasised", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const disc = tree(page, "discipline");
+    // Soul Warding needs Improved Power Word: Shield at rank 3: that connection starts unmet.
+    const links = disc.locator("[data-link-state]");
+    expect(await links.count()).toBeGreaterThan(1);
+    await expect(disc.locator('[data-link-state="met"]')).toHaveCount(0);
+    expect(await disc.locator('[data-link-state="unmet"]').count()).toBeGreaterThan(0);
+    await expect(disc.locator("[data-link-focus]")).toHaveCount(0);
+    const target = talent(page, "discipline", "Soul Warding");
+    await clickLocked(target);
+    const focused = await disc.locator("[data-link-focus]").count();
+    expect(focused).toBeGreaterThan(0);
+    // Buying the prerequisite at full rank makes its connection met (build from a known-legal code).
+    const code = codeFor([["Power in Light", 5], ["Twin Disciplines", 5], ["Improved Power Word: Shield", 3]]);
+    await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
+    expect(await tree(page, "discipline").locator('[data-link-state="met"]').count()).toBeGreaterThan(0);
+  });
+
+  test("the detail panel shows the selected rank as text and pips, and the buttons follow the rules", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const panel = page.getByTestId("talent-detail");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 1/5");
+    await expect(panel.getByTestId("rank-pips").locator("span")).toHaveCount(5);
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-violet-300")).toHaveCount(1);
+    await panel.getByRole("button", { name: /Add a point to Power in Light/ }).click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 2/5");
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-violet-300")).toHaveCount(2);
+    await panel.getByRole("button", { name: /Remove a point from Power in Light/ }).click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 1/5");
+    for (let i = 0; i < 4; i++) await panel.getByRole("button", { name: /Add a point/ }).click();
+    await expect(panel.getByTestId("rank-summary")).toContainText("Rank 5/5");
+    await expect(panel.getByRole("button", { name: /Add a point/ })).toBeDisabled();
+    await expect(panel.getByTestId("talent-status")).toHaveText("Maximum rank");
+    await expect(panel.getByTestId("rank-pips").locator("span.bg-gold-300")).toHaveCount(5);
+  });
+
+  test("tooltip: compact and hover-only; the panel keeps the long form with the reasons behind 'Why?'", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    await clickLocked(talent(page, "discipline", "Penance"));
+    await page.mouse.move(0, 0);
+    const panel = page.getByTestId("talent-detail");
+    await expect(panel.getByTestId("talent-description-gap-reasons")).toBeVisible();
+    // Hovering another talent with gaps: the tooltip has no 'Why?' block, only the one-line note, and it vanishes on leave.
+    const mart = talent(page, "discipline", "Martyrdom");
+    await mart.hover();
+    const tip = page.getByTestId("talent-tooltip");
+    await expect(tip).toBeVisible();
+    await expect(tip.getByTestId("talent-description-gap-reasons")).toHaveCount(0);
+    await expect(tip.getByTestId("talent-description-gaps")).toContainText("not available for this build yet");
+    await expect(tip.getByTestId("rank-summary")).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(tip).toHaveCount(0);
+    // The panel still shows Penance, not Martyrdom (hover never selects).
+    await expect(panel).toContainText("Penance");
+  });
+
+  test("keyboard still works: arrows move, Enter adds, Backspace removes, Escape clears", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.focus();
+    await page.keyboard.press("Enter");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("talent-detail")).toContainText("Wand Specialization");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Backspace");
+    await expect(pil.getByTestId("rank-badge")).toHaveText("0/5");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("talent-detail")).toContainText("Select a talent");
+  });
+});
+
 test.describe("Talent calculator (touch / mobile)", () => {
   test.beforeEach(({}, testInfo) => {
     test.skip(testInfo.project.name !== "mobile", "touch layout");
@@ -607,6 +751,9 @@ test.describe("Talent calculator (touch / mobile)", () => {
     await soul.scrollIntoViewIfNeeded();
     await soul.tap({ force: true }); // locked (aria-disabled): selecting it to read it is still allowed
     const panel = page.getByTestId("talent-detail");
+    // The sheet starts collapsed (name, rank, Add/Remove); the toggle shows the full details.
+    await expect(panel.getByTestId("talent-description")).toBeHidden();
+    await panel.getByTestId("panel-toggle").tap();
     await expect(panel.getByTestId("talent-description")).toHaveText("Reduces the cooldown on your Power Word: Shield spell by 4 sec and reduces its mana cost by 15%.");
     const penance = talent(page, "discipline", "Penance");
     await penance.scrollIntoViewIfNeeded();
@@ -617,4 +764,287 @@ test.describe("Talent calculator (touch / mobile)", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
+});
+
+test.describe("Talent calculator V2.1: compact geometry", () => {
+  // Every class page, every tree: the frame, hit area, badge and connector geometry is measured in the browser, not assumed.
+  for (const id of CLASS_IDS) {
+    test(`${id}: square 46/42px nodes in 68/60px cells, 44px hit areas, no overlaps, connectors end on node centres`, async ({ page }, testInfo) => {
+      const mobile = testInfo.project.name === "mobile";
+      await page.goto(`/guides/classes/${id}`);
+      await expect(page.getByTestId("talent-grid").first()).toBeVisible();
+      const report = await page.evaluate(() => {
+        type R = { x: number; y: number; w: number; h: number };
+        const rect = (el: Element): R => {
+          const r = el.getBoundingClientRect();
+          return { x: r.left, y: r.top, w: r.width, h: r.height };
+        };
+        const hit = (a: R, b: R) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+        const out: { trees: number; nodes: number; problems: string[]; frame: number[]; hitMin: number; badgeFont: number[]; tops: number[]; lines: number; cells: number[] } = {
+          trees: 0, nodes: 0, problems: [], frame: [], hitMin: 999, badgeFont: [], tops: [], lines: 0, cells: [],
+        };
+        for (const grid of Array.from(document.querySelectorAll('[data-testid="talent-grid"]'))) {
+          out.trees++;
+          const cols = Number(grid.getAttribute("data-cols"));
+          const rows = Number(grid.getAttribute("data-rows"));
+          const g = rect(grid);
+          out.tops.push(Math.round(g.y));
+          const cw = g.w / cols;
+          const ch = g.h / rows;
+          const nodes = Array.from(grid.querySelectorAll<HTMLButtonElement>("button[data-talent-id]")).map((b) => {
+            const f = b.querySelector('[data-testid="node-frame"]')!;
+            const bd = b.querySelector('[data-testid="rank-badge"]')!;
+            return { name: b.getAttribute("aria-label")!, btn: rect(b), frame: rect(f), badge: rect(bd), font: parseFloat(getComputedStyle(bd).fontSize) };
+          });
+          out.nodes += nodes.length;
+          for (const n of nodes) {
+            out.frame.push(Math.round(n.frame.w * 10) / 10);
+            if (Math.abs(n.frame.w - n.frame.h) > 0.5) out.problems.push(`${n.name}: frame not square ${n.frame.w}x${n.frame.h}`);
+            if (n.btn.w < 44 || n.btn.h < 44) out.problems.push(`${n.name}: hit area ${n.btn.w}x${n.btn.h}`);
+            out.hitMin = Math.min(out.hitMin, n.btn.w, n.btn.h);
+            out.badgeFont.push(n.font);
+            // The frame is centred in its cell.
+            const cx = n.frame.x + n.frame.w / 2;
+            const cy = n.frame.y + n.frame.h / 2;
+            if (Math.abs(cx - (n.btn.x + n.btn.w / 2)) > 0.6 || Math.abs(cy - (n.btn.y + n.btn.h / 2)) > 0.6) out.problems.push(`${n.name}: frame not centred in its cell`);
+            // The badge stays inside the cell (so it can never reach a neighbour) and is a small corner mark.
+            if (n.badge.x < n.btn.x - 0.5 || n.badge.y < n.btn.y - 0.5 || n.badge.x + n.badge.w > n.btn.x + n.btn.w + 0.5 || n.badge.y + n.badge.h > n.btn.y + n.btn.h + 0.5) out.problems.push(`${n.name}: badge leaves its cell`);
+            const ix = Math.max(0, Math.min(n.badge.x + n.badge.w, n.frame.x + n.frame.w) - Math.max(n.badge.x, n.frame.x));
+            const iy = Math.max(0, Math.min(n.badge.y + n.badge.h, n.frame.y + n.frame.h) - Math.max(n.badge.y, n.frame.y));
+            if (ix * iy > 0.16 * n.frame.w * n.frame.h) out.problems.push(`${n.name}: badge covers ${Math.round((100 * ix * iy) / (n.frame.w * n.frame.h))}% of the icon`);
+          }
+          for (let i = 0; i < nodes.length; i++)
+            for (let j = i + 1; j < nodes.length; j++) {
+              const a = nodes[i]!, b = nodes[j]!;
+              if (hit(a.btn, b.btn) || hit(a.frame, b.frame) || hit(a.badge, b.badge) || hit(a.badge, b.frame) || hit(b.badge, a.frame)) out.problems.push(`${a.name} overlaps ${b.name}`);
+            }
+          // Connectors: both ends of every line are on a node centre.
+          const svg = grid.querySelector("svg")!;
+          const s = rect(svg);
+          for (const line of Array.from(svg.querySelectorAll("line"))) {
+            out.lines++;
+            for (const [px, py] of [[Number(line.getAttribute("x1")), Number(line.getAttribute("y1"))], [Number(line.getAttribute("x2")), Number(line.getAttribute("y2"))]] as const) {
+              const x = s.x + (px / cols) * s.w;
+              const y = s.y + (py / rows) * s.h;
+              const near = nodes.some((n) => Math.abs(n.frame.x + n.frame.w / 2 - x) <= 1 && Math.abs(n.frame.y + n.frame.h / 2 - y) <= 1);
+              if (!near) out.problems.push(`connector end (${x.toFixed(1)}, ${y.toFixed(1)}) misses every node centre`);
+            }
+          }
+          if (Math.abs(cw - ch) > 0.1) out.problems.push(`cells not square ${cw}x${ch}`);
+          // The spacing the owner asked for (68px desktop / 60px phones), and the grid fits inside its tree panel.
+          out.cells.push(Math.round(cw * 10) / 10);
+          const panel = rect(grid.closest("section")!);
+          if (g.x < panel.x || g.x + g.w > panel.x + panel.w) out.problems.push(`grid ${Math.round(g.w)}px leaves its panel (${Math.round(panel.w)}px)`);
+        }
+        return out;
+      });
+      expect(report.problems).toEqual([]);
+      expect(report.trees).toBe(3);
+      expect(report.nodes).toBeGreaterThan(30);
+      expect(report.lines).toBeGreaterThan(0);
+      // Frames: ~46px on desktop, ~42px on phones; the hit area is the 48/56px cell.
+      const [lo, hi] = mobile ? [40, 44] : [44, 48];
+      for (const f of report.frame) {
+        expect(f).toBeGreaterThanOrEqual(lo);
+        expect(f).toBeLessThanOrEqual(hi);
+      }
+      for (const c of report.cells) expect(c).toBe(mobile ? 60 : 68);
+      expect(report.hitMin).toBeGreaterThanOrEqual(44);
+      for (const f of report.badgeFont) {
+        expect(f).toBeGreaterThanOrEqual(10);
+        expect(f).toBeLessThanOrEqual(11);
+      }
+      // The three trees of a class sit on one line on desktop.
+      if (!mobile) expect(new Set(report.tops).size).toBe(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    });
+  }
+});
+
+test.describe("Talent calculator V2.1: panel, help and tooltip (desktop)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop interactions");
+  });
+
+  test("the detail panel is compact and dismissible: close button, Escape, focus returns to the talent", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const panel = page.getByTestId("talent-detail");
+    const pil = talent(page, "discipline", "Power in Light");
+    await expect(panel.getByTestId("talent-detail-card")).toHaveCount(0);
+    await pil.click();
+    const card = panel.getByTestId("talent-detail-card");
+    await expect(card).toBeVisible();
+    // Compact: a horizontal header (name + rank + actions on one row on desktop) and a short card.
+    const box = (await card.boundingBox())!;
+    expect(box.height).toBeLessThan(300);
+    const name = (await card.getByText("Power in Light", { exact: true }).boundingBox())!;
+    const add = (await card.getByRole("button", { name: /Add a point/ }).boundingBox())!;
+    expect(Math.abs(name.y - add.y)).toBeLessThan(40);
+    await expect(card.getByRole("button", { name: "Close talent details" })).toBeVisible();
+    await expect(card.getByTestId("panel-toggle")).toBeHidden(); // the collapse control is a phone-only affordance
+    await expect(card.getByTestId("talent-detail-body")).toBeVisible();
+    // The wrapper lets clicks through; only the card itself takes them.
+    expect(await panel.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+    expect(await card.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("auto");
+    // Close: the panel goes, the build is untouched, the talent keeps focus but is not re-selected.
+    await card.getByRole("button", { name: "Close talent details" }).click();
+    await expect(panel.getByTestId("talent-detail-card")).toHaveCount(0);
+    await expect(pil).not.toHaveAttribute("data-selected", "true");
+    await expect(pil).toBeFocused();
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    // Escape does the same.
+    await pil.click();
+    await expect(panel.getByTestId("talent-detail-card")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(panel.getByTestId("talent-detail-card")).toHaveCount(0);
+  });
+
+  test("the detail panel never swallows a click on a talent next to it", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    await talent(page, "discipline", "Power in Light").click();
+    const wand = talent(page, "discipline", "Wand Specialization");
+    await wand.click();
+    await expect(page.getByTestId("talent-detail")).toContainText("Wand Specialization");
+    await expect(wand.getByTestId("rank-badge")).toHaveText("1/2");
+  });
+
+  test("keyboard and right-click removal still work with the compact node", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.click();
+    await pil.click();
+    await expect(pil.getByTestId("rank-badge")).toHaveText("2/5");
+    await pil.click({ button: "right" });
+    await expect(pil.getByTestId("rank-badge")).toHaveText("1/5");
+    await pil.click({ modifiers: ["Shift"] });
+    await expect(pil.getByTestId("rank-badge")).toHaveText("0/5");
+  });
+
+  test("the header keeps the points and Share/Reset prominent; the instructions live in a Help disclosure", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    for (const id of ["points-spent", "points-remaining", "required-level", "share-build", "reset-build"]) await expect(page.getByTestId(id)).toBeVisible();
+    // The long keyboard/mouse instructions are not on the page until the disclosure is opened; one concise hint is.
+    await expect(page.getByText("Shift+click")).toBeHidden();
+    await expect(page.getByTestId("talent-hint")).toContainText("Click to add a point, right-click to remove.");
+    const help = page.getByTestId("talent-help");
+    await help.getByText("How to use").click();
+    await expect(help.getByText("Shift+click")).toBeVisible();
+    await expect(help.getByText("arrow keys")).toBeVisible();
+    await expect(help).toHaveAttribute("open", "");
+    await help.getByText("How to use").click();
+    await expect(page.getByText("Shift+click")).toBeHidden();
+    // The legend is light: small swatches, small type.
+    const sw = (await page.getByRole("list", { name: "Talent states" }).locator("span").first().boundingBox())!;
+    expect(sw.width).toBeLessThanOrEqual(14);
+  });
+
+  test("the tooltip has a fixed width, a muted Spell ID, and stays inside the viewport at every corner of the tree", async ({ page }) => {
+    for (const vp of [{ width: 1280, height: 800 }, { width: 1024, height: 700 }]) {
+      await page.setViewportSize(vp);
+      await page.goto("/guides/classes/priest");
+      const last = page.getByTestId("tree-shadow-magic");
+      await last.scrollIntoViewIfNeeded();
+      const buttons = last.getByRole("button");
+      const n = await buttons.count();
+      for (const i of [0, 3, n - 4, n - 1]) {
+        const b = buttons.nth(i);
+        await b.scrollIntoViewIfNeeded();
+        await b.hover();
+        const tip = page.getByTestId("talent-tooltip");
+        await expect(tip).toBeVisible();
+        const r = (await tip.boundingBox())!;
+        expect(r.x, `left edge (${vp.width}, node ${i})`).toBeGreaterThanOrEqual(0);
+        expect(r.x + r.width, `right edge (${vp.width}, node ${i})`).toBeLessThanOrEqual(vp.width);
+        expect(r.y, `top edge`).toBeGreaterThanOrEqual(0);
+        expect(r.y + r.height, `bottom edge`).toBeLessThanOrEqual(vp.height);
+        expect(Math.round(r.width)).toBe(288);
+        await page.mouse.move(0, 0);
+        await expect(tip).toHaveCount(0);
+      }
+    }
+  });
+
+  test("tooltip: next rank is secondary, the unresolved '?' is explicit, the Spell ID is quiet but present", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.click();
+    await pil.hover();
+    const tip = page.getByTestId("talent-tooltip");
+    const label = tip.getByText("Next rank:");
+    await expect(label).toBeVisible();
+    const cur = await tip.getByTestId("talent-description").locator("p").first().evaluate((el) => getComputedStyle(el).color);
+    const next = await label.locator("xpath=..").evaluate((el) => getComputedStyle(el).color);
+    expect(next).not.toBe(cur);
+    await expect(tip.getByText(/^Spell ID \d+$/)).toBeVisible();
+    const id = await tip.getByText(/^Spell ID \d+$/).evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(id).toBeLessThanOrEqual(11);
+    await page.mouse.move(0, 0);
+    await talent(page, "discipline", "Penance").hover();
+    await expect(page.getByTestId("talent-tooltip").locator('[data-gap]').first()).toHaveAccessibleName(/value not available/);
+  });
+});
+
+test.describe("Talent calculator V2.1: bottom sheet (touch / mobile)", () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "touch layout");
+  });
+
+  test("the sheet starts collapsed and compact, expands to the full details, and closes", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const pil = talent(page, "discipline", "Power in Light");
+    await pil.scrollIntoViewIfNeeded();
+    await pil.tap();
+    const panel = page.getByTestId("talent-detail");
+    const card = panel.getByTestId("talent-detail-card");
+    await expect(card).toHaveAttribute("data-sheet", "collapsed");
+    const vp = page.viewportSize()!;
+    const collapsed = (await card.boundingBox())!;
+    expect(collapsed.height).toBeLessThan(vp.height * 0.3); // leaves most of the tree usable
+    expect(collapsed.y + collapsed.height).toBeLessThanOrEqual(vp.height);
+    await expect(card.getByTestId("talent-detail-body")).toBeHidden();
+    // ≥44px controls, all inside the viewport width.
+    for (const b of [card.getByRole("button", { name: /Add a point/ }), card.getByRole("button", { name: /Remove a point/ }), card.getByTestId("panel-toggle"), card.getByTestId("panel-close")]) {
+      const r = (await b.boundingBox())!;
+      expect(Math.min(r.width, r.height)).toBeGreaterThanOrEqual(44);
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.width).toBeLessThanOrEqual(vp.width);
+    }
+    const toggle = card.getByTestId("panel-toggle");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.tap();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(card).toHaveAttribute("data-sheet", "expanded");
+    await expect(card.getByTestId("talent-detail-body")).toBeVisible();
+    await expect(card.getByTestId("talent-description")).toBeVisible();
+    const expanded = (await card.boundingBox())!;
+    expect(expanded.height).toBeGreaterThan(collapsed.height);
+    expect(expanded.height).toBeLessThanOrEqual(vp.height * 0.62 + 1);
+    expect(expanded.y + expanded.height).toBeLessThanOrEqual(vp.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    // Add from the sheet; close it.
+    await expect(spent(page)).toHaveText("1/51"); // the tap that selected it also added a point
+    await card.getByRole("button", { name: /Add a point/ }).tap();
+    await expect(spent(page)).toHaveText("2/51");
+    await card.getByTestId("panel-close").tap();
+    await expect(panel.getByTestId("talent-detail-card")).toHaveCount(0);
+    await expect(spent(page)).toHaveText("2/51");
+  });
+
+  test("the header wraps cleanly and the Help disclosure opens inside the screen", async ({ page }) => {
+    await page.goto("/guides/classes/priest");
+    const vp = page.viewportSize()!;
+    for (const id of ["points-spent", "points-remaining", "required-level", "share-build", "reset-build"]) {
+      const r = (await page.getByTestId(id).boundingBox())!;
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.width).toBeLessThanOrEqual(vp.width);
+    }
+    await expect(page.getByTestId("talent-hint")).toContainText("Tap a talent to add a point.");
+    const help = page.getByTestId("talent-help");
+    await help.getByText("How to use").tap();
+    const body = help.locator("div").first();
+    await expect(body).toBeVisible();
+    const r = (await body.boundingBox())!;
+    expect(r.x).toBeGreaterThanOrEqual(0);
+    expect(r.x + r.width).toBeLessThanOrEqual(vp.width);
+  });
 });

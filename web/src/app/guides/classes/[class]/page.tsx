@@ -7,7 +7,7 @@ import { getSpecGuide } from "@/components/classes/spec-guides";
 import { DataNote } from "@/components/DataNote";
 import { TalentCalculator } from "@/components/talents/TalentCalculator";
 import { CLASSES, classPath, getClass, getSpecs, specPath } from "@/lib/classes/classes";
-import { classIntro, talentSourceNote, treeRankCount } from "@/lib/classes/facts";
+import { classIntro, treeRankCount } from "@/lib/classes/facts";
 import { pageContext } from "@/lib/page";
 import { robotsFor } from "@/lib/seo";
 import { getTalentData, getTalentIcons } from "@/lib/talents/registry";
@@ -69,7 +69,7 @@ export default async function Page({ params }: { params: Params }) {
           </section>
 
           <div id="talents" className="scroll-mt-6">
-            <TalentCalculator data={data} icons={icons} sourceNote={talentSourceNote(info.id, Object.keys(icons).length)} />
+            <TalentCalculator data={data} icons={icons} />
           </div>
         </>
       ) : (

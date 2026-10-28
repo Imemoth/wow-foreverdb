@@ -47,7 +47,7 @@ export default function TalentFixturePage() {
     <div className="mx-auto max-w-7xl py-6">
       <h1 className="panel-title text-xl">Talent calculator test fixture</h1>
       <p className="mb-4 mt-1 text-sm text-mist">Internal harness: synthetic descriptions and icons on the real Priest tree. Not a public page.</p>
-      <TalentCalculator data={data} icons={icons} sourceNote="E2E fixture note." />
+      <TalentCalculator data={data} icons={icons} />
     </div>
   );
 }

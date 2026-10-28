@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { SPEC_GUIDES, getSpecGuide } from "@/components/classes/spec-guides";
 import { CLASSES, classPath, getClass, getSpec, getSpecs, specPath, specSlug } from "@/lib/classes/classes";
-import { classIntro, joinNames, talentSourceNote } from "@/lib/classes/facts";
+import { SiteFooter } from "@/components/SiteFooter";
+import * as facts from "@/lib/classes/facts";
+import { classIntro, joinNames } from "@/lib/classes/facts";
 import { getTalentData } from "@/lib/talents/registry";
 
 describe("class registry", () => {
@@ -56,17 +58,15 @@ describe("class copy only states what the data supports", () => {
     expect(classIntro("Gnome", null)).toMatch(/not available yet/);
   });
 
-  it("names the data build and states what is missing", () => {
-    const note = talentSourceNote("priest");
-    expect(note).toContain("1.60.1.70634");
-    expect(note).toMatch(/beta/i);
-    expect(note).toMatch(/Icons are not included/);
-    expect(note).toMatch(/\d+ of \d+ talents have a verified description/);
-    expect(note).toMatch(/not available for this build yet/);
-  });
-
-  it("says when description text is withheld or absent", () => {
-    expect(talentSourceNote("priest", 0, { FOREVERDB_DEPLOYMENT: "production" })).toMatch(/withheld/);
+  it("no longer carries a technical provenance panel; the legal notices live in the site footer", () => {
+    expect("talentSourceNote" in facts).toBe(false);
+    const footer = renderToStaticMarkup(createElement(SiteFooter));
+    expect(footer).toMatch(/independent, free, non-commercial fan project/);
+    expect(footer).toMatch(/not affiliated with or endorsed by Blizzard Entertainment/);
+    expect(footer).toMatch(/trademarks or registered trademarks of Blizzard Entertainment, Inc\./);
+    expect(footer).toMatch(/Blizzard Entertainment, Inc\. All rights reserved/);
+    expect(footer).toMatch(/talent names, descriptions and icons/);
+    expect(footer).toMatch(/claims no rights to them/);
   });
 });
 
