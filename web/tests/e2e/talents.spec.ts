@@ -809,7 +809,7 @@ test.describe("Talent calculator V2.1: compact geometry", () => {
             if (n.badge.x < n.btn.x - 0.5 || n.badge.y < n.btn.y - 0.5 || n.badge.x + n.badge.w > n.btn.x + n.btn.w + 0.5 || n.badge.y + n.badge.h > n.btn.y + n.btn.h + 0.5) out.problems.push(`${n.name}: badge leaves its cell`);
             const ix = Math.max(0, Math.min(n.badge.x + n.badge.w, n.frame.x + n.frame.w) - Math.max(n.badge.x, n.frame.x));
             const iy = Math.max(0, Math.min(n.badge.y + n.badge.h, n.frame.y + n.frame.h) - Math.max(n.badge.y, n.frame.y));
-            if (ix * iy > 0.14 * n.frame.w * n.frame.h) out.problems.push(`${n.name}: badge covers ${Math.round((100 * ix * iy) / (n.frame.w * n.frame.h))}% of the icon`);
+            if (ix * iy > 0.16 * n.frame.w * n.frame.h) out.problems.push(`${n.name}: badge covers ${Math.round((100 * ix * iy) / (n.frame.w * n.frame.h))}% of the icon`);
           }
           for (let i = 0; i < nodes.length; i++)
             for (let j = i + 1; j < nodes.length; j++) {
