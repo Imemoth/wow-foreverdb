@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
@@ -6,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CLASS_MOTIF, TREE_MOTIF, treeMotif } from "@/components/classes/backdrops";
 import { TalentCard } from "@/components/talents/TalentCard";
 import { CLASS_COLORS } from "@/lib/classes/colors";
-import rawPriest from "@/data/talents/forever/1.60.1.70630/priest.json";
+import rawPriest from "@/data/talents/forever/1.60.1.70634/priest.json";
 import { layoutHash } from "@/lib/talents/build-code";
 import { createEngine } from "@/lib/talents/engine";
 import { resolveTalentIcons, talentIconBase, talentIconImgOrigin } from "@/lib/talents/icons";
@@ -111,10 +112,43 @@ describe("shipped overlays", () => {
     }
   });
 
-  it("ships no icons: no client icon id for this build is available, and the report says so", () => {
-    expect(TALENT_ICONS.build).toBeNull();
-    expect(Object.keys(TALENT_ICONS.icons)).toHaveLength(0);
-    expect(coverage.summary.withValidIcon).toBe(0);
+  it("ships the icon manifest of the dataset build: every talent's spell is mapped, 358 distinct images, ids only", () => {
+    expect(TALENT_ICONS.schema).toBe("azerdex.talent-icons/1");
+    expect(TALENT_ICONS.build).toBe(BUILD);
+    const talents = CLASSES.flatMap((c) => getTalentData(c, { FOREVERDB_DEPLOYMENT: "local" })!.trees.flatMap((t) => t.talents));
+    expect(talents).toHaveLength(466);
+    for (const t of talents) {
+      const id = TALENT_ICONS.icons[String(t.spellId)];
+      expect(id !== undefined && Number.isInteger(id) && id > 0 && id < 2 ** 31, `${t.name} (${t.spellId})`).toBe(true);
+    }
+    expect(Object.keys(TALENT_ICONS.icons)).toHaveLength(466);
+    expect(new Set(Object.values(TALENT_ICONS.icons)).size).toBe(358);
+    expect(coverage.summary.withValidIcon).toBe(466);
+  });
+
+  it("the icon inventory matches the manifest one-to-one and records hashes only", () => {
+    const inv = JSON.parse(readFileSync(join(DIR, "icons-inventory.json"), "utf8")) as { build: string; uniqueImages: number; talents: number; files: Record<string, { webpSha256: string; webpBytes: number; width: number; height: number; sourceBlpSha256: string | null }> };
+    expect(inv.build).toBe(BUILD);
+    expect(inv.talents).toBe(466);
+    expect(Object.keys(inv.files).map(Number).sort((a, b) => a - b)).toEqual([...new Set(Object.values(TALENT_ICONS.icons))].sort((a, b) => a - b));
+    expect(inv.uniqueImages).toBe(358);
+    for (const [id, f] of Object.entries(inv.files)) {
+      expect(f.webpSha256, id).toMatch(/^[0-9a-f]{64}$/);
+      expect(f.sourceBlpSha256, id).toMatch(/^[0-9a-f]{64}$/);
+      expect([f.width, f.height], id).toEqual([64, 64]);
+      expect(f.webpBytes, id).toBeGreaterThan(100);
+    }
+  });
+
+  it("no Blizzard image is tracked in the repository (talent icons live only on the asset host)", () => {
+    let files: string[];
+    try {
+      files = execFileSync("git", ["ls-files"], { cwd: join(process.cwd(), ".."), encoding: "utf8" }).split("\n");
+    } catch {
+      return; // not a git checkout (e.g. an exported source tree): nothing to inspect
+    }
+    const offending = files.filter((f) => /\.blp$/i.test(f) || /talent-icons\/.+\.(webp|png|jpe?g|blp)$/i.test(f));
+    expect(offending).toEqual([]);
   });
 
   it("never mixes in an overlay from another build", () => {
@@ -250,8 +284,21 @@ describe("talent icons", () => {
     for (const bad of [0, -1, 1.5, 2 ** 31, Number.NaN, "../x" as never]) expect(resolveTalentIcons(priest, manifest({ icons: { [sid]: bad } }), base)).toEqual({});
   });
 
-  it("the shipped build resolves no icons, even with the CDN switched on", () => {
-    expect(getTalentIcons(priest, { AZERDEX_TALENT_ICONS: "cdn", NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: base })).toEqual({});
+  it("the shipped manifest resolves every talent to a versioned CDN URL only when the CDN is switched on", () => {
+    expect(getTalentIcons(priest, {})).toEqual({});
+    expect(getTalentIcons(priest, { AZERDEX_TALENT_ICONS: "1", NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: base })).toEqual({});
+    for (const c of CLASSES) {
+      const data = getTalentData(c, { FOREVERDB_DEPLOYMENT: "local" })!;
+      const urls = getTalentIcons(data, { AZERDEX_TALENT_ICONS: "cdn", NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: base });
+      const talents = data.trees.flatMap((t) => t.talents);
+      expect(Object.keys(urls), c).toHaveLength(talents.length);
+      for (const t of talents) expect(urls[t.id], `${c}/${t.name}`).toBe(`${base}/talent-icons/${BUILD}/${TALENT_ICONS.icons[String(t.spellId)]}.webp`);
+    }
+  });
+
+  it("refuses a manifest of another build (e.g. 70630 ids are never served as 70634)", () => {
+    const icons = Object.fromEntries(Object.entries(TALENT_ICONS.icons));
+    expect(resolveTalentIcons(priest, manifest({ build: "1.60.1.70630", icons }), base)).toEqual({});
   });
 
   it("the icon origin reaches img-src only, and only when configured", () => {
@@ -306,9 +353,20 @@ describe("TalentCard", () => {
     expect(one).toContain('data-complete="true"');
     expect(one).not.toContain("data-gap");
     const ranks = [1, 2, 3, 4, 5].map((n) => ({ segments: [`Text for rank ${n}`], complete: true }));
-    const at2 = render({ ...byName("Power in Light"), rankText: ranks }, {}, { [byName("Power in Light").id]: 2 });
+    const talent = { ...byName("Power in Light"), rankText: ranks };
+    const at2 = render(talent, {}, { [talent.id]: 2 });
     expect(at2).toContain("Text for rank 2");
-    expect(at2).not.toContain("Text for rank 3");
+    expect(at2).toContain("Next rank:");
+    expect(at2).toContain("Text for rank 3");
+    expect(at2).not.toContain("Text for rank 4");
+    expect(at2).not.toContain("Text for rank 1");
+    const at0 = render(talent);
+    expect(at0).toContain("Rank 1:");
+    expect(at0).toContain("Text for rank 1");
+    expect(at0).not.toContain("Text for rank 2");
+    const atMax = render(talent, {}, { [talent.id]: 5 });
+    expect(atMax).toContain("Text for rank 5");
+    expect(atMax).not.toContain("Next rank");
   });
 
   it("shows the current and next rank when per-rank text exists", () => {

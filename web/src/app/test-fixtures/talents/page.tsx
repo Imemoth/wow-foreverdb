@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { TalentCalculator } from "@/components/talents/TalentCalculator";
 import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
-import priestRaw from "@/data/talents/forever/1.60.1.70630/priest.json";
+import priestRaw from "@/data/talents/forever/1.60.1.70634/priest.json";
 import { TALENT_BUILD } from "@/lib/talents/registry";
 import { applyTalentText } from "@/lib/talents/text";
 import type { TalentClassData, TalentTextFile } from "@/lib/talents/types";

@@ -1,11 +1,14 @@
 {
   "schema": "azerdex.talent-class/1",
-  "classId": "shaman",
-  "className": "Shaman",
-  "gameClassId": 7,
+  "classId": "hunter",
+  "className": "Hunter",
+  "gameClassId": 3,
   "build": {
-    "version": "1.60.1.70630",
-    "buildId": 70630
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
   },
   "pointBudget": {
     "total": 51,
@@ -14,92 +17,92 @@
   },
   "trees": [
     {
-      "id": 11326,
-      "name": "Elemental Combat",
-      "slug": "elemental-combat",
+      "id": 11372,
+      "name": "Beast Mastery",
+      "slug": "beast-mastery",
       "rows": 7,
       "cols": 4,
       "talents": [
         {
-          "id": 104773,
-          "name": "Convection",
-          "spellId": 16039,
+          "id": 104960,
+          "name": "Deadly Aspects",
+          "spellId": 19552,
           "row": 0,
           "col": 1,
           "maxRank": 5
         },
         {
-          "id": 104772,
-          "name": "Concussion",
-          "spellId": 16035,
+          "id": 104976,
+          "name": "Endurance Training",
+          "spellId": 19583,
           "row": 0,
           "col": 2,
           "maxRank": 5
         },
         {
-          "id": 104769,
-          "name": "Elemental Devastation",
-          "spellId": 30160,
+          "id": 104975,
+          "name": "Focused Fire",
+          "spellId": 1223755,
           "row": 1,
           "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104974,
+          "name": "Improved Aspect of the Monkey",
+          "spellId": 19549,
+          "row": 1,
+          "col": 1,
           "maxRank": 3,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104767,
-          "name": "Reverberation",
-          "spellId": 16040,
+          "id": 104973,
+          "name": "Pathfinding",
+          "spellId": 19559,
           "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104972,
+          "name": "Improved Revive Pet",
+          "spellId": 24443,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104970,
+          "name": "Bestial Swiftness",
+          "spellId": 19596,
+          "row": 2,
           "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104969,
+          "name": "Unleashed Fury",
+          "spellId": 19616,
+          "row": 2,
+          "col": 2,
           "maxRank": 5,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104771,
-          "name": "Elemental Alacrity",
-          "spellId": 16578,
-          "row": 1,
-          "col": 2,
-          "maxRank": 3,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104770,
-          "name": "Call of Flame",
-          "spellId": 16038,
-          "row": 1,
-          "col": 3,
-          "maxRank": 3,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104768,
-          "name": "Elemental Focus",
-          "spellId": 16164,
-          "row": 2,
-          "col": 0,
-          "maxRank": 1,
           "pointsRequired": 10,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104765,
-          "name": "Elemental Warding",
-          "spellId": 28996,
-          "row": 2,
-          "col": 1,
-          "maxRank": 3,
-          "pointsRequired": 10,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104764,
-          "name": "Trial by Fire",
-          "spellId": 16086,
+          "id": 104968,
+          "name": "Improved Mend Pet",
+          "spellId": 19572,
           "row": 3,
           "col": 0,
           "maxRank": 2,
@@ -107,19 +110,19 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104763,
-          "name": "Eye of the Storm",
-          "spellId": 29062,
+          "id": 104967,
+          "name": "Ferocity",
+          "spellId": 19598,
           "row": 3,
-          "col": 1,
-          "maxRank": 3,
+          "col": 2,
+          "maxRank": 5,
           "pointsRequired": 15,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104762,
-          "name": "Earthbound",
-          "spellId": 1222988,
+          "id": 104966,
+          "name": "Summon Hawk",
+          "spellId": 1293241,
           "row": 3,
           "col": 3,
           "maxRank": 1,
@@ -127,9 +130,9 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104761,
-          "name": "Elemental Reach",
-          "spellId": 28999,
+          "id": 104965,
+          "name": "Spirit Bond",
+          "spellId": 19578,
           "row": 4,
           "col": 0,
           "maxRank": 2,
@@ -137,35 +140,39 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104760,
-          "name": "Lava Burst",
-          "spellId": 408490,
+          "id": 104964,
+          "name": "Intimidation",
+          "spellId": 19577,
           "row": 4,
           "col": 1,
           "maxRank": 1,
-          "pointsRequired": 20,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104759,
-          "name": "Lightning Overload",
-          "spellId": 408438,
-          "row": 4,
-          "col": 2,
-          "maxRank": 3,
           "pointsRequired": 20,
           "pointsRequiredScope": "tree",
           "requires": [
             {
-              "talentId": 104771,
+              "talentId": 104961,
+              "rule": "any"
+            },
+            {
+              "talentId": 104970,
               "rule": "any"
             }
           ]
         },
         {
-          "id": 104766,
-          "name": "Elemental Fury",
-          "spellId": 16089,
+          "id": 104963,
+          "name": "Bestial Discipline",
+          "spellId": 19590,
+          "row": 4,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104962,
+          "name": "Frenzy",
+          "spellId": 19621,
           "row": 5,
           "col": 2,
           "maxRank": 5,
@@ -173,15 +180,15 @@
           "pointsRequiredScope": "tree",
           "requires": [
             {
-              "talentId": 104759,
+              "talentId": 104967,
               "rule": "any"
             }
           ]
         },
         {
-          "id": 104758,
-          "name": "Elemental Mastery",
-          "spellId": 16166,
+          "id": 104961,
+          "name": "Bestial Wrath",
+          "spellId": 19574,
           "row": 6,
           "col": 1,
           "maxRank": 1,
@@ -189,7 +196,7 @@
           "pointsRequiredScope": "assumed-tree",
           "requires": [
             {
-              "talentId": 104760,
+              "talentId": 104964,
               "rule": "any"
             }
           ]
@@ -197,192 +204,182 @@
       ]
     },
     {
-      "id": 11363,
-      "name": "Enhancement",
-      "slug": "enhancement",
+      "id": 11371,
+      "name": "Marksmanship",
+      "slug": "marksmanship",
       "rows": 7,
       "cols": 4,
       "talents": [
         {
-          "id": 104757,
-          "name": "Earth's Grasp",
-          "spellId": 16043,
+          "id": 105013,
+          "name": "Hawk Eye",
+          "spellId": 19498,
           "row": 0,
           "col": 0,
-          "maxRank": 2
+          "maxRank": 3
         },
         {
-          "id": 104753,
-          "name": "Thundering Strikes",
-          "spellId": 16255,
+          "id": 105012,
+          "name": "Improved Concussive Shot",
+          "spellId": 19407,
           "row": 0,
           "col": 1,
           "maxRank": 5
         },
         {
-          "id": 104756,
-          "name": "Ancestral Knowledge",
-          "spellId": 17485,
+          "id": 105011,
+          "name": "Lethal Attacks",
+          "spellId": 19426,
           "row": 0,
           "col": 2,
           "maxRank": 5
         },
         {
-          "id": 104754,
-          "name": "Guardian Totems",
-          "spellId": 16258,
+          "id": 110870,
+          "name": "Improved Stings",
+          "spellId": 1310661,
           "row": 1,
           "col": 0,
-          "maxRank": 2,
+          "maxRank": 3,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104755,
-          "name": "Mental Dexterity",
-          "spellId": 415140,
+          "id": 105009,
+          "name": "Efficiency",
+          "spellId": 19416,
           "row": 1,
           "col": 1,
-          "maxRank": 3,
+          "maxRank": 5,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104752,
-          "name": "Improved Ghost Wolf",
-          "spellId": 16262,
+          "id": 105008,
+          "name": "Careful Aim",
+          "spellId": 1223984,
           "row": 1,
           "col": 2,
-          "maxRank": 2,
+          "maxRank": 5,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104751,
-          "name": "Improved Lightning Shield",
-          "spellId": 16261,
-          "row": 1,
-          "col": 3,
-          "maxRank": 3,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104750,
-          "name": "Elemental Weapons",
-          "spellId": 16266,
+          "id": 105005,
+          "name": "Rapid Killing",
+          "spellId": 415405,
           "row": 2,
           "col": 0,
-          "maxRank": 3,
+          "maxRank": 2,
           "pointsRequired": 10,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104749,
-          "name": "Shamanistic Focus",
-          "spellId": 1223030,
+          "id": 105006,
+          "name": "Improved Arcane Shot",
+          "spellId": 19454,
           "row": 2,
-          "col": 2,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105007,
+          "name": "Lone Wolf",
+          "spellId": 415370,
+          "row": 2,
+          "col": 3,
           "maxRank": 1,
           "pointsRequired": 10,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104748,
-          "name": "Anticipation",
-          "spellId": 16254,
-          "row": 2,
-          "col": 3,
-          "maxRank": 3,
-          "pointsRequired": 10,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104746,
-          "name": "Toughness",
-          "spellId": 16252,
+          "id": 105004,
+          "name": "Trueshot Aura",
+          "spellId": 1299346,
           "row": 3,
-          "col": 0,
-          "maxRank": 5,
+          "col": 1,
+          "maxRank": 1,
           "pointsRequired": 15,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104747,
-          "name": "Flurry",
-          "spellId": 16256,
+          "id": 105002,
+          "name": "Mortal Shots",
+          "spellId": 19485,
           "row": 3,
-          "col": 1,
+          "col": 2,
           "maxRank": 5,
           "pointsRequired": 15,
           "pointsRequiredScope": "tree",
           "requires": [
             {
-              "talentId": 104755,
+              "talentId": 105008,
               "rule": "any"
             }
           ]
         },
         {
-          "id": 104743,
-          "name": "Stormstrike",
-          "spellId": 17364,
+          "id": 105003,
+          "name": "Improved Serpent Sting",
+          "spellId": 19464,
           "row": 3,
-          "col": 2,
-          "maxRank": 1,
+          "col": 3,
+          "maxRank": 5,
           "pointsRequired": 15,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104745,
-          "name": "Spirit Weapons",
-          "spellId": 16268,
+          "id": 104999,
+          "name": "Rapid Recuperation",
+          "spellId": 1223987,
           "row": 4,
           "col": 0,
-          "maxRank": 1,
-          "pointsRequired": 20,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104744,
-          "name": "Mental Quickness",
-          "spellId": 30812,
-          "row": 4,
-          "col": 1,
           "maxRank": 2,
           "pointsRequired": 20,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104742,
-          "name": "Improved Stormstrike",
-          "spellId": 1223031,
-          "row": 4,
-          "col": 2,
-          "maxRank": 2,
-          "pointsRequired": 20,
-          "pointsRequiredScope": "tree",
+          "pointsRequiredScope": "assumed-tree",
           "requires": [
             {
-              "talentId": 104743,
+              "talentId": 105005,
               "rule": "any"
             }
           ]
         },
         {
-          "id": 104741,
-          "name": "Maelstrom Weapon",
-          "spellId": 408498,
+          "id": 105001,
+          "name": "Barrage",
+          "spellId": 19461,
+          "row": 4,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105000,
+          "name": "Scatter Shot",
+          "spellId": 19503,
+          "row": 4,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 104998,
+          "name": "Ranged Weapon Specialization",
+          "spellId": 19507,
           "row": 5,
           "col": 2,
           "maxRank": 5,
           "pointsRequired": 25,
-          "pointsRequiredScope": "tree"
+          "pointsRequiredScope": "assumed-tree"
         },
         {
-          "id": 104740,
-          "name": "Rage of the Farseer",
-          "spellId": 425336,
+          "id": 104997,
+          "name": "Sniper Shot",
+          "spellId": 1310687,
           "row": 6,
           "col": 1,
           "maxRank": 1,
@@ -390,7 +387,7 @@
           "pointsRequiredScope": "assumed-tree",
           "requires": [
             {
-              "talentId": 104744,
+              "talentId": 105004,
               "rule": "any"
             }
           ]
@@ -398,82 +395,82 @@
       ]
     },
     {
-      "id": 11362,
-      "name": "Restoration",
-      "slug": "restoration",
+      "id": 11370,
+      "name": "Survival",
+      "slug": "survival",
       "rows": 7,
       "cols": 4,
       "talents": [
         {
-          "id": 104739,
-          "name": "Improved Healing Wave",
-          "spellId": 16182,
+          "id": 104996,
+          "name": "Improved Tracking",
+          "spellId": 24293,
           "row": 0,
           "col": 1,
           "maxRank": 5
         },
         {
-          "id": 104729,
-          "name": "Tidal Focus",
-          "spellId": 16179,
+          "id": 104995,
+          "name": "Deflection",
+          "spellId": 19295,
           "row": 0,
           "col": 2,
           "maxRank": 5
         },
         {
-          "id": 104734,
-          "name": "Mindfulness",
-          "spellId": 1223033,
+          "id": 104994,
+          "name": "Entrapment",
+          "spellId": 19184,
           "row": 1,
           "col": 0,
-          "maxRank": 3,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104736,
-          "name": "Natural Grace",
-          "spellId": 29187,
-          "row": 1,
-          "col": 1,
-          "maxRank": 3,
-          "pointsRequired": 5,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104735,
-          "name": "Totemic Focus",
-          "spellId": 16173,
-          "row": 1,
-          "col": 2,
           "maxRank": 5,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104737,
-          "name": "Improved Reincarnation",
-          "spellId": 16184,
+          "id": 104993,
+          "name": "Savage Strikes",
+          "spellId": 19159,
           "row": 1,
-          "col": 3,
+          "col": 1,
           "maxRank": 2,
           "pointsRequired": 5,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104731,
-          "name": "Ancestral Healing",
-          "spellId": 16176,
+          "id": 104992,
+          "name": "Survivalist",
+          "spellId": 19255,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104990,
+          "name": "Improved Wing Clip",
+          "spellId": 19228,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104991,
+          "name": "Clever Traps",
+          "spellId": 19239,
           "row": 2,
           "col": 0,
-          "maxRank": 3,
+          "maxRank": 2,
           "pointsRequired": 10,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104733,
-          "name": "Healing Focus",
-          "spellId": 16181,
+          "id": 104987,
+          "name": "Surefooted",
+          "spellId": 19290,
           "row": 2,
           "col": 1,
           "maxRank": 3,
@@ -481,9 +478,9 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104732,
-          "name": "Water Shield",
-          "spellId": 408510,
+          "id": 104986,
+          "name": "Deterrence",
+          "spellId": 19263,
           "row": 2,
           "col": 2,
           "maxRank": 1,
@@ -491,59 +488,85 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104738,
-          "name": "Tidal Mastery",
-          "spellId": 16194,
+          "id": 104988,
+          "name": "Survival Tactics",
+          "spellId": 19376,
           "row": 3,
           "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110861,
+          "name": "Predator's Edge",
+          "spellId": 1310627,
+          "row": 3,
+          "col": 1,
           "maxRank": 5,
           "pointsRequired": 15,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104730,
-          "name": "Restorative Totems",
-          "spellId": 16187,
-          "row": 3,
-          "col": 1,
-          "maxRank": 5,
-          "pointsRequired": 15,
-          "pointsRequiredScope": "tree"
-        },
-        {
-          "id": 104728,
-          "name": "Mana Tide Totem",
-          "spellId": 16190,
+          "id": 104989,
+          "name": "Counterattack",
+          "spellId": 19306,
           "row": 3,
           "col": 2,
           "maxRank": 1,
           "pointsRequired": 15,
-          "pointsRequiredScope": "tree"
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 104986,
+              "rule": "any"
+            }
+          ]
         },
         {
-          "id": 104727,
-          "name": "Healing Way",
-          "spellId": 29206,
+          "id": 104983,
+          "name": "Resourcefulness",
+          "spellId": 440529,
           "row": 4,
-          "col": 1,
-          "maxRank": 3,
+          "col": 0,
+          "maxRank": 2,
           "pointsRequired": 20,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104726,
-          "name": "Nature's Swiftness",
-          "spellId": 16188,
+          "id": 104985,
+          "name": "Expose Prey",
+          "spellId": 1310532,
+          "row": 4,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110860,
+          "name": "Survivalist's Discipline",
+          "spellId": 1310496,
           "row": 4,
           "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 104981,
+          "name": "Strider Kick",
+          "spellId": 1317257,
+          "row": 4,
+          "col": 3,
           "maxRank": 1,
           "pointsRequired": 20,
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104725,
-          "name": "Purification",
-          "spellId": 16178,
+          "id": 110859,
+          "name": "Lightning Reflexes",
+          "spellId": 19168,
           "row": 5,
           "col": 2,
           "maxRank": 5,
@@ -551,9 +574,9 @@
           "pointsRequiredScope": "tree"
         },
         {
-          "id": 104724,
-          "name": "Riptide",
-          "spellId": 408521,
+          "id": 104984,
+          "name": "Lacerating Strikes",
+          "spellId": 1310533,
           "row": 6,
           "col": 1,
           "maxRank": 1,
@@ -561,7 +584,7 @@
           "pointsRequiredScope": "assumed-tree",
           "requires": [
             {
-              "talentId": 104727,
+              "talentId": 104985,
               "rule": "any"
             }
           ]

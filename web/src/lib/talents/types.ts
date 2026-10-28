@@ -62,7 +62,8 @@ export interface TalentClassData {
   classId: string;
   className: string;
   gameClassId: number;
-  build: { version: string; buildId: number };
+  /** layoutCompatibleWith: earlier builds whose talent layout was verified identical by the importer (their share links stay valid). */
+  build: { version: string; buildId: number; layoutCompatibleWith?: string[] };
   /** Total points from the client's point-level table (one point per level from firstPointLevel to lastPointLevel). */
   pointBudget: { total: number; firstPointLevel: number; lastPointLevel: number };
   trees: TalentTree[];

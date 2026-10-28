@@ -4,8 +4,11 @@
   "className": "Rogue",
   "gameClassId": 4,
   "build": {
-    "version": "1.60.1.70630",
-    "buildId": 70630
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
   },
   "pointBudget": {
     "total": 51,

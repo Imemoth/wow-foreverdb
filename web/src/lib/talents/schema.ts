@@ -48,7 +48,13 @@ export const TalentClassSchema = z
     classId: z.string().regex(/^[a-z]+$/),
     className: z.string().min(2).max(20),
     gameClassId: z.number().int().positive(),
-    build: z.object({ version: z.string().regex(/^\d+\.\d+\.\d+\.\d+$/), buildId: z.number().int().positive() }).strict(),
+    build: z
+      .object({
+        version: z.string().regex(/^\d+\.\d+\.\d+\.\d+$/),
+        buildId: z.number().int().positive(),
+        layoutCompatibleWith: z.array(z.string().regex(/^\d+\.\d+\.\d+\.\d+$/)).max(4).optional(),
+      })
+      .strict(),
     pointBudget: z
       .object({ total: z.number().int().positive(), firstPointLevel: z.number().int().positive(), lastPointLevel: z.number().int().positive() })
       .strict(),

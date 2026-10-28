@@ -26,6 +26,7 @@ export function talentSourceNote(classId: string, iconCount = 0, env: Readonly<R
   const text = getTextStatus(classId, env);
   const parts = [
     `Talent structure (names, ranks, grid positions, prerequisites, tier requirements) from the WoW: Forever beta client, build ${build.version}, as extracted by the Everloot project (commit ${source.commit.slice(0, 7)}).`,
+    "Talent names, description text and icons are World of Warcraft game content (c) Blizzard Entertainment, Inc.; AzerDex is an independent fan site and is not affiliated with or endorsed by Blizzard.",
   ];
   if (text.state === "none" && iconCount === 0) {
     parts.push("Rank descriptions and icons are not included because no verified, build-matched source is available yet.");
@@ -37,7 +38,7 @@ export function talentSourceNote(classId: string, iconCount = 0, env: Readonly<R
     } else if (text.state === "withheld") parts.push("Description text is withheld on this deployment.");
     else if (text.state === "mismatch") parts.push(`Description text supplied for build ${text.textBuild ?? "unknown"} was ignored because it does not match build ${build.version}.`);
     else parts.push("Rank descriptions are not included because no verified, build-matched source is available yet.");
-    parts.push(iconCount > 0 ? `Icons: client art for ${iconCount} talents, served from the AzerDex asset host (build ${build.version}).` : "Icons are not included; talents show their names.");
+    parts.push(iconCount > 0 ? `Icons: Blizzard client art for ${iconCount} talents, read from the same client build (${build.version}) and served from the AzerDex asset host.` : "Icons are not included; talents show their names.");
   }
   parts.push("Beta data: not confirmed for the release client and subject to change.");
   return parts.join(" ");

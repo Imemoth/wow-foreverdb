@@ -7,7 +7,9 @@
 | cjber/tweaks-forever overlay data | Comparison evidence only | Not imported | Not used |
 | Fonts: Cinzel, Inter, JetBrains Mono | Fontsource npm packages | SIL OFL 1.1 | Self-hosted |
 | ForeverDB logo, category glyphs, location plots | Original SVG in `web/src/components` | Project-owned | Used |
-| Item/spell icons | Blizzard | Not licensed | **Not used.** The Class Guides talent calculator has an optional, **off-by-default** path for talent icons from the allow-listed asset host only (never git); see [`class-guides-talents.md`](class-guides-talents.md#icons) |
+| Item/spell icons | Blizzard | Not licensed | **Not used.** The Class Guides talent calculator has an optional, **off-by-default** path for talent icons from the allow-listed asset host only (never git). 358 icons (build 1.60.1.70634) are validated and staged for review, **not uploaded**; enabling them anywhere needs the owner's explicit approval; see [`class-guides-talents.md`](class-guides-talents.md#icons) and [Publication and rights](class-guides-talents.md#publication-and-rights) |
+| Talent names, ranks, positions and description text (Class Guides) | Blizzard game data read from the Forever client (Everloot catalog; owner's local export) | Not licensed; attribution shown | Shown on beta/preview/local; **withheld on production** unless `AZERDEX_TALENT_TEXT=1` (owner decision pending) |
+| Everloot / TalentForge / extraction tooling | Third-party code and data | Everloot AGPL-3.0 code (its data is Blizzard's); TalentForge has no licence | References and cross-checks only; no code redistributed |
 | Class/tree backdrops (Class Guides) | Original inline SVG in `web/src/components/classes/backdrops.tsx` | Project-owned | Used |
 
 ## V1 decision

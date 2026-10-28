@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CLASSES, getSpecs } from "@/lib/classes/classes";
-import { decodeBuild, encodeBuild } from "@/lib/talents/build-code";
+import { decodeBuild, encodeBuild, layoutHash } from "@/lib/talents/build-code";
 import { createEngine } from "@/lib/talents/engine";
 import { availableTalentClasses, getTalentData, TALENT_BUILD, TALENT_MANIFEST } from "@/lib/talents/registry";
 import { TalentClassSchema, validateTalentClass } from "@/lib/talents/schema";
@@ -26,7 +26,7 @@ describe("shipped talent data (WoW: Forever)", () => {
 
     it("is stamped with the dataset build and has three trees", () => {
       expect(data.classId).toBe(id);
-      expect(data.build).toEqual({ version: TALENT_BUILD.version, buildId: TALENT_BUILD.buildId });
+      expect(data.build).toEqual({ version: TALENT_BUILD.version, buildId: TALENT_BUILD.buildId, layoutCompatibleWith: ["1.60.1.70630"] });
       expect(data.trees).toHaveLength(3);
     });
 
@@ -97,5 +97,39 @@ describe("shipped talent data (WoW: Forever)", () => {
     expect(TALENT_MANIFEST.source.repository).toMatch(/^https:\/\//);
     expect(TALENT_MANIFEST.build.version).toBe(TALENT_BUILD.version);
     expect(Object.keys(TALENT_MANIFEST.source.sha256).sort()).toEqual(CLASSES.map((c) => c.id).sort());
+  });
+});
+
+// Layout hashes of the 1.60.1.70630 dataset, captured from that dataset before the move to 1.60.1.70634 (the hash covers the
+// class, the build string, tree ids and every talent's id and max rank). Pinned as literals so a later change to the
+// structure or to the hash cannot silently invalidate links that were shared for 70630.
+const LEGACY_70630_HASH: Record<string, string> = {
+  warrior: "1tb877i", paladin: "trhiq1", hunter: "1lmnj7k", rogue: "1t7bvh1", priest: "1k68lpi", shaman: "1scyk30", mage: "xqy51a", warlock: "mi4cb2", druid: "1xgbguo",
+};
+
+describe("share links made for build 1.60.1.70630", () => {
+  it.each(CLASSES.map((c) => c.id))("%s: the dataset declares and reproduces the 70630 layout, and old links decode", (id) => {
+    const data = getTalentData(id) as TalentClassData;
+    expect(data.build.layoutCompatibleWith).toEqual(["1.60.1.70630"]);
+    expect(layoutHash(data, "1.60.1.70630")).toBe(LEGACY_70630_HASH[id]);
+    expect(layoutHash(data)).not.toBe(LEGACY_70630_HASH[id]); // new links carry the new build
+    const engine = createEngine(data);
+    // A real allocation: the first talent of every tree that has no requirements, one point each.
+    const alloc: Record<number, number> = {};
+    for (const t of data.trees) alloc[t.talents[0]!.id] = 1;
+    const modern = encodeBuild(data, alloc);
+    const legacy = `${LEGACY_70630_HASH[id]}.${modern.split(".")[1]}`;
+    const a = decodeBuild(engine, legacy), b = decodeBuild(engine, modern);
+    expect(a).toEqual(b);
+    expect(a.ok).toBe(true);
+  });
+
+  it("a link from any other build is still refused", () => {
+    const data = getTalentData("priest") as TalentClassData;
+    const engine = createEngine(data);
+    const modern = encodeBuild(data, { [data.trees[0]!.talents[0]!.id]: 1 });
+    const tail = modern.split(".")[1];
+    expect(decodeBuild(engine, `${layoutHash(data, "1.60.1.70532")}.${tail}`)).toEqual({ ok: false, reason: "layout" });
+    expect(decodeBuild(engine, `${LEGACY_70630_HASH.mage}.${tail}`)).toEqual({ ok: false, reason: "layout" });
   });
 });

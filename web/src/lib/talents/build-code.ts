@@ -18,7 +18,7 @@ const MAX_CODE_LENGTH = 160;
 const SHAPE = /^([0-9a-z]{1,8})\.([0-9]*(?:-[0-9]*)*)$/;
 
 /** FNV-1a (32 bit) over the layout, as base-36. Not a security feature: only detects mismatching data versions. */
-export function layoutHash(data: TalentClassData): string {
+export function layoutHash(data: TalentClassData, buildVersion: string = data.build.version): string {
   let h = 0x811c9dc5;
   const feed = (s: string) => {
     for (let i = 0; i < s.length; i++) {
@@ -26,7 +26,7 @@ export function layoutHash(data: TalentClassData): string {
       h = Math.imul(h, 0x01000193) >>> 0;
     }
   };
-  feed(`${data.classId}|${data.build.version}`);
+  feed(`${data.classId}|${buildVersion}`);
   for (const t of data.trees) {
     feed(`|T${t.id}`);
     for (const x of t.talents) feed(`,${x.id}:${x.maxRank}`);
@@ -46,7 +46,10 @@ export function decodeBuild(engine: TalentEngine, code: string | null | undefine
   const { data } = engine;
   const segments = m[2]!.split("-");
   if (segments.length !== data.trees.length) return { ok: false, reason: "format" };
-  if (m[1] !== layoutHash(data)) return { ok: false, reason: "layout" };
+  // A link made for an earlier build is accepted only when the dataset declares that build's layout identical to its own
+  // (verified by the importer, see import-talent-catalog.mjs). Anything else is refused.
+  const known = [layoutHash(data), ...(data.build.layoutCompatibleWith ?? []).map((v) => layoutHash(data, v))];
+  if (!known.includes(m[1]!)) return { ok: false, reason: "layout" };
 
   const allocation: Record<number, number> = {};
   for (const [i, tree] of data.trees.entries()) {

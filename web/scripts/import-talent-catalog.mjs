@@ -3,6 +3,12 @@
 // into AzerDex's own versioned talent format (src/lib/talents/types.ts) plus a provenance manifest.
 //
 //   node scripts/import-talent-catalog.mjs <catalogDir> --commit <sha> [--out <dir>]
+//        [--previous <dir of the previous build's output> --layout-compatible <previous build version>]
+//
+// --layout-compatible: declares that this build's talent layout is IDENTICAL to the previous build's, so share links made for
+// that build stay valid (build-code.ts accepts their layout hash). It is accepted only after this script has compared every
+// class, tree, talent (ids, names, spell ids, positions, ranks, gates, prerequisites) with --previous and found no difference;
+// any difference is an error. Nothing is relabelled: the data keeps its own build.
 //
 // <catalogDir> holds druid.json ... warrior.json. Nothing is added, guessed or edited by hand: every field
 // is copied or mechanically derived, and the manifest records the sha256 of each source and output file so
@@ -97,6 +103,19 @@ for (const cls of CLASSES) {
     trees,
   };
   outputs.push([cls, out]);
+}
+
+const compatible = arg("layout-compatible");
+const previousDir = arg("previous");
+if (compatible && !previousDir) throw new Error("--layout-compatible needs --previous <dir>");
+if (compatible) {
+  const strip = (o) => JSON.stringify({ ...o, build: undefined });
+  for (const [cls, out] of outputs) {
+    const prev = JSON.parse(readFileSync(join(resolve(previousDir), `${cls}.json`), "utf8"));
+    if (prev.build.version !== compatible) throw new Error(`${cls}: previous output is build ${prev.build.version}, not ${compatible}`);
+    if (strip(prev) !== strip(out)) throw new Error(`${cls}: layout differs from build ${compatible}; refusing to declare compatibility`);
+    out.build = { ...out.build, layoutCompatibleWith: [compatible] };
+  }
 }
 
 const outDir = resolve(arg("out") ?? join("src", "data", "talents", "forever", build.version));

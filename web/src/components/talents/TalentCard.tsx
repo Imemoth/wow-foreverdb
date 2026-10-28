@@ -36,8 +36,17 @@ export function TalentCard({ engine, alloc, talent, tree, icon, compact = false 
   const anyOf = talentReqs.filter((r) => r.anyOf);
   const add = engine.canAdd(alloc, talent.id);
   const descriptions = talent.descriptions;
-  const built = textForRank(talent, rank);
-  const gapCodes = built ? [...new Set(built.segments.flatMap((g) => (typeof g === "string" ? [] : [g.c])))] : [];
+  // Text that differs per rank is shown like the game does: the current rank, then the next one ("Rank 1:" before the first point).
+  const perRank = (talent.rankText?.length ?? 0) > 1;
+  const shown: Array<{ label: string | null; text: NonNullable<ReturnType<typeof textForRank>> }> = [];
+  if (talent.rankText) {
+    if (!perRank) shown.push({ label: null, text: textForRank(talent, rank)! });
+    else {
+      if (rank > 0) shown.push({ label: null, text: textForRank(talent, rank)! });
+      if (rank < talent.maxRank) shown.push({ label: rank > 0 ? "Next rank:" : "Rank 1:", text: textForRank(talent, rank + 1)! });
+    }
+  }
+  const gapCodes = [...new Set(shown.flatMap((x) => x.text.segments.flatMap((g) => (typeof g === "string" ? [] : [g.c]))))];
 
   return (
     <div className="space-y-2 text-sm text-parchment">
@@ -82,11 +91,14 @@ export function TalentCard({ engine, alloc, talent, tree, icon, compact = false 
         </ul>
       )}
 
-      {built ? (
-        <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs" data-testid="talent-description" data-complete={built.complete ? "true" : "false"}>
-          <p className="whitespace-pre-line">
-            <Segments segments={built.segments} />
-          </p>
+      {shown.length > 0 ? (
+        <div className="space-y-1.5 border-t border-ink-700 pt-2 text-xs" data-testid="talent-description" data-complete={shown.every((x) => x.text.complete) ? "true" : "false"}>
+          {shown.map((x, i) => (
+            <p key={i} className={x.label && rank > 0 ? "whitespace-pre-line text-mist" : "whitespace-pre-line"}>
+              {x.label && <span className="font-semibold">{x.label} </span>}
+              <Segments segments={x.text.segments} />
+            </p>
+          ))}
           {gapCodes.length > 0 && (
             <p className="text-[11px] text-mist" data-testid="talent-description-gaps">
               <span className="font-mono text-gold-300">?</span> marks a number that is not available for this game build yet
