@@ -13,7 +13,7 @@ export function ClassGuidesEntry() {
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="max-w-2xl">
           <h2 id="class-guides-entry" className="panel-title text-xl">Class guides &amp; talent calculator</h2>
-          <p className="text-sm text-mist">Browse every class&apos;s talent trees, plan a build with shareable links, and read specialization guides.</p>
+          <p className="hidden text-sm text-mist sm:block">Browse every class&apos;s talent trees, plan a build with shareable links, and read specialization guides.</p>
         </div>
         <Link href="/guides/classes" className="btn-primary inline-flex text-sm">Browse classes</Link>
       </div>

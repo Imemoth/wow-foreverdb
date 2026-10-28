@@ -17,7 +17,7 @@ export function ClassCard({ info }: { info: ClassInfo }) {
   const art = classCardArt(info.id);
   return (
     <li
-      className={`group relative isolate flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl border border-t-2 bg-ink-900 shadow-lg transition-[border-color,box-shadow] duration-300 hover:shadow-xl has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-violet-400 ${s.border}`}
+      className={`group relative isolate flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl border border-t-2 bg-ink-900 shadow-lg transition-[border-color,box-shadow] duration-300 hover:shadow-xl has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet-400 ${s.border}`}
       data-testid={`class-card-${info.id}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- static same-origin asset; responsive srcset without next/image's inline styles (page CSP) */}

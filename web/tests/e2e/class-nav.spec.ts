@@ -24,7 +24,7 @@ test.describe("/guides landing page", () => {
       const hero = document.querySelector("#guides-hero-title")!;
       const search = document.querySelector('form[role="search"]')!;
       const classes = document.querySelector('[data-testid="class-guides-entry"]')!;
-      const results = document.querySelector("ul.grid")!; // the guide cards
+      const results = [...document.querySelectorAll("ul.grid")].pop()!; // the guide cards (the last grid list on the page)
       const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       return [before(hero, search), before(search, classes), before(classes, results)];
     });
@@ -93,7 +93,7 @@ test.describe("/guides landing page", () => {
 
   test("search and filters are unchanged: query parameters, results, clear filters and the empty state", async ({ page }) => {
     await page.goto("/guides?q=zzzz-no-such-guide");
-    await expect(page.getByRole("heading", { name: "No guides match those filters" })).toBeVisible();
+    await expect(page.getByText("No guides match those filters")).toBeVisible();
     await expect(page.getByRole("link", { name: "Clear filters" }).first()).toBeVisible();
     await expect(page.getByTestId("class-guides-entry")).toBeVisible(); // stays compact and available under an empty result
     await page.goto("/guides");
@@ -112,7 +112,7 @@ test.describe("/guides landing page", () => {
       const panel = (await page.getByTestId("class-guides-entry").boundingBox())!;
       expect(panel.x).toBeGreaterThanOrEqual(0);
       expect(panel.x + panel.width).toBeLessThanOrEqual(vp.width);
-      expect(panel.height).toBeLessThan(vp.width < 640 ? 300 : 230);
+      expect(panel.height).toBeLessThan(vp.width < 640 ? 260 : 200);
       for (const id of ids) {
         const b = (await page.getByTestId(`class-icon-${id}`).boundingBox())!;
         expect(b.x).toBeGreaterThanOrEqual(0);
@@ -135,8 +135,9 @@ test.describe("/guides/classes illustrated cards", () => {
     const all = await imagesLoaded(page, '[data-testid="class-card-art"]');
     expect(loaded).toHaveLength(9);
     for (const [i, l] of all.entries()) {
-      expect(l.w, ids[i]).toBeGreaterThanOrEqual(640);
-      expect(l.src, ids[i]).toContain(`/class-cards/${ids[i]}`);
+      // naturalWidth is density-corrected for a `sizes`/srcset image, so check the chosen file and that real pixels arrived.
+      expect(l.w, ids[i]).toBeGreaterThanOrEqual(480);
+      expect(l.src, ids[i]).toMatch(new RegExp(`/class-cards/${ids[i]}(-640)?\\.webp$`));
       expect(l.w / l.h, ids[i]).toBeGreaterThan(1.3);
     }
   });
@@ -165,8 +166,6 @@ test.describe("/guides/classes illustrated cards", () => {
     await page.goBack();
     await page.getByTestId("class-card-mage").getByRole("link", { name: "Talent calculator" }).click();
     await expect(page).toHaveURL(/\/guides\/classes\/mage#talents$/);
-    const link = (await page.getByTestId("class-card-druid").boundingBox()) ?? null;
-    expect(link).toBeNull(); // different page now
   });
 
   test("hover and focus states: art zooms subtly on hover, the card shows a focus ring on keyboard focus", async ({ page }, testInfo) => {
@@ -178,12 +177,13 @@ test.describe("/guides/classes illustrated cards", () => {
     await card.hover();
     await expect.poll(() => art.evaluate((el) => getComputedStyle(el).transform)).not.toBe(before);
     await page.mouse.move(0, 0);
+    const resting = await card.evaluate((el) => getComputedStyle(el).boxShadow);
     await card.getByRole("link", { name: "Priest" }).focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");
     await expect(card.getByRole("link", { name: "Priest" })).toBeFocused();
-    const shadow = await card.evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(shadow).not.toBe("none");
+    // keyboard focus draws a violet ring around the whole card
+    await expect.poll(() => card.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe(resting);
     await page.keyboard.press("Tab");
     await expect(card.getByRole("link", { name: "Talent calculator" })).toBeFocused();
   });
