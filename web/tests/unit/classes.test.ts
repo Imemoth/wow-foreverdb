@@ -7,8 +7,9 @@ import { classIntro, joinNames, talentSourceNote } from "@/lib/classes/facts";
 import { getTalentData } from "@/lib/talents/registry";
 
 describe("class registry", () => {
-  it("lists the nine classes once each, in the order of the Class Guides", () => {
-    expect(CLASSES.map((c) => c.name)).toEqual(["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid"]);
+  it("lists the nine classes once each, alphabetically (the order of the class chooser)", () => {
+    expect(CLASSES.map((c) => c.name)).toEqual(["Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]);
+    expect(CLASSES.map((c) => c.name)).toEqual([...CLASSES.map((c) => c.name)].sort((a, b) => a.localeCompare(b)));
     expect(new Set(CLASSES.map((c) => c.id)).size).toBe(9);
     for (const c of CLASSES) expect(c.color).toMatch(/^#[0-9A-F]{6}$/);
   });
