@@ -320,7 +320,7 @@ md.push(`| Ranks (all nodes) | ${summary.ranksTotal} | |`, `| Ranks fully resolv
 md.push(`| Nodes with a valid icon | ${summary.withValidIcon} | ${pct(summary.withValidIcon)} |`, "");
 md.push("Unresolved numbers by reason (nodes affected): " + (Object.entries(gapTotals).map(([c, n]) => `${c} ${n}`).join(", ") || "none"), "");
 if (source.referencedSpells) md.push(`Referenced spell facts: ${source.referencedSpells.ref}, sha256 ${source.referencedSpells.sha256} (build ${build}).`, "");
-md.push("Reason codes:  + Object.entries(GAP_TEXT).map(([c, t]) => `**${c}** - ${t}`).join(" "), "");
+md.push("Reason codes: " + Object.entries(GAP_TEXT).map(([c, t]) => `**${c}** - ${t}`).join(" "), "");
 const group = (title, status) => {
   const list = rows.filter((r) => (Array.isArray(status) ? status.includes(r.status) : r.status === status));
   md.push(`## ${title} (${list.length})`, "", "| Node id | Talent | Class / tree | Spell id | Ranks | Reason |", "| ---: | --- | --- | ---: | ---: | --- |");
