@@ -44,14 +44,21 @@ const icons = JSON.parse(readFileSync(join(dataset, "icons.json"), "utf8"));
 const inv = JSON.parse(readFileSync(join(dataset, "icons-inventory.json"), "utf8"));
 // Everything taken from the data files that ends up in a URL or a path is validated first: a build is four dot-separated
 // numbers and a FileDataID a positive 31-bit integer; anything else aborts before any request is made.
-if (!/^\d+\.\d+\.\d+\.\d+$/.test(String(icons.build))) throw new Error("icons.json: malformed build");
-const build = String(icons.build);
+// Validated values are re-encoded character by character from a fixed alphabet before they are used in a URL or path, so what reaches a
+// request is made of known characters only (not of the file's own string).
+const ALPHABET = { 0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", ".": "." };
+const canon = (value, pattern, what) => {
+  const text = String(value);
+  if (!pattern.test(text)) throw new Error(`icons.json: malformed ${what}`);
+  return Array.from(text, (c) => ALPHABET[c]).join("");
+};
+const build = canon(icons.build, /^[1-9][0-9]{0,3}\.[0-9]{1,4}\.[0-9]{1,4}\.[1-9][0-9]{0,5}$/, "build");
 if (inv.build !== build) throw new Error(`inventory is for ${inv.build}, manifest for ${build}`);
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 const ids = [...new Set(Object.values(icons.icons))]
   .map((v) => {
     if (!Number.isSafeInteger(v) || v <= 0 || v >= 2 ** 31) throw new Error(`icons.json: invalid FileDataID ${JSON.stringify(v)}`);
-    return v;
+    return Number(canon(v, /^[1-9][0-9]{0,9}$/, "FileDataID"));
   })
   .sort((a, b) => a - b);
 const results = [];
@@ -60,7 +67,7 @@ const note = (id, ok, detail) => results.push({ id, ok, ...detail });
 async function check(id) {
   const rec = inv.files[String(id)];
   if (!rec) return note(id, false, { error: "not in inventory" });
-  const rel = `talent-icons/${build}/${id}.webp`;
+  const rel = `talent-icons/${build}/${canon(id, /^[1-9][0-9]{0,9}$/, "FileDataID")}.webp`;
   if (dir) {
     const p = join(dir, rel);
     if (!existsSync(p)) return note(id, false, { error: "file missing" });
