@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // READ-ONLY verification of the talent icons on an asset host (HTTP GET only: no upload, no credentials).
 //
-//   node scripts/verify-talent-icons-cdn.mjs --base https://azerdex-assets.pages.dev --dataset src/data/talents/forever/<build> [--out evidence.json]
+//   node scripts/verify-talent-icons-cdn.mjs --base https://azerdex-assets.pages.dev --dataset src/data/talents/forever/<build> > evidence.json    (the evidence JSON goes to stdout; redirect it)
 //   node scripts/verify-talent-icons-cdn.mjs --dir <staging dir containing talent-icons/<build>/> --dataset <dir>     (offline, before upload)
 //
 // For every distinct FileDataID in icons.json it checks, against icons-inventory.json: HTTP 200, Content-Type image/webp,
 // the exact byte length and sha256, and reports the cache and nosniff headers. An unknown id must answer 404 (so a host that
 // answers 200 to everything, e.g. an SPA fallback, is caught). An unreachable host is a FAIL, never a pass.
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const arg = (n) => {
@@ -19,15 +19,23 @@ const dataset = resolve(arg("dataset") ?? "");
 const base = arg("base")?.replace(/\/+$/, "");
 const dir = arg("dir") ? resolve(arg("dir")) : null;
 if (!arg("dataset") || (!base && !dir)) {
-  console.error("usage: verify-talent-icons-cdn.mjs --dataset <dir> (--base <https origin> | --dir <staging dir>) [--out <file>]");
+  console.error("usage: verify-talent-icons-cdn.mjs --dataset <dir> (--base <https origin> | --dir <staging dir>)");
   process.exit(2);
 }
 const icons = JSON.parse(readFileSync(join(dataset, "icons.json"), "utf8"));
 const inv = JSON.parse(readFileSync(join(dataset, "icons-inventory.json"), "utf8"));
-const build = icons.build;
+// Everything taken from the data files that ends up in a URL or a path is validated first: a build is four dot-separated
+// numbers and a FileDataID a positive 31-bit integer; anything else aborts before any request is made.
+if (!/^\d+\.\d+\.\d+\.\d+$/.test(String(icons.build))) throw new Error("icons.json: malformed build");
+const build = String(icons.build);
 if (inv.build !== build) throw new Error(`inventory is for ${inv.build}, manifest for ${build}`);
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
-const ids = [...new Set(Object.values(icons.icons))].sort((a, b) => a - b);
+const ids = [...new Set(Object.values(icons.icons))]
+  .map((v) => {
+    if (!Number.isSafeInteger(v) || v <= 0 || v >= 2 ** 31) throw new Error(`icons.json: invalid FileDataID ${JSON.stringify(v)}`);
+    return v;
+  })
+  .sort((a, b) => a - b);
 const results = [];
 const note = (id, ok, detail) => results.push({ id, ok, ...detail });
 
@@ -81,5 +89,4 @@ const evidence = {
 };
 const ok = results.length === ids.length && failed.length === 0 && (negative === null || negative.ok);
 console.log(JSON.stringify({ ...evidence, ok }, null, 1));
-if (arg("out")) writeFileSync(resolve(arg("out")), JSON.stringify({ ...evidence, ok }, null, 1) + "\n");
 process.exit(ok ? 0 : 1);

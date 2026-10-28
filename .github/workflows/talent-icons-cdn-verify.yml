@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           build=$(node -e 'console.log(require("./web/src/data/talents/forever/1.60.1.70634/icons.json").build)')
           echo "dataset icon build: $build"
-          node web/scripts/verify-talent-icons-cdn.mjs --dataset "web/src/data/talents/forever/$build" --base "$BASE_URL" --out talent-icons-evidence.json
+          node web/scripts/verify-talent-icons-cdn.mjs --dataset "web/src/data/talents/forever/$build" --base "$BASE_URL" | tee talent-icons-evidence.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
