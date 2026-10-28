@@ -126,13 +126,13 @@ test.describe("/guides landing page", () => {
 test.describe("/guides/classes illustrated cards", () => {
   test("nine cards, alphabetical, each with its own illustration loaded at full quality", async ({ page }) => {
     await page.goto("/guides/classes");
-    const cards = page.locator('[data-testid^="class-card-"]:not([data-testid="class-card-art"])');
+    const cards = page.locator('[data-testid^="class-card-"]');
     await expect(cards).toHaveCount(9);
     await expect(cards.getByRole("heading", { level: 2 })).toHaveText(CLASSES);
-    const loaded = await imagesLoaded(page, '[data-testid="class-card-art"]');
+    const loaded = await imagesLoaded(page, '[data-testid="card-art"]');
     // lazy images below the fold: scroll through so every one loads
     await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 400) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 60)); } });
-    const all = await imagesLoaded(page, '[data-testid="class-card-art"]');
+    const all = await imagesLoaded(page, '[data-testid="card-art"]');
     expect(loaded).toHaveLength(9);
     for (const [i, l] of all.entries()) {
       // naturalWidth is density-corrected for a `sizes`/srcset image, so check the chosen file and that real pixels arrived.
@@ -172,7 +172,7 @@ test.describe("/guides/classes illustrated cards", () => {
     test.skip(testInfo.project.name !== "desktop", "hover/keyboard states");
     await page.goto("/guides/classes");
     const card = page.getByTestId("class-card-priest");
-    const art = card.getByTestId("class-card-art");
+    const art = card.getByTestId("card-art");
     const before = await art.evaluate((el) => getComputedStyle(el).scale);
     await card.hover();
     await expect.poll(() => art.evaluate((el) => getComputedStyle(el).scale)).not.toBe(before);

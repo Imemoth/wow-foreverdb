@@ -515,11 +515,11 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       await page.goto("/guides/classes");
       for (const id of CLASS_IDS) {
         const card = page.getByTestId(`class-card-${id}`);
-        await expect(card.getByTestId("class-card-art")).toHaveAttribute("aria-hidden", "true");
-        await expect(card.getByTestId("class-card-art")).toHaveAttribute("src", `/class-cards/${id}.webp`);
+        await expect(card.getByTestId("card-art")).toHaveAttribute("aria-hidden", "true");
+        await expect(card.getByTestId("card-art")).toHaveAttribute("src", `/class-cards/${id}.webp`);
         await expect(card.getByRole("link", { name: "Talent calculator" })).toBeVisible();
       }
-      await expect(page.locator('[data-testid="class-card-art"]')).toHaveCount(9);
+      await expect(page.locator('[data-testid="card-art"]')).toHaveCount(9);
       await page.getByTestId("class-card-druid").getByRole("link", { name: "Druid" }).click();
       await expect(page).toHaveURL(/\/guides\/classes\/druid$/);
     });

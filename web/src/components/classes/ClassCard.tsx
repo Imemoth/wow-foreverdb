@@ -32,7 +32,7 @@ export function ClassCard({ info }: { info: ClassInfo }) {
         loading="lazy"
         decoding="async"
         draggable={false}
-        data-testid="class-card-art"
+        data-testid="card-art"
         className={`absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03] ${CARD_ART_POSITION[info.id] ?? "object-center"}`}
       />
       {/* Readability: darkens only the lower part, where the text sits; the character above stays untouched. */}
