@@ -767,7 +767,7 @@ test.describe("Talent calculator (touch / mobile)", () => {
 test.describe("Talent calculator V2.1: compact geometry", () => {
   // Every class page, every tree: the frame, hit area, badge and connector geometry is measured in the browser, not assumed.
   for (const id of CLASS_IDS) {
-    test(`${id}: square compact nodes, 44px hit areas, no overlaps, connectors end on node centres`, async ({ page }, testInfo) => {
+    test(`${id}: square 46/42px nodes in 68/60px cells, 44px hit areas, no overlaps, connectors end on node centres`, async ({ page }, testInfo) => {
       const mobile = testInfo.project.name === "mobile";
       await page.goto(`/guides/classes/${id}`);
       await expect(page.getByTestId("talent-grid").first()).toBeVisible();
@@ -778,8 +778,8 @@ test.describe("Talent calculator V2.1: compact geometry", () => {
           return { x: r.left, y: r.top, w: r.width, h: r.height };
         };
         const hit = (a: R, b: R) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
-        const out: { trees: number; nodes: number; problems: string[]; frame: number[]; hitMin: number; badgeFont: number[]; tops: number[]; lines: number } = {
-          trees: 0, nodes: 0, problems: [], frame: [], hitMin: 999, badgeFont: [], tops: [], lines: 0,
+        const out: { trees: number; nodes: number; problems: string[]; frame: number[]; hitMin: number; badgeFont: number[]; tops: number[]; lines: number; cells: number[] } = {
+          trees: 0, nodes: 0, problems: [], frame: [], hitMin: 999, badgeFont: [], tops: [], lines: 0, cells: [],
         };
         for (const grid of Array.from(document.querySelectorAll('[data-testid="talent-grid"]'))) {
           out.trees++;
@@ -829,6 +829,10 @@ test.describe("Talent calculator V2.1: compact geometry", () => {
             }
           }
           if (Math.abs(cw - ch) > 0.1) out.problems.push(`cells not square ${cw}x${ch}`);
+          // The spacing the owner asked for (68px desktop / 60px phones), and the grid fits inside its tree panel.
+          out.cells.push(Math.round(cw * 10) / 10);
+          const panel = rect(grid.closest("section")!);
+          if (g.x < panel.x || g.x + g.w > panel.x + panel.w) out.problems.push(`grid ${Math.round(g.w)}px leaves its panel (${Math.round(panel.w)}px)`);
         }
         return out;
       });
@@ -842,6 +846,7 @@ test.describe("Talent calculator V2.1: compact geometry", () => {
         expect(f).toBeGreaterThanOrEqual(lo);
         expect(f).toBeLessThanOrEqual(hi);
       }
+      for (const c of report.cells) expect(c).toBe(mobile ? 60 : 68);
       expect(report.hitMin).toBeGreaterThanOrEqual(44);
       for (const f of report.badgeFont) {
         expect(f).toBeGreaterThanOrEqual(10);

@@ -14,8 +14,8 @@ const GRID_COLS: Record<number, string> = {
 };
 const COL_START = ["col-start-1", "col-start-2", "col-start-3", "col-start-4", "col-start-5", "col-start-6", "col-start-7", "col-start-8"];
 const ROW_START = ["row-start-1", "row-start-2", "row-start-3", "row-start-4", "row-start-5", "row-start-6", "row-start-7", "row-start-8", "row-start-9", "row-start-10", "row-start-11", "row-start-12", "row-start-13", "row-start-14", "row-start-15", "row-start-16"];
-// 48px cells (42px frames, a ≥44px hit area) on small screens, 56px cells (46px frames) from `sm` up.
-const CELL_VARS = "[--cell:3rem] sm:[--cell:3.5rem]";
+// 60px cells (42px frames, a ≥44px hit area, 9px of air around each frame) on small screens, 68px cells (46px frames) from `sm` up.
+const CELL_VARS = "[--cell:3.75rem] sm:[--cell:4.25rem]";
 
 export const talentDomId = (id: number) => `talent-${id}`;
 
