@@ -489,11 +489,12 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
   });
 
   test.describe("background art", () => {
-    test("class hero, tree and card backdrops are decorative, inert and do not block the page", async ({ page }) => {
+    test("class hero art, tree and card backdrops are decorative, inert and do not block the page", async ({ page }) => {
       await page.goto("/guides/classes/priest");
-      const hero = page.getByTestId("class-hero").getByTestId("backdrop-hero");
+      const hero = page.getByTestId("class-hero").getByTestId("class-hero-art");
       await expect(hero).toHaveAttribute("aria-hidden", "true");
-      await expect(hero).toHaveCSS("pointer-events", "none");
+      await expect(hero).toHaveAttribute("src", "/class-cards/priest.webp");
+      await expect(page.getByTestId("class-hero").getByTestId("backdrop-hero")).toHaveCount(0); // the old SVG motif is gone from the hero
       for (const slug of ["discipline", "holy", "shadow-magic"]) {
         const b = tree(page, slug).getByTestId("backdrop-tree");
         await expect(b).toHaveCount(1);
@@ -511,14 +512,15 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
       await expect(page.getByTestId("class-hero").locator("svg a, svg button, svg [tabindex]")).toHaveCount(0);
     });
 
-    test("class cards carry a backdrop behind readable, clickable content", async ({ page }) => {
+    test("class cards show the class illustration behind readable, clickable content", async ({ page }) => {
       await page.goto("/guides/classes");
-      for (const id of ["warrior", "priest", "druid"]) {
+      for (const id of CLASS_IDS) {
         const card = page.getByTestId(`class-card-${id}`);
-        await expect(card.getByTestId("backdrop-card")).toHaveAttribute("aria-hidden", "true");
+        await expect(card.getByTestId("card-art")).toHaveAttribute("aria-hidden", "true");
+        await expect(card.getByTestId("card-art")).toHaveAttribute("src", `/class-cards/${id}.webp`);
         await expect(card.getByRole("link", { name: "Talent calculator" })).toBeVisible();
       }
-      await expect(page.locator('[data-testid="backdrop-card"]')).toHaveCount(9);
+      await expect(page.locator('[data-testid="card-art"]')).toHaveCount(9);
       await page.getByTestId("class-card-druid").getByRole("link", { name: "Druid" }).click();
       await expect(page).toHaveURL(/\/guides\/classes\/druid$/);
     });

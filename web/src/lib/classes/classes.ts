@@ -14,9 +14,10 @@ export interface ClassInfo {
   color: string;
 }
 
+// Alphabetical, which is the order the class chooser, the guides entry and the sitemap list them in.
 const NAMES: ReadonlyArray<readonly [string, string]> = [
-  ["warrior", "Warrior"], ["paladin", "Paladin"], ["hunter", "Hunter"], ["rogue", "Rogue"], ["priest", "Priest"],
-  ["shaman", "Shaman"], ["mage", "Mage"], ["warlock", "Warlock"], ["druid", "Druid"],
+  ["druid", "Druid"], ["hunter", "Hunter"], ["mage", "Mage"], ["paladin", "Paladin"], ["priest", "Priest"],
+  ["rogue", "Rogue"], ["shaman", "Shaman"], ["warlock", "Warlock"], ["warrior", "Warrior"],
 ];
 
 export const CLASSES: readonly ClassInfo[] = NAMES.map(([id, name]) => ({ id, name, color: CLASS_COLORS[id]! }));

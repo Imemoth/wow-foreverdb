@@ -98,8 +98,6 @@ export async function GuidesLibrary({ searchParams }: { searchParams: SP }) {
         </section>
       </div>
 
-      <ClassGuidesEntry />
-
       <form action="/guides" method="get" role="search" aria-label="Search the Arcane Library" autoComplete="off"
         className="panel grid gap-3 p-4 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
         <div className="flex flex-col gap-1">
@@ -122,6 +120,9 @@ export async function GuidesLibrary({ searchParams }: { searchParams: SP }) {
         </div>
         <button type="submit" className="btn-primary">Search</button>
       </form>
+
+      {/* Compact class navigation, directly under the search form (the nine large class cards live on /guides/classes). */}
+      <ClassGuidesEntry />
 
       <div aria-live="polite" className="space-y-4">
         {!empty && (
