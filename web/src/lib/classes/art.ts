@@ -51,12 +51,37 @@ export const HERO_ART_POSITION: Record<string, string> = {
  * Talent tree backgrounds (owner-approved illustrations), `<class>/<tree slug>` -> file stem under `/public/tree-backgrounds/`.
  * Each tree has two encodes of one 3:4 image: `<stem>.webp` (900 px wide) and `<stem>-600.webp` (600 px wide). A tree with no
  * entry keeps its vector backdrop (the SVG layer is always rendered underneath, so it is also the fallback if an image fails).
- * Priest is the reference implementation; the other classes' trees are added here as their art arrives.
+ * All 27 trees (9 classes x 3) have an illustration; Priest was the reference implementation. The file stem is the artwork's own name
+ * (e.g. `druid-feral` is the `druid/feral-combat` tree), so the key here, not the file name, is what binds an image to a tree.
  */
 export const TREE_BACKGROUNDS: Readonly<Record<string, string>> = {
+  "druid/balance": "druid-balance",
+  "druid/feral-combat": "druid-feral",
+  "druid/restoration": "druid-restoration",
+  "hunter/beast-mastery": "hunter-beast-mastery",
+  "hunter/marksmanship": "hunter-marksmanship",
+  "hunter/survival": "hunter-survival",
+  "mage/arcane": "mage-arcane",
+  "mage/fire": "mage-fire",
+  "mage/frost": "mage-frost",
+  "paladin/holy": "paladin-holy",
+  "paladin/protection": "paladin-protection",
+  "paladin/retribution": "paladin-retribution",
   "priest/discipline": "priest-discipline",
   "priest/holy": "priest-holy",
   "priest/shadow-magic": "priest-shadow",
+  "rogue/assassination": "rogue-assassination",
+  "rogue/combat": "rogue-combat",
+  "rogue/subtlety": "rogue-subtlety",
+  "shaman/elemental-combat": "shaman-elemental",
+  "shaman/enhancement": "shaman-enhancement",
+  "shaman/restoration": "shaman-restoration",
+  "warlock/affliction": "warlock-affliction",
+  "warlock/demonology": "warlock-demonology",
+  "warlock/destruction": "warlock-destruction",
+  "warrior/arms": "warrior-arms",
+  "warrior/fury": "warrior-fury",
+  "warrior/protection": "warrior-protection",
 };
 
 export const treeBackgroundArt = (classId: string, treeSlug: string) => {
