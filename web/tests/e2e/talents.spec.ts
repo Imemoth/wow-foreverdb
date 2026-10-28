@@ -645,8 +645,8 @@ test.describe("Talent calculator UI V2 (desktop)", () => {
     await clickLocked(target);
     const focused = await disc.locator("[data-link-focus]").count();
     expect(focused).toBeGreaterThan(0);
-    // Buying the prerequisite chain makes a connection met (build from a known-legal code).
-    const code = codeFor([["Power in Light", 5], ["Wand Specialization", 2], ["Twin Disciplines", 5], ["Silent Resolve", 3]]);
+    // Buying the prerequisite at full rank makes its connection met (build from a known-legal code).
+    const code = codeFor([["Power in Light", 5], ["Twin Disciplines", 5], ["Improved Power Word: Shield", 3]]);
     await page.goto(`/guides/classes/priest?${BUILD_PARAM}=${code}`);
     expect(await tree(page, "discipline").locator('[data-link-state="met"]').count()).toBeGreaterThan(0);
   });
