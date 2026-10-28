@@ -190,7 +190,7 @@ const TOKEN = new RegExp(
   "g",
 );
 
-export function renderTemplate(template: string, facts: SpellFacts, rank?: number): Rendered {
+export function renderTemplate(template: string, facts: SpellFacts, rank?: number, referencedSpells?: Readonly<Record<string, SpellFacts>>): Rendered {
   const segments: Segment[] = [];
   const gaps: Rendered["gaps"] = [];
   let lastNumber: number | null = null;
@@ -230,7 +230,27 @@ export function renderTemplate(template: string, facts: SpellFacts, rank?: numbe
         const [one, many] = tok.slice(2, -1).split(":");
         out = lastNumber === 1 ? one! : many!;
       } else if (/^\$[/*]\d+(?:\.\d+)?;\d+[a-zA-Z]/.test(tok) || /^\$\d+[a-zA-Z]/.test(tok)) {
-        throw new Gap("spell", `needs another spell's data (${tok.slice(1)}), which is not in the available data`);
+        // Cross-spell values require explicitly supplied facts from the exact dataset build.
+        const ref = /^\$(?:([/*])(\d+(?:\.\d+)?);)?(\d{3,})([a-zA-Z])(\d?)$/.exec(tok);
+        if (!ref) throw new Gap("spell", "unsupported cross-spell token");
+        const linked = referencedSpells?.[ref[3]!];
+        if (!linked) throw new Gap("spell", "referenced spell is missing from verified build data");
+        const letter = ref[4]!;
+        if (letter === "d" || letter === "D") {
+          if (!linked.durationMs || linked.durationMs < 0 || ref[1]) throw new Gap("spell", "referenced spell duration is not verified");
+          n = linked.durationMs / 1000;
+          out = duration(linked.durationMs);
+        } else if (letter === "u" || letter === "U") {
+          throw new Gap("spell", "referenced spell maximum stacks are not verified");
+        } else {
+          try {
+            n = variable(letter, Number(ref[5] || "1"), linked, false, undefined);
+          } catch {
+            throw new Gap("spell", "referenced spell effect is not completely verified");
+          }
+          if (ref[1]) n = ref[1] === "/" ? n / Number(ref[2]) : n * Number(ref[2]);
+          out = fmt(n);
+        }
       } else if (tok.startsWith("$@")) {
         throw new Gap("spell", "needs another spell's name or description");
       } else if (tok.startsWith("$?")) {
