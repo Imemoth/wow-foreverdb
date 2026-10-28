@@ -95,7 +95,7 @@ export function TalentCard({ engine, alloc, talent, tree, icon, variant = "panel
         <div className="space-y-2 border-t border-ink-700 pt-3" data-testid="talent-description" data-complete={shown.every((x) => x.text.complete) ? "true" : "false"}>
           {shown.map((x, i) => (
             <p key={i} className={`whitespace-pre-line leading-relaxed ${tooltip ? "text-[13px]" : "max-w-[72ch] text-sm"} ${x.label && rank > 0 ? "text-parchment/80" : "text-parchment"}`}>
-              {x.label && <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-violet-300">{x.label}</span>}
+              {x.label && <><span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">{x.label}</span>{" "}</>}
               <Segments segments={x.text.segments} />
             </p>
           ))}
@@ -125,7 +125,7 @@ export function TalentCard({ engine, alloc, talent, tree, icon, variant = "panel
           {rank > 0 && <p>{descriptions[rank - 1]}</p>}
           {rank < talent.maxRank && (
             <p className={rank > 0 ? "text-parchment/80" : undefined}>
-              <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-violet-300">{rank > 0 ? "Next rank:" : "Rank 1:"}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">{rank > 0 ? "Next rank:" : "Rank 1:"}</span>{" "}
               {descriptions[rank]}
             </p>
           )}

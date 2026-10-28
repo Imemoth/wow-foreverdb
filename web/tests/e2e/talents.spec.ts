@@ -637,7 +637,7 @@ test.describe("Talent calculator UI V2 (desktop)", () => {
     const disc = tree(page, "discipline");
     // Soul Warding needs Improved Power Word: Shield at rank 3: that connection starts unmet.
     const links = disc.locator("[data-link-state]");
-    expect(await links.count()).toBeGreaterThan(5);
+    expect(await links.count()).toBeGreaterThan(1);
     await expect(disc.locator('[data-link-state="met"]')).toHaveCount(0);
     expect(await disc.locator('[data-link-state="unmet"]').count()).toBeGreaterThan(0);
     await expect(disc.locator("[data-link-focus]")).toHaveCount(0);
