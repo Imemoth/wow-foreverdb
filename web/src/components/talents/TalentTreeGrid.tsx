@@ -228,7 +228,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
                   <span
                     aria-hidden="true"
                     data-testid="rank-badge"
-                    className={`absolute -bottom-[3px] -right-[3px] min-w-[1.5rem] rounded-[4px] border px-[3px] text-center font-mono text-[10px] font-semibold leading-[13px] tabular-nums shadow-[0_1px_2px_rgb(0_0_0/0.7)] ${BADGE_CLASS[state]}`}
+                    className={`absolute -bottom-[3px] -right-[3px] min-w-[1.375rem] rounded-[4px] border px-[2px] text-center font-mono text-[10px] font-semibold leading-[12px] tabular-nums shadow-[0_1px_2px_rgb(0_0_0/0.7)] ${BADGE_CLASS[state]}`}
                   >
                     {rank}/{x.maxRank}
                   </span>
