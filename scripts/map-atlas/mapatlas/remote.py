@@ -19,8 +19,9 @@ from .packaging import file_table
 PREVIEW_HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.azerdex-assets\.pages\.dev$")
 Opener = Callable[[str], tuple[int, dict[str, str], bytes]]
 EXPECT = (("forever/", "public, max-age=31536000, immutable"), ("zone-heroes/", "public, max-age=31536000, immutable"),
-          ("atlas/", "public, max-age=300, must-revalidate"))
-MISSING_PATHS = ("forever/9999999/v1/manifest.json", "zone-heroes/9999999/v1/desktop-1280.webp", "zone-heroes/1424/v999/desktop-1280.webp")
+          ("talent-icons/", "public, max-age=31536000, immutable"), ("atlas/", "public, max-age=300, must-revalidate"))
+MISSING_PATHS = ("forever/9999999/v1/manifest.json", "zone-heroes/9999999/v1/desktop-1280.webp", "zone-heroes/1424/v999/desktop-1280.webp",
+                 "talent-icons/9.9.9.9/1.webp")
 
 
 def _default_open(url: str) -> tuple[int, dict[str, str], bytes]:
@@ -54,12 +55,12 @@ def verify_remote(base_url: str, dist: Path, opener: Opener | None = None) -> di
             problems.append(f"{rel}: cache-control {headers.get('cache-control')!r} != {want!r}")
         if headers.get("access-control-allow-origin") != "*":
             problems.append(f"{rel}: missing Access-Control-Allow-Origin: *")
-        if rel.startswith("zone-heroes/"):  # the new namespace is held to the full contract: type, nosniff, timing visibility
+        if rel.startswith(("zone-heroes/", "talent-icons/")):  # the newer namespaces are held to the full contract: type, nosniff (+ timing for heroes)
             if headers.get("content-type", "").split(";")[0].strip().lower() != "image/webp":
                 problems.append(f"{rel}: content-type {headers.get('content-type')!r} != 'image/webp'")
             if headers.get("x-content-type-options", "").lower() != "nosniff":
                 problems.append(f"{rel}: missing X-Content-Type-Options: nosniff")
-            if headers.get("timing-allow-origin") != "*":
+            if rel.startswith("zone-heroes/") and headers.get("timing-allow-origin") != "*":
                 problems.append(f"{rel}: missing Timing-Allow-Origin: *")
     for p in MISSING_PATHS:  # paths that must not exist: guards against a catch-all/SPA fallback masking misses
         status, _, _ = open_fn(f"{base}/{p}")

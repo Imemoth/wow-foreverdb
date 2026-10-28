@@ -16,7 +16,25 @@ const arg = (n) => {
   return i > 0 ? process.argv[i + 1] : undefined;
 };
 const dataset = resolve(arg("dataset") ?? "");
-const base = arg("base")?.replace(/\/+$/, "");
+const ALLOWED_HOSTS = ["azerdex-assets.pages.dev", "assets.azerdex.com"];
+const PREVIEW_HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.azerdex-assets\.pages\.dev$/;
+function allowedOrigin(raw) {
+  if (raw === undefined) return undefined;
+  let u;
+  try { u = new URL(raw); } catch { throw new Error(`refusing --base ${JSON.stringify(raw)}: not a URL`); }
+  const test = process.argv.includes("--allow-test-origin") && u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost");
+  const prod = u.protocol === "https:" && (ALLOWED_HOSTS.includes(u.hostname) || PREVIEW_HOST.test(u.hostname)) && !u.port;
+  if (!(test || prod) || u.username || u.password || u.search || u.hash || !["", "/"].includes(u.pathname)) {
+    throw new Error(`refusing --base ${JSON.stringify(raw)}: https on an allow-listed asset host only (${ALLOWED_HOSTS.join(", ")}), no port, credentials, path or query`);
+  }
+  return u.origin;
+}
+let base;
+try { base = allowedOrigin(arg("base")); } catch (e) { console.error(e.message); process.exit(2); }
+if (process.argv.includes("--validate-only")) {
+  console.log(JSON.stringify({ origin: base ?? null }));
+  process.exit(0); // checks the --base rules and stops: no request is made
+}
 const dir = arg("dir") ? resolve(arg("dir")) : null;
 if (!arg("dataset") || (!base && !dir)) {
   console.error("usage: verify-talent-icons-cdn.mjs --dataset <dir> (--base <https origin> | --dir <staging dir>)");
@@ -50,7 +68,7 @@ async function check(id) {
     return note(id, b.length === rec.webpBytes && sha256(b) === rec.webpSha256, { bytes: b.length });
   }
   try {
-    const res = await fetch(`${base}/${rel}`, { headers: { "User-Agent": "AzerDex-talent-icons-readonly/1.0" }, signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(`${base}/${rel}`, { headers: { "User-Agent": "AzerDex-talent-icons-readonly/1.0" }, redirect: "manual", signal: AbortSignal.timeout(30_000) });
     const b = Buffer.from(await res.arrayBuffer());
     const type = res.headers.get("content-type") ?? "";
     note(id, res.status === 200 && /^image\/webp/i.test(type) && b.length === rec.webpBytes && sha256(b) === rec.webpSha256, {
@@ -67,7 +85,7 @@ await Promise.all(Array.from({ length: 8 }, async () => { for (let id; (id = que
 let negative = null;
 if (base) {
   try {
-    const res = await fetch(`${base}/talent-icons/${build}/1.webp`, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(`${base}/talent-icons/${build}/1.webp`, { redirect: "manual", signal: AbortSignal.timeout(30_000) });
     negative = { url: `talent-icons/${build}/1.webp`, status: res.status, ok: res.status === 404 };
   } catch (e) {
     negative = { error: String(e.message ?? e), ok: false };

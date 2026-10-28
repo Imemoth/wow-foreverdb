@@ -15,7 +15,8 @@ const BUILD = "9.9.9.2";
 const root = mkdtempSync(join(tmpdir(), "azerdex-cdn-verify-"));
 const dataset = join(root, "dataset"), staging = join(root, "staging", "talent-icons", BUILD);
 let server: Server;
-let mode: "good" | "wrong-type" | "spa" | "missing" | "tampered" = "good";
+let mode: "good" | "wrong-type" | "spa" | "missing" | "tampered" | "redirect" = "good";
+const hits: string[] = [];
 let port = 0;
 const files = new Map<string, Buffer>();
 
@@ -32,6 +33,8 @@ beforeAll(async () => {
   writeFileSync(join(dataset, "icons.json"), JSON.stringify({ build: BUILD, icons: { 1: 111, 2: 222 } }));
   writeFileSync(join(dataset, "icons-inventory.json"), JSON.stringify({ build: BUILD, files: inv }));
   server = createServer((req, res) => {
+    hits.push(req.url ?? "");
+    if (mode === "redirect") return void res.writeHead(302, { location: "http://127.0.0.1:1/elsewhere.webp" }).end();
     const f = files.get(req.url ?? "");
     const headers = { "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" };
     if (mode === "spa") return void res.writeHead(200, { "content-type": "text/html" }).end("<html>app</html>");
@@ -50,7 +53,7 @@ afterAll(() => {
 const verify = async (m: typeof mode) => {
   mode = m;
   try {
-    const { stdout } = await run("node", [SCRIPT, "--dataset", dataset, "--base", `http://127.0.0.1:${port}`]);
+    const { stdout } = await run("node", [SCRIPT, "--dataset", dataset, "--base", `http://127.0.0.1:${port}`, "--allow-test-origin"]);
     return { code: 0, out: JSON.parse(stdout) };
   } catch (e) {
     const err = e as { code: number; stdout: string };
@@ -76,8 +79,35 @@ describe("verify-talent-icons-cdn.mjs", () => {
   it("fails an unreachable host", async () => {
     server.close();
     mode = "good";
-    await expect(run("node", [SCRIPT, "--dataset", dataset, "--base", `http://127.0.0.1:${port}`])).rejects.toMatchObject({ code: 1 });
+    await expect(run("node", [SCRIPT, "--dataset", dataset, "--base", `http://127.0.0.1:${port}`, "--allow-test-origin"])).rejects.toMatchObject({ code: 1 });
     await new Promise<void>((r) => server.listen(port, "127.0.0.1", r));
+  });
+
+  it("never follows a redirect: a 3xx is a failure and nothing else is requested", async () => {
+    hits.length = 0;
+    const r = await verify("redirect");
+    expect(r.code).toBe(1);
+    expect(r.out.ok).toBe(false);
+    expect(r.out.failed[0]).toMatchObject({ status: 302 });
+    expect(hits.every((u) => u.startsWith("/talent-icons/"))).toBe(true);
+  });
+
+  it("refuses any base that is not an https allow-listed asset origin, before any request", async () => {
+    hits.length = 0;
+    const bad = [
+      "https://evil.example", "https://azerdex-assets.pages.dev.evil.example", "https://evil.example/azerdex-assets.pages.dev", "http://azerdex-assets.pages.dev",
+      "https://azerdex-assets.pages.dev:8443", "https://user:pw@azerdex-assets.pages.dev", "https://azerdex-assets.pages.dev/sub", "https://azerdex-assets.pages.dev/?x=1",
+      `http://127.0.0.1:${port}`, // loopback needs the explicit test flag
+    ];
+    for (const base of bad) await expect(run("node", [SCRIPT, "--dataset", dataset, "--base", base]), base).rejects.toMatchObject({ code: 2 });
+    expect(hits).toEqual([]);
+  });
+
+  it("accepts exactly the documented hosts (validation only: no request is made)", async () => {
+    for (const base of ["https://azerdex-assets.pages.dev", "https://assets.azerdex.com", "https://3ae723a0.azerdex-assets.pages.dev", "https://azerdex-assets.pages.dev/"]) {
+      const { stdout } = await run("node", [SCRIPT, "--dataset", dataset, "--base", base, "--validate-only"]);
+      expect(JSON.parse(stdout).origin, base).toBe(new URL(base).origin);
+    }
   });
 
   it("verifies a staging directory offline, before any upload", async () => {
