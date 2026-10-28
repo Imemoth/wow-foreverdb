@@ -28,3 +28,21 @@ export const CARD_ART_POSITION: Record<string, string> = {
   warlock: "object-[40%_50%]",
   warrior: "object-[58%_50%]", // face, spiked pauldrons and the axe
 };
+
+/**
+ * Class detail hero: the same card illustration (same two files, no copy), framed as a wide banner. On desktop the picture
+ * fills the right ~78% of the banner (text on the left), so the window is about 2.7:1 and only the vertical position matters;
+ * on phones it fills the banner at roughly 1.1:1 and only the horizontal position matters. One `object-position` therefore
+ * serves both: x steers the phone crop, y the desktop crop. Chosen so faces, weapons and spell effects stay in frame.
+ */
+export const HERO_ART_POSITION: Record<string, string> = {
+  druid: "object-[50%_30%]", // antlered helm and casting hands
+  hunter: "object-[80%_15%]", // face, drawn bow and arrow
+  mage: "object-[50%_12%]", // face and both spell rings
+  paladin: "object-[50%_10%]", // raised hammer and face
+  priest: "object-[30%_8%]", // staff, face and casting hand
+  rogue: "object-[70%_35%]", // hooded face and blades
+  shaman: "object-[43%_25%]", // horned head and lightning hand
+  warlock: "object-[30%_25%]", // skull face and fel hand
+  warrior: "object-[90%_20%]", // face and spiked pauldron
+};

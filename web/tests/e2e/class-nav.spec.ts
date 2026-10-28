@@ -215,3 +215,83 @@ test.describe("/guides/classes illustrated cards", () => {
     expect(bad).toEqual([]);
   });
 });
+
+test.describe("illustrated class detail hero", () => {
+  for (const [i, id] of ids.entries()) {
+    test(`${id}: hero uses its own illustration, reads well, keeps the CTA, no overflow or shift`, async ({ page }, testInfo) => {
+      const mobile = testInfo.project.name === "mobile";
+      const bad: string[] = [];
+      page.on("console", (m) => { if (/Content Security Policy|Refused to/i.test(m.text())) bad.push(m.text()); });
+      page.on("response", (r) => { if (r.status() >= 400 && /class-(icons|cards)/.test(r.url())) bad.push(`${r.status()} ${r.url()}`); });
+      await page.addInitScript(() => {
+        (window as unknown as { __cls: number }).__cls = 0;
+        new PerformanceObserver((l) => { for (const e of l.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) (window as unknown as { __cls: number }).__cls += e.value; }).observe({ type: "layout-shift", buffered: true });
+      });
+      await page.goto(`/guides/classes/${id}`);
+      const hero = page.getByTestId("class-hero");
+      await expect(hero).toBeVisible();
+      await expect(hero).toHaveAttribute("data-class", id);
+      // The same illustration as the class card, through the same two files.
+      const art = hero.getByTestId("class-hero-art");
+      await expect(art).toHaveAttribute("src", `/class-cards/${id}.webp`);
+      await expect(art).toHaveAttribute("srcset", `/class-cards/${id}-640.webp 640w, /class-cards/${id}.webp 1024w`);
+      await expect(art).toHaveAttribute("aria-hidden", "true");
+      const loaded = await imagesLoaded(page, '[data-testid="class-hero-art"]');
+      expect(loaded[0]!.w, id).toBeGreaterThanOrEqual(480);
+      expect(loaded[0]!.src, id).toMatch(new RegExp(`/class-cards/${id}(-640)?\\.webp$`));
+      // Old presentation removed: no letter emblem, no SVG motif; name, intro and CTA kept.
+      await expect(hero.locator("svg")).toHaveCount(0);
+      await expect(hero.getByText(CLASSES[i]!.charAt(0), { exact: true })).toHaveCount(0);
+      await expect(hero.getByRole("heading", { level: 1, name: CLASSES[i]! })).toBeVisible();
+      const cta = hero.getByRole("link", { name: "Open the talent calculator" });
+      await expect(cta).toBeVisible();
+      expect((await cta.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      // Wide cinematic banner on desktop (320-380px), a taller crop on phones; text stays inside it.
+      const box = (await hero.boundingBox())!;
+      const vp = page.viewportSize()!;
+      if (!mobile) {
+        expect(box.height, id).toBeGreaterThanOrEqual(320);
+        expect(box.height, id).toBeLessThanOrEqual(380);
+        expect(box.width / box.height, id).toBeGreaterThan(2.5);
+      } else {
+        expect(box.height, id).toBeLessThanOrEqual(520);
+      }
+      expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
+      const copy = (await hero.getByRole("heading", { level: 1 }).boundingBox())!;
+      expect(copy.y).toBeGreaterThanOrEqual(box.y);
+      expect(copy.y + copy.height).toBeLessThanOrEqual(box.y + box.height);
+      // Readable: the text sits on a dark scrim (the gradient is opaque-ish where the copy is).
+      expect(await hero.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+      expect(await noOverflow(page)).toBeLessThanOrEqual(0);
+      // The sections below are unchanged and working.
+      await expect(page.getByRole("heading", { level: 2, name: "Specializations" })).toBeVisible();
+      await expect(page.getByTestId("talent-calculator")).toBeVisible();
+      await expect(page.getByTestId("points-remaining")).toHaveText("51");
+      await page.waitForTimeout(300);
+      const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+      expect(cls, `${id} layout shift`).toBeLessThan(0.02);
+      expect(bad).toEqual([]);
+    });
+  }
+
+  test("keyboard: the calculator link is reachable with a visible focus ring and jumps to the calculator", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "keyboard focus is a desktop concern");
+    await page.goto("/guides/classes/druid");
+    const cta = page.getByTestId("class-hero").getByRole("link", { name: "Open the talent calculator" });
+    await cta.focus();
+    await expect(cta).toBeFocused();
+    const ring = await cta.evaluate((el) => { const c = getComputedStyle(el); return { style: c.outlineStyle, width: parseFloat(c.outlineWidth) }; });
+    expect(ring.style).not.toBe("none");
+    expect(ring.width).toBeGreaterThanOrEqual(2);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/guides\/classes\/druid#talents$/);
+  });
+
+  test("the journey is consistent: card art on /guides/classes is the hero art on the class page", async ({ page }) => {
+    await page.goto("/guides/classes");
+    const cardSrc = await page.getByTestId("class-card-warrior").getByTestId("card-art").getAttribute("src");
+    await page.getByTestId("class-card-warrior").getByRole("link", { name: "Warrior" }).click();
+    await expect(page).toHaveURL(/\/guides\/classes\/warrior$/);
+    await expect(page.getByTestId("class-hero-art")).toHaveAttribute("src", cardSrc!);
+  });
+});

@@ -6,7 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ClassCard } from "@/components/classes/ClassCard";
 import { ClassGuidesEntry } from "@/components/classes/ClassGuidesEntry";
-import { CARD_ART_POSITION, classCardArt, classIconPath } from "@/lib/classes/art";
+import { ClassHero } from "@/components/classes/ClassHero";
+import { CARD_ART_POSITION, HERO_ART_POSITION, classCardArt, classIconPath } from "@/lib/classes/art";
 import { CLASSES, classPath } from "@/lib/classes/classes";
 
 const PUBLIC = join(process.cwd(), "public");
@@ -123,5 +124,23 @@ describe("class card artwork (Choose your class)", () => {
       expect(html).toMatch(/alt="" aria-hidden="true"/);
       expect(html).toContain(CARD_ART_POSITION[c.id]);
     }
+  });
+});
+
+describe("class detail hero", () => {
+  it("every class has hero art direction and the hero reuses the card files (no copies, no letter emblem, no SVG)", () => {
+    for (const c of CLASSES) {
+      expect(HERO_ART_POSITION[c.id], c.id).toMatch(/^object-\[\d+%_\d+%\]$/);
+      const html = renderToStaticMarkup(createElement(ClassHero, { info: c, intro: "Intro text.", hasCalculator: true }));
+      expect(html).toContain(`src="/class-cards/${c.id}.webp"`);
+      expect(html).toContain(`/class-cards/${c.id}-640.webp 640w`);
+      expect(html).toContain(HERO_ART_POSITION[c.id]);
+      expect(html).toContain(`>${c.name}</h1>`);
+      expect(html).toContain('href="#talents"');
+      expect(html).not.toContain("<svg");
+      expect(html).not.toMatch(/rounded-full/);
+    }
+    const none = renderToStaticMarkup(createElement(ClassHero, { info: CLASSES[0]!, intro: "x", hasCalculator: false }));
+    expect(none).not.toContain("Open the talent calculator");
   });
 });

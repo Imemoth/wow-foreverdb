@@ -489,11 +489,12 @@ test.describe("Talent calculator (pointer and keyboard)", () => {
   });
 
   test.describe("background art", () => {
-    test("class hero, tree and card backdrops are decorative, inert and do not block the page", async ({ page }) => {
+    test("class hero art, tree and card backdrops are decorative, inert and do not block the page", async ({ page }) => {
       await page.goto("/guides/classes/priest");
-      const hero = page.getByTestId("class-hero").getByTestId("backdrop-hero");
+      const hero = page.getByTestId("class-hero").getByTestId("class-hero-art");
       await expect(hero).toHaveAttribute("aria-hidden", "true");
-      await expect(hero).toHaveCSS("pointer-events", "none");
+      await expect(hero).toHaveAttribute("src", "/class-cards/priest.webp");
+      await expect(page.getByTestId("class-hero").getByTestId("backdrop-hero")).toHaveCount(0); // the old SVG motif is gone from the hero
       for (const slug of ["discipline", "holy", "shadow-magic"]) {
         const b = tree(page, slug).getByTestId("backdrop-tree");
         await expect(b).toHaveCount(1);
