@@ -11,7 +11,8 @@ import { buildProjection } from "../src/core/project.ts";
 import { syntheticExport } from "../src/core/synthetic.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const config = PublicationConfig.parse(JSON.parse(readFileSync(resolve(here, "../publication-config.json"), "utf8")));
+// The total-row safety threshold (default 120,000 input rows, about synthetic scale 83) would refuse the largest scales: lift it for this CPU benchmark.
+const config = PublicationConfig.parse({ ...JSON.parse(readFileSync(resolve(here, "../publication-config.json"), "utf8")), limits: { maxExportRows: 10_000_000 } });
 for (const arg of process.argv.slice(2)) {
   const scale = Number(arg);
   const t0 = performance.now();

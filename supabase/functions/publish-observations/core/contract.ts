@@ -99,6 +99,94 @@ export const PrivateExport = z
 
 export type PrivateExport = z.infer<typeof PrivateExport>;
 
+/**
+ * Safety threshold for the TOTAL number of input rows (sum of the five collections below). It protects memory, it is not a
+ * promise that an export of that size completes inside the Edge CPU budget (measured ceiling is far lower, see
+ * docs/web/public-publication-benchmarks.md). Overridable with `limits.maxExportRows` in the publication config.
+ */
+export const DEFAULT_MAX_EXPORT_ROWS = 120_000;
+/** A failing export reports at most this many validation issues; validation stops as soon as the cap is reached. */
+export const MAX_VALIDATION_ISSUES = 20;
+
+export const EXPORT_SECTIONS = ["sources", "items", "buckets", "drops", "locations"] as const;
+export type ExportSection = (typeof EXPORT_SECTIONS)[number];
+const ROW_SCHEMAS = { sources: ExportSource, items: ExportItem, buckets: ExportBucket, drops: ExportDrop, locations: ExportLocation } as const;
+
+/** Row counts per collection of a raw (unvalidated) export. Reads array lengths only, never an element. */
+export function exportRowCounts(raw: unknown): { total: number; sections: Record<ExportSection, number> } {
+  const sections = { sources: 0, items: 0, buckets: 0, drops: 0, locations: 0 };
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const k of EXPORT_SECTIONS) {
+      const v = (raw as Record<string, unknown>)[k];
+      sections[k] = Array.isArray(v) ? v.length : 0;
+    }
+  }
+  return { total: EXPORT_SECTIONS.reduce((n, k) => n + sections[k], 0), sections };
+}
+
+export interface ValidationIssue {
+  path: string;
+  code: string;
+}
+export type BoundedParse =
+  | { success: true; data: PrivateExport }
+  | { success: false; issues: ValidationIssue[]; /** true: validation stopped at the cap, more problems may exist */ truncated: boolean };
+
+/**
+ * Same strict contract as `PrivateExport`, validated row by row so that the work and the memory spent on a failing export are
+ * bounded: it stops at `maxIssues` issues instead of building one issue set per failing row. The result for a valid export is
+ * identical to `PrivateExport.parse`; a failing one carries only `{path, code}` (never a value, a message or a key name).
+ */
+export function parsePrivateExportBounded(raw: unknown, maxIssues: number = MAX_VALIDATION_ISSUES): BoundedParse {
+  const issues: ValidationIssue[] = [];
+  const full = () => issues.length >= maxIssues;
+  const add = (path: string, code: string) => {
+    if (!full()) issues.push({ path, code });
+  };
+  const fail = (): BoundedParse => ({ success: false, issues, truncated: full() });
+
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    add("", "invalid_type");
+    return fail();
+  }
+  const obj = raw as Record<string, unknown>;
+  if (Object.keys(obj).some((k) => k !== "meta" && !(EXPORT_SECTIONS as readonly string[]).includes(k))) add("", "unrecognized_keys");
+
+  // One row. A throwing transform (an unparseable timestamp) is a violation too, reported without its message.
+  const parseRow = (schema: { safeParse(v: unknown): { success: boolean; data?: unknown; error?: { issues: { path: PropertyKey[]; code: string }[] } } }, value: unknown, base: string) => {
+    let r;
+    try {
+      r = schema.safeParse(value);
+    } catch {
+      add(base, "exception");
+      return { ok: false as const };
+    }
+    if (r.success) return { ok: true as const, data: r.data };
+    for (const i of r.error?.issues ?? []) add([base, ...i.path.map(String)].filter((x) => x !== "").join("."), i.code);
+    return { ok: false as const };
+  };
+
+  const meta = parseRow(ExportMeta, obj.meta, "meta");
+  const data: Record<string, unknown> = { meta: meta.ok ? meta.data : undefined };
+  for (const section of EXPORT_SECTIONS) {
+    if (full()) return fail();
+    const rows = obj[section];
+    if (!Array.isArray(rows)) {
+      add(section, "invalid_type");
+      continue;
+    }
+    const out: unknown[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = parseRow(ROW_SCHEMAS[section], rows[i], `${section}.${i}`);
+      if (r.ok) out.push(r.data);
+      if (full()) return fail();
+    }
+    data[section] = out;
+  }
+  if (issues.length > 0) return fail();
+  return { success: true, data: data as PrivateExport };
+}
+
 export const PublicationConfig = z
   .object({
     contractVersion: z.literal(1),
@@ -120,6 +208,11 @@ export const PublicationConfig = z
     allowedSourceTypes: z.array(z.enum(SOURCE_TYPES)).min(1),
     allowedLootKinds: z.array(z.enum(LOOT_KINDS)).min(1),
     retainPublications: z.number().int().min(2).max(10),
+    /** Optional. Absent = defaults (DEFAULT_MAX_EXPORT_ROWS). Adding it does not change any published content. */
+    limits: z.object({ maxExportRows: z.number().int().min(1).max(10_000_000) }).strict().optional(),
   })
   .strict();
 export type PublicationConfig = z.infer<typeof PublicationConfig>;
+
+/** The effective total-row safety threshold of a parsed config. */
+export const maxExportRows = (config: PublicationConfig): number => config.limits?.maxExportRows ?? DEFAULT_MAX_EXPORT_ROWS;

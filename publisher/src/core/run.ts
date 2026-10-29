@@ -9,7 +9,7 @@
  *   dry_run   build + validate only; compares with the active publication; NOTHING is written to the public DB
  *   rehearse  the full write path including finalize/activation, then ROLLBACK -> rehearsal_ok | failed (persists nothing)
  */
-import type { PublicationConfig } from "./contract.ts";
+import { maxExportRows, type PublicationConfig } from "./contract.ts";
 import { buildProjection, PublicationError } from "./project.ts";
 import {
   acquireLease,
@@ -157,7 +157,7 @@ export async function runPublication(deps: RunDeps, req: RunRequest): Promise<Ru
       const privRaw = await phase("privateConnect", () => deps.openPrivate!());
       priv = privRaw;
       const privC = counting(privRaw);
-      rawExport = await phase("privateExportQuery", () => readPrivateExport(privC, deps.config.locationGrid));
+      rawExport = await phase("privateExportQuery", () => readPrivateExport(privC, deps.config.locationGrid, maxExportRows(deps.config)));
       metrics.privateDbOperations = privC.ops();
       await priv.close().catch(() => undefined);
       priv = null;

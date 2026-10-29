@@ -4,7 +4,9 @@
  */
 import { createHash } from "node:crypto";
 import {
-  PrivateExport,
+  exportRowCounts,
+  maxExportRows,
+  parsePrivateExportBounded,
   type LootKind,
   type PublicationConfig,
   type SourceType,
@@ -97,12 +99,15 @@ export function displayKindOf(type: SourceType, id: number): DisplayKind {
 }
 
 export function buildProjection(rawExport: unknown, config: PublicationConfig): { projection: Projection; report: BuildReport } {
-  const parsed = PrivateExport.safeParse(rawExport);
+  // Size guard BEFORE any validation: reads array lengths only. Counts, never values.
+  const limit = maxExportRows(config);
+  const counts = exportRowCounts(rawExport);
+  if (counts.total > limit) throw new PublicationError("export_too_large", { limit, rows: counts.total, sections: counts.sections });
+
+  // Bounded, strict validation: stops at MAX_VALIDATION_ISSUES. Fail closed; report only paths/codes, never values (they may be private).
+  const parsed = parsePrivateExportBounded(rawExport);
   if (!parsed.success) {
-    // Fail closed. Report only paths/codes, never values (they may be private).
-    throw new PublicationError("export_contract_violation", {
-      issues: parsed.error.issues.slice(0, 20).map((i) => ({ path: i.path.join("."), code: i.code })),
-    });
+    throw new PublicationError("export_contract_violation", { issues: parsed.issues, truncated: parsed.truncated });
   }
   const ex = parsed.data;
   if (ex.meta.contract_version !== config.contractVersion) {
