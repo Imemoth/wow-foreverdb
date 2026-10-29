@@ -161,7 +161,9 @@ test.describe("version history", () => {
     const ruthless = rows.filter({ hasText: "Critical strike bonus reduced from 2% to 1%" });
     await expect(ruthless).toContainText("26 Oct 2026");
     await expect(ruthless).toContainText("Earlier definition: Increases your critical strike chance by 2%.");
-    await expect(ruthless.getByRole("link").first()).toHaveAttribute("href", /us\.forums\.blizzard\.com/);
+    // Compare the parsed host exactly; a regular expression on a URL would also match it anywhere in the path or query.
+    const href = await ruthless.getByRole("link").first().getAttribute("href");
+    expect(new URL(href!).hostname).toBe("us.forums.blizzard.com");
     await expect(history.getByTestId("retired-ability")).toContainText("Sword Specialization");
     await summary.click();
     await expect(history).not.toHaveAttribute("open", "");

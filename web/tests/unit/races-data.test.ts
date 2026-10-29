@@ -86,7 +86,19 @@ describe("race/class compatibility (Blizzard official tables)", () => {
   });
 });
 
+/** Exact hosts Blizzard's articles and forum notes are served from. Compared as parsed hostnames, never with a pattern on the URL string. */
+const OFFICIAL_HOSTS = ["news.blizzard.com", "us.forums.blizzard.com"];
+
 describe("sources and provenance", () => {
+  it("every source URL is https, has no credentials or port, and community sources never use an official host", () => {
+    for (const s of RACE_SOURCES.sources) {
+      const u = new URL(s.url);
+      expect(u.protocol, s.id).toBe("https:");
+      expect(u.username + u.password + u.port, s.id).toBe("");
+      if (s.kind === "community") expect(OFFICIAL_HOSTS, s.id).not.toContain(u.hostname);
+      else expect(OFFICIAL_HOSTS, s.id).toContain(u.hostname);
+    }
+  });
   it("every file passes its schema and every reference resolves", () => {
     expect(SourceCatalogSchema.safeParse(RACE_SOURCES).success).toBe(true);
     expect(BaselineSchema.safeParse(RACE_BASELINE).success).toBe(true);
@@ -102,7 +114,7 @@ describe("sources and provenance", () => {
         const s = byId.get(sid)!;
         if (r.evidence === "official") {
           expect(["official-article", "official-dev-notes"]).toContain(s.kind);
-          expect(new URL(s.url).hostname).toMatch(/(^|\.)blizzard\.com$/);
+          expect(OFFICIAL_HOSTS).toContain(new URL(s.url).hostname);
         } else {
           expect(s.kind).toBe("community");
         }
