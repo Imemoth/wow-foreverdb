@@ -212,8 +212,9 @@ export const PublicationConfig = z
       .refine((t) => t.minBucketObservationsForRate <= t.lowConfidenceBelow && t.lowConfidenceBelow <= t.highConfidenceAtLeast, {
         message: "confidence thresholds must be ordered",
       }),
-    allowedSourceTypes: z.array(z.enum(SOURCE_TYPES)).min(1),
-    allowedLootKinds: z.array(z.enum(LOOT_KINDS)).min(1),
+    // .max(): zod >= 4.6.6 rejects an over-long array before validating its elements (GHSA-mrhx-c7xc-m3w5); no valid list is longer than its enum
+    allowedSourceTypes: z.array(z.enum(SOURCE_TYPES)).min(1).max(SOURCE_TYPES.length),
+    allowedLootKinds: z.array(z.enum(LOOT_KINDS)).min(1).max(LOOT_KINDS.length),
     retainPublications: z.number().int().min(2).max(10),
     /** Optional. Absent = DEFAULT_MAX_EXPORT_ROWS. Can only lower the threshold (max MAX_CONFIGURABLE_EXPORT_ROWS). Never changes published content. */
     limits: z.object({ maxExportRows: z.number().int().min(1).max(MAX_CONFIGURABLE_EXPORT_ROWS) }).strict().optional(),
