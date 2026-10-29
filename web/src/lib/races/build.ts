@@ -65,6 +65,7 @@ export function buildRaceGuides(state: ResolvedState, identities: readonly RaceI
     const pending = state.entities.filter((e) => e.kind === "ability" && strs(e.current.races).includes(id.id)).reduce((n, e) => n + e.pending.length, 0);
     return {
       id: id.id, slug: id.id, name: id.name, faction: id.faction, summary: id.summary, classes,
+      classSources: race ? uniqueSources(race) : [],
       active: current.filter((a) => a.type === "active"), passive: current.filter((a) => a.type === "passive"),
       retired: mine.filter((a) => !a.active),
       changes, earliest,

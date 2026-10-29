@@ -46,6 +46,8 @@ export interface RaceGuide {
   faction: Faction;
   summary: string;
   classes: ClassAvailability[];
+  /** Sources that document the class list (Blizzard's race/class overview; for Skyborne also the Skyborne article). */
+  classSources: SourceRef[];
   active: AbilityView[];
   passive: AbilityView[];
   /** Abilities that used to belong to this race and no longer do. */

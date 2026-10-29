@@ -135,6 +135,15 @@ test.describe("race pages", () => {
     await expect(page.getByTestId("ability-orc.command")).toBeVisible();
   });
 
+  test("the class list links its official Blizzard source, and the provenance box lists it too", async ({ page }) => {
+    await page.goto("/guides/races/gnome");
+    const link = page.getByTestId("class-sources").getByRole("link").first();
+    const url = new URL((await link.getAttribute("href"))!);
+    expect(url.hostname).toBe("news.blizzard.com");
+    expect(url.pathname).toMatch(/^\/en-us\/article\/24304075\//);
+    await expect(page.getByTestId("provenance").locator('a[href*="24304075"]')).toHaveCount(1);
+  });
+
   test("source links are present and open externally and safely", async ({ page }) => {
     await page.goto("/guides/races/troll");
     const links = page.getByTestId("ability-troll.berserking").getByRole("link");

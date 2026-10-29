@@ -73,6 +73,14 @@ describe("race/class compatibility (Blizzard official tables)", () => {
       expect(guide(race).classes.map((c) => c.classId), race).toEqual(classes);
     }
   });
+  it("links the official source of every class list", () => {
+    for (const g of RACE_GUIDES) {
+      const urls = g.classSources.map((x) => x.url);
+      expect(urls, g.id).toContain("https://news.blizzard.com/en-us/article/24304075/create-the-hero-you-want-to-be-in-world-of-warcraft-forever");
+      if (g.id.endsWith("skyborne")) expect(urls, g.id).toContain("https://news.blizzard.com/en-us/article/24302071/wow-forever-meet-the-new-skyborne");
+      expect(g.classSources.every((x) => x.kind === "official-article"), g.id).toBe(true);
+    }
+  });
   it("flags exactly the six officially named new combinations", () => {
     const flagged = RACE_GUIDES.flatMap((g) => g.classes.filter((c) => c.isNew).map((c) => [g.id, c.classId]));
     expect(Object.fromEntries(flagged)).toEqual(OFFICIAL_NEW);

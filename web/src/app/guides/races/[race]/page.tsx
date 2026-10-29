@@ -37,7 +37,7 @@ export default async function Page({ params }: { params: Params }) {
   const { nonce, baseUrl } = await pageContext();
   const s = FACTION_STYLE[g.faction];
   const isNewRace = raceNewFlags[g.slug] ?? false;
-  const sources = [...new Map([...g.active, ...g.passive, ...g.retired].flatMap((a) => a.sources).map((x) => [x.id, x])).values()]
+  const sources = [...new Map([...g.classSources, ...g.active.flatMap((a) => a.sources), ...g.passive.flatMap((a) => a.sources), ...g.retired.flatMap((a) => a.sources)].map((x) => [x.id, x])).values()]
     .sort((a, b) => a.publishedOn.localeCompare(b.publishedOn) || a.id.localeCompare(b.id));
 
   return (
@@ -68,7 +68,8 @@ export default async function Page({ params }: { params: Params }) {
             </li>
           ))}
         </ul>
-        <p className="text-sm text-mist">Class availability follows Blizzard&apos;s official race and class tables (published 22 September 2026). Each class links to its AzerDex class guide and talent calculator.</p>
+        <p className="text-sm text-mist">Class availability follows Blizzard&apos;s official race and class tables. Each class links to its AzerDex class guide and talent calculator.</p>
+        <div data-testid="class-sources"><SourceLinks sources={g.classSources} label="Class availability source" /></div>
       </section>
 
       <section aria-labelledby="abilities-title" className="space-y-6">
