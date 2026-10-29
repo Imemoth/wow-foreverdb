@@ -210,6 +210,170 @@ test.describe("version history", () => {
   });
 });
 
+/** Scrolls the whole page so lazy images start loading, then waits until every matching <img> is complete. */
+async function loadImages(page: Page, selector: string) {
+  await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 400) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 50)); } window.scrollTo(0, 0); });
+  return page.evaluate(async (sel) => {
+    const imgs = [...document.querySelectorAll<HTMLImageElement>(sel)];
+    await Promise.all(imgs.map((i) => (i.complete ? 1 : new Promise((r) => { i.onload = i.onerror = r; }))));
+    return imgs.map((i) => ({ w: i.naturalWidth, h: i.naturalHeight, src: i.currentSrc, race: i.dataset.race ?? "" }));
+  }, selector);
+}
+
+/** Collects console errors, uncaught errors, failed image responses and Content-Security-Policy violations for a page. */
+async function watchPage(page: Page) {
+  const problems: string[] = [];
+  await page.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP violation: ${e.violatedDirective} ${e.blockedURI}`));
+  });
+  page.on("console", (m) => { if (m.type() === "error") problems.push(`console: ${m.text()}`); });
+  page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+  page.on("response", (r) => { if (/\/(race-cards|class-cards|class-icons)\//.test(r.url()) && r.status() >= 400) problems.push(`${r.status()} ${new URL(r.url()).pathname}`); });
+  return problems;
+}
+
+test.describe("race artwork", () => {
+  test("every race card shows its own illustration, loaded at its own 3:4 shape, with the name below the picture", async ({ page }) => {
+    const problems = await watchPage(page);
+    await page.goto("/guides/races");
+    const loaded = await loadImages(page, '[data-testid="race-art"]');
+    expect(loaded).toHaveLength(10);
+    for (const l of loaded) {
+      // naturalWidth of a srcset image is density-corrected by `sizes`, so check the file chosen and that real pixels arrived.
+      expect(l.w, l.race).toBeGreaterThanOrEqual(200);
+      expect(l.src, l.race).toMatch(new RegExp(`/race-cards/${l.race}(-540|-800)?\\.webp$`));
+      expect(Math.abs(l.w / l.h - 0.75), l.race).toBeLessThan(0.01);
+    }
+    expect(new Set(loaded.map((l) => l.src)).size).toBe(10);
+    for (const id of ALL) {
+      const card = page.getByTestId(`race-card-${id}`);
+      const art = await card.getByTestId("race-art").boundingBox();
+      expect(Math.abs(art!.width / art!.height - 0.75), id).toBeLessThan(0.01); // shown at the image's own shape: no crop
+      const title = await card.getByRole("heading", { level: 3 }).boundingBox();
+      expect(title!.y, id).toBeGreaterThanOrEqual(art!.y + art!.height - 1); // the name never lies on the character
+      await expect(card.getByText(NAMES[id]!, { exact: true }).first()).toBeVisible();
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("the whole card is one link to the race page and shows hover/focus feedback", async ({ page, isMobile }) => {
+    await page.goto("/guides/races");
+    const card = page.getByTestId("race-card-tauren");
+    const link = card.getByRole("link", { name: "Tauren" });
+    expect((await link.boundingBox())!.height).toBeGreaterThan(0);
+    // stretched link: clicking the picture area opens the race page
+    await card.click({ position: { x: 40, y: 60 } });
+    await expect(page).toHaveURL(/\/guides\/races\/tauren$/);
+    if (isMobile) return;
+    await page.goto("/guides/races");
+    await page.keyboard.press("Tab");
+    for (let i = 0; i < 40; i++) {
+      if (await page.getByTestId("race-card-human").locator(":focus-visible").count()) break;
+      await page.keyboard.press("Tab");
+    }
+    const ring = await page.getByTestId("race-card-human").evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(ring).not.toBe("none"); // keyboard focus draws a ring around the whole card
+  });
+
+  test("each race page uses the matching illustration in its hero, and both Skyborne factions use different ones", async ({ page }) => {
+    const srcs = new Map<string, string>();
+    for (const id of ALL) {
+      const problems = await watchPage(page);
+      await page.goto(`/guides/races/${id}`);
+      const [hero] = await loadImages(page, '[data-testid="race-hero-art"]');
+      expect(hero!.src, id).toMatch(new RegExp(`/race-cards/${id}(-540|-800)?\\.webp$`));
+      expect(hero!.w, id).toBeGreaterThan(300);
+      expect(await page.getByTestId("race-hero").getAttribute("data-race")).toBe(id);
+      srcs.set(id, hero!.src.replace(/-(540|800)\.webp$/, ".webp"));
+      expect(problems, id).toEqual([]);
+    }
+    expect(new Set(srcs.values()).size).toBe(10);
+    expect(srcs.get("high-order-skyborne")).not.toBe(srcs.get("windshaper-skyborne"));
+  });
+
+  test("desktop hero: artwork on the right, all text on the left and clear of the picture", async ({ page, isMobile }) => {
+    test.skip(isMobile, "desktop layout");
+    await page.setViewportSize({ width: 1366, height: 900 });
+    for (const id of ["tauren", "human", "windshaper-skyborne"]) {
+      await page.goto(`/guides/races/${id}`);
+      const hero = (await page.getByTestId("race-hero").boundingBox())!;
+      const art = (await page.getByTestId("race-hero-art").boundingBox())!;
+      expect(art.x, id).toBeGreaterThan(hero.x + hero.width * 0.45);
+      const h1 = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
+      expect(h1.x + h1.width, id).toBeLessThan(art.x + art.width * 0.3); // text ends where the picture's fade begins
+      const summary = (await page.getByTestId("race-hero").locator("p").nth(1).boundingBox())!;
+      expect(summary.x + summary.width, id).toBeLessThan(art.x + art.width * 0.3);
+      expect(art.y, id).toBeLessThanOrEqual(hero.y + 1);
+      expect(art.y + art.height, id).toBeGreaterThanOrEqual(hero.y + hero.height - 1);
+    }
+  });
+
+  test("phone hero: the picture is above the text, faces are in the first screen, and no text lies on the picture", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const id of ALL) {
+      await page.goto(`/guides/races/${id}`);
+      const art = (await page.getByTestId("race-hero-art").boundingBox())!;
+      const h1 = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
+      const label = (await page.getByTestId("race-hero").locator("p").first().boundingBox())!;
+      expect(label.y, id).toBeGreaterThanOrEqual(art.y + art.height - 1);
+      expect(h1.y, id).toBeGreaterThan(art.y + art.height);
+      expect(art.width, id).toBeGreaterThan(300);
+      expect(art.y + art.height * 0.4, id).toBeLessThan(844); // the top 40% (where every face is) is within the first screen
+      expect(art.height / art.width, id).toBeLessThan(1.3); // no excessive blank space or stretched poster
+    }
+  });
+
+  test("available-class tiles are illustrated with the existing class art, link to the right Class Guide and keep the new-in-Forever marker", async ({ page }) => {
+    const problems = await watchPage(page);
+    await page.goto("/guides/races/undead");
+    const expected = ["mage", "paladin", "priest", "rogue", "warlock", "warrior"];
+    await expect(page.locator("[data-testid^=class-][data-class]")).toHaveCount(expected.length);
+    const art = await loadImages(page, '[data-testid="class-tile-art"]');
+    expect(art).toHaveLength(expected.length);
+    art.forEach((a, i) => { expect(a.w).toBeGreaterThan(100); expect(a.src).toMatch(new RegExp(`/class-cards/${expected[i]}(-640)?\\.webp$`)); });
+    for (const cls of expected) {
+      const tile = page.getByTestId(`class-${cls}`);
+      expect(await tile.getByRole("link").getAttribute("href")).toBe(`/guides/classes/${cls}`);
+      const box = (await tile.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(80);
+      const link = (await tile.getByRole("link").boundingBox())!;
+      expect(link.height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByTestId("class-paladin")).toContainText("New in Forever");
+    await expect(page.getByTestId("class-mage")).not.toContainText("New in Forever");
+    // the whole tile is the link: clicking the picture side opens the guide
+    await page.getByTestId("class-priest").locator('[data-testid="class-tile-art"]').click({ position: { x: 20, y: 20 }, force: true });
+    await expect(page).toHaveURL(/\/guides\/classes\/priest$/);
+    expect(problems).toEqual([]);
+  });
+
+  test("the Guides landing page shows a thumbnail of every race, each a 44px+ target to the right page", async ({ page }) => {
+    const problems = await watchPage(page);
+    await page.goto("/guides");
+    const loaded = await loadImages(page, '[data-testid="race-thumb"]');
+    expect(loaded).toHaveLength(10);
+    // naturalWidth of a srcset image is density-corrected by `sizes` (40 px here), so check the file actually chosen and that pixels arrived.
+    loaded.forEach((l) => { expect(l.w).toBeGreaterThan(0); expect(l.src).toMatch(/\/race-cards\/[a-z-]+-(240|540)\.webp$/); });
+    expect(new Set(loaded.map((l) => l.src)).size).toBe(10);
+    for (const id of ALL) {
+      const link = page.getByTestId(`race-link-${id}`);
+      const box = (await link.boundingBox())!;
+      expect(Math.min(box.width, box.height), id).toBeGreaterThanOrEqual(44);
+      await expect(link).toHaveAttribute("href", `/guides/races/${id}`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("the race and class data on the page is unchanged by the artwork", async ({ page }) => {
+    await page.goto("/guides/races/orc");
+    await expect(page.locator("[data-testid^=class-][data-class]")).toHaveCount(6);
+    await expect(page.getByTestId("ability-orc.blood-fury").getByTestId("cooldown")).toHaveText("2 min");
+    await expect(page.getByTestId("provenance")).toContainText("Not verified against the release client");
+    await page.getByTestId("version-history").locator("summary").click();
+    await expect(page.getByTestId("history-row")).toHaveCount(7);
+  });
+});
+
 test.describe("accessibility with the history expanded", () => {
   for (const id of ["human", "windshaper-skyborne", "dwarf"]) {
     test(`WCAG 2.2 AA automated checks, version history open: ${id}`, async ({ page }) => {
