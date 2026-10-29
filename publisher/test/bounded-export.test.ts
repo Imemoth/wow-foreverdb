@@ -4,14 +4,17 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MAX_EXPORT_ROWS,
   EXPORT_SECTIONS,
+  MAX_CONFIGURABLE_EXPORT_ROWS,
   exportRowCounts,
   MAX_VALIDATION_ISSUES,
   maxExportRows,
   parsePrivateExportBounded,
   PrivateExport,
   PublicationConfig,
+  type PublicationConfig as PublicationConfigT,
 } from "../src/core/contract.ts";
 import { buildProjection, PublicationError } from "../src/core/project.ts";
+import { readdirSync } from "node:fs";
 import { runPublication, type RunDeps } from "../src/core/run.ts";
 import { readPrivateExport, type ClosableSqlClient, type SqlClient } from "../src/core/sql.ts";
 import { syntheticExport } from "../src/core/synthetic.ts";
@@ -221,9 +224,21 @@ describe("the total-row guard in buildProjection (sum over the five collections)
 describe("the config limit", () => {
   it("is optional and validated", () => {
     expect(PublicationConfig.safeParse({ ...rawConfig, limits: { maxExportRows: 1000 } }).success).toBe(true);
-    for (const v of [0, -1, 1.5, "5", 10_000_001, null]) expect(PublicationConfig.safeParse({ ...rawConfig, limits: { maxExportRows: v } }).success).toBe(false);
+    for (const v of [0, -1, 1.5, "5", 120_001, 10_000_000, null]) expect(PublicationConfig.safeParse({ ...rawConfig, limits: { maxExportRows: v } }).success).toBe(false);
+    expect(PublicationConfig.safeParse({ ...rawConfig, limits: { maxExportRows: 120_000 } }).success).toBe(true);
     expect(PublicationConfig.safeParse({ ...rawConfig, limits: { maxExportRows: 10, extra: 1 } }).success).toBe(false);
     expect(PublicationConfig.safeParse({ ...rawConfig, limits: {} }).success).toBe(false);
+  });
+  it("can only lower the threshold: the ceiling equals the default, in the schema, in maxExportRows and at the read boundary", async () => {
+    expect(MAX_CONFIGURABLE_EXPORT_ROWS).toBe(DEFAULT_MAX_EXPORT_ROWS);
+    const handBuilt = { ...config, limits: { maxExportRows: 10_000_000 } } as PublicationConfigT; // bypasses the schema on purpose
+    expect(maxExportRows(handBuilt)).toBe(120_000);
+    const over = violation({ ...tiny(), sources: new Array(120_001) }, handBuilt);
+    expect(over.message).toBe("export_too_large");
+    const f = fakePrivate({});
+    await expect(readPrivateExport(f.client, 1, 120_001)).rejects.toMatchObject({ message: "invalid_export_limit" });
+    expect(f.statements).toHaveLength(0);
+    await expect(readPrivateExport(f.client, 1, 10_000_000)).rejects.toMatchObject({ message: "invalid_export_limit" });
   });
   it("does not change a valid export's published content", () => {
     const a = buildProjection(syntheticExport(1), config).report.contentSha256;
@@ -233,13 +248,19 @@ describe("the config limit", () => {
 });
 
 /** A private-database fake that honours `limit`, serves lazily generated rows and records everything that happens. */
-function fakePrivate(sizes: Partial<Record<(typeof EXPORT_SECTIONS)[number], number>>, rowOf: (section: string, i: number) => Record<string, unknown> = (s, i) => ({ s, i })) {
+function fakePrivate(sizes: Partial<Record<(typeof EXPORT_SECTIONS)[number], number>>, rowOf: (section: string, i: number) => Record<string, unknown> = (s, i) => ({ s, i }), metaRows = 1) {
   const statements: { text: string; params: unknown[] }[] = [];
   let produced = 0;
+  let producedMeta = 0;
   const client: SqlClient = {
     query: async (text, params = []) => {
       statements.push({ text: text.replace(/\s+/g, " ").trim(), params });
-      if (/export_meta_v1/.test(text)) return { rows: [{ contract_version: 1 }] };
+      if (/export_meta_v1/.test(text)) {
+        const lim = /limit (\d+)/.exec(text);
+        const n = lim ? Math.min(metaRows, Number(lim[1])) : metaRows;
+        producedMeta += n;
+        return { rows: Array.from({ length: n }, () => ({ contract_version: 1 })) };
+      }
       const m = /export_(sources|items|buckets|drops|locations)_v1/.exec(text);
       if (m) {
         const section = m[1] as (typeof EXPORT_SECTIONS)[number];
@@ -252,7 +273,7 @@ function fakePrivate(sizes: Partial<Record<(typeof EXPORT_SECTIONS)[number], num
       return { rows: [] };
     },
   };
-  return { client, statements, produced: () => produced };
+  return { client, statements, produced: () => produced, producedMeta: () => producedMeta };
 }
 const collectionLimits = (st: { text: string; params: unknown[] }[]) =>
   st.filter((s) => /export_(sources|items|buckets|drops|locations)_v1/.test(s.text)).map((s) => Number(s.params[s.params.length - 1]));
@@ -308,6 +329,39 @@ describe("the database read boundary", () => {
     const f = fakePrivate({ sources: 400, items: 400, buckets: 400, drops: 400, locations: 400 });
     await expect(readPrivateExport(f.client, 1, 1000)).rejects.toMatchObject({ message: "export_too_large" });
     expect(f.produced()).toBeLessThanOrEqual(1001);
+  });
+
+  it("the metadata query is bounded too: limit 2, one row is the contract", async () => {
+    const f = fakePrivate({ sources: 1 });
+    await readPrivateExport(f.client, 1, 100);
+    expect(f.statements[1]!.text).toBe("select * from publication_export.export_meta_v1() limit 2");
+  });
+
+  it("a metadata function that returns many rows is refused after reading at most 2 of them; nothing else is requested", async () => {
+    const f = fakePrivate({ sources: 5 }, undefined, 5_000_000);
+    const err = (await readPrivateExport(f.client, 1, 100).catch((e) => e)) as PublicationError;
+    expect(err).toBeInstanceOf(PublicationError);
+    expect(err.message).toBe("export_meta_invalid");
+    expect(err.detail).toEqual({ reason: "more_than_one_row" });
+    expect(f.producedMeta()).toBe(2);
+    expect(f.produced()).toBe(0);
+    const text = f.statements.map((s) => s.text);
+    expect(text.at(-1)).toBe("rollback");
+    expect(text.some((t) => t === "commit" || /export_(sources|items|buckets|drops|locations)_v1/.test(t))).toBe(false);
+  });
+
+  it("two metadata rows are already a violation (a second row is the proof)", async () => {
+    const f = fakePrivate({}, undefined, 2);
+    await expect(readPrivateExport(f.client, 1, 100)).rejects.toMatchObject({ message: "export_meta_invalid" });
+  });
+
+  it("no metadata row keeps the existing diagnostics: the read succeeds and validation reports meta, path and code only", async () => {
+    const f = fakePrivate({}, undefined, 0);
+    const out = (await readPrivateExport(f.client, 1, 100)) as Record<string, unknown>;
+    expect(out.meta).toBeUndefined();
+    const err = violation(out);
+    expect(err.message).toBe("export_contract_violation");
+    expect((err.detail as { issues: unknown[] }).issues).toEqual([{ path: "meta", code: "invalid_type" }]);
   });
 
   it("an invalid limit is refused before the database is touched", async () => {
@@ -393,5 +447,21 @@ describe("runPublication with a private export over the limit", () => {
     expect(r.ok).toBe(true);
     expect(r.sha256).toBe(buildProjection(syntheticExport(1), config).report.contentSha256);
     expect(collectionLimits(f.statements)[0]).toBe(DEFAULT_MAX_EXPORT_ROWS + 1);
+  });
+});
+
+describe("the unguarded projection stays out of the production path", () => {
+  it("projectValidatedExport is referenced only where it is defined (project.ts) and by the benchmark script", () => {
+    const root = resolve(__dirname, "..");
+    const prod = [
+      ...readdirSync(resolve(root, "src/core")).map((f) => `src/core/${f}`),
+      "src/cli.ts",
+      "src/node-sql.ts",
+      "../supabase/functions/publish-observations/index.ts",
+      ...readdirSync(resolve(root, "../supabase/functions/publish-observations/core")).map((f) => `../supabase/functions/publish-observations/core/${f}`),
+    ];
+    const users = prod.filter((f) => readFileSync(resolve(root, f), "utf8").includes("projectValidatedExport"));
+    expect(users.sort()).toEqual(["../supabase/functions/publish-observations/core/project.ts", "src/core/project.ts"]);
+    expect(readFileSync(resolve(root, "scripts/bench-projection.ts"), "utf8")).toContain("projectValidatedExport");
   });
 });

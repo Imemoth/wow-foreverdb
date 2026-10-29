@@ -74,6 +74,8 @@ if npx tsx src/cli.ts export --config "$TMP/limit-$((rows - 1)).json" --out "$TM
 limit_cfg "$rows"
 out=$(npx tsx src/cli.ts publish --config "$TMP/limit-$rows.json"); echo "$out" | grep -q '"outcome":"duplicate"' || fail "export exactly at the limit was not accepted: $out"
 pass "oversized private export refused at the read boundary ($rows rows: limit $((rows - 1)) fails closed, limit $rows accepted); active publication untouched"
+[ "$($PSQL -d $PRIV -Atc "select count(*) from publication_export.export_meta_v1()")" = "1" ] || fail "export_meta_v1() must return exactly one row (the read boundary reads at most 2 and refuses more than 1)"
+pass "export_meta_v1() single-row contract holds on the real export function"
 
 # Fail closed: non-allowlisted column in the export.
 node -e 'const f=process.argv[1];const d=require(f);d.buckets[0].installation_id="leak";require("fs").writeFileSync(f+".bad.json",JSON.stringify(d))' "$TMP/export.json"

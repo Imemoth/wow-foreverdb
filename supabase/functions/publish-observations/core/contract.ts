@@ -105,6 +105,13 @@ export type PrivateExport = z.infer<typeof PrivateExport>;
  * docs/web/public-publication-benchmarks.md). Overridable with `limits.maxExportRows` in the publication config.
  */
 export const DEFAULT_MAX_EXPORT_ROWS = 120_000;
+/**
+ * Hard ceiling for the configured limit: equal to the default, so a config can only LOWER the threshold. Measured (Node, V8 heap
+ * limits as a proxy for the 256 MB Edge isolate, synthetic compact rows with raw + validated + projected data in memory): 36k rows fit
+ * 128 MB, 87k fit 192 MB, 120k fit 256 MB (212 MB used), 145k barely (229 MB), 181k do not; real rows are wider. Going above this is a
+ * code change that needs a fresh memory benchmark on the hosted runtime, never a config edit.
+ */
+export const MAX_CONFIGURABLE_EXPORT_ROWS = DEFAULT_MAX_EXPORT_ROWS;
 /** A failing export reports at most this many validation issues; validation stops as soon as the cap is reached. */
 export const MAX_VALIDATION_ISSUES = 20;
 
@@ -208,11 +215,12 @@ export const PublicationConfig = z
     allowedSourceTypes: z.array(z.enum(SOURCE_TYPES)).min(1),
     allowedLootKinds: z.array(z.enum(LOOT_KINDS)).min(1),
     retainPublications: z.number().int().min(2).max(10),
-    /** Optional. Absent = defaults (DEFAULT_MAX_EXPORT_ROWS). Adding it does not change any published content. */
-    limits: z.object({ maxExportRows: z.number().int().min(1).max(10_000_000) }).strict().optional(),
+    /** Optional. Absent = DEFAULT_MAX_EXPORT_ROWS. Can only lower the threshold (max MAX_CONFIGURABLE_EXPORT_ROWS). Never changes published content. */
+    limits: z.object({ maxExportRows: z.number().int().min(1).max(MAX_CONFIGURABLE_EXPORT_ROWS) }).strict().optional(),
   })
   .strict();
 export type PublicationConfig = z.infer<typeof PublicationConfig>;
 
 /** The effective total-row safety threshold of a parsed config. */
-export const maxExportRows = (config: PublicationConfig): number => config.limits?.maxExportRows ?? DEFAULT_MAX_EXPORT_ROWS;
+export const maxExportRows = (config: PublicationConfig): number =>
+  Math.min(config.limits?.maxExportRows ?? DEFAULT_MAX_EXPORT_ROWS, MAX_CONFIGURABLE_EXPORT_ROWS); // clamped again: a hand-built, unparsed config cannot exceed the ceiling

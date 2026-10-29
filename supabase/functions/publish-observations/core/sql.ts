@@ -9,7 +9,7 @@
  * Public side  : staging INSERT + pub_admin.* only (role foreverdb_publisher; the Edge Function
  *                assumes it with SET LOCAL ROLE inside each transaction).
  */
-import { DEFAULT_MAX_EXPORT_ROWS, type ExportSection, type PublicationConfig } from "./contract.ts";
+import { DEFAULT_MAX_EXPORT_ROWS, MAX_CONFIGURABLE_EXPORT_ROWS, type ExportSection, type PublicationConfig } from "./contract.ts";
 import { countsOf, PublicationError, type Projection } from "./project.ts";
 
 export interface SqlClient {
@@ -40,13 +40,19 @@ export function counting(client: SqlClient): SqlClient & { ops: () => number } {
  * change between counting and fetching, and the single snapshot keeps the collections consistent with each other. An oversized
  * export fails closed (rollback, `export_too_large`, counts only) before any further collection is requested and before
  * validation or any write. For an export within the budget the result is exactly what the unbounded queries returned.
+ * The metadata query is bounded the same way (limit 2, exactly one row is the contract).
  */
 export async function readPrivateExport(c: SqlClient, grid: number, maxRows: number = DEFAULT_MAX_EXPORT_ROWS): Promise<unknown> {
-  if (!Number.isInteger(maxRows) || maxRows < 1) throw new PublicationError("invalid_export_limit");
+  // The ceiling is enforced here too, so the read boundary does not depend on what the caller computed.
+  if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_CONFIGURABLE_EXPORT_ROWS) throw new PublicationError("invalid_export_limit");
   await c.query("begin isolation level repeatable read read only");
   try {
     const q = async (sql: string, params: unknown[] = []) => (await c.query(sql, params)).rows;
-    const [meta] = await q("select * from publication_export.export_meta_v1()");
+    // export_meta_v1() is a single-row contract (one SELECT without FROM). Bounded like everything else: at most 2 rows are read, and a
+    // second one proves the contract is broken. No rows at all stays a validation matter (meta missing -> export_contract_violation).
+    const metaRows = await q("select * from publication_export.export_meta_v1() limit 2");
+    if (metaRows.length > 1) throw new PublicationError("export_meta_invalid", { reason: "more_than_one_row" });
+    const meta = metaRows[0];
     const collections: [ExportSection, string, unknown[]][] = [
       ["sources", "select * from publication_export.export_sources_v1()", []],
       ["items", "select * from publication_export.export_items_v1()", []],

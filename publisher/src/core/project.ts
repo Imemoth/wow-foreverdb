@@ -8,6 +8,7 @@ import {
   maxExportRows,
   parsePrivateExportBounded,
   type LootKind,
+  type PrivateExport,
   type PublicationConfig,
   type SourceType,
 } from "./contract.ts";
@@ -109,7 +110,16 @@ export function buildProjection(rawExport: unknown, config: PublicationConfig): 
   if (!parsed.success) {
     throw new PublicationError("export_contract_violation", { issues: parsed.issues, truncated: parsed.truncated });
   }
-  const ex = parsed.data;
+  return projectValidatedExport(parsed.data, config);
+}
+
+/**
+ * The projection of an export that is ALREADY validated (`parsePrivateExportBounded`). It has no size guard of its own: the only
+ * production entry is `buildProjection`, which enforces the row limit and the bounded validation first. It is exported for the
+ * synthetic CPU benchmarks (scripts/bench-projection.ts), which exceed the production limit on purpose; a static test pins that no
+ * production source references it.
+ */
+export function projectValidatedExport(ex: PrivateExport, config: PublicationConfig): { projection: Projection; report: BuildReport } {
   if (ex.meta.contract_version !== config.contractVersion) {
     throw new PublicationError("export_contract_version_mismatch", { got: ex.meta.contract_version });
   }

@@ -76,6 +76,18 @@ The full write path was additionally exercised by the rehearsal-only Cron job ab
 Safety threshold: 120,000 total input rows (sum of the five collections), enforced in the database read (see `publication-pipeline.md`) and again before validation.
 It bounds memory; it does **not** mean such an export completes: synthetic scale 83 (120,267 input rows) needs 3.3 s of `buildProjection` in Node against the 2 s Edge CPU limit.
 
+**Why 120,000 is also the hard ceiling (memory of the whole pipeline: raw export + validated copy + projection in memory, synthetic compact rows; V8 heap limit as a proxy for the 256 MB Edge isolate, Node 24):**
+
+| Input rows (synthetic scale) | 128 MB heap | 192 MB heap | 256 MB heap |
+| --- | --- | --- | --- |
+| 36,225 (25) | fits | fits | fits |
+| 86,940 (60) | out of memory | fits | fits |
+| 120,267 (83) | out of memory | out of memory | fits (212 MB used) |
+| 144,900 (100) | | | fits (229 MB used) |
+| 181,125 (125) | | | **out of memory** |
+
+Real database rows are wider than the synthetic ones (the bounded read of 120,000 real-shaped rows alone holds about +44 MB heap versus 16 MB for the synthetic export), so 120,000 is already at the memory edge and the configured limit may only lower it. **Memory protection is not CPU capacity**: the CPU ceiling is 36,000-39,000 input rows (2 s Edge CPU limit), and `buildProjection` of the 120,267-row export alone needs 3.3-4.4 s in Node. Any operational limit below 120,000 must be based on hosted-runtime benchmarks and observed production runs.
+
 **Valid exports, old vs new code (validation + projection, medians; run-to-run spread about +/-8 %):**
 
 | Export | Validation old / new | `buildProjection` old / new |
