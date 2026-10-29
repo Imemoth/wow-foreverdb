@@ -157,7 +157,8 @@ export function parsePrivateExportBounded(raw: unknown, maxIssues: number = MAX_
     return fail();
   }
   const obj = raw as Record<string, unknown>;
-  if (Object.keys(obj).some((k) => k !== "meta" && !(EXPORT_SECTIONS as readonly string[]).includes(k))) add("", "unrecognized_keys");
+  // Reported LAST, like PrivateExport did (zod appends the unrecognized-keys issue after the field issues): same report order.
+  const hasUnknownKey = Object.keys(obj).some((k) => k !== "meta" && !(EXPORT_SECTIONS as readonly string[]).includes(k));
 
   // One row. A throwing transform (an unparseable timestamp) is a violation too, reported without its message.
   const parseRow = (schema: { safeParse(v: unknown): { success: boolean; data?: unknown; error?: { issues: { path: PropertyKey[]; code: string }[] } } }, value: unknown, base: string) => {
@@ -190,6 +191,7 @@ export function parsePrivateExportBounded(raw: unknown, maxIssues: number = MAX_
     }
     data[section] = out;
   }
+  if (hasUnknownKey) add("", "unrecognized_keys");
   if (issues.length > 0) return fail();
   return { success: true, data: data as PrivateExport };
 }

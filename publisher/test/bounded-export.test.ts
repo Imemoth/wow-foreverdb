@@ -89,12 +89,17 @@ describe("bounded validation is the same strict contract as PrivateExport", () =
       else if (kind === 4) ex[pick(["meta", ...EXPORT_SECTIONS, "extra"])] = pick(pool);
       else ex.meta[pick(Object.keys(ex.meta))] = pick(pool);
       let oldOk: boolean;
+      let oldReport: string[] | null = null; // zod's own report, in its order
       try {
-        oldOk = PrivateExport.safeParse(ex).success;
+        const o = PrivateExport.safeParse(ex);
+        oldOk = o.success;
+        if (!o.success) oldReport = o.error.issues.map((i) => `${i.path.join(".")}|${i.code}`);
       } catch {
         oldOk = false; // a throwing timestamp transform: also a rejection
       }
       const newR = parsePrivateExportBounded(ex);
+      // The report is the first 20 entries of what PrivateExport reported, same order (the diagnostics did not change).
+      if (oldReport && !newR.success) expect(newR.issues.map((i) => `${i.path}|${i.code}`), JSON.stringify(ex).slice(0, 160)).toEqual(oldReport.slice(0, 20));
       expect(newR.success, JSON.stringify(ex).slice(0, 200)).toBe(oldOk);
       if (oldOk) {
         accepted++;
