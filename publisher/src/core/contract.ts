@@ -10,7 +10,8 @@
  */
 import { z } from "zod";
 
-const int = z.coerce.number().int().finite();
+// zod 4: z.number() already rejects NaN/Infinity (and .int() is bounded to safe integers), so no .finite().
+const int = z.coerce.number().int();
 const bigintLike = z.union([z.string().regex(/^-?\d{1,18}$/), z.number().int()]).transform(Number);
 const ts = z.union([z.string(), z.date()]).nullable().transform((v) => (v == null ? null : new Date(v).toISOString()));
 const share = z.union([z.string(), z.number()]).nullable().transform((v) => (v == null ? null : Number(v)));

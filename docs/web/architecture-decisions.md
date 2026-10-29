@@ -40,7 +40,7 @@ Browsers never get a database key or JWT. All data flows through server code (RS
 ## ADR-004 — Next.js 16 App Router + TypeScript + Tailwind 4, inside this repo (Accepted)
 
 - Server Components give indexable HTML. Route handlers act as the BFF. The `proxy` (formerly middleware) applies the nonce CSP and rate limits. `web/` sits next to `publisher/` and `database/public-read/` in this repository so contracts change atomically in one PR.
-- Pinned exact versions and committed lockfiles: Next **16.3.8**, React **19.2.8**, zod **3.25.76**, pg **8.23.1**. `gray-matter` was replaced by `yaml` (core schema) after `npm audit` flagged its transitive dependencies. Prod `npm audit`: 0 vulnerabilities.
+- Pinned exact versions and committed lockfiles: Next **16.3.8**, React **19.2.8**, zod **4.6.7**, pg **8.23.1**. `gray-matter` was replaced by `yaml` (core schema) after `npm audit` flagged its transitive dependencies. Prod `npm audit`: 0 vulnerabilities.
 - Self-hosted OFL fonts (Cinzel, Inter, JetBrains Mono via Fontsource). No third-party runtime requests.
 
 ## ADR-005 — Strict nonce CSP ⇒ dynamic HTML; caching at the data layer (Accepted)
