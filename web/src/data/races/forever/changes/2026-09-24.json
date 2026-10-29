@@ -1,0 +1,57 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Blizzard beta development notes, 24 Sep 2026",
+  "records": [
+    {
+      "id": "2026-09-24-build-notes",
+      "announcedOn": "2026-09-24",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "official",
+      "sources": [
+        "blz-notes-0924"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Published in Blizzard's WoW Forever Beta development notes; the notes describe the beta client. Whether the release client matches, and the in-game effective date and build, are not verified. The post was edited later (last edit 2026-10-26); its race entries are dated by the post's creation.",
+      "ops": [
+        {
+          "entity": "gnome.eureka",
+          "type": "modified",
+          "set": {
+            "description": "Reduces the Mana, Rage or Energy cost of your next 3 spells or abilities by 10% and increases their damage or healing by 10%."
+          },
+          "summary": "Clarified as a 10% discount on Mana, Rage or Energy abilities for every class.",
+          "previous": {
+            "description": "Reduces the cost of your next 3 spells or abilities and increases their damage or healing by 10%."
+          }
+        },
+        {
+          "entity": "tauren.cultivation",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Each herb needs a player level equal to the level required to pick it divided by 5. Herbs that need more than 300 Herbalism skill can be cultivated at player level 60."
+            ]
+          },
+          "summary": "Cultivating a herb now needs a minimum player level.",
+          "previous": {
+            "details": []
+          }
+        },
+        {
+          "entity": "undead.touch-of-the-grave",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Does not break crowd control and only triggers from spells and abilities that have a damage component: Shadow Word: Pain triggers it on cast but not on periodic damage."
+            ]
+          },
+          "summary": "No longer breaks crowd control, and only triggers from effects that deal damage.",
+          "previous": {
+            "details": []
+          }
+        }
+      ]
+    }
+  ]
+}

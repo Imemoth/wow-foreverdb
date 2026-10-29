@@ -33,27 +33,44 @@ export interface SourceRef {
  * How well a statement is backed. Priority follows the project's source order:
  * client-verified (a named client build) > official (Blizzard patch/dev notes or overview articles) >
  * corroborated (independent community sources) > unverified.
- * Only `client-verified` and `official` records change the current state; the other two are listed as pending, never applied.
+ * Precedence is per property: official / client-verified evidence structurally changes the state; community (`corroborated`)
+ * evidence may fill in or refine a property but never overwrites a property that stronger evidence established; `unverified`
+ * evidence is only listed as pending.
  */
 export type Evidence = "client-verified" | "official" | "corroborated" | "unverified";
 export const APPLIED_EVIDENCE: readonly Evidence[] = ["client-verified", "official"];
 
-export type ChangeType = "added" | "modified" | "renamed" | "removed" | "restored";
+/**
+ * `documented` = a previously unknown or vaguer detail became known. It does NOT claim the game changed.
+ * Structural types (`added`, `removed`, `restored`) always need applied (client-verified / official) evidence.
+ */
+export type ChangeType = "added" | "modified" | "renamed" | "removed" | "restored" | "documented";
+
+/** Higher wins. `unverified` (0) never changes the state. */
+export const EVIDENCE_RANK: Record<Evidence, number> = { "client-verified": 3, official: 2, corroborated: 1, unverified: 0 };
 
 export interface BaselineEntity {
   id: string;
   kind: string;
+  /** How well the baseline definition is backed; individual properties may override via `propEvidence`. */
+  evidence: Evidence;
+  propEvidence?: Record<string, Evidence>;
   props: Props;
-  /** Source ids (from the baseline file) documenting this entity. */
+  /** Source ids from the source catalogue documenting this entity (including later sources that state its earlier values). */
   sources: string[];
+}
+
+/** The single place where sources are defined; baselines and change records only reference their ids. */
+export interface SourceCatalog {
+  schema: "azerdex.versioned-sources/1";
+  sources: SourceRef[];
 }
 
 export interface Baseline {
   schema: "azerdex.versioned-baseline/1";
-  /** Publication date of the baseline source(s). */
+  /** Publication date of the baseline documentation. */
   asOf: IsoDate;
   title: string;
-  sources: SourceRef[];
   entities: BaselineEntity[];
 }
 
@@ -79,7 +96,7 @@ export interface ChangeRecord {
   /** Client build the change is verified against; null unless independently supported. */
   build: string | null;
   evidence: Evidence;
-  /** Source ids (from the file's `sources`). At least one. */
+  /** Source ids from the source catalogue. At least one. */
   sources: string[];
   /** When the record was checked against its sources. */
   verifiedOn: IsoDate;
@@ -90,7 +107,6 @@ export interface ChangeRecord {
 export interface ChangeFile {
   schema: "azerdex.versioned-changes/1";
   title: string;
-  sources: SourceRef[];
   records: ChangeRecord[];
 }
 
@@ -113,7 +129,7 @@ export interface HistoryEntry {
   summary: string;
   notes?: string;
   diffs: PropDiff[];
-  /** False for pending records (not strong enough evidence to replace confirmed values). */
+  /** False when nothing in the entry could be applied (weaker evidence than what is already established). */
   applied: boolean;
   /** The full property set after this entry (applied entries only); lets the UI show earlier definitions. */
   snapshot: Props | null;
@@ -125,6 +141,8 @@ export interface ResolvedEntity {
   /** False after a `removed` change (until `restored`). Inactive entities keep their last definition in `current`. */
   active: boolean;
   current: Props;
+  /** Evidence behind each current property value (absent for unknown/null values). */
+  propEvidence: Record<string, Evidence>;
   history: HistoryEntry[];
   pending: HistoryEntry[];
 }
@@ -138,7 +156,7 @@ export interface ResolvedState {
 
 export type VersionedErrorCode =
   | "duplicate-entity" | "unknown-entity" | "already-removed" | "not-removed" | "already-exists" | "conflict"
-  | "unknown-source" | "bad-order" | "duplicate-record" | "empty-record" | "bad-op";
+  | "unknown-source" | "duplicate-source" | "bad-order" | "duplicate-record" | "empty-record" | "bad-op";
 
 export class VersionedDataError extends Error {
   constructor(readonly code: VersionedErrorCode, message: string) {

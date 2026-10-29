@@ -51,13 +51,15 @@ export function buildRaceGuides(state: ResolvedState, identities: readonly RaceI
     for (const a of mine) for (const entry of a.history) if (entry.recordId !== "baseline") changes.push({ ability: a, entry });
     changes.sort((x, y) => y.entry.announcedOn.localeCompare(x.entry.announcedOn) || x.ability.name.localeCompare(y.ability.name));
     const every = mine.flatMap((a) => a.history.filter((h) => h.recordId !== "baseline"));
+    // "documented" entries are community-reported details, not game changes, so they never count as the latest update.
+    const gameChanges = every.filter((h) => h.type !== "documented");
     const pending = state.entities.filter((e) => e.kind === "ability" && strs(e.current.races).includes(id.id)).reduce((n, e) => n + e.pending.length, 0);
     return {
       id: id.id, slug: id.id, name: id.name, faction: id.faction, summary: id.summary, classes,
       active: current.filter((a) => a.type === "active"), passive: current.filter((a) => a.type === "passive"),
       retired: mine.filter((a) => !a.active),
       changes,
-      latestUpdate: every.length ? every.map((h) => h.announcedOn).sort().at(-1)! : null,
+      latestUpdate: gameChanges.length ? gameChanges.map((h) => h.announcedOn).sort().at(-1)! : null,
       evidence: {
         clientVerified: every.filter((h) => h.evidence === "client-verified").length,
         official: current.length + every.filter((h) => h.evidence === "official").length,

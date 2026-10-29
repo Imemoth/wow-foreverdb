@@ -1,29 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { BaselineSchema, ChangeFileSchema } from "@/lib/versioned/schema";
+import { BaselineSchema, ChangeFileSchema, SourceCatalogSchema } from "@/lib/versioned/schema";
 import { resolveVersioned } from "@/lib/versioned/resolve";
-import { VersionedDataError, type Baseline, type ChangeFile, type ChangeRecord } from "@/lib/versioned/types";
+import { VersionedDataError, type Baseline, type ChangeFile, type ChangeRecord, type SourceCatalog } from "@/lib/versioned/types";
 
 // Synthetic fixtures: invented names and numbers that exist only in this test file.
 const SRC = (id: string, publishedOn: string) => ({
   id, url: `https://example.com/${id}`, title: `Synthetic source ${id}`, publisher: "Test", kind: "official-article" as const, publishedOn, retrievedOn: "2026-10-29",
 });
+const catalog: SourceCatalog = { schema: "azerdex.versioned-sources/1", sources: [SRC("base", "2026-09-22"), SRC("c", "2026-10-15")] };
 const baseline: Baseline = {
-  schema: "azerdex.versioned-baseline/1", asOf: "2026-09-22", title: "Synthetic baseline", sources: [SRC("base", "2026-09-22")],
+  schema: "azerdex.versioned-baseline/1", asOf: "2026-09-22", title: "Synthetic baseline",
   entities: [
-    { id: "a.one", kind: "ability", props: { name: "One", value: 2, unknownThing: null }, sources: ["base"] },
-    { id: "a.two", kind: "ability", props: { name: "Two", value: 5 }, sources: ["base"] },
+    { id: "a.one", kind: "ability", evidence: "official", props: { name: "One", value: 2, unknownThing: null }, sources: ["base"] },
+    { id: "a.two", kind: "ability", evidence: "official", props: { name: "Two", value: 5 }, sources: ["base"] },
   ],
 };
 const rec = (over: Partial<ChangeRecord> & Pick<ChangeRecord, "id" | "ops">): ChangeRecord => ({
   announcedOn: "2026-10-15", effectiveOn: null, build: null, evidence: "official", sources: ["c"], verifiedOn: "2026-10-29", ...over,
 });
-const file = (...records: ChangeRecord[]): ChangeFile => ({ schema: "azerdex.versioned-changes/1", title: "Synthetic", sources: [SRC("c", "2026-10-15")], records });
+const file = (...records: ChangeRecord[]): ChangeFile => ({ schema: "azerdex.versioned-changes/1", title: "Synthetic", records });
 const mod = (entity: string, set: Record<string, string | number>, previous?: Record<string, string | number>) =>
   ({ entity, type: "modified" as const, set, previous, summary: "Synthetic change summary." });
 
 describe("resolveVersioned", () => {
   it("resolves a baseline with no changes", () => {
-    const s = resolveVersioned(baseline, []);
+    const s = resolveVersioned(baseline, [], catalog);
     expect(s.entities.map((e) => e.id)).toEqual(["a.one", "a.two"]);
     expect(s.byId.get("a.one")!.current).toEqual({ name: "One", value: 2, unknownThing: null });
     expect(s.byId.get("a.one")!.history).toHaveLength(1);
@@ -32,7 +33,7 @@ describe("resolveVersioned", () => {
 
   it("applies a modification, keeps the earlier definition and does not mutate its input", () => {
     const before = JSON.stringify(baseline);
-    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [mod("a.one", { value: 1 }, { value: 2 })] }))]);
+    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [mod("a.one", { value: 1 }, { value: 2 })] }))], catalog);
     const e = s.byId.get("a.one")!;
     expect(e.current.value).toBe(1);
     expect(e.history.map((h) => h.snapshot?.value)).toEqual([2, 1]);
@@ -43,21 +44,21 @@ describe("resolveVersioned", () => {
   it("is order-independent and reproducible", () => {
     const r1 = rec({ id: "r1", announcedOn: "2026-10-15", ops: [mod("a.one", { value: 1 }, { value: 2 })] });
     const r2 = rec({ id: "r2", announcedOn: "2026-10-26", ops: [mod("a.one", { value: 3 }, { value: 1 })] });
-    const a = resolveVersioned(baseline, [file(r2), file(r1)]);
-    const b = resolveVersioned(baseline, [file(r1, r2)]);
+    const a = resolveVersioned(baseline, [file(r2), file(r1)], catalog);
+    const b = resolveVersioned(baseline, [file(r1, r2)], catalog);
     expect(a.byId.get("a.one")!.current.value).toBe(3);
     expect(JSON.parse(JSON.stringify(a))).toEqual(JSON.parse(JSON.stringify(b)));
-    expect(JSON.stringify(resolveVersioned(baseline, [file(r1, r2)]).entities)).toBe(JSON.stringify(b.entities));
+    expect(JSON.stringify(resolveVersioned(baseline, [file(r1, r2)], catalog).entities)).toBe(JSON.stringify(b.entities));
   });
 
   it("removal makes an ability non-current but keeps its history; restore brings it back", () => {
     const removed = rec({ id: "r1", ops: [{ entity: "a.two", type: "removed", summary: "Removed in a synthetic update." }] });
     const restored = rec({ id: "r2", announcedOn: "2026-10-26", ops: [{ entity: "a.two", type: "restored", set: { value: 6 }, summary: "Restored in a synthetic update." }] });
-    const s1 = resolveVersioned(baseline, [file(removed)]).byId.get("a.two")!;
+    const s1 = resolveVersioned(baseline, [file(removed)], catalog).byId.get("a.two")!;
     expect(s1.active).toBe(false);
     expect(s1.history.map((h) => h.type)).toEqual(["baseline", "removed"]);
     expect(s1.history[0]!.snapshot).toEqual({ name: "Two", value: 5 });
-    const s2 = resolveVersioned(baseline, [file(removed, restored)]).byId.get("a.two")!;
+    const s2 = resolveVersioned(baseline, [file(removed, restored)], catalog).byId.get("a.two")!;
     expect(s2.active).toBe(true);
     expect(s2.current.value).toBe(6);
     expect(s2.history.map((h) => h.type)).toEqual(["baseline", "removed", "restored"]);
@@ -67,20 +68,20 @@ describe("resolveVersioned", () => {
     const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [
       { entity: "a.two", type: "removed", summary: "Replaced by a new ability." },
       { entity: "a.three", type: "added", kind: "ability", set: { name: "Three", value: 9 }, summary: "Introduced as a replacement." },
-    ] }))]);
+    ] }))], catalog);
     expect(s.entities.filter((e) => e.active).map((e) => e.id)).toEqual(["a.one", "a.three"]);
     expect(s.byId.get("a.two")!.history).toHaveLength(2);
   });
 
   it("handles renames as a recorded change", () => {
-    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [{ entity: "a.one", type: "renamed", set: { name: "Uno" }, previous: { name: "One" }, summary: "Renamed in a synthetic update." }] }))]);
+    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [{ entity: "a.one", type: "renamed", set: { name: "Uno" }, previous: { name: "One" }, summary: "Renamed in a synthetic update." }] }))], catalog);
     expect(s.byId.get("a.one")!.current.name).toBe("Uno");
     expect(s.byId.get("a.one")!.history[0]!.snapshot!.name).toBe("One");
   });
 
   it("never lets weaker evidence replace confirmed values; it is listed as pending", () => {
     for (const evidence of ["corroborated", "unverified"] as const) {
-      const s = resolveVersioned(baseline, [file(rec({ id: "r1", evidence, ops: [mod("a.one", { value: 99 })] }))]);
+      const s = resolveVersioned(baseline, [file(rec({ id: "r1", evidence, ops: [mod("a.one", { value: 99 })] }))], catalog);
       expect(s.byId.get("a.one")!.current.value).toBe(2);
       expect(s.byId.get("a.one")!.pending).toHaveLength(1);
       expect(s.byId.get("a.one")!.pending[0]!.applied).toBe(false);
@@ -89,7 +90,7 @@ describe("resolveVersioned", () => {
   });
 
   it("a pending addition is not an established or active entity", () => {
-    const s = resolveVersioned(baseline, [file(rec({ id: "r1", evidence: "unverified", ops: [{ entity: "a.new", type: "added", kind: "ability", set: { name: "New" }, summary: "Unverified rumour about a new ability." }] }))]);
+    const s = resolveVersioned(baseline, [file(rec({ id: "r1", evidence: "unverified", ops: [{ entity: "a.new", type: "added", kind: "ability", set: { name: "New" }, summary: "Unverified rumour about a new ability." }] }))], catalog);
     const e = s.byId.get("a.new")!;
     expect(e.active).toBe(false);
     expect(e.history).toHaveLength(0);
@@ -97,7 +98,7 @@ describe("resolveVersioned", () => {
   });
 
   it("an unknown (null) baseline value cannot conflict with a later statement", () => {
-    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [{ entity: "a.one", type: "modified", set: { unknownThing: 3 }, previous: { unknownThing: 8 }, summary: "Value became known." }] }))]);
+    const s = resolveVersioned(baseline, [file(rec({ id: "r1", ops: [{ entity: "a.one", type: "modified", set: { unknownThing: 3 }, previous: { unknownThing: 8 }, summary: "Value became known." }] }))], catalog);
     expect(s.byId.get("a.one")!.current.unknownThing).toBe(3);
   });
 
@@ -115,13 +116,14 @@ describe("resolveVersioned", () => {
       ["duplicate record id", [rec({ id: "r1", ops: [mod("a.one", { value: 1 })] }), rec({ id: "r1", announcedOn: "2026-10-16", ops: [mod("a.one", { value: 3 })] })], "duplicate-record"],
       ["empty record", [rec({ id: "r1", ops: [] })], "empty-record"],
     ])("%s", (_n, records, expected) => {
-      expect(code(() => resolveVersioned(baseline, [file(...(records as ChangeRecord[]))]))).toBe(expected);
+      expect(code(() => resolveVersioned(baseline, [file(...(records as ChangeRecord[]))], catalog))).toBe(expected);
     });
   });
 });
 
 describe("versioned schemas", () => {
   it("accept the synthetic fixtures", () => {
+    expect(SourceCatalogSchema.safeParse(catalog).success).toBe(true);
     expect(BaselineSchema.safeParse(baseline).success).toBe(true);
     expect(ChangeFileSchema.safeParse(file(rec({ id: "r1", ops: [mod("a.one", { value: 1 })] }))).success).toBe(true);
   });
