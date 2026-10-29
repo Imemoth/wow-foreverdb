@@ -162,6 +162,21 @@ describe("oversized collections fail safely", () => {
   });
 });
 
+describe("oversized config arrays are rejected up front", () => {
+  // zod >= 4.6.6 checks .max() before validating any element (GHSA-mrhx-c7xc-m3w5): one issue, however long the array.
+  // Unconstrained or .min()-only arrays would still accumulate one issue per bad element.
+  it.each(["allowedSourceTypes", "allowedLootKinds"] as const)("%s with 200k invalid entries yields a single too_big issue", (key) => {
+    const r = PublicationConfig.safeParse({ ...rawConfig, [key]: Array.from({ length: 200_000 }, () => "not-in-the-allowlist") });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
+  });
+
+  it("the production config sits within the bounds", () => {
+    expect(config.allowedSourceTypes.length).toBeLessThanOrEqual(SOURCE_TYPES.length);
+    expect(config.allowedLootKinds.length).toBeLessThanOrEqual(LOOT_KINDS.length);
+  });
+});
+
 describe("publication allowlists are pinned (changing them widens the public data surface and needs review)", () => {
   it("source types and loot kinds", () => {
     expect([...SOURCE_TYPES]).toEqual(["creature", "gameobject", "fishing", "item"]);
