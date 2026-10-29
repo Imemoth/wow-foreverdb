@@ -218,7 +218,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
                 onPointerLeave={() => onHover(null)}
                 onPointerCancel={() => onHover(null)}
                 // The button is the whole cell (the hit area); the visible frame inside it is smaller. The focus ring is drawn on the frame.
-                className={`group relative flex h-full w-full scroll-mb-44 items-center justify-center focus-visible:outline-none ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+                className={`group relative flex h-full w-full touch-manipulation scroll-mb-44 items-center justify-center focus-visible:outline-none ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
               >
                 <span
                   data-testid="node-frame"
@@ -235,7 +235,7 @@ export function TalentTreeGrid({ tree, engine, alloc, tabbableId, selectedId, ho
                 </span>
               </button>
               {tipOpen && (
-                <Tooltip className={`pointer-events-none absolute hidden w-72 rounded-lg border border-gold-500/50 bg-ink-900 p-3 shadow-2xl ring-1 ring-black/40 md:block ${hAlign} ${vAlign}`}>
+                <Tooltip className={`pointer-events-none absolute hidden w-72 rounded-lg border border-gold-500/50 bg-ink-900 p-3 shadow-2xl ring-1 ring-black/40 wide:block ${hAlign} ${vAlign}`}>
                   <TalentCard engine={engine} alloc={alloc} talent={x} tree={tree} icon={icons[x.id]} variant="tooltip" />
                 </Tooltip>
               )}
