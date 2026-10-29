@@ -105,7 +105,7 @@ not read a Blizzard development note as proof of release-client behaviour.
 - Blizzard's 15 Oct post calls the Undead racial "Touch of the Dead" in places; it is recorded as Touch of the Grave (the 26 Oct post).
 - Forum post 1 (24 Sep) was edited later (last 26 Oct); its entries are dated by the post's creation.
 - Priest racial *spells* (Fear Ward, Divine Grace, ...) are class spells and out of scope for V1.
-- Icons: none. AzerDex has no licensed ability artwork (see `docs/third-party-blizzard-content-notice.md`), so cards use a neutral lettered tile.
+- Race artwork: the ten owner-provided illustrations on the cards, hero and `/guides` thumbnails; see [race-art.md](race-art.md). Ability icons: none. AzerDex has no licensed ability artwork (see `docs/third-party-blizzard-content-notice.md`), so ability cards use a neutral lettered tile.
 - Pages are server-rendered per request (dynamic), like the Class Guides: the site's nonce-based CSP requires a per-request nonce.
 
 ## Tests

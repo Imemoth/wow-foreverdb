@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { DataNote } from "@/components/DataNote";
+import { ClassTile } from "@/components/classes/ClassTile";
 import { AbilityCard } from "@/components/races/AbilityCard";
-import { FACTION_STYLE } from "@/components/races/faction-style";
+import { RaceHero } from "@/components/races/RaceHero";
 import { SourceLinks } from "@/components/races/SourceLinks";
 import { VersionHistory } from "@/components/races/VersionHistory";
-import { classPath } from "@/lib/classes/classes";
+import { getClass } from "@/lib/classes/classes";
 import { pageContext } from "@/lib/page";
-import { FACTION_LABEL, formatDate } from "@/lib/races/format";
+import { FACTION_LABEL } from "@/lib/races/format";
 import { getRaceGuide, RACE_GUIDES, raceNewFlags, racePath } from "@/lib/races/registry";
 import { robotsFor } from "@/lib/seo";
 
@@ -35,7 +35,6 @@ export default async function Page({ params }: { params: Params }) {
   const g = getRaceGuide((await params).race);
   if (!g) notFound();
   const { nonce, baseUrl } = await pageContext();
-  const s = FACTION_STYLE[g.faction];
   const isNewRace = raceNewFlags[g.slug] ?? false;
   const sources = [...new Map([...g.classSources, ...g.active.flatMap((a) => a.sources), ...g.passive.flatMap((a) => a.sources), ...g.retired.flatMap((a) => a.sources)].map((x) => [x.id, x])).values()]
     .sort((a, b) => a.publishedOn.localeCompare(b.publishedOn) || a.id.localeCompare(b.id));
@@ -44,29 +43,22 @@ export default async function Page({ params }: { params: Params }) {
     <div className="space-y-10">
       <Breadcrumbs nonce={nonce} baseUrl={baseUrl} items={[{ name: "Guides", href: "/guides" }, { name: "Races", href: "/guides/races" }, { name: g.name }]} />
 
-      <header className={`space-y-3 rounded-xl border border-l-4 bg-ink-800 p-6 sm:p-8 ${s.border}`} data-testid="race-hero" data-faction={g.faction}>
-        <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em]">
-          <span className={s.text}>{FACTION_LABEL[g.faction]}</span>
-          {isNewRace && <span className="rounded border border-violet-400/60 px-1.5 py-0.5 tracking-wider text-violet-300">New race in Forever</span>}
-        </p>
-        <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold text-parchment sm:text-5xl">{g.name}</h1>
-        <p className="max-w-3xl text-mist">{g.summary}</p>
-        <p className="text-sm text-mist">
-          {g.latestUpdate ? <>Latest documented change: <time dateTime={g.latestUpdate} className="text-parchment">{formatDate(g.latestUpdate)}</time>.</> : "No changes documented since the earliest published definitions."}
-        </p>
-      </header>
+      <RaceHero guide={g} isNewRace={isNewRace} />
 
       <section aria-labelledby="classes-title" className="space-y-4">
         <h2 id="classes-title" className="panel-title text-2xl">Available classes</h2>
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label={`${g.name} classes`}>
-          {g.classes.map((c) => (
-            <li key={c.classId} className="panel flex items-center justify-between gap-3 p-4" data-testid={`class-${c.classId}`}>
-              <Link href={classPath(c.classId)} className="min-h-11 flex-1 content-center font-[family-name:var(--font-display)] text-lg font-semibold text-parchment no-underline hover:text-gold-300">
-                {c.name} <span className="sr-only">class guide</span>
-              </Link>
-              {c.isNew && <span className="rounded border border-violet-400/60 px-1.5 py-0.5 text-xs font-semibold text-violet-300">New in Forever</span>}
-            </li>
-          ))}
+          {g.classes.map((c) => {
+            const info = getClass(c.classId);
+            return info ? (
+              <ClassTile
+                key={c.classId}
+                info={info}
+                testId={`class-${c.classId}`}
+                badge={c.isNew ? <span className="rounded border border-violet-400/60 bg-ink-950/70 px-1.5 py-0.5 text-xs font-semibold text-violet-300">New in Forever</span> : undefined}
+              />
+            ) : null;
+          })}
         </ul>
         <p className="text-sm text-mist">Class availability follows Blizzard&apos;s official race and class tables. Each class links to its AzerDex class guide and talent calculator.</p>
         <div data-testid="class-sources"><SourceLinks sources={g.classSources} label="Class availability source" /></div>

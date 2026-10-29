@@ -33,7 +33,7 @@ export default async function Page() {
       {(["alliance", "horde"] as const).map((faction) => (
         <section key={faction} aria-labelledby={`faction-${faction}`} className="space-y-4" data-testid={`faction-${faction}`}>
           <h2 id={`faction-${faction}`} className={`panel-title text-2xl ${FACTION_STYLE[faction].text}`}>{FACTION_LABEL[faction]}</h2>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label={`${FACTION_LABEL[faction]} races`}>
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" aria-label={`${FACTION_LABEL[faction]} races`}>
             {RACE_GUIDES.filter((g) => g.faction === faction).map((g) => <RaceCard key={g.slug} guide={g} isNewRace={raceNewFlags[g.slug] ?? false} />)}
           </ul>
         </section>
