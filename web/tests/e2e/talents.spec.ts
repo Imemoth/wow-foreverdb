@@ -1018,7 +1018,7 @@ test.describe("Talent calculator V2.1: bottom sheet (touch / mobile)", () => {
     await expect(card.getByTestId("talent-description")).toBeVisible();
     const expanded = (await card.boundingBox())!;
     expect(expanded.height).toBeGreaterThan(collapsed.height);
-    expect(expanded.height).toBeLessThanOrEqual(vp.height * 0.62 + 1);
+    expect(expanded.height).toBeLessThanOrEqual(vp.height * 0.45 + 1); // 44dvh, with internal scroll
     expect(expanded.y + expanded.height).toBeLessThanOrEqual(vp.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     // Add from the sheet; close it.

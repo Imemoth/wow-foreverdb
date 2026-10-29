@@ -32,6 +32,9 @@ function Segments({ segments }: { segments: TextSegment[] }) {
   );
 }
 
+/** Id of the panel body, so the sheet's expand/collapse button can name what it controls. */
+export const DETAIL_BODY_ID = "selected-talent-body";
+
 /** Filled/empty pips for the ranks of a talent (decorative; the rank is also written as text next to them). */
 function RankPips({ rank, max }: { rank: number; max: number }) {
   return (
@@ -50,7 +53,7 @@ function RankPips({ rank, max }: { rank: number; max: number }) {
  *
  * Two variants: "tooltip" (hover only, narrow, one column) and "panel" (the selected talent in the bottom panel: a compact
  * header with the caller's `actions`, and a body that reads left to right - description, then requirements and status - on
- * wide screens). `expanded=false` hides the body on narrow screens only (the collapsed mobile sheet); wide screens always show it.
+ * wide screens). `expanded=false` hides the body in the compact sheet (phones, tablets, short windows); the wide desktop panel always shows it.
  */
 export function TalentCard({
   engine,
@@ -69,7 +72,7 @@ export function TalentCard({
   tree: TalentTree;
   icon?: string;
   variant?: "panel" | "tooltip";
-  /** Add/Remove for the panel (after the rank on wide screens, on its own row under the name on phones). */
+  /** Add/Remove for the panel (after the rank on one row, on its own row under the name on phones). */
   actions?: ReactNode;
   /** Collapse/close controls (top right). */
   dismiss?: ReactNode;
@@ -200,7 +203,7 @@ export function TalentCard({
 
   const header = (
     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-      <div className="order-1 flex min-w-0 flex-1 basis-48 items-start gap-2.5">
+      <div className="order-1 flex min-w-0 flex-1 basis-48 items-start gap-2.5 sm:basis-32">
         <CardIcon src={icon} />
         <div className="min-w-0">
           <p className="font-[family-name:var(--font-display)] text-base font-semibold leading-tight text-gold-300">{talent.name}</p>
@@ -209,16 +212,16 @@ export function TalentCard({
           </p>
         </div>
       </div>
-      {dismiss && <div className="order-2 md:order-4">{dismiss}</div>}
-      <div className={`order-3 flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 md:order-2 ${rankTone}`} data-testid="rank-summary">
+      {dismiss && <div className="order-4 max-sm:order-2">{dismiss}</div>}
+      <div className={`order-2 flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 max-sm:order-3 ${rankTone}`} data-testid="rank-summary">
         <p className="font-mono text-xs font-semibold tabular-nums">
           Rank {rank}/{talent.maxRank}
         </p>
-        <span className="contents max-md:hidden">
+        <span className="contents sheet:hidden">
           <RankPips rank={rank} max={talent.maxRank} />
         </span>
       </div>
-      {actions && <div className="order-4 ml-auto md:order-3 md:ml-0">{actions}</div>}
+      {actions && <div className="order-3 max-sm:order-4 max-sm:ml-auto">{actions}</div>}
     </div>
   );
 
@@ -236,9 +239,9 @@ export function TalentCard({
   }
 
   return (
-    <div className="space-y-2.5 text-sm text-parchment">
+    <div className="text-sm text-parchment">
       {header}
-      <div className={`${expanded ? "grid" : "hidden"} gap-x-5 gap-y-2.5 border-t border-ink-700 pt-2.5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]`} data-testid="talent-detail-body">
+      <div id={DETAIL_BODY_ID} className={`${expanded ? "grid" : "hidden wide:grid"} mt-2.5 gap-x-5 gap-y-2.5 border-t border-ink-700 pt-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]`} data-testid="talent-detail-body">
         <div className="min-w-0">{description}</div>
         <div className="min-w-0 space-y-2">
           {requirements}

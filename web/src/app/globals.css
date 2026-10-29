@@ -42,6 +42,12 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
+/* Talent detail panel modes. "wide" is a fine pointer (mouse/trackpad) on a roomy window: the panel always shows its full
+   details and hover tooltips are on. "sheet" is everything else - phones, tablets (coarse pointer) and short or narrow windows -
+   where the panel is a compact, collapsible bottom sheet with touch-size controls. The two are exact complements. */
+@custom-variant wide (@media (pointer: fine) and (width >= 48rem) and (height >= 35rem));
+@custom-variant sheet (@media not ((pointer: fine) and (width >= 48rem) and (height >= 35rem)));
+
 @layer base {
   :root {
     color-scheme: dark;

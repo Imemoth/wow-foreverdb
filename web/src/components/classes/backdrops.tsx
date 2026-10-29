@@ -119,7 +119,7 @@ export function TreeBackdrop({ classId, treeSlug }: { classId: string; treeSlug:
           <img
             src={art.src}
             srcSet={art.srcSet}
-            sizes="(min-width: 1024px) 420px, 100vw"
+            sizes="(min-width: 1024px) 420px, (min-width: 640px) 400px, 352px"
             alt=""
             aria-hidden="true"
             width={900}
