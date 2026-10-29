@@ -12,6 +12,7 @@ rights to them:
 | Content | Where | How AzerDex got it |
 | --- | --- | --- |
 | Talent names, ranks, positions, prerequisites, tier gates (game data) | `web/src/data/talents/forever/<build>/<class>.json` | Read from the Forever client's tables by the Everloot project (pinned commit in `manifest.json`) |
+| Racial ability names and effect values, race/class tables | `web/src/data/races/forever/` | Read from Blizzard's published articles and beta development notes (sources listed in `sources.json`, each with URL and date); descriptions are AzerDex's own wording of those facts. No race or ability artwork is used |
 | Talent description text and numbers | `.../text.json` | Description templates and per-rank values read from the owner's installed Forever client (read-only; no encrypted block decrypted), proven against Everloot's text hashes |
 | 358 talent spell icons | **not in this repository**; served from the asset host under `talent-icons/<build>/<FileDataID>.webp` | Extracted from the owner's installed Forever client (CASC) as BLP files and **technically converted** to lossless 64x64 WebP for browser compatibility; each WebP is pixel-identical to its BLP source. `icons-inventory.json` records sha256 hashes only |
 | Zone map images | asset host | Game client, see `third-party-map-atlas-notice.md` |

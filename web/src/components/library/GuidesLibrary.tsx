@@ -6,6 +6,7 @@ import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { filterGuides, guideCategories, guideTags, isEmptyGuidesQuery, parseGuidesQuery, sortGuides, type GuidesQuery } from "@/lib/content/guides-query";
 import { pageContext } from "@/lib/page";
 import { ClassGuidesEntry } from "@/components/classes/ClassGuidesEntry";
+import { RaceGuidesEntry } from "@/components/races/RaceGuidesEntry";
 import { ArcaneLibraryBanner } from "./ArcaneLibraryBanner";
 import { GuideCard } from "./GuideCard";
 
@@ -123,6 +124,8 @@ export async function GuidesLibrary({ searchParams }: { searchParams: SP }) {
 
       {/* Compact class navigation, directly under the search form (the nine large class cards live on /guides/classes). */}
       <ClassGuidesEntry />
+
+      <RaceGuidesEntry />
 
       <div aria-live="polite" className="space-y-4">
         {!empty && (

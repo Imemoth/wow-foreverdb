@@ -23,7 +23,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } },
       testIgnore: /preview-safety\.spec\.ts/,
     },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(responsive|talents|class-nav|tree-backgrounds|maps-poc(-viewport|-atlas)?)\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(responsive|talents|class-nav|races|tree-backgrounds|maps-poc(-viewport|-atlas)?)\.spec\.ts/ },
     {
       name: "preview",
       testMatch: /preview-safety\.spec\.ts/,

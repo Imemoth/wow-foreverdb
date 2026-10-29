@@ -1,0 +1,298 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Blizzard beta development notes, 15 Oct 2026 (racial update)",
+  "records": [
+    {
+      "id": "2026-10-15-racial-update",
+      "announcedOn": "2026-10-15",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "official",
+      "sources": [
+        "blz-notes-1015"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Published in Blizzard's WoW Forever Beta development notes; the notes describe the beta client. Whether the release client matches, and the in-game effective date and build, are not verified. The post was created 2026-10-16 00:15 UTC (the evening of 15 October US Pacific time) and edited the same day. A community page associates this update with a client build; that is not independently verified, so no build is recorded.",
+      "ops": [
+        {
+          "entity": "dwarf.mace-specialization",
+          "type": "removed",
+          "summary": "Mace Specialization was replaced by Earth Fury."
+        },
+        {
+          "entity": "dwarf.earth-fury",
+          "type": "added",
+          "kind": "ability",
+          "set": {
+            "name": "Earth Fury",
+            "type": "passive",
+            "races": [
+              "dwarf"
+            ],
+            "description": "Increases your critical strike bonus to damage and healing by 2%.",
+            "cooldown": null,
+            "duration": null,
+            "details": [],
+            "communityNotes": null
+          },
+          "summary": "Replaces Mace Specialization with a 2% bonus to critical damage and healing."
+        },
+        {
+          "entity": "dwarf.find-treasure",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Can stay active alongside other tracking abilities.",
+              "Also gives a chance to find additional items in most chests."
+            ]
+          },
+          "summary": "Now also gives a chance to find additional items in most chests.",
+          "previous": {
+            "details": [
+              "Can stay active alongside other tracking abilities."
+            ]
+          }
+        },
+        {
+          "entity": "human.sword-specialization",
+          "type": "removed",
+          "summary": "Sword Specialization was replaced by Ruthless."
+        },
+        {
+          "entity": "human.ruthless",
+          "type": "added",
+          "kind": "ability",
+          "set": {
+            "name": "Ruthless",
+            "type": "passive",
+            "races": [
+              "human"
+            ],
+            "description": "Increases your critical strike chance by 2%.",
+            "cooldown": null,
+            "duration": null,
+            "details": [],
+            "communityNotes": null
+          },
+          "summary": "Replaces Sword Specialization with a flat 2% critical strike chance bonus."
+        },
+        {
+          "entity": "orc.axe-specialization",
+          "type": "removed",
+          "summary": "Axe Specialization was replaced by Savage."
+        },
+        {
+          "entity": "orc.savage",
+          "type": "added",
+          "kind": "ability",
+          "set": {
+            "name": "Savage",
+            "type": "passive",
+            "races": [
+              "orc"
+            ],
+            "description": "Increases your critical strike chance by 1%.",
+            "cooldown": null,
+            "duration": null,
+            "details": [],
+            "communityNotes": null
+          },
+          "summary": "Replaces Axe Specialization with a flat 1% critical strike chance bonus."
+        },
+        {
+          "entity": "orc.blood-fury",
+          "type": "modified",
+          "set": {
+            "cooldown": "3 min"
+          },
+          "summary": "Cooldown increased from 2 to 3 minutes.",
+          "previous": {
+            "cooldown": "2 min"
+          }
+        },
+        {
+          "entity": "orc.shatter-curse",
+          "type": "modified",
+          "set": {
+            "description": "Dispels Curses and Banes and reduces Magical damage taken by 5%."
+          },
+          "summary": "Now dispels Curses and Banes instead of granting immunity; the Magical damage reduction is smaller (5%, was 15%).",
+          "previous": {
+            "description": "Grants immunity to Curses and Banes and reduces Magical damage taken by 15%."
+          }
+        },
+        {
+          "entity": "tauren.war-stomp",
+          "type": "modified",
+          "set": {
+            "cooldown": "90 sec"
+          },
+          "summary": "Cooldown reduced from 2 minutes to 90 seconds.",
+          "previous": {
+            "cooldown": "2 min"
+          }
+        },
+        {
+          "entity": "tauren.cultivation",
+          "type": "modified",
+          "set": {
+            "cooldown": "15 min"
+          },
+          "summary": "Cooldown reduced from 60 minutes to 15 minutes.",
+          "previous": {
+            "cooldown": "60 min"
+          }
+        },
+        {
+          "entity": "tauren.endurance",
+          "type": "modified",
+          "set": {
+            "description": "Increases total Health by 5% and your critical strike bonus to damage and healing by 2%."
+          },
+          "summary": "Now adds 2% critical damage and healing instead of 1% hit chance.",
+          "previous": {
+            "description": "Increases total Health by 5% and hit chance by 1%."
+          }
+        },
+        {
+          "entity": "tauren.plainsrunning",
+          "type": "modified",
+          "set": {
+            "description": "Increases movement speed the longer you stay moving, and increases mounted movement speed by 3% (stacks with other mounted speed increases).",
+            "details": [
+              "You must keep moving a minimum distance per second to maintain the effect; stutter-stepping is no longer enough."
+            ]
+          },
+          "summary": "Also grants 3% mounted movement speed, and you must now keep moving a minimum distance to keep the effect.",
+          "previous": {
+            "description": "Increases movement speed the longer you stay moving.",
+            "details": []
+          }
+        },
+        {
+          "entity": "night-elf.quickness",
+          "type": "modified",
+          "set": {
+            "description": "Increases Dodge chance by 1% and run speed by 2%. The movement speed bonus stacks with other movement speed increases."
+          },
+          "summary": "The movement speed bonus now stacks with other movement speed increases.",
+          "previous": {
+            "description": "Increases Dodge chance by 1% and run speed by 2%."
+          }
+        },
+        {
+          "entity": "gnome.eureka",
+          "type": "modified",
+          "set": {
+            "description": "For 8 seconds, reduces the Mana, Rage or Energy cost of your abilities by 10% and increases their damage or healing by 10%. It has no charges and also benefits Power Word: Shield.",
+            "details": [
+              "Cannot be used correctly while stealthed or invisible."
+            ]
+          },
+          "summary": "Reworked into an 8-second buff with no charges; it now also benefits Power Word: Shield.",
+          "previous": {
+            "description": "Reduces the Mana, Rage or Energy cost of your next 3 spells or abilities by 10% and increases their damage or healing by 10%. It does not affect periodic effects; channeled spells do not count as periodic.",
+            "details": []
+          }
+        },
+        {
+          "entity": "troll.regeneration",
+          "type": "modified",
+          "set": {
+            "description": "Increases your Health regeneration bonuses to 20%, doubling the earlier 10% of Health regeneration that continued during combat."
+          },
+          "summary": "Health regeneration bonuses doubled from 10% to 20%.",
+          "previous": {
+            "description": "10% of your Health regeneration continues during combat."
+          }
+        },
+        {
+          "entity": "undead.touch-of-the-grave",
+          "type": "modified",
+          "set": {
+            "description": "Your spells and attacks have a 30% chance (casters) or 20% chance (Paladins, Rogues and Warriors) to drain life from the target.",
+            "cooldown": "25 sec (internal)",
+            "details": [
+              "Does not break crowd control and only triggers from spells and abilities that have a damage component: Shadow Word: Pain triggers it on cast but not on periodic damage.",
+              "No longer scales with Shadow damage increases on the target or caster, and is not reduced when a lower-ranked spell is used.",
+              "Blizzard's October 15 notes call this ability “Touch of the Dead”."
+            ]
+          },
+          "summary": "Chance to trigger set per role and an internal cooldown added.",
+          "previous": {
+            "description": "Your attacks have a chance to drain life from enemies.",
+            "details": [
+              "Does not break crowd control and only triggers from spells and abilities that have a damage component: Shadow Word: Pain triggers it on cast but not on periodic damage."
+            ]
+          }
+        },
+        {
+          "entity": "undead.will-of-the-forsaken",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Cannot be used while affected by Scatter Shot."
+            ]
+          },
+          "summary": "Cannot be used while under the effect of Scatter Shot.",
+          "previous": {
+            "details": []
+          }
+        },
+        {
+          "entity": "skyborne.wind-blessed",
+          "type": "modified",
+          "set": {
+            "description": "Increases melee, ranged and spellcasting Haste by 3%."
+          },
+          "summary": "Haste bonus tripled from 1% to 3%.",
+          "previous": {
+            "description": "Increases melee, ranged and spellcasting Haste by 1%."
+          }
+        },
+        {
+          "entity": "skyborne.walk-on-air",
+          "type": "modified",
+          "set": {
+            "cooldown": "90 sec"
+          },
+          "summary": "Cooldown reduced from 2 minutes to 90 seconds.",
+          "previous": {
+            "cooldown": "2 min"
+          }
+        },
+        {
+          "entity": "high-order-skyborne.read-leyline",
+          "type": "modified",
+          "set": {
+            "duration": "At least 30 sec",
+            "details": [
+              "Blizzard's September 22 article spells the name “Read Ley Line”.",
+              "Can be cast while moving."
+            ]
+          },
+          "summary": "Can be cast while moving; minimum duration increased from 20 to 30 seconds.",
+          "previous": {
+            "duration": "At least 20 sec",
+            "details": [
+              "Blizzard's September 22 article spells the name “Read Ley Line”."
+            ]
+          }
+        },
+        {
+          "entity": "windshaper-skyborne.skysight",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Can be cast while moving."
+            ]
+          },
+          "summary": "Can now be cast while moving.",
+          "previous": {
+            "details": []
+          }
+        }
+      ]
+    }
+  ]
+}
