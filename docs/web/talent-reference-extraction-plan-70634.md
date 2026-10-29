@@ -10,7 +10,7 @@ Canonical live input: `web/src/data/talents/forever/1.60.1.70634/coverage.json`.
 - 91 talent nodes have a `spell` gap. Some additionally have a `proc`, `expr` or `named` gap; the categories overlap.
 - 111 distinct referenced spell IDs are in `coverage.spellReferences`, across the nine classes.
 - See **[the complete 111-ID worklist](talent-reference-wowhead-research-70634.json)**: each ID, its required tokens, consumers, class, ranks and research status.
-- Initial indexed Wowhead Forever survey: **12 IDs investigated**, **9 with directly observed candidate spell values**, 3 needing special review/indirect evidence, **99 not yet surveyed**. This is NOT 12 verified 70634 records.
+- Initial indexed Wowhead Forever survey: **14 IDs investigated**, **11 with directly observed candidate spell values**, 3 needing special review/indirect evidence, **97 not yet surveyed**. This is NOT 12 verified 70634 records.
 
 ### Sample values observed on Wowhead Forever
 
@@ -27,6 +27,8 @@ Canonical live input: `web/src/data/talents/forever/1.60.1.70634/coverage.json`.
 | 12579 | Mage Winter's Chill | Wowhead says 2% bonus crit (raw effect 3%) | **Conflicts** with AzerDex's hash-verified 70634 talent text about Cone of Cold damage. DO NOT import |
 | 12880 | Warrior Enrage | duration 12 sec | [Forever spell](https://www.wowhead.com/forever/spell=12880); separate `$h` proc gap remains |
 | 14143 | Rogue Remorseless Attacks | duration 20 sec | [Forever spell](https://www.wowhead.com/forever/spell=14143); raw effect 41 vs displayed 40 |
+| 27813 | Priest Blessed Recovery | duration 6 sec | [Forever spell](https://www.wowhead.com/forever/spell=27813) |
+| 27827 | Priest Spirit of Redemption | duration 15 sec | [Forever spell](https://www.wowhead.com/forever/spell=27827) |
 | 14181 | Rogue Relentless Strikes | 25 Energy | [Forever spell](https://www.wowhead.com/forever/spell=14181); raw effect 26 vs rendered 25 |
 
 **Wowhead version caveat:** a `/forever/spell=` page is not pinned to the precise 70634 build. The [Wowhead talent calculator announcement](https://www.wowhead.com/news/wow-forever-talent-calculator-now-live-382870) expressly warned that rank scaling and some preliminary tooltip values might be inaccurate. Treat these as review candidates only, never a source of automatic `verified` claims. Review the linked spell's own page, not only the talent name or the classic/retail pages. The indexed tooltip, the page's raw Effect Value, and the 70634 client template may differ.
