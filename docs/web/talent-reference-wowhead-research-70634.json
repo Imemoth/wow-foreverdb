@@ -7,7 +7,7 @@
     "partialTalentNodes": 103,
     "unresolvedRanks": 261,
     "referencedSpells": 111,
-    "reviewedSpellIds": 12
+    "reviewedSpellIds": 14
   },
   "references": [
     {
@@ -1272,9 +1272,19 @@
         }
       ],
       "wowhead": {
-        "status": "not_yet_reviewed",
-        "sourceUrl": null,
-        "values": []
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D27813/blessed-recovery",
+        "values": [
+          {
+            "token": "$27813d",
+            "display": "6 sec",
+            "numeric": 6,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Priest Blessed Recovery: periodic buff lasts 6 sec."
+        ]
       }
     },
     {
@@ -1291,9 +1301,19 @@
         }
       ],
       "wowhead": {
-        "status": "not_yet_reviewed",
-        "sourceUrl": null,
-        "values": []
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D27827/spirit-of-redemption",
+        "values": [
+          {
+            "token": "$27827d",
+            "display": "15 sec",
+            "numeric": 15,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Priest Spirit of Redemption: 15 sec."
+        ]
       }
     },
     {
