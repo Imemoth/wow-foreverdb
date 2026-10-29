@@ -102,6 +102,45 @@ describe("resolveVersioned", () => {
     expect(s.byId.get("a.one")!.current.unknownThing).toBe(3);
   });
 
+  describe("evidence precedence is decided per property", () => {
+    const base2: Baseline = {
+      ...baseline,
+      entities: [{ id: "a.x", kind: "ability", evidence: "official", propEvidence: { note: "corroborated" }, props: { name: "X", value: 4, note: "n", cooldown: null }, sources: ["base"] }],
+    };
+    const run = (r: ChangeRecord) => resolveVersioned(base2, [file(r)], catalog).byId.get("a.x")!;
+    const doc = (evidence: ChangeRecord["evidence"], set: Record<string, string | number>) =>
+      rec({ id: "r1", evidence, ops: [{ entity: "a.x", type: "documented", set, summary: "Detail reported by a community site." }] });
+
+    it("community evidence fills an unknown property but never overwrites an official one", () => {
+      const e = run(doc("corroborated", { cooldown: "3 min", value: 99 }));
+      expect(e.current.cooldown).toBe("3 min");
+      expect(e.propEvidence.cooldown).toBe("corroborated");
+      expect(e.current.value).toBe(4);
+      expect(e.propEvidence.value).toBe("official");
+      expect(e.pending).toHaveLength(1);
+      expect(e.pending[0]!.diffs).toEqual([{ prop: "value", from: undefined, to: 99 }]);
+      expect(e.history.at(-1)!.diffs.map((d) => d.prop)).toEqual(["cooldown"]);
+    });
+    it("community evidence may refine a community-backed property, official evidence may replace it", () => {
+      expect(run(doc("corroborated", { note: "m" })).current.note).toBe("m");
+      const e = run(rec({ id: "r2", ops: [mod("a.x", { note: "official note" })] }));
+      expect(e.current.note).toBe("official note");
+      expect(e.propEvidence.note).toBe("official");
+    });
+    it("unverified evidence never applies, even to an unknown property", () => {
+      const e = run(doc("unverified", { cooldown: "9 min" }));
+      expect(e.current.cooldown).toBeNull();
+      expect(e.pending).toHaveLength(1);
+    });
+    it("community evidence cannot add, remove or restore", () => {
+      const r = rec({ id: "r3", evidence: "corroborated", ops: [{ entity: "a.x", type: "removed", summary: "Rumoured removal." }, { entity: "a.y", type: "added", kind: "ability", set: { name: "Y" }, summary: "Rumoured addition." }] });
+      const s = resolveVersioned(base2, [file(r)], catalog);
+      expect(s.byId.get("a.x")!.active).toBe(true);
+      expect(s.byId.get("a.x")!.pending).toHaveLength(1);
+      expect(s.byId.get("a.y")!.active).toBe(false);
+    });
+  });
+
   describe("fails explicitly instead of guessing", () => {
     const code = (fn: () => unknown) => { try { fn(); } catch (e) { return e instanceof VersionedDataError ? e.code : "other"; } return "none"; };
     it.each([

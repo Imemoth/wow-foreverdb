@@ -1,6 +1,6 @@
 import { CLASSES } from "../classes/classes";
-import type { HistoryEntry, PropValue, ResolvedEntity, ResolvedState, SourceRef } from "../versioned/types";
-import type { AbilityView, ClassAvailability, Faction, RaceGuide } from "./types";
+import type { PropValue, ResolvedEntity, ResolvedState, SourceRef } from "../versioned/types";
+import type { AbilityView, ClassAvailability, Faction, RaceChange, RaceGuide } from "./types";
 
 export interface RaceIdentity {
   id: string;
@@ -29,6 +29,8 @@ export function abilityView(e: ResolvedEntity): AbilityView {
     cooldown: str(p.cooldown),
     duration: str(p.duration),
     details: strs(p.details),
+    communityNotes: strs(p.communityNotes),
+    evidence: { ...e.propEvidence },
     races: strs(p.races),
     active: e.active,
     history: e.history,
@@ -47,8 +49,15 @@ export function buildRaceGuides(state: ResolvedState, identities: readonly RaceI
     const current = mine.filter((a) => a.active);
     const newIds = new Set(strs(race?.current.newClasses));
     const classes: ClassAvailability[] = strs(race?.current.classes).map((c) => ({ classId: c, name: className(c), isNew: newIds.has(c) }));
-    const changes: Array<{ ability: AbilityView; entry: HistoryEntry }> = [];
-    for (const a of mine) for (const entry of a.history) if (entry.recordId !== "baseline") changes.push({ ability: a, entry });
+    const changes: RaceChange[] = [];
+    for (const a of mine) {
+      a.history.forEach((entry, i) => {
+        if (entry.recordId === "baseline") return;
+        const before = [...a.history.slice(0, i)].reverse().find((h) => h.snapshot)?.snapshot?.description;
+        changes.push({ ability: a, entry, before: typeof before === "string" ? before : null });
+      });
+    }
+    const earliest: RaceChange[] = mine.filter((a) => !a.active).map((a) => ({ ability: a, entry: a.history[0]!, before: null }));
     changes.sort((x, y) => y.entry.announcedOn.localeCompare(x.entry.announcedOn) || x.ability.name.localeCompare(y.ability.name));
     const every = mine.flatMap((a) => a.history.filter((h) => h.recordId !== "baseline"));
     // "documented" entries are community-reported details, not game changes, so they never count as the latest update.
@@ -58,11 +67,12 @@ export function buildRaceGuides(state: ResolvedState, identities: readonly RaceI
       id: id.id, slug: id.id, name: id.name, faction: id.faction, summary: id.summary, classes,
       active: current.filter((a) => a.type === "active"), passive: current.filter((a) => a.type === "passive"),
       retired: mine.filter((a) => !a.active),
-      changes,
+      changes, earliest,
       latestUpdate: gameChanges.length ? gameChanges.map((h) => h.announcedOn).sort().at(-1)! : null,
       evidence: {
         clientVerified: every.filter((h) => h.evidence === "client-verified").length,
-        official: current.length + every.filter((h) => h.evidence === "official").length,
+        official: every.filter((h) => h.evidence === "official").length,
+        community: every.filter((h) => h.evidence === "corroborated").length,
         pending,
       },
     };
