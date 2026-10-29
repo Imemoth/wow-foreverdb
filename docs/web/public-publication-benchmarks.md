@@ -104,4 +104,3 @@ Published content is byte-identical (golden hashes unchanged; the same content h
 | 1,000 | 4,000 issues, 30 ms, +4 MB | 20 issues, 6 ms, +0 MB |
 | 100,000 | 400,000 issues, 1.2 s, **+376 MB** | 20 issues, 5 ms, +1 MB |
 | 1,000,000 | **out of memory at 2 GB** | 20 issues, 5 ms, +0 MB |
-
