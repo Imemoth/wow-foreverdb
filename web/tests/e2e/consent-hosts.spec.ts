@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { isInsightsScript, isSpeedInsights } from "./vercel-urls";
 
 /**
  * Host behaviour of the consent gate against the HOSTED server (the same one preview-safety uses: VERCEL=1, https SITE_URL, harness flag
@@ -9,20 +10,28 @@ import { expect, test } from "./fixtures";
  */
 test.use({ seedConsent: false });
 
+// Requests still in flight when a test ends must not turn into a teardown error.
+test.afterEach(async ({ page }) => {
+  await page.context().unrouteAll({ behavior: "ignoreErrors" });
+});
+
 const PREVIEW_PORT = Number(process.env.E2E_PREVIEW_PORT ?? 3201); // same default as playwright.config.ts
-const SCRIPT = /\/_vercel\/insights\/script\.js|va\.vercel-scripts\.com/;
 const at = (host: string, path = "/") => `https://${host}${path}`;
 
 async function serveAs(page: Page, host: string) {
   const seen: string[] = [];
-  page.on("request", (r) => { if (SCRIPT.test(r.url())) seen.push(r.url()); });
-  await page.context().route(new RegExp(`^https?://${host.replaceAll(".", "\\.")}/`), async (route) => {
+  page.on("request", (r) => { if (isInsightsScript(r.url())) seen.push(r.url()); });
+  await page.context().route((url) => url.hostname === host, async (route) => {
     const u = new URL(route.request().url());
-    const response = await route.fetch({ url: `http://localhost:${PREVIEW_PORT}${u.pathname}${u.search}`, headers: { ...route.request().headers(), host } });
-    await route.fulfill({ response });
+    try {
+      const response = await route.fetch({ url: `http://localhost:${PREVIEW_PORT}${u.pathname}${u.search}`, headers: { ...route.request().headers(), host } });
+      await route.fulfill({ response });
+    } catch {
+      /* the test ended while a request (e.g. a prefetch) was in flight: nothing to answer */
+    }
   });
   // Registered on the page, so it wins over the context-level forwarder for the script URL.
-  await page.route(SCRIPT, (route) => route.fulfill({ status: 200, contentType: "application/javascript", body: "/* stub */" }));
+  await page.route((url) => isInsightsScript(url), (route) => route.fulfill({ status: 200, contentType: "application/javascript", body: "/* stub */" }));
   return seen;
 }
 const banner = (page: Page) => page.locator('[data-consent="banner"]');
@@ -98,7 +107,7 @@ for (const host of ["localhost", "foreverdb-git-preview-test.vercel.app", "other
 
 test("Speed Insights stays off by default: no speed-insights request on a public host even after accepting", async ({ page }) => {
   const asked: string[] = [];
-  page.on("request", (r) => { if (/speed-insights/.test(r.url())) asked.push(r.url()); });
+  page.on("request", (r) => { if (isSpeedInsights(r.url())) asked.push(r.url()); });
   const seen = await serveAs(page, "azerdex.com");
   await page.goto(at("azerdex.com"));
   await accept(page);

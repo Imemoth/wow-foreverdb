@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { CONSENT_STORAGE_KEY, PRIVACY_NOTICE_VERSION, createConsentRecord } from "../../src/lib/consent";
+import { isInsightsScript, isVercelMeasurement } from "./vercel-urls";
 
 /**
  * Consent for optional analytics, in a real browser, on the local harness (the layout treats the local e2e server as an analytics-capable host
@@ -10,15 +11,13 @@ import { CONSENT_STORAGE_KEY, PRIVACY_NOTICE_VERSION, createConsentRecord } from
  */
 test.use({ seedConsent: false });
 
-const SCRIPT = /\/_vercel\/insights\/script\.js|va\.vercel-scripts\.com\/v1\/script\.debug\.js/;
-const ANY_VERCEL = /\/_vercel\/|vercel-scripts\.com/;
 
 async function track(page: Page) {
   const requests: string[] = [];
   page.on("request", (r) => {
-    if (ANY_VERCEL.test(r.url())) requests.push(r.url());
+    if (isVercelMeasurement(r.url())) requests.push(r.url());
   });
-  await page.route(SCRIPT, (route) => route.fulfill({ status: 200, contentType: "application/javascript", body: "/* stub: records nothing */" }));
+  await page.route((url) => isInsightsScript(url), (route) => route.fulfill({ status: 200, contentType: "application/javascript", body: "/* stub: records nothing */" }));
   return requests;
 }
 const stored = (page: Page) => page.evaluate((k) => window.localStorage.getItem(k), CONSENT_STORAGE_KEY);
@@ -82,7 +81,7 @@ test("accept: the script loads once, only now, page views are queued; remembered
   expect(requests).toEqual([]);
   await banner(page).getByRole("button", { name: "Accept analytics" }).click();
   await expect(banner(page)).toHaveCount(0);
-  await expect.poll(() => requests.filter((u) => SCRIPT.test(u)).length).toBeGreaterThan(0);
+  await expect.poll(() => requests.filter((u) => isInsightsScript(u)).length).toBeGreaterThan(0);
   expect(JSON.parse((await stored(page))!)).toMatchObject({ analytics: true, notice: PRIVACY_NOTICE_VERSION });
   await expect.poll(() => queued(page, "pageview")).toBeGreaterThan(0);
 
@@ -93,7 +92,7 @@ test("accept: the script loads once, only now, page views are queued; remembered
 
   await page.reload();
   await expect(banner(page)).toHaveCount(0);
-  await expect.poll(() => requests.filter((u) => SCRIPT.test(u)).length).toBeGreaterThan(1);
+  await expect.poll(() => requests.filter((u) => isInsightsScript(u)).length).toBeGreaterThan(1);
 });
 
 test("the send-time gate: with the script loaded, every event carries the live consent and is URL-redacted", async ({ page }) => {
@@ -139,10 +138,10 @@ test("withdrawal from the footer stops measurement at once, without signing out,
   await expect(page).toHaveURL(/\/zones/);
   expect(await queued(page, "pageview")).toBe(frozen);
 
-  const scriptRequestsBefore = requests.filter((u) => SCRIPT.test(u)).length;
+  const scriptRequestsBefore = requests.filter((u) => isInsightsScript(u)).length;
   await page.reload();
   await page.goto("/zones");
-  expect(requests.filter((u) => SCRIPT.test(u)).length).toBe(scriptRequestsBefore);
+  expect(requests.filter((u) => isInsightsScript(u)).length).toBe(scriptRequestsBefore);
   expect((await page.context().cookies()).map((c) => c.name)).toContain("fdb_sid"); // essential state untouched
 });
 
