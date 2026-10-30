@@ -10,7 +10,7 @@ const footer = renderToStaticMarkup(createElement(SiteFooter)).replace(/<[^>]+>/
 
 describe("site footer legal notice", () => {
   it("keeps fan-project status, non-affiliation, trademark and attribution", () => {
-    expect(footer).toContain("independent fan project");
+    expect(footer).toContain("independent, free, non-commercial fan project")
     expect(footer).toContain("not affiliated with or endorsed by Blizzard Entertainment, Inc.");
     expect(footer).toMatch(/World of Warcraft and related names are trademarks or registered trademarks of Blizzard Entertainment, Inc\./);
     expect(footer).toMatch(/© Blizzard Entertainment, Inc\. All rights reserved/);
@@ -23,8 +23,10 @@ describe("site footer legal notice", () => {
     expect(footer).not.toMatch(/AzerDex's own|owned by AzerDex|copyright AzerDex|all rights reserved by AzerDex/i);
   });
 
-  it("makes no unapproved commercial-status claim (a voluntary support link exists in the header)", () => {
-    expect(footer).not.toMatch(/non-?commercial|not-for-profit|nonprofit|permanently|\bfree\b/i);
+  it("states the owner-approved designation: independent, free, non-commercial fan project (not to be reworded without owner approval)", () => {
+    expect(footer).toContain("AzerDex is an independent, free, non-commercial fan project and is not affiliated with or endorsed by Blizzard Entertainment, Inc.");
+    // /about/data carries the same owner-approved designation.
+    expect(readFileSync(join(root, "src/app/about/data/page.tsx"), "utf8")).toContain("is an independent, free, non-commercial fan site and is not affiliated with or endorsed by Blizzard Entertainment.");
   });
 
   it("links to /addon-companion and never to the obsolete /download", () => {

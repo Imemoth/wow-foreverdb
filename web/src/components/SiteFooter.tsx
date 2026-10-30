@@ -23,8 +23,10 @@ export function SiteFooter() {
             <li><a href="https://github.com/Imemoth/wow-foreverdb" rel="noopener noreferrer">Source on GitHub</a></li>
           </ul>
         </nav>
+        {/* "Independent, free, non-commercial fan project" is an explicit, owner-approved designation. Changes to project
+            ownership, licensing, commercial status or monetization wording need explicit owner approval. */}
         <p className="leading-relaxed">
-          AzerDex is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment, Inc.
+          AzerDex is an independent, free, non-commercial fan project and is not affiliated with or endorsed by Blizzard Entertainment, Inc.
           World of Warcraft and related names are trademarks or registered trademarks of Blizzard Entertainment, Inc.
           &copy; Blizzard Entertainment, Inc. All rights reserved. Zone map images, talent and ability names, descriptions
           and icons come from World of Warcraft: Forever and remain Blizzard&apos;s property; AzerDex claims no rights to them.
