@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { getJson } from "@/lib/account/client";
 import { createHeaderStatusStore, type HeaderAccountStatus } from "@/lib/account/header-status";
 import { LogoutButton } from "./LogoutButton";
-import { BookIcon, ChevronDownIcon, InstallIcon, LogInIcon, MonitorIcon, PersonIcon, UserPlusIcon } from "./icons";
+import { ChevronDownIcon, InstallIcon, LogInIcon, MonitorIcon, PersonIcon, UserPlusIcon } from "./icons";
 
 type Status = HeaderAccountStatus;
 
@@ -18,7 +18,6 @@ const MEMBER_LINKS = [
   { href: "/account", label: "My account", Icon: PersonIcon },
   { href: "/account/installations", label: "My installations", Icon: InstallIcon },
   { href: "/account/devices", label: "Devices", Icon: MonitorIcon },
-  { href: "/account/guildbook", label: "Guildbook", Icon: BookIcon },
 ];
 
 /**

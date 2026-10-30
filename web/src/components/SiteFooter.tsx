@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ConsentSettingsButton } from "@/components/consent/ConsentSettingsButton";
 
 export function SiteFooter() {
   return (
@@ -17,16 +18,21 @@ export function SiteFooter() {
           <ul className="grid grid-cols-2 gap-2">
             <li><Link href="/about/data">How the data works</Link></li>
             <li><Link href="/about/privacy">Privacy</Link></li>
+            <li><ConsentSettingsButton /></li>
             <li><Link href="/addon-companion">Addon &amp; Companion</Link></li>
             <li><Link href="/news/rss.xml">RSS feed</Link></li>
             <li><Link href="/zones">All zones</Link></li>
             <li><a href="https://github.com/Imemoth/wow-foreverdb" rel="noopener noreferrer">Source on GitHub</a></li>
           </ul>
         </nav>
+        {/* "Independent, free, non-commercial fan project" is an explicit, owner-approved designation. Changes to project
+            ownership, licensing, commercial status or monetization wording need explicit owner approval. */}
         <p className="leading-relaxed">
-          AzerDex is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment.
-          World of Warcraft and related names are trademarks of Blizzard Entertainment, Inc. Zone map images are taken
-          from the game client and remain Blizzard&apos;s property; AzerDex claims no rights to them.
+          AzerDex is an independent, free, non-commercial fan project and is not affiliated with or endorsed by Blizzard Entertainment, Inc.
+          World of Warcraft and related names are trademarks or registered trademarks of Blizzard Entertainment, Inc.
+          &copy; Blizzard Entertainment, Inc. All rights reserved. Zone map images, talent and ability names, descriptions
+          and icons come from World of Warcraft: Forever and remain Blizzard&apos;s property; AzerDex claims no rights to them.
+          Class and race illustrations, class emblems, talent tree backgrounds and homepage artwork are not game assets.
         </p>
       </div>
     </footer>

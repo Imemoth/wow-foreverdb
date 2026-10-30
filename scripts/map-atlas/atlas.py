@@ -21,6 +21,7 @@ from mapatlas.importer import ImportOptions, run_import  # noqa: E402
 from mapatlas.inventory import build_inventory  # noqa: E402
 from mapatlas.packaging import PackageError, check_limits, verify_manifests, verify_superset  # noqa: E402
 from mapatlas.remote import verify_remote  # noqa: E402
+from mapatlas import talenticons  # noqa: E402
 from mapatlas.unified import (BaselineError, UnifiedOptions, build_unified, make_pin, read_baseline, verify_baseline_against_pin,  # noqa: E402
                               verify_unified)
 from mapatlas.versioning import Ledger  # noqa: E402
@@ -131,7 +132,9 @@ def cmd_pin_baseline(a):
 
 def cmd_build_unified(a):
     r = build_unified(UnifiedOptions(Path(a.baseline), Path(a.pin), Path(a.inventory), Path(a.hero_sources), Path(a.out), Path(a.ledger),
-                                     Path(a.hero_ledger), a.expect_baseline_sha256))
+                                     Path(a.hero_ledger), a.expect_baseline_sha256,
+                                     Path(a.talent_icons_inventory) if a.talent_icons_inventory else None,
+                                     Path(a.talent_icons_source) if a.talent_icons_source else None))
     d = r["dist"]
     print(f"{r['status']} · {r['distLabel']} · files {d['fileCount']} (headroom {d['fileHeadroom']}) · {d['totalBytes']} bytes · zip {d['zip']['bytes']} bytes sha256 {d['zip']['sha256']}")
     print("nothing was uploaded; see unified-report.md, SHA256SUMS.txt and the *.next.json ledger proposals in " + a.out)
@@ -140,7 +143,8 @@ def cmd_build_unified(a):
 def cmd_verify_unified(a):
     pin = json.loads(Path(a.pin).read_text(encoding="utf-8"))
     inv = load_inventory(Path(a.inventory))
-    problems = verify_unified(Path(a.dist), pin, inv, Ledger.load(Path(a.ledger)), HeroLedger.load(Path(a.hero_ledger)))
+    icon_inv = talenticons.load_inventory(Path(a.talent_icons_inventory)) if a.talent_icons_inventory else None
+    problems = verify_unified(Path(a.dist), pin, inv, Ledger.load(Path(a.ledger)), HeroLedger.load(Path(a.hero_ledger)), icon_inv=icon_inv)
     if problems:
         print("\n".join(problems[:60]))
         sys.exit(1)
@@ -222,10 +226,13 @@ def main(argv=None):
     s.add_argument("--out", required=True); s.add_argument("--pin", default=str(DEFAULT_PIN)); s.add_argument("--inventory", default=str(DEFAULT_INVENTORY))
     s.add_argument("--hero-sources", default=str(DEFAULT_HERO_SOURCES)); s.add_argument("--ledger", default=str(DEFAULT_LEDGER))
     s.add_argument("--hero-ledger", default=str(DEFAULT_HERO_LEDGER)); s.add_argument("--expect-baseline-sha256")
+    s.add_argument("--talent-icons-inventory", help="also publish talent icons: web/src/data/talents/forever/<build>/icons-inventory.json (ids + hashes)")
+    s.add_argument("--talent-icons-source", help="staging directory that holds talent-icons/<build>/<FileDataID>.webp (required with the inventory)")
     s.set_defaults(f=cmd_build_unified)
     s = sub.add_parser("verify-unified", help="re-check a unified dist directory (baseline pin, heroes, headers, ledgers, Pages limits)")
     s.add_argument("--dist", required=True); s.add_argument("--pin", default=str(DEFAULT_PIN)); s.add_argument("--inventory", default=str(DEFAULT_INVENTORY))
-    s.add_argument("--ledger", default=str(DEFAULT_LEDGER)); s.add_argument("--hero-ledger", default=str(DEFAULT_HERO_LEDGER)); s.set_defaults(f=cmd_verify_unified)
+    s.add_argument("--ledger", default=str(DEFAULT_LEDGER)); s.add_argument("--hero-ledger", default=str(DEFAULT_HERO_LEDGER))
+    s.add_argument("--talent-icons-inventory"); s.set_defaults(f=cmd_verify_unified)
     s = sub.add_parser("hero-measure", help="print inventory-format records (size, SHA-256, dimensions) for the .webp files of a directory")
     s.add_argument("--dir", required=True); s.set_defaults(f=cmd_hero_measure)
     s = sub.add_parser("promote-hero-ledger", help="after the owner has published a unified dist, adopt its hero ledger (append-only)")

@@ -11,7 +11,9 @@ import type { AccountAuthConfig } from "./config";
  *   - only the functions of the reviewed `ACCOUNT_RPCS` registry (and the five ACCOUNT functions of the separate zero-touch
  *     `ENROLLMENT_RPCS` registry, migration 0014) that make sense for a registered WEB account can be named
  *     (`WEB_RPCS`): `fdb_account_claim_start` (the Companion's anonymous owner starts claims, never the website) and
- *     `fdb_installation_link_status` (a Companion call) are not reachable from here, and there is no generic entry point;
+ *     `fdb_installation_link_status` (a Companion call) are not reachable from here, and there is no generic entry point. The
+ *     Guildbook is Companion-local: no Guildbook function is reachable from the website (they stay in the registry only to pin
+ *     migration 0012 for the conformance linter);
  *   - the target is derived from the validated Account Auth configuration (`cfg.authOrigin`), the path is `/rest/v1/rpc/<name>`
  *     and the method is always POST: no table, schema, view or filter access exists, and no caller-controlled header, query
  *     string or `Prefer` value is ever sent (so a transaction can never be rolled back or limited by a caller);
@@ -25,8 +27,6 @@ import type { AccountAuthConfig } from "./config";
 export const WEB_RPCS = [
   "fdb_account_claim_redeem",
   "fdb_account_installations",
-  "fdb_account_guildbook_guilds",
-  "fdb_account_guildbook_members",
 ] as const satisfies readonly AccountRpcName[];
 export type WebRpcName = (typeof WEB_RPCS)[number];
 

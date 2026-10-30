@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 import { clientIp, ipv6Prefix64 } from "@/lib/security/identity";
 import { MAX_CHALLENGE_BODY_BYTES, readBoundedJson } from "@/lib/security/challenge";
@@ -28,7 +28,7 @@ const baseEnv: Record<string, string> = {
   CHALLENGE_COOKIE_SECRET: "unit-test-cookie-secret-0123456789abcdef",
 };
 
-let siteverify: ReturnType<typeof vi.fn>;
+let siteverify: Mock<(url: string, init?: RequestInit) => Promise<Response>>;
 let upstashCalls: unknown[][];
 let upstashMode: "ok" | "http500" | "network" | "garbage";
 let upstashCounts: Map<string, number>;

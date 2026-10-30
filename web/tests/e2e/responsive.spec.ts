@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-for (const path of ["/", "/database?q=copper", "/item/2770", "/creature/1554", "/zone/1420", "/guides/reading-observed-drop-rates"]) {
+for (const path of ["/", "/database?q=copper", "/item/2770", "/creature/1554", "/zone/1420", "/guides/reading-observed-drop-rates", "/guides/classes", "/guides/classes/priest", "/guides/classes/priest/shadow", "/guides/races", "/guides/races/human", "/guides/races/high-order-skyborne"]) {
   test(`mobile layout has no horizontal page scroll: ${path}`, async ({ page }) => {
     await page.goto(path);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

@@ -21,9 +21,16 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } },
-      testIgnore: /preview-safety\.spec\.ts/,
+      testIgnore: /(preview-safety|consent-hosts)\.spec\.ts/,
     },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(responsive|maps-poc(-viewport|-atlas)?)\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(responsive|talents|class-nav|races|tree-backgrounds|consent|maps-poc(-viewport|-atlas)?)\.spec\.ts/ },
+    {
+      // Consent gate vs HOST: the spec forwards https requests for the public AzerDex hostnames (and a generated Vercel preview host) to the
+      // hosted-preview server below with that Host header, so the real layout code decides from the real Host. Nothing leaves the machine.
+      name: "public-host",
+      testMatch: /consent-hosts\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
     {
       name: "preview",
       testMatch: /preview-safety\.spec\.ts/,

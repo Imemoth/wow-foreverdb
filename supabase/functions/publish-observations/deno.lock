@@ -2,9 +2,9 @@
   "version": "4",
   "specifiers": {
     "jsr:@supabase/functions-js@*": "2.118.0",
-    "npm:openai@^4.52.5": "4.104.0_zod@3.25.76",
+    "npm:openai@^4.52.5": "4.104.0",
     "npm:postgres@3.4.5": "3.4.5",
-    "npm:zod@3.25.76": "3.25.76"
+    "npm:zod@4.6.7": "4.6.7"
   },
   "jsr": {
     "@supabase/functions-js@2.118.0": {
@@ -190,7 +190,7 @@
         "whatwg-url"
       ]
     },
-    "openai@4.104.0_zod@3.25.76": {
+    "openai@4.104.0": {
       "integrity": "sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==",
       "dependencies": [
         "@types/node-fetch",
@@ -199,8 +199,7 @@
         "agentkeepalive",
         "form-data-encoder",
         "formdata-node",
-        "node-fetch",
-        "zod"
+        "node-fetch"
       ]
     },
     "postgres@3.4.5": {
@@ -228,14 +227,14 @@
         "webidl-conversions"
       ]
     },
-    "zod@3.25.76": {
-      "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
+    "zod@4.6.7": {
+      "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
     }
   },
   "workspace": {
     "dependencies": [
       "npm:postgres@3.4.5",
-      "npm:zod@3.25.76"
+      "npm:zod@4.6.7"
     ]
   }
 }

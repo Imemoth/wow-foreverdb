@@ -108,17 +108,17 @@ const client = () => ({ "x-forwarded-for": `198.51.100.${(n += 1) % 250}` });
 
 test.describe.configure({ timeout: 90_000 });
 
-test.describe("eligible public-beta homepage (every condition holds, including a genuine active publication)", () => {
+test.describe("post-launch beta deindexing (authorized published preview)", () => {
   test.skip(!DB_URL, "needs BETA_SEO_DATABASE_URL (a published public read model)");
 
-  test("indexable homepage: meta robots, canonical, OG, JSON-LD and X-Robots-Tag all agree", async () => {
+  test("homepage is noindex despite authorized published data; canonical points at production", async () => {
     await withServer(3220, betaWithPublication, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
       expect(r.status).toBe(200);
-      expect(r.headers["x-robots-tag"]).toBeUndefined();
+      expect(r.headers["x-robots-tag"]).toBe("noindex, follow");
       expect(r.headers["x-foreverdb-deployment"]).toBe("preview");
-      expect(r.body).toMatch(/<meta name="robots" content="index, follow"/);
-      expect(r.body).toContain(`<link rel="canonical" href="https://${BETA_HOST}"`);
+      expect(r.body).toMatch(/<meta name="robots" content="noindex, follow"/);
+      expect(r.body).toContain(`<link rel="canonical" href="https://azerdex.com"`);
       expect(r.body).toContain(`<meta property="og:url" content="https://${BETA_HOST}"`);
       const ld = /"@type":"WebSite"[\s\S]*?"url":"([^"]+)"/.exec(r.body)?.[1];
       expect(ld).toBe(`https://${BETA_HOST}`);
@@ -145,7 +145,7 @@ test.describe("eligible public-beta homepage (every condition holds, including a
     await withServer(3222, betaWithPublication, async (base) => {
       for (const path of ["/database", "/zones", "/zone/1420", "/item/2770", "/download"]) {
         const r = await curlGet(`${base}${path}`, { Host: BETA_HOST, ...client() });
-        expect(r.headers["x-robots-tag"], path).toBe("noindex, nofollow");
+        expect(r.headers["x-robots-tag"], path).toBe("noindex, follow");
         expect(r.body, path).toMatch(/<meta name="robots" content="noindex/);
       }
       const verify = await curlGet(`${base}/verify`, { Host: BETA_HOST, ...client() });
@@ -165,7 +165,7 @@ test.describe("eligible public-beta homepage (every condition holds, including a
     });
   });
 
-  test("robots.txt / sitemap.xml consistency: crawlable data pages, no disallow hiding their noindex, single approved URL", async () => {
+  test("robots.txt permits deindexing and beta sitemap no longer advertises URLs", async () => {
     await withServer(3224, betaWithPublication, async (base) => {
       const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
       expect(robotsTxt).toMatch(/Allow: \//);
@@ -176,11 +176,11 @@ test.describe("eligible public-beta homepage (every condition holds, including a
       expect(robotsTxt).not.toMatch(/Disallow:\s*\/zones/);
       expect(robotsTxt).not.toMatch(/Disallow:\s*\/zone\//);
       expect(robotsTxt).not.toMatch(/Disallow:\s*\/item\//);
-      expect(robotsTxt).toContain(`Sitemap: https://${BETA_HOST}/sitemap.xml`);
+      expect(robotsTxt).not.toMatch(/Sitemap:/);
 
       const sitemapXml = (await curlGet(`${base}/sitemap.xml`, { Host: BETA_HOST })).body;
       const locs = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-      expect(locs).toEqual([`https://${BETA_HOST}/`]);
+      expect(locs).toEqual([]);
       // Never advertises entity pages or sample articles.
       expect(sitemapXml).not.toMatch(/\/item\/|\/creature\/|\/object\/|\/fishing\/|\/zone\/|\/news\/|\/blog\//);
 
@@ -198,10 +198,11 @@ test.describe("every condition is independently required", () => {
   test("non-indexable development branch: same host, env config copied to the wrong branch stays noindex", async () => {
     await withServer(3225, { ...authorizedBeta, VERCEL_GIT_COMMIT_REF: "feature/unrelated-branch" }, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
-      expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
+      expect(r.headers["x-robots-tag"]).toBe("noindex, follow");
       expect(r.body).toMatch(/<meta name="robots" content="noindex, nofollow"/);
       const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
-      expect(robotsTxt).toMatch(/Disallow: \/\s*$/m);
+      expect(robotsTxt).toMatch(/Allow: \/\s*$/m);
+      expect(robotsTxt).not.toMatch(/Sitemap:/);
     });
   });
 
@@ -210,10 +211,10 @@ test.describe("every condition is independently required", () => {
     delete fixtureBeta.AZERDEX_READ_DB_URL;
     await withServer(3226, fixtureBeta, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
-      expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
+      expect(r.headers["x-robots-tag"]).toBe("noindex, follow");
       expect(r.body).toMatch(/<meta name="robots" content="noindex, nofollow"/);
       const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
-      expect(robotsTxt).toMatch(/Disallow: \/\s*$/m);
+      expect(robotsTxt).toMatch(/Allow: \/\s*$/m);
       expect((await curlGet(`${base}/sitemap.xml`, { Host: BETA_HOST })).body).not.toContain("<loc>");
     });
   });
@@ -221,11 +222,11 @@ test.describe("every condition is independently required", () => {
   test("not indexable while the public database has no reachable genuine publication (fails closed, no fixture substitution)", async () => {
     await withServer(3229, authorizedBeta, async (base) => {
       const r = await curlGet(`${base}/`, { Host: BETA_HOST, ...client() });
-      expect(r.headers["x-robots-tag"]).toBe("noindex, nofollow");
+      expect(r.headers["x-robots-tag"]).toBe("noindex, follow");
       expect(r.body).not.toMatch(/<meta name="robots" content="index/);
       expect(r.body).not.toMatch(/synthetic|invented/i);
       const robotsTxt = (await curlGet(`${base}/robots.txt`, { Host: BETA_HOST })).body;
-      expect(robotsTxt).toMatch(/Disallow: \/\s*$/m);
+      expect(robotsTxt).toMatch(/Allow: \/\s*$/m);
       const api = await curlGet(`${base}/api/v1/meta`, { Host: BETA_HOST, ...client() });
       expect(api.status).toBe(503);
       expect(api.body).not.toMatch(/example\.com|postgres|password|pw/i);

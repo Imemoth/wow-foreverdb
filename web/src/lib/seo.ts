@@ -5,16 +5,14 @@ import { data } from "./data";
 import { isIndexable, serverEnv, type ServerEnv } from "./env";
 
 /**
- * Narrowly-scoped public-beta homepage SEO exception. Google may index ONLY the exact homepage
- * ("/") of this exact hostname, on a preview deployment reading the real PUBLIC PostgreSQL read
- * model (never the synthetic fixture), whose branch has been explicitly authorized (env.ts's
- * betaSeoBranchAuthorized) and which currently has a genuine active publication
- * (hasGenuinePublication, checked per request). Every other beta page, every generated
- * *.vercel.app alias and every other branch stays governed by isIndexable() below (production
- * only) - this is an allow-list of independent conditions, not a default that any single one of
- * them can imply on its own.
+ * Legacy public-beta SEO eligibility helpers. The production site is now live, so
+ * PUBLIC_BETA_INDEXING_ENABLED disables their indexing override even when the old
+ * host/branch/publication authorization conditions are still satisfied.
  */
 export const BETA_SEO_HOSTNAME = "beta.azerdex.com";
+
+/** Production is live: the former public-beta indexing exception is permanently disabled. */
+export const PUBLIC_BETA_INDEXING_ENABLED = false;
 
 type BetaSeoEnv = Pick<ServerEnv, "FOREVERDB_DEPLOYMENT" | "FOREVERDB_DATA_SOURCE" | "betaSeoBranchAuthorized">;
 
@@ -63,23 +61,30 @@ export async function hasGenuinePublication(): Promise<boolean> {
   }
 }
 
+/**
+ * Preserve the old beta presentation rules (copy and homepage JSON-LD) without
+ * re-enabling search indexing. The real publication requirement still applies.
+ */
+export async function isPublicBetaPresentationHomepage(env: BetaSeoEnv, hostname: string, pathname: string): Promise<boolean> {
+  return isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
+}
+
 /** isPublicBetaHost + the genuine-publication check (robots.txt / sitemap.xml). */
 export async function isIndexablePublicBetaHost(env: BetaSeoEnv, hostname: string): Promise<boolean> {
-  return isPublicBetaHost(env, hostname) && (await hasGenuinePublication());
+  return PUBLIC_BETA_INDEXING_ENABLED && isPublicBetaHost(env, hostname) && (await hasGenuinePublication());
 }
 
 /** isPublicBetaHomepage + the genuine-publication check (HTML metadata, X-Robots-Tag, JSON-LD). */
 export async function isIndexablePublicBetaHomepage(env: BetaSeoEnv, hostname: string, pathname: string): Promise<boolean> {
-  return isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
+  return PUBLIC_BETA_INDEXING_ENABLED && isPublicBetaHomepage(env, hostname, pathname) && (await hasGenuinePublication());
 }
 
 /**
- * Single source of truth for indexing. Non-production deployments are never indexable, except the
- * one narrowly-scoped public-beta homepage (pass betaHomepage from isPublicBetaHomepage above);
- * thin/low-sample/filtered/sample pages are noindex,follow.
+ * Single source of truth for indexing. Production-only indexing; the former beta
+ * homepage exemption is disabled after public launch. Thin-content pages are noindex,follow.
  */
 export function robotsFor(indexable: boolean, betaHomepage = false): Metadata["robots"] {
-  if (betaHomepage) return { index: true, follow: true };
+  if (betaHomepage && PUBLIC_BETA_INDEXING_ENABLED) return { index: true, follow: true };
   if (!isIndexable(serverEnv())) return { index: false, follow: false };
   return indexable ? { index: true, follow: true } : { index: false, follow: true };
 }

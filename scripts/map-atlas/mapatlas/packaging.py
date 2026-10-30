@@ -15,6 +15,9 @@ ASSET_PATH_RE = re.compile(r"^forever/([1-9]\d{0,5})/(v[1-9]\d{0,3})/([A-Za-z0-9
 # Cinematic zone hero renditions: their own namespace, independently versioned, never mixed into forever/ or atlas/.
 HERO_PATH_RE = re.compile(r"^zone-heroes/([1-9]\d{0,5})/(v[1-9]\d{0,3})/((?:desktop|mobile)-[1-9]\d{2,4}\.webp)$")
 
+# Talent icons (Class Guides): `talent-icons/<game build>/<FileDataID>.webp`, immutable by construction (build and id are in the path).
+TALENT_ICON_PATH_RE = re.compile(r"^talent-icons/([1-9]\d{0,3}\.\d{1,4}\.\d{1,4}\.[1-9]\d{0,5})/([1-9]\d{0,9})\.webp$")
+
 HEADERS = """/forever/*
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *
@@ -35,6 +38,15 @@ ZONE_HEROES_HEADERS = """/zone-heroes/*
   Timing-Allow-Origin: *
 """
 UNIFIED_HEADERS = HEADERS + "\n" + ZONE_HEROES_HEADERS
+
+# A snapshot that also carries talent icons: the reviewed unified rules byte-identical, then one more block. Content-Type is not set here:
+# Pages derives image/webp from the .webp extension (the verifiers require it on served files).
+TALENT_ICONS_HEADERS = """/talent-icons/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+"""
+UNIFIED_ICONS_HEADERS = UNIFIED_HEADERS + "\n" + TALENT_ICONS_HEADERS
 
 
 class PackageError(ValueError):
@@ -65,7 +77,7 @@ def check_limits(root: Path) -> dict:
         problems.append(f"{len(files)} files exceeds the {PAGES_MAX_FILES} file limit")
     if over:
         problems.append(f"files over {PAGES_MAX_FILE_BYTES} bytes: {', '.join(over[:5])}")
-    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or HERO_PATH_RE.match(f) or (f.startswith("atlas/") and f.count("/") == 1) or f == "_headers")]
+    bad_paths = [f for f in files if not (ASSET_PATH_RE.match(f) or HERO_PATH_RE.match(f) or TALENT_ICON_PATH_RE.match(f) or (f.startswith("atlas/") and f.count("/") == 1) or f == "_headers")]
     if bad_paths:
         problems.append(f"files outside the CDN path convention: {', '.join(bad_paths[:5])}")
     return {"fileCount": len(files), "largestBytes": max(((root / f).stat().st_size for f in files), default=0),

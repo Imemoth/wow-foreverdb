@@ -12,9 +12,9 @@ test.afterAll(async () => { await db.end(); });
 
 const PRIVATE_POSTS = [
   ["/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: "x", confirm: true, accountId: "00000000-0000-4000-8000-000000000000" }],
-  ["/account/api/guildbook/guilds", { installationId: "some-installation-1" }],
-  ["/account/api/guildbook/members", { installationId: "some-installation-1", guildKey: "Realm:Guild1", page: 0 }],
 ] as const;
+// (The retired Guildbook routes are deny-by-default 404 stubs without authentication or CSRF handling: they are not part of this matrix;
+// 01, 02 and the header test below pin that they answer 404 and carry the account zone's private headers.)
 
 test("CSRF / Origin / Fetch-Metadata / content-type matrix on every private POST route: each protection alone is enough to refuse", async ({ playwright }) => {
   const a = await webUser(playwright, "csrf");
@@ -97,10 +97,10 @@ test("every private route and page: private no-store, noindex, path-hiding refer
 test("redirect allowlist: the new pages are valid return paths, everything else falls back to /account", async ({ playwright }) => {
   const users = [await webUser(playwright, "redir1"), await webUser(playwright, "redir2")]; // (sign-ins are throttled per address: 10 / 15 min)
   const cases: [string, string][] = [
-    ["/account/link", "/account/link"], ["/account/installations", "/account/installations"], ["/account/guildbook", "/account/guildbook"],
+    ["/account/link", "/account/link"], ["/account/installations", "/account/installations"], ["/account/guildbook", "/account"],
     ["/account/link?code=ABCDEF0123456789ABCDEF0123456789", "/account/link"], ["/account/link#x", "/account/link"],
     ["//evil.example/account/link", "/account"], ["https://evil.example", "/account"], ["/\\evil.example", "/account"], ["/account/link/../../admin", "/account"],
-    ["/account/linkx", "/account"], ["/account/%2e%2e/api/me", "/account"], ["%2F%2Fevil.example", "/account"], ["/account/guildbook/", "/account/guildbook"],
+    ["/account/linkx", "/account"], ["/account/%2e%2e/api/me", "/account"], ["%2F%2Fevil.example", "/account"], ["/account/guildbook/", "/account"],
   ];
   for (const [i, [next, want]] of cases.entries()) {
     const c = await newClient(playwright);
@@ -109,12 +109,13 @@ test("redirect allowlist: the new pages are valid return paths, everything else 
     expect(r.status(), next).toBe(200);
     expect(await json(r), next).toEqual({ ok: true, redirect: want });
   }
-  // the unauthenticated page redirect carries only the fixed, allowlisted return path
-  const anon = await (await newClient(playwright)).get("/account/guildbook", { maxRedirects: 0 });
-  expect(anon.headers().location).toBe("/account/login?next=%2Faccount%2Fguildbook");
+  // the unauthenticated page redirect carries only the fixed, allowlisted return path; the retired Guildbook page is not a page at all
+  const anonLink = await (await newClient(playwright)).get("/account/link", { maxRedirects: 0 });
+  expect(anonLink.headers().location).toBe("/account/login?next=%2Faccount%2Flink");
+  expect((await (await newClient(playwright)).get("/account/guildbook", { maxRedirects: 0 })).status()).toBe(404);
 });
 
-test("XSS: hostile guild, member, zone and rank text is rendered as inert text on the Guildbook and the installation pages", async ({ browser, playwright }) => {
+test("XSS: hostile guild text an old Companion still uploads is dropped by the server and nothing of it can reach the website (the installation page renders inert)", async ({ browser, playwright }) => {
   const a = await webUser(playwright, "xss");
   const id = await anonymous();
   const installationId = uniq("xss");
@@ -125,6 +126,9 @@ test("XSS: hostile guild, member, zone and rank text is rendered as inert text o
   for (const m of snap.guilds[0]!.members) { m.name = `N${m.name}${evil}`.slice(0, 48); m.zone = `Zone ${evil}`; m.rankName = `Rank ${evil}`; }
   const r = await ingest(id.token, snap);
   expect(r.status, JSON.stringify(r.body)).toBe(200);
+  // migration 0018 drops the Guildbook before the legacy ingest: no guild, member or profession row exists for the installation
+  expect((await db.query("select count(*)::int n from public.installation_guilds where installation_id = $1", [installationId])).rows[0].n).toBe(0);
+  expect((await db.query("select count(*)::int n from public.installation_guild_members where installation_id = $1", [installationId])).rows[0].n).toBe(0);
   const code = (await (await import("./stack")).rpc(id.token, "fdb_account_claim_start", { p_installation_id: installationId })).body.code as string;
   expect((await link(a.c, code, a.password)).status()).toBe(200);
 
@@ -133,14 +137,13 @@ test("XSS: hostile guild, member, zone and rank text is rendered as inert text o
   const page = await ctx.newPage();
   const violations: string[] = [];
   page.on("console", (m) => { if (/Content Security Policy|CSP violation/i.test(m.text())) violations.push(m.text()); });
-  await page.goto(`/account/guildbook#installation=${encodeURIComponent(installationId)}`);
-  await page.getByRole("button", { name: /Guild/ }).first().click();
-  await expect(page.getByTestId("member-row").first()).toBeVisible();
+  expect((await page.goto("/account/guildbook"))?.status()).toBe(404);
+  expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
+  await page.goto("/account/installations");
+  await expect(page.getByText(installationId)).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
   expect(await page.locator("main img, main script").count()).toBe(0);
-  expect(await page.getByTestId("member-row").first().innerText()).toContain("<img");
-  await page.goto("/account/installations");
-  expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
+  expect(await page.content()).not.toContain("<img src=x");
   await ctx.close();
   expect(await ownerOf(db, installationId)).toBe(a.uid);
 });

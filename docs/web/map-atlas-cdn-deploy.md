@@ -103,3 +103,29 @@ The site keeps serving the heroes from its own origin until `AZERDEX_ZONE_HERO_S
 | Hero artwork wrong after publication | Never edit a published file. Fix the source, add `v2` to `heroes/zone-heroes.json` (+ registry entry), build a new unified snapshot, upload, verify. `v1` stays served. Website: flip `AZERDEX_ZONE_HERO_SOURCE` back (below). |
 | Website misbehaves with CDN heroes | Unset `AZERDEX_ZONE_HERO_SOURCE` (or set `local`) and redeploy / use Vercel instant rollback: the same-origin `/zones/hero/*` files (kept in the repository) serve again; no data or schema is involved. |
 | Ledgers promoted but the deployment rolled back | Keep the archived baseline and the unified zip; the next build needs the baseline (`--baseline`) so every published version is carried forward, otherwise it refuses by design. |
+
+## Unified snapshot + talent icons (Class Guides) - build and upload
+
+Same rule as above: Pages Direct Upload is a **complete snapshot**, so the talent icons ship **inside** the unified snapshot (baseline atlas + zone heroes + `talent-icons/`), never as an icons-only deployment. `talent-icons/<game build>/<FileDataID>.webp` is a third namespace, independent of `forever/` and `zone-heroes/` (module `scripts/map-atlas/mapatlas/talenticons.py`, tests `scripts/map-atlas/tests/test_talent_icons.py`).
+
+| | |
+| --- | --- |
+| Inventory (committed, ids + sha256 only) | `web/src/data/talents/forever/1.60.1.70634/icons-inventory.json` (358 icons, 64x64 lossless WebP, <= 256 KiB each) |
+| Staging directory (**never in Git**) | the owner's converted files laid out as `<dir>/talent-icons/1.60.1.70634/<FileDataID>.webp` (the supplied `AzerDexTalentIcons_CDN_70634.zip` unzipped as is) |
+| `_headers` | the reviewed unified rules byte-identical, then `/talent-icons/*` -> `Cache-Control: public, max-age=31536000, immutable`, `Access-Control-Allow-Origin: *`, `X-Content-Type-Options: nosniff` (no `Content-Type` override: Pages derives `image/webp` from the extension) |
+| Checks added | exact file set (baseline pin + heroes + inventory), every icon equals its inventory size and SHA-256 and decodes as a 64x64 WebP, nothing else in the staging directory, atlas metadata may not reference `talent-icons`, Pages limits, per-file response headers; `verify-remote` also holds the icons to type, `nosniff`, immutable cache and a 404 for an unknown icon path |
+
+```bash
+cd scripts/map-atlas
+# 1. build the COMPLETE snapshot (baseline is verified against its pin first; nothing is uploaded)
+python atlas.py build-unified --baseline <atlas-dist-1.60.1.70450.zip> --out <out> \
+  --talent-icons-inventory ../../web/src/data/talents/forever/1.60.1.70634/icons-inventory.json --talent-icons-source <staging dir>
+python atlas.py verify-unified --dist <out>/dist --talent-icons-inventory ../../web/src/data/talents/forever/1.60.1.70634/icons-inventory.json
+# 2. note the current production deployment id (rollback target), then upload the whole folder to the EXISTING project
+cd <out> && npx wrangler pages deploy dist --project-name azerdex-assets --branch <the project's production branch>
+# 3. verify what is served (read-only): the existing files and the icons
+cd scripts/map-atlas && python atlas.py verify-remote --base https://azerdex-assets.pages.dev --dist <out>/dist
+node web/scripts/verify-talent-icons-cdn.mjs --dataset web/src/data/talents/forever/1.60.1.70634 --base https://azerdex-assets.pages.dev
+```
+
+Expected: `verify-remote` and the icon verifier both pass (358 of 358 icons HTTP 200, `image/webp`, exact hash, immutable cache; unknown icon 404); every previously published file is still served. Then (beta/preview only) set `AZERDEX_TALENT_ICONS=cdn` (the beta already carries `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev` for the maps) and **redeploy** so the new value is read, and open the nine class pages. Rollback: unset `AZERDEX_TALENT_ICONS` (the calculator returns to name plates at once), and roll the Pages project back to the noted deployment if the snapshot itself is bad. Production variables stay unchanged.

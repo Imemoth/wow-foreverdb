@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
 import { RegisterForm } from "../_components/RegisterForm";
+import { PrivacyNote } from "../_ui/PrivacyNote";
 
 export const metadata = { title: "Create account" };
 
@@ -20,6 +21,10 @@ export default async function RegisterPage() {
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">Create your account</h1>
       <p className="text-mist">An account lets you sign in on AzerDex. Browsing the database never requires one.</p>
       <p className="text-sm text-mist">Already have an account? <Link href="/account/login">Sign in</Link></p>
+      <PrivacyNote>
+        We use your email address and password only to create and run your account, and your email address to send you account emails
+        (confirmation, password reset and a welcome message). Who is responsible and your rights are described in the
+      </PrivacyNote>
       <RegisterForm turnstileSiteKey={siteKey} />
     </>
   );

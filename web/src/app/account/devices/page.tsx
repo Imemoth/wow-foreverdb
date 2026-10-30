@@ -6,6 +6,7 @@ import { requirePageUser } from "@/lib/account/page-session";
 import { callWebRpc } from "@/lib/account/rpc-client";
 import { Unavailable } from "../_ui/Unavailable";
 import { RevokeButton } from "../_components/RevokeButton";
+import { PrivacyNote } from "../_ui/PrivacyNote";
 
 export const metadata = { title: "Devices" };
 
@@ -66,6 +67,10 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
           <li>If you lose it or it expires, come back here and download a new one. You do not need to reinstall anything.</li>
           <li>You can have at most 5 unused files at a time. Revoke one below if you no longer need it.</li>
         </ul>
+        <PrivacyNote anchor="companion">
+          A connected computer is recorded with a label (the Windows computer name when it connects from the Companion) and its
+          last activity. See the Addon and Companion section of the
+        </PrivacyNote>
         <form method="post" action="/account/api/enrollment/download" className="pt-1">
           <input type="hidden" name={FORM_CSRF_FIELD} value={token} />
           <button type="submit" className="btn-primary">Download activation file for a new computer</button>

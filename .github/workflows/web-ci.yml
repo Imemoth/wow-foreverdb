@@ -87,6 +87,12 @@ jobs:
         run: npx playwright test --project=preview
       - name: Accessibility regression (axe WCAG 2.2 AA) and SEO
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
+      - name: Cookie consent and analytics gate (first visit, refusal, acceptance, reload, navigation, withdrawal, a11y; desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/consent.spec.ts
+      - name: Consent gate by host (public AzerDex hosts load analytics only after opt-in; preview/other hosts never; Speed Insights off)
+        run: npx playwright test --project=public-host
+      - name: Class guides and talent calculator (desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/talents.spec.ts
       - name: Responsive layout (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
       # Zone atlas maps (feature-gated, off by default): needs a second build WITH the CDN origin baked in. Runs against a real local HTTPS
@@ -138,6 +144,12 @@ jobs:
         run: npm ci && npm run typecheck && npm test
       - uses: denoland/setup-deno@v2
         with: { deno-version: v2.1.4 }  # the Supabase Edge runtime's Deno-compatible version
+      # Must run BEFORE `deno check`: a non-frozen check silently rewrites an out-of-date lock inside the runner and would hide drift.
+      # `deno cache --frozen`, not `deno check --frozen`: Deno < 2.6 type-checking injects an implicit @types/node that it never
+      # writes to the lock, so `check --frozen` fails on this pinned Deno whatever lock is committed (docs/web/release-gates.md §6).
+      - name: Supabase Edge Function lockfile is frozen-consistent (deno.json <-> deno.lock, integrity hashes)
+        working-directory: supabase/functions/publish-observations
+        run: deno cache --frozen index.ts
       - name: Supabase Edge Function type-check (the function is a thin adapter over publisher/src/core)
         run: |
           node scripts/sync-edge-core.mjs --check
@@ -181,10 +193,49 @@ jobs:
       - uses: github/codeql-action/analyze@v3
 
   # ---------------------------------------------------------------------------------------------
+  # Both npm roots. publisher/ was never audited before, so an advisory in its production dependencies (zod, GHSA-mrhx-c7xc-m3w5)
+  # was invisible to CI. Joins the aggregate gate below, so the required `Web release gate` fails with it (no ruleset change).
+  #   production tree: high and critical fail, independent of the dev-dependency policy
+  #   full tree (incl. devDependencies): moderate and above fail
+  # `npm ci --ignore-scripts`: audit only reads the resolved tree, so no package lifecycle script needs to run. Investigation: release-gates.md §5.
+  dependency-audit:
+    name: Dependency audit (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: { project: [web, publisher] }
+    defaults: { run: { working-directory: '${{ matrix.project }}' } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: '${{ matrix.project }}/package-lock.json' }
+      - run: npm ci --ignore-scripts
+      - name: Production dependency audit (high and critical fail)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit incl. devDependencies (moderate and above fail)
+        if: ${{ !cancelled() }}
+        run: npm audit --audit-level=moderate
+      - name: Audit findings in the job summary (advisory ids, severity, dependency path)
+        if: failure()
+        run: |
+          {
+            echo '### npm audit findings in `${{ matrix.project }}/`'
+            echo '```'
+            npm audit || true
+            echo '```'
+            echo 'How to investigate and fix: docs/web/release-gates.md section 5.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm audit --json > "$RUNNER_TEMP/npm-audit-${{ matrix.project }}.json" || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: 'npm-audit-${{ matrix.project }}', path: '${{ runner.temp }}/npm-audit-${{ matrix.project }}.json', retention-days: 14 }
+
+  # ---------------------------------------------------------------------------------------------
   web-gate:
     name: Web release gate
     if: always()
-    needs: [web-quality, web-e2e, publisher-and-pipeline, codeql]
+    needs: [web-quality, web-e2e, publisher-and-pipeline, codeql, dependency-audit]
     runs-on: ubuntu-latest
     steps:
       - name: Every upstream job must have succeeded (failed, cancelled and skipped all fail the gate)

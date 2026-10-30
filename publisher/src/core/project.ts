@@ -4,8 +4,11 @@
  */
 import { createHash } from "node:crypto";
 import {
-  PrivateExport,
+  exportRowCounts,
+  maxExportRows,
+  parsePrivateExportBounded,
   type LootKind,
+  type PrivateExport,
   type PublicationConfig,
   type SourceType,
 } from "./contract.ts";
@@ -97,14 +100,26 @@ export function displayKindOf(type: SourceType, id: number): DisplayKind {
 }
 
 export function buildProjection(rawExport: unknown, config: PublicationConfig): { projection: Projection; report: BuildReport } {
-  const parsed = PrivateExport.safeParse(rawExport);
+  // Size guard BEFORE any validation: reads array lengths only. Counts, never values.
+  const limit = maxExportRows(config);
+  const counts = exportRowCounts(rawExport);
+  if (counts.total > limit) throw new PublicationError("export_too_large", { limit, rows: counts.total, sections: counts.sections });
+
+  // Bounded, strict validation: stops at MAX_VALIDATION_ISSUES. Fail closed; report only paths/codes, never values (they may be private).
+  const parsed = parsePrivateExportBounded(rawExport);
   if (!parsed.success) {
-    // Fail closed. Report only paths/codes, never values (they may be private).
-    throw new PublicationError("export_contract_violation", {
-      issues: parsed.error.issues.slice(0, 20).map((i) => ({ path: i.path.join("."), code: i.code })),
-    });
+    throw new PublicationError("export_contract_violation", { issues: parsed.issues, truncated: parsed.truncated });
   }
-  const ex = parsed.data;
+  return projectValidatedExport(parsed.data, config);
+}
+
+/**
+ * The projection of an export that is ALREADY validated (`parsePrivateExportBounded`). It has no size guard of its own: the only
+ * production entry is `buildProjection`, which enforces the row limit and the bounded validation first. It is exported for the
+ * synthetic CPU benchmarks (scripts/bench-projection.ts), which exceed the production limit on purpose; a static test pins that no
+ * production source references it.
+ */
+export function projectValidatedExport(ex: PrivateExport, config: PublicationConfig): { projection: Projection; report: BuildReport } {
   if (ex.meta.contract_version !== config.contractVersion) {
     throw new PublicationError("export_contract_version_mismatch", { got: ex.meta.contract_version });
   }

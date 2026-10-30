@@ -28,5 +28,6 @@ npm run test:e2e        # Playwright: journeys, security, axe WCAG 2.2 AA, SEO, 
 - `src/lib/validation.ts`: every request parameter bound
 - `src/app/api/v1/*`: cacheable read-only BFF
 - `content/`: Markdown + YAML front matter (reviewed via PR)
+- `src/lib/talents/`, `src/data/talents/`, `src/components/talents/`, `src/components/classes/`: Class Guides + Talent Calculator (see [`docs/web/class-guides-talents.md`](../docs/web/class-guides-talents.md))
 
 Architecture, threat model and runbooks: [`docs/web/`](../docs/web/).

@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
 import { assetOriginForPage, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
-import { isIndexablePublicBetaHomepage } from "@/lib/seo";
+import { talentIconImgOrigin } from "@/lib/talents/icons";
+import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHomepage } from "@/lib/seo";
 import { API_CSP, BASE_SECURITY_HEADERS, HSTS, SENSITIVE_PAGE_REFERRER_POLICY, buildPageCsp, deploymentHeaders, type DeploymentKindName } from "@/lib/security/headers";
 import { isSameOriginJson, isSameOriginRequest } from "@/lib/security/challenge";
 import { clientIp, hashIp, newSessionId, verifyPass } from "@/lib/security/identity";
@@ -183,6 +184,8 @@ export async function proxy(request: NextRequest) {
     assetOrigin: assetOriginForPage(pathname, process.env.NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL),
     // img-src only, and only when AZERDEX_ZONE_HERO_SOURCE=cdn (default: same-origin heroes, CSP unchanged).
     heroImgOrigin: heroImgOrigin(),
+    // img-src only, and only when AZERDEX_TALENT_ICONS=cdn on an allow-listed https asset host (default: CSP unchanged).
+    iconImgOrigin: talentIconImgOrigin(),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -193,6 +196,10 @@ export async function proxy(request: NextRequest) {
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
   const htmlStamp = deploymentHeaders(kind, publicBetaHomepage);
+  // The public beta must remain crawlable after launch so Google can read its noindex directive.
+  if (kind === "preview" && requestHost === BETA_SEO_HOSTNAME && pathname !== "/verify" && !pathname.startsWith("/verify/")) {
+    htmlStamp["X-Robots-Tag"] = "noindex, follow";
+  }
   for (const [k, v] of Object.entries({ ...BASE_SECURITY_HEADERS, ...htmlStamp, ...accountHeaders })) res.headers.set(k, v);
   if (https) res.headers.set("Strict-Transport-Security", HSTS);
   // The anonymous rate-limit cookie is for public browsing only: account pages neither receive nor issue it.

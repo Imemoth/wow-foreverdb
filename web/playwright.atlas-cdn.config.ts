@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { consentStorageState } from "./tests/consent-seed";
 
 // Local acceptance only (needs the private real atlas dist). Requires a build made WITH the asset base URL:
 //   NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev npx next build
@@ -19,6 +20,7 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     ignoreHTTPSErrors: true,
+    storageState: consentStorageState(`http://localhost:${PORT}`),
     launchOptions: { ...(executablePath ? { executablePath } : {}), args: [`--host-resolver-rules=MAP azerdex-assets.pages.dev 127.0.0.1:${CDN_PORT}`, "--ignore-certificate-errors", "--no-proxy-server"] },
   },
   projects: [

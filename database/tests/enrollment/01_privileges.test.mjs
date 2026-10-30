@@ -78,10 +78,24 @@ describe("function privileges and definer hygiene", () => {
        from pg_proc p where p.pronamespace in ('public'::regnamespace,'private'::regnamespace)`)).rows;
     const bySig = new Map(now.map((r) => [r.sig, r]));
     assert.ok(before.length > 20);
+    // Migration 0018 (Guildbook local-only) is the one designed exception, and only on a database that has it (marker table present): the ingest
+    // body is retained byte-identical under the *_legacy name and the Guildbook RPCs keep their bodies but lose their client ACL.
+    const killSwitch = (await w.admin.query("select to_regclass('private.guildbook_cloud_sync_guard') is not null as v")).rows[0].v;
     for (const b of before) {
+      if (killSwitch && b.sig === "private.foreverdb_ingest_snapshot_impl_v1(jsonb)") {
+        const l = bySig.get("private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)");
+        assert.ok(l, "legacy ingest body retained");
+        assert.deepEqual({ owner: l.owner, config: l.config, md5: l.md5 }, { owner: b.owner, config: b.config, md5: b.md5 }, "legacy body unchanged");
+        continue;
+      }
       const a = bySig.get(b.sig);
       assert.ok(a, `${b.sig} still exists`);
-      assert.deepEqual({ owner: a.owner, acl: a.acl, config: a.config, md5: a.md5 }, { owner: b.owner, acl: b.acl, config: b.config, md5: b.md5 }, `${b.sig} unchanged`);
+      const aclClosedBy0018 = killSwitch && /guildbook/.test(b.sig);
+      assert.deepEqual(
+        { owner: a.owner, acl: aclClosedBy0018 ? "-" : a.acl, config: a.config, md5: a.md5 },
+        { owner: b.owner, acl: aclClosedBy0018 ? "-" : b.acl, config: b.config, md5: b.md5 },
+        `${b.sig} unchanged`,
+      );
     }
   });
 });

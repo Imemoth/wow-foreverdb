@@ -43,7 +43,11 @@ public partial class MainWindow
         }
 
         account.Sessions.StatusChanged += _ =>
-            Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                RefreshAccountUi();
+                RefreshGuildbookUi();
+            }));
 
         account.Sync.InstallationChanged += _ =>
             Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
@@ -157,6 +161,7 @@ public partial class MainWindow
         HideClaimCard();
         AccountMessageText.Visibility = Visibility.Collapsed;
         RefreshAccountUi();
+        RefreshGuildbookUi();
     }
 
     private async Task<string> GetSearchTokenAsync(
@@ -427,9 +432,6 @@ public partial class MainWindow
 
     private async Task ResyncAfterIdentityChangeAsync()
     {
-        // Signing in to the real project for the first owner pilot must NOT
-        // auto-upload existing installations, even if AutoSync was enabled.
-        if (_account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot) return;
         var service = _syncService;
         var watcher = _watcher;
 
@@ -439,28 +441,46 @@ public partial class MainWindow
             return;
         }
 
+        WowSavedVariablesWatcher? temporaryFinder = null;
         try
         {
-            var finder = watcher ??
+            temporaryFinder = watcher ??
                 new WowSavedVariablesWatcher(
                     _settings.WowRoot,
                     (_, _) => Task.CompletedTask);
+            var files = temporaryFinder.FindExistingFiles().ToArray();
+            var discovered = service.DiscoverInstallations(files);
 
-            foreach (var file in finder.FindExistingFiles())
+            // A sign-in after startup must restore that account's encrypted LOCAL Guildbook, for every environment and even when
+            // AutoSync is off. Restoration is completed before, and independently from, any public upload; it uses no network.
+            if (_guildbookSync is not null)
+            {
+                await GuildbookStartupCoordinator.RestoreAsync(
+                    _guildbookSync,
+                    discovered);
+            }
+
+            // Signing in to the real project for the first owner pilot must NOT
+            // auto-upload existing installations, even if AutoSync was enabled.
+            if (_account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot) return;
+
+            foreach (var file in files)
             {
                 await service.SyncFileAsync(
                     file,
                     trigger: SyncTrigger.Auto);
             }
-
-            if (watcher is null)
-            {
-                finder.Dispose();
-            }
         }
         catch (Exception ex)
         {
             RecordSyncError(ex.Message);
+        }
+        finally
+        {
+            if (watcher is null)
+            {
+                temporaryFinder?.Dispose();
+            }
         }
     }
 

@@ -31,6 +31,8 @@ Synthetic data (`source: "synthetic"`) is refused for `publish` and was only eve
 
 ### E — growth (synthetic, `rehearse`, hosted)
 
+**Unit of "Rows" below: rows WRITTEN (the projection's output rows), not input rows.** Input rows (the five export collections) are far fewer: synthetic scale 10 = 14,490 input rows -> 35,294 output rows; scale 25 = 36,225 -> 87,849; scale 30 = 43,470 -> 105,722; scale 83 = 120,267 -> 292,040. The real export today is 1,350 input rows. So the Edge CPU ceiling (25-27x) corresponds to roughly **36-39k input rows**.
+
 | Scale | Rows | CPU (platform) | Wall | Notes |
 | --- | --- | --- | --- | --- |
 | 1× | ~3.5k | 147 ms (dry run), 165 ms (rehearse) | 209 / 493 ms | |
@@ -68,3 +70,49 @@ The full write path was additionally exercised by the rehearsal-only Cron job ab
 - Platform CPU for real-data runs is available in Edge logs only for runs still inside the log retention window.
 - The website's read path against the published data was verified through the `web_api` functions as `foreverdb_web_reader`
   (zones 1420/1412/1421 and Copper Vein 1731 returned real cells); the Vercel Preview itself is blocked on an owner action (see operations doc).
+
+## Export size guard (#137): measured on the shared core, Node 24, local PostgreSQL 16
+
+Safety threshold: 120,000 total input rows (sum of the five collections), enforced in the database read (see `publication-pipeline.md`) and again before validation.
+It bounds memory; it does **not** mean such an export completes: synthetic scale 83 (120,267 input rows) needs 3.3 s of `buildProjection` in Node against the 2 s Edge CPU limit.
+
+**Why 120,000 is also the hard ceiling (memory of the whole pipeline: raw export + validated copy + projection in memory, synthetic compact rows; V8 heap limit as a proxy for the 256 MB Edge isolate, Node 24):**
+
+| Input rows (synthetic scale) | 128 MB heap | 192 MB heap | 256 MB heap |
+| --- | --- | --- | --- |
+| 36,225 (25) | fits | fits | fits |
+| 86,940 (60) | out of memory | fits | fits |
+| 120,267 (83) | out of memory | out of memory | fits (212 MB used) |
+| 144,900 (100) | | | fits (229 MB used) |
+| 181,125 (125) | | | **out of memory** |
+
+Real database rows are wider than the synthetic ones (the bounded read of 120,000 real-shaped rows alone holds about +44 MB heap versus 16 MB for the synthetic export), so 120,000 is already at the memory edge and the configured limit may only lower it. **Memory protection is not CPU capacity**: the CPU ceiling is 36,000-39,000 input rows (2 s Edge CPU limit), and `buildProjection` of the 120,267-row export alone needs 3.3-4.4 s in Node. Any operational limit below 120,000 must be based on hosted-runtime benchmarks and observed production runs.
+
+**Valid exports, old vs new code (validation + projection, medians; run-to-run spread about +/-8 %):**
+
+| Export | Validation old / new | `buildProjection` old / new |
+| --- | --- | --- |
+| production-sized, 1,350 rows | 3.21 / 3.18 ms (validation only) | n/a |
+| scale 1 (1,449 rows) | 3.1-3.3 / 3.2-3.4 ms | 25.4-25.9 / 24.3-27.0 ms |
+| scale 10 (14,490 rows) | 33.5-35.9 / 37.6-38.3 ms | 298.7-312.8 / 301.0-305.7 ms |
+| scale 25 (36,225 rows) | 87.4-90.5 / 94.8-98.2 ms | 815.8-836.8 / 770.1-895.0 ms |
+
+Published content is byte-identical (golden hashes unchanged; the same content hash through the database read path).
+
+**Database read, real PostgreSQL with synthetic export functions (old = unbounded, new = limit 120,000):**
+
+| Rows in the database | Old | New |
+| --- | --- | --- |
+| 1,350 | loaded, 16 ms, heap +4 MB | identical |
+| 88,000 | loaded, 341 ms, heap +33 MB, RSS +59 MB | identical cost |
+| 120,000 | loaded, 460 ms, heap +40 MB, RSS +92 MB | loaded, 450 ms |
+| 150,000 | loaded, 572 ms, RSS +100 MB | **refused** (`export_too_large`) |
+| 1,000,000 | loaded, 3.9 s, heap +343 MB, RSS +448 MB (above the 256 MB Edge limit) | **refused**, 0.6 s, heap +59 MB, RSS +99 MB |
+
+**Many invalid rows (every row fails, 4 issues per row):**
+
+| Rows | Old (`PrivateExport.safeParse`) | New (bounded) |
+| --- | --- | --- |
+| 1,000 | 4,000 issues, 30 ms, +4 MB | 20 issues, 6 ms, +0 MB |
+| 100,000 | 400,000 issues, 1.2 s, **+376 MB** | 20 issues, 5 ms, +1 MB |
+| 1,000,000 | **out of memory at 2 GB** | 20 issues, 5 ms, +0 MB |
