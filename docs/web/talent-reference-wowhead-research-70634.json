@@ -1,0 +1,2325 @@
+{
+  "schema": "azerdex.referenced-spell-research/1",
+  "targetBuild": "1.60.1.70634",
+  "researchDate": "2026-10-29",
+  "authority": "RESEARCH ONLY: Wowhead Forever pages are not pinned to a specific 70634 client build. Not importable directly as verified spell facts.",
+  "sourceCoverage": {
+    "partialTalentNodes": 103,
+    "unresolvedRanks": 261,
+    "referencedSpells": 111,
+    "reviewedSpellIds": 14
+  },
+  "references": [
+    {
+      "spellId": 6150,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104960,
+          "talent": "Deadly Aspects",
+          "classId": "hunter",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 11189,
+      "requiredTokenKinds": [
+        "${$s1+($SPFR*0.1)*($Ns3/100+1)}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105762,
+          "talent": "Ice Barrier",
+          "classId": "mage",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 12355,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105792,
+          "talent": "Impact",
+          "classId": "mage",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D12355/impact",
+        "values": [
+          {
+            "token": "$12355d",
+            "display": "2 sec",
+            "numeric": 2,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Mage Impact linked stun."
+        ]
+      }
+    },
+    {
+      "spellId": 12484,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105771,
+          "talent": "Improved Blizzard",
+          "classId": "mage",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D12484/chilled",
+        "values": [
+          {
+            "token": "$12484d",
+            "display": "1.5 sec",
+            "numeric": 1.5,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Mage Improved Blizzard linked chill duration; page buff rounds 1 sec, spell detail says 1.5 sec."
+        ]
+      }
+    },
+    {
+      "spellId": 12494,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105774,
+          "talent": "Frostbite",
+          "classId": "mage",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D12494/frostbite",
+        "values": [
+          {
+            "token": "$12494d",
+            "display": "5 sec",
+            "numeric": 5,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Mage Frostbite root duration."
+        ]
+      }
+    },
+    {
+      "spellId": 12536,
+      "requiredTokenKinds": [
+        "$/10;Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105810,
+          "talent": "Arcane Concentration",
+          "classId": "mage",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 12579,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105763,
+          "talent": "Winter's Chill",
+          "classId": "mage",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_conflict_review",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D12579/winters-chill",
+        "values": [
+          {
+            "token": "$12579s1",
+            "display": "2% critical chance in Wowhead buff (raw 3%), but 70634 AzerDex template expects next Cone of Cold damage increase",
+            "numeric": null,
+            "unit": "percent"
+          }
+        ],
+        "notes": [
+          "Mechanic mismatch: do not import. Find build 70634 SpellEffect and hotfix-aware data."
+        ]
+      }
+    },
+    {
+      "spellId": 12880,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105931,
+          "talent": "Enrage",
+          "classId": "warrior",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D12880/enrage",
+        "values": [
+          {
+            "token": "$12880d",
+            "display": "12 sec",
+            "numeric": 12,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Warrior Enrage tooltip also has independent proc ($h), so filling duration alone will not make all ranks complete."
+        ]
+      }
+    },
+    {
+      "spellId": 12964,
+      "requiredTokenKinds": [
+        "${$Nm1/10}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105937,
+          "talent": "Unbridled Wrath",
+          "classId": "warrior",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 12966,
+      "requiredTokenKinds": [
+        "$Nn"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105928,
+          "talent": "Flurry",
+          "classId": "warrior",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 12976,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105970,
+          "talent": "Last Stand",
+          "classId": "warrior",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 14143,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105723,
+          "talent": "Remorseless Attacks",
+          "classId": "rogue",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D14143/remorseless",
+        "values": [
+          {
+            "token": "$14143d",
+            "display": "20 sec",
+            "numeric": 20,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Rogue Remorseless Attacks linked buff; raw 41 vs displayed 40 (effect +1 mismatch)."
+        ]
+      }
+    },
+    {
+      "spellId": 14181,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105759,
+          "talent": "Relentless Strikes",
+          "classId": "rogue",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D14181/relentless-strikes-effect",
+        "values": [
+          {
+            "token": "$14181s1",
+            "display": "25 Energy in tooltip, Effect Value 26",
+            "numeric": 25,
+            "unit": "energy"
+          }
+        ],
+        "notes": [
+          "Rogue Relentless Strikes; effect-dummy scripted value requires checking, do not use raw 26."
+        ]
+      }
+    },
+    {
+      "spellId": 14893,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105860,
+          "talent": "Inspiration",
+          "classId": "priest",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 15258,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105821,
+          "talent": "Shadow Weaving",
+          "classId": "priest",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_conflict_review",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D15258/shadow-weaving",
+        "secondarySourceUrl": "https://www.wowhead.com/forever/spell%3D15257/shadow-weaving",
+        "values": [
+          {
+            "token": "$15258s1",
+            "display": "2% in buff text (raw Effect Value 3%)",
+            "numeric": 2,
+            "unit": "percent"
+          },
+          {
+            "token": "$15258d",
+            "display": "15 sec",
+            "numeric": 15,
+            "unit": "seconds"
+          },
+          {
+            "token": "$15258u",
+            "display": "5 stacks in talent tooltip; not evidenced by linked buff's max stacks row",
+            "numeric": 5,
+            "unit": "stacks"
+          }
+        ],
+        "notes": [
+          "The linked buff says damage TAKEN from caster; tooltip wording on related talent page differs from AzerDex 70634 raw template. Confirm 70634 effects, stack max in SpellAuraOptions and exact tooltip semantics before import."
+        ]
+      }
+    },
+    {
+      "spellId": 15269,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105832,
+          "talent": "Blackout",
+          "classId": "priest",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D15269/blackout",
+        "values": [
+          {
+            "token": "$15269d",
+            "display": "3 sec",
+            "numeric": 3,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Stun aura page; no source-build identifier exposed."
+        ]
+      }
+    },
+    {
+      "spellId": 15271,
+      "requiredTokenKinds": [
+        "$NS2",
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105833,
+          "talent": "Spirit Tap",
+          "classId": "priest",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D15271/spirit-tap",
+        "values": [
+          {
+            "token": "$15271s1",
+            "display": "100%",
+            "numeric": 100,
+            "unit": "percent"
+          },
+          {
+            "token": "$15271d",
+            "display": "15 sec",
+            "numeric": 15,
+            "unit": "seconds"
+          },
+          {
+            "token": "$15271S2",
+            "display": "50%",
+            "numeric": 50,
+            "unit": "percent"
+          }
+        ],
+        "notes": [
+          "Buff/tooltip values 100/50, while page Effect Value reports 101/51. Do not copy the raw Effect Value without confirming display semantics."
+        ]
+      }
+    },
+    {
+      "spellId": 16177,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104731,
+          "talent": "Ancestral Healing",
+          "classId": "shaman",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16191,
+      "requiredTokenKinds": [
+        "$Na1",
+        "$Ns1",
+        "$Nt1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104728,
+          "talent": "Mana Tide Totem",
+          "classId": "shaman",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16246,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104768,
+          "talent": "Elemental Focus",
+          "classId": "shaman",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16257,
+      "requiredTokenKinds": [
+        "$Nn"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104747,
+          "talent": "Flurry",
+          "classId": "shaman",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16488,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105934,
+          "talent": "Blood Craze",
+          "classId": "warrior",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16886,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104934,
+          "talent": "Nature's Grace",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16922,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104933,
+          "talent": "Improved Starfire",
+          "classId": "druid",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 16959,
+      "requiredTokenKinds": [
+        "$/10;Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104947,
+          "talent": "Blood Frenzy",
+          "classId": "druid",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 17057,
+      "requiredTokenKinds": [
+        "$/10;Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104958,
+          "talent": "Furor",
+          "classId": "druid",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 17794,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105889,
+          "talent": "Improved Shadow Bolt",
+          "classId": "warlock",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 17941,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105914,
+          "talent": "Nightfall",
+          "classId": "warlock",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18093,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105878,
+          "talent": "Pyroclasm",
+          "classId": "warlock",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18118,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Nm1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105886,
+          "talent": "Aftermath",
+          "classId": "warlock",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18425,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105733,
+          "talent": "Improved Kick",
+          "classId": "rogue",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18498,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105963,
+          "talent": "Improved Shield Bash",
+          "classId": "warrior",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18789,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105900,
+          "talent": "Demonic Sacrifice",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18790,
+      "requiredTokenKinds": [
+        "$Ns1",
+        "$Nt1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105900,
+          "talent": "Demonic Sacrifice",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18791,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105900,
+          "talent": "Demonic Sacrifice",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18792,
+      "requiredTokenKinds": [
+        "$Ns1",
+        "$Nt1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105900,
+          "talent": "Demonic Sacrifice",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 18814,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105892,
+          "talent": "Soul Link",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 19229,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104990,
+          "talent": "Improved Wing Clip",
+          "classId": "hunter",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 19410,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105012,
+          "talent": "Improved Concussive Shot",
+          "classId": "hunter",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 19615,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104962,
+          "talent": "Frenzy",
+          "classId": "hunter",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 19675,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104944,
+          "talent": "Feral Charge",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 19718,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105735,
+          "talent": "Riposte",
+          "classId": "rogue",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 20050,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105693,
+          "talent": "Vengeance",
+          "classId": "paladin",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 20128,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Nn"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105626,
+          "talent": "Redoubt",
+          "classId": "paladin",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 20424,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105696,
+          "talent": "Seal of Command",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 20467,
+      "requiredTokenKinds": [
+        "$/2;Ns1",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105696,
+          "talent": "Seal of Command",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 20924,
+      "requiredTokenKinds": [
+        "$Ns3"
+      ],
+      "consumers": [
+        {
+          "nodeId": 110872,
+          "talent": "Consecrated Ground",
+          "classId": "paladin",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 22959,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105788,
+          "talent": "Improved Scorch",
+          "classId": "mage",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 23455,
+      "requiredTokenKinds": [
+        "$Na1",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105862,
+          "talent": "Holy Nova",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 23602,
+      "requiredTokenKinds": [
+        "${$Nm1/10}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105971,
+          "talent": "Master of Defense",
+          "classId": "warrior",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 23694,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105942,
+          "talent": "Improved Hamstring",
+          "classId": "warrior",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 24394,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104964,
+          "talent": "Intimidation",
+          "classId": "hunter",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 24406,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104968,
+          "talent": "Improved Mend Pet",
+          "classId": "hunter",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 24905,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104937,
+          "talent": "Moonkin Form",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 24907,
+      "requiredTokenKinds": [
+        "$Na1",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104937,
+          "talent": "Moonkin Form",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 24932,
+      "requiredTokenKinds": [
+        "$Na1",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104955,
+          "talent": "Leader of the Pack",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 25228,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105892,
+          "talent": "Soul Link",
+          "classId": "warlock",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 25771,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105625,
+          "talent": "Templar's Bulwark",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 27813,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105861,
+          "talent": "Blessed Recovery",
+          "classId": "priest",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D27813/blessed-recovery",
+        "values": [
+          {
+            "token": "$27813d",
+            "display": "6 sec",
+            "numeric": 6,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Priest Blessed Recovery: periodic buff lasts 6 sec."
+        ]
+      }
+    },
+    {
+      "spellId": 27827,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105854,
+          "talent": "Spirit of Redemption",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D27827/spirit-of-redemption",
+        "values": [
+          {
+            "token": "$27827d",
+            "display": "15 sec",
+            "numeric": 15,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Priest Spirit of Redemption: 15 sec."
+        ]
+      }
+    },
+    {
+      "spellId": 27828,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns2"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105845,
+          "talent": "Martyrdom",
+          "classId": "priest",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 28682,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105781,
+          "talent": "Combustion",
+          "classId": "mage",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 30165,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104769,
+          "talent": "Elemental Devastation",
+          "classId": "shaman",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 400573,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1",
+        "$Ns2",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105806,
+          "talent": "Arcane Blast",
+          "classId": "mage",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 400589,
+      "requiredTokenKinds": [
+        "$Ns1",
+        "$Ns3"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105802,
+          "talent": "Missile Barrage",
+          "classId": "mage",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 400625,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1",
+        "$Ns2"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105786,
+          "talent": "Heating Up",
+          "classId": "mage",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 400669,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105764,
+          "talent": "Fingers of Frost",
+          "classId": "mage",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 401877,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105851,
+          "talent": "Prayer of Mending",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 401880,
+      "requiredTokenKinds": [
+        "$Na1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105851,
+          "talent": "Prayer of Mending",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 402261,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Nt2"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105834,
+          "talent": "Penance",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 402284,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105834,
+          "talent": "Penance",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 402289,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105834,
+          "talent": "Penance",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 408255,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104935,
+          "talent": "Eclipse",
+          "classId": "druid",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 408505,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104741,
+          "talent": "Maelstrom Weapon",
+          "classId": "shaman",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 408511,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104732,
+          "talent": "Water Shield",
+          "classId": "shaman",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 412538,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105794,
+          "talent": "Ignite",
+          "classId": "mage",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 412609,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105950,
+          "talent": "Deep Wounds",
+          "classId": "warrior",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 414924,
+      "requiredTokenKinds": [
+        "$@spelltooltipN"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104944,
+          "talent": "Feral Charge",
+          "classId": "druid",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 415407,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105005,
+          "talent": "Rapid Killing",
+          "classId": "hunter",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 417053,
+      "requiredTokenKinds": [
+        "${$Nm1/10}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104954,
+          "talent": "Natural Reaction",
+          "classId": "druid",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 426311,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105875,
+          "talent": "Shadow and Flame",
+          "classId": "warlock",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 431624,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105840,
+          "talent": "Divine Aegis",
+          "classId": "priest",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 437063,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 110873,
+          "talent": "Infusion of Light",
+          "classId": "paladin",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 440667,
+      "requiredTokenKinds": [
+        "$Nd",
+        "${$m1/-3*$Nm1}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105702,
+          "talent": "Vindication",
+          "classId": "paladin",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 440873,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105897,
+          "talent": "Decimation",
+          "classId": "warlock",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 462707,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105750,
+          "talent": "Cutthroat",
+          "classId": "rogue",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1238289,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104762,
+          "talent": "Earthbound",
+          "classId": "shaman",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1238931,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104742,
+          "talent": "Improved Stormstrike",
+          "classId": "shaman",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1241057,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105824,
+          "talent": "Silence",
+          "classId": "priest",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "indirect_only",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D15487/silence",
+        "values": [
+          {
+            "token": "$1241057d",
+            "display": "3 sec in parent talent tooltip; referenced spell 1241057 itself not found",
+            "numeric": 3,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "Not direct proof of spell 1241057 duration; DO NOT import as verified cross-spell facts."
+        ]
+      }
+    },
+    {
+      "spellId": 1242512,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104999,
+          "talent": "Rapid Recuperation",
+          "classId": "hunter",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1242688,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104983,
+          "talent": "Resourcefulness",
+          "classId": "hunter",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1242853,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105922,
+          "talent": "Soul Harvest",
+          "classId": "warlock",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1293248,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104966,
+          "talent": "Summon Hawk",
+          "classId": "hunter",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1293696,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105896,
+          "talent": "Demonic Brand",
+          "classId": "warlock",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1293816,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105875,
+          "talent": "Shadow and Flame",
+          "classId": "warlock",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1299448,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104960,
+          "talent": "Deadly Aspects",
+          "classId": "hunter",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310318,
+      "requiredTokenKinds": [
+        "${$Nm1/10}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105976,
+          "talent": "Shield Specialization",
+          "classId": "warrior",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310536,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104984,
+          "talent": "Lacerating Strikes",
+          "classId": "hunter",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310706,
+      "requiredTokenKinds": [
+        "$Ns2",
+        "${$Nm1*$Nm2/100}"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105709,
+          "talent": "Mutilate",
+          "classId": "rogue",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310723,
+      "requiredTokenKinds": [
+        "$Nd",
+        "$Ns1",
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 110866,
+          "talent": "Thousand Cuts",
+          "classId": "rogue",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310726,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 104985,
+          "talent": "Expose Prey",
+          "classId": "hunter",
+          "ranks": 2
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310909,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105320,
+          "talent": "Light's Vigil",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310912,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105320,
+          "talent": "Light's Vigil",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310914,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105320,
+          "talent": "Light's Vigil",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1310925,
+      "requiredTokenKinds": [
+        "$Nm1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 110874,
+          "talent": "Shield Specialization",
+          "classId": "paladin",
+          "ranks": 3
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1311033,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 110879,
+          "talent": "Iron Creed",
+          "classId": "paladin",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1311604,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105323,
+          "talent": "Holy Shock",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1311605,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105323,
+          "talent": "Holy Shock",
+          "classId": "paladin",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1326084,
+      "requiredTokenKinds": [
+        "$Nu"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105627,
+          "talent": "Reckoning",
+          "classId": "paladin",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    },
+    {
+      "spellId": 1326168,
+      "requiredTokenKinds": [
+        "$Nd"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105823,
+          "talent": "Dark Inspiration",
+          "classId": "priest",
+          "ranks": 5
+        }
+      ],
+      "wowhead": {
+        "status": "wowhead_observed",
+        "sourceUrl": "https://www.wowhead.com/forever/spell%3D1326168/dark-inspiration",
+        "values": [
+          {
+            "token": "$1326168d",
+            "display": "10 sec",
+            "numeric": 10,
+            "unit": "seconds"
+          }
+        ],
+        "notes": [
+          "This is the triggered buff, not the talent spell 1326159."
+        ]
+      }
+    },
+    {
+      "spellId": 1326891,
+      "requiredTokenKinds": [
+        "$Ns1"
+      ],
+      "consumers": [
+        {
+          "nodeId": 105762,
+          "talent": "Ice Barrier",
+          "classId": "mage",
+          "ranks": 1
+        }
+      ],
+      "wowhead": {
+        "status": "not_yet_reviewed",
+        "sourceUrl": null,
+        "values": []
+      }
+    }
+  ]
+}

@@ -57,6 +57,8 @@ const templatesRef = need("templates-ref");
 const svPath = resolve(need("spell-values"));
 const svRef = need("spell-values-ref");
 const svPrevPath = arg("spell-values-prev") ? resolve(arg("spell-values-prev")) : null;
+const referencedPath = arg("referenced-spells") ? resolve(arg("referenced-spells")) : null;
+const referencedRef = arg("referenced-spells-ref");
 const checkOnly = flag("check");
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -75,6 +77,21 @@ const build = manifest.build.version;
 const sv = readJson(svPath);
 if ((sv.build?.version ?? sv.build) !== build) throw new Error(`spell-values is for build ${JSON.stringify(sv.build)}, dataset is ${build}`);
 const svPrev = svPrevPath ? readJson(svPrevPath) : null;
+const referenced = referencedPath ? readJson(referencedPath) : null;
+if (referenced && !referencedRef) throw new Error("--referenced-spells requires --referenced-spells-ref for provenance");
+if (referenced && (referenced.schema !== "azerdex.referenced-spells/1" || referenced.build !== build || !referenced.spells || Array.isArray(referenced.spells))) {
+  throw new Error("referenced spell facts must have schema azerdex.referenced-spells/1, matching build and spells object");
+}
+const referencedFacts = {};
+for (const [id, f] of Object.entries(referenced?.spells ?? {})) {
+  if (!/^\d{3,}$/.test(id) || !f || !Array.isArray(f.effects) || !Object.hasOwn(f, "durationMs")) throw new Error(`invalid referenced spell ${id}`);
+  if (!f.source || f.source.build !== build || !f.source.tableDigests || !f.source.description) throw new Error(`missing same-build provenance for referenced spell ${id}`);
+  if (f.durationMs !== null && (!Number.isInteger(f.durationMs) || f.durationMs < 0)) throw new Error(`invalid duration for referenced spell ${id}`);
+  for (const e of f.effects) {
+    if (![e.index,e.basePoints,e.dieSides,e.periodMs,e.chainTargets].every(Number.isFinite) || !(e.radiusYards === null || Number.isFinite(e.radiusYards))) throw new Error(`invalid effect for referenced spell ${id}`);
+  }
+  referencedFacts[id] = { durationMs: f.durationMs, effects: f.effects };
+}
 const sameBuild = templatesBuild === build;
 if (!sameBuild && !svPrev) throw new Error("templates are from another build: --spell-values-prev (spell rows of the templates' build) is required");
 
@@ -171,7 +188,7 @@ for (const cls of classes) {
         if (effects.some((x) => x.index === fe.index) || fe.perRankStatus === "none") continue;
         effects.push({ index: fe.index, basePoints: 0, dieSides: 0, periodMs: 0, chainTargets: 0, radiusYards: null, curve: true, rankValues: sameBuild ? valuesOf(fe) : undefined });
       }
-      const complete = (rank) => renderTemplate(entry.descriptionTemplate, { effects, durationMs: s.durationMs }, rank);
+      const complete = (rank) => renderTemplate(entry.descriptionTemplate, { effects, durationMs: s.durationMs }, rank, referencedFacts);
       const perRank = Array.from({ length: t.maxRank }, (_, i) => complete(i + 1));
       const ranksVerified = perRank.filter((r) => r.complete).length;
       const distinct = new Set(perRank.map((r) => JSON.stringify(tidySegments(r.segments))));
@@ -229,6 +246,7 @@ const source = {
     ? { build: templatesBuild, ref: templatesRef, ...snapshotInfo }
     : { build: templatesBuild, ref: templatesRef, generatedAt: templatesManifest?.generatedAt ?? null, sha256: templateFiles },
   spellValues: { build, ref: svRef, sha256: sha256(readFileSync(svPath)) },
+  ...(referenced ? { referencedSpells: { build, ref: referencedRef, sha256: sha256(readFileSync(referencedPath)), spellIds: Object.keys(referencedFacts).map(Number).sort((a,b)=>a-b) } } : {}),
   verification: sameBuild
     ? "raw description+aura hash == target build text hash; per-rank values from the same build's curves, linked through the catalog's trait definition ids; spell values from the target build"
     : "raw template hash == target build text hash; effect rows equal across builds; values from the target build only",
@@ -253,23 +271,23 @@ const summary = {
 const gapTotals = {};
 for (const r of rows) for (const g of r.gaps) gapTotals[g] = (gapTotals[g] ?? 0) + 1;
 // Other spells whose data the unresolved numbers still need (so the next extraction knows exactly what to add).
-const referenced = new Map();
+const unresolvedReferences = new Map();
 for (const [id, e] of Object.entries(talents)) {
   for (const segs of e.ranks ? e.ranks.map((r) => r.segments) : [e.segments]) {
     for (const g of segs) {
       if (typeof g === "string") continue;
       for (const m of g.g.matchAll(/\$(?:[/*][\d.]+;)?(\d{3,})(?=[a-zA-Z])|\$@[a-z]+(\d{3,})/g)) {
         const spell = Number(m[1] ?? m[2]);
-        const o = referenced.get(spell) ?? { spellId: spell, tokens: new Set(), talents: new Set() };
+        const o = unresolvedReferences.get(spell) ?? { spellId: spell, tokens: new Set(), talents: new Set() };
         o.tokens.add(g.g.replace(/(\$(?:[/*][\d.]+;)?|\$@[a-z]+)\d{3,}/g, "$1N"));
         o.talents.add(Number(id));
-        referenced.set(spell, o);
+        unresolvedReferences.set(spell, o);
       }
     }
   }
 }
-const spellReferences = [...referenced.values()].sort((a, b) => a.spellId - b.spellId).map((o) => ({ spellId: o.spellId, kinds: [...o.tokens].sort(), talentIds: [...o.talents].sort((a, b) => a - b) }));
-const coverage = { schema: "azerdex.talent-coverage/1", build, extractedAt, source: { templates: source.templates, spellValues: source.spellValues }, summary, gapTotals, spellReferences, talents: rows };
+const spellReferences = [...unresolvedReferences.values()].sort((a, b) => a.spellId - b.spellId).map((o) => ({ spellId: o.spellId, kinds: [...o.tokens].sort(), talentIds: [...o.talents].sort((a, b) => a - b) }));
+const coverage = { schema: "azerdex.talent-coverage/1", build, extractedAt, source: { templates: source.templates, spellValues: source.spellValues, ...(source.referencedSpells ? { referencedSpells: source.referencedSpells } : {}) }, summary, gapTotals, spellReferences, talents: rows };
 
 const iconsPath = join(datasetDir, "icons.json");
 const icons = existsSync(iconsPath) ? readJson(iconsPath) : { build: null, icons: {} };
@@ -301,6 +319,7 @@ md.push(`| Nodes without a verified description | ${summary.unverifiedOrMissing}
 md.push(`| Ranks (all nodes) | ${summary.ranksTotal} | |`, `| Ranks fully resolved | ${summary.ranksFullyResolved} | ${((100 * summary.ranksFullyResolved) / summary.ranksTotal).toFixed(1)}% |`);
 md.push(`| Nodes with a valid icon | ${summary.withValidIcon} | ${pct(summary.withValidIcon)} |`, "");
 md.push("Unresolved numbers by reason (nodes affected): " + (Object.entries(gapTotals).map(([c, n]) => `${c} ${n}`).join(", ") || "none"), "");
+if (source.referencedSpells) md.push(`Referenced spell facts: ${source.referencedSpells.ref}, sha256 ${source.referencedSpells.sha256} (build ${build}).`, "");
 md.push("Reason codes: " + Object.entries(GAP_TEXT).map(([c, t]) => `**${c}** - ${t}`).join(" "), "");
 const group = (title, status) => {
   const list = rows.filter((r) => (Array.isArray(status) ? status.includes(r.status) : r.status === status));
