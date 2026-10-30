@@ -75,6 +75,17 @@ describe("Addon and Companion disclosure matches the source", () => {
     expect(exists("docs/guildbook-local-only/historical-cleanup-completed.md")).toBe(false);
   });
 
+  it("three cases are kept apart: the current Companion never sends it, older installed ones still can, historical rows remain", () => {
+    expect(text).toMatch(/Only the current Companion is built never to send the Guildbook/);
+    expect(text).toMatch(/Older Companion versions that are still installed\s+can still upload it/);
+    expect(text).toMatch(/until the AzerDex server is changed to discard it on arrival, whatever they send is stored privately/);
+    expect(text).toMatch(/it does not describe protection that is not yet active/);
+    // The notice must not claim the server already discards it. When migration 0018 is applied in production this test and the notice are
+    // updated together (see docs/guildbook-local-only/0018-approval-checklist.md, "Documents to change with the rollout").
+    expect(text).not.toMatch(/(server|AzerDex) (already )?(discards|drops|blocks|rejects) (it|the Guildbook|guild)/i);
+    expect(text).not.toMatch(/cannot (upload|send) (it|the Guildbook)/i);
+  });
+
   it("officer notes are not collected, as stated", () => {
     expect(read("docs/DATA_MODEL.md")).toMatch(/Officer notes are not collected/);
     expect(text).toMatch(/Officer notes are not collected/);

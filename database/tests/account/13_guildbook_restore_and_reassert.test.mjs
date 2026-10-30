@@ -120,6 +120,25 @@ describe("scope=reads, then the re-assert script", () => {
     const r = psqlFile(CLONES.none, REASSERT);
     assert.notEqual(r.status, 0);
     assert.match(r.out, /kill switch \(0018\) is not active/);
+    // A controlled refusal, not a catalog error: the missing guard table must never surface as "relation ... does not exist".
+    assert.doesNotMatch(r.out, /does not exist/);
+  });
+
+  it("the restore script refuses the same way (controlled message) when 0018 is not active, and changes no privilege", async () => {
+    await cloneDatabase(DB, CLONES.none);
+    const sub = await connect(CLONES.none);
+    const fnAcl = `select p.oid::regprocedure::text as sig, coalesce(p.proacl::text, '') as acl
+                   from pg_proc p where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace) order by 1`;
+    try {
+      const before = (await sub.query(fnAcl)).rows;
+      const r = psqlFile(CLONES.none, RESTORE, { ...ok, scope: "all" });
+      assert.notEqual(r.status, 0);
+      assert.match(r.out, /kill switch is not active here/);
+      assert.doesNotMatch(r.out, /does not exist/);
+      assert.deepEqual((await sub.query(fnAcl)).rows, before);
+    } finally {
+      await sub.end();
+    }
   });
 });
 

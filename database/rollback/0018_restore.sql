@@ -53,6 +53,7 @@ declare
     v_approval text := current_setting('fdb.restore_approval');
     v_sig text;
     v_src text;
+    v_active boolean;
 begin
     if v_confirm is distinct from 'REOPEN-GUILDBOOK-CLOUD-PATHS' then
         raise exception '0018 restore refused: the confirmation text does not match';
@@ -63,8 +64,13 @@ begin
     if length(v_operator) not between 2 and 80 or length(v_approval) not between 3 and 120 then
         raise exception '0018 restore refused: malformed operator or approval reference';
     end if;
-    if to_regclass('private.guildbook_cloud_sync_guard') is null
-       or not exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = 'disabled') then
+    -- Two separate statements on purpose: PL/pgSQL plans a statement before running it, so a single expression that mentions the table
+    -- fails with "relation does not exist" when the table is absent. A missing table must be a controlled refusal (fail-closed), not an error.
+    v_active := false;
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = 'disabled') into v_active;
+    end if;
+    if not v_active then
         raise exception '0018 restore refused: the Guildbook local-only kill switch is not active here (nothing to restore)';
     end if;
 

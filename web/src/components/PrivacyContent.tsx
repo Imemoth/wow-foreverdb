@@ -295,6 +295,13 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
         this notice will say when that has been done and checked. Until then you can ask for them to be deleted by writing to{" "}
         <a href={`mailto:${PRIVACY_CONTACT_EMAIL}`}>{PRIVACY_CONTACT_EMAIL}</a>.
       </p>
+      <h3>Older Companion versions still installed</h3>
+      <p>
+        Only the current Companion is built never to send the Guildbook. <strong>Older Companion versions that are still installed
+        can still upload it</strong>, and until the AzerDex server is changed to discard it on arrival, whatever they send is
+        stored privately as described above. Updating the Companion stops this. This notice will be updated when the server-side
+        change is in place; it does not describe protection that is not yet active.
+      </p>
       <h3>What is published</h3>
       <p>
         Published database statistics are aggregates. The public database pages read only from that published aggregate

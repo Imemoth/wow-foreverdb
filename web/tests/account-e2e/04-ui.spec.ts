@@ -21,7 +21,7 @@ async function browserFor(browser: Browser, u: WebUser, viewport = { width: 1280
   const page = await ctx.newPage();
   const problems: string[] = [];
   const requests: string[] = [];
-  page.on("console", (m) => { if (m.type() === "error" && !/status of (401|403|409|422)/.test(m.text())) problems.push(`console: ${m.text()}`); });
+  page.on("console", (m) => { if (m.type() === "error" && !/status of (401|403|409|422)/.test(m.text())) problems.push(`console: ${m.text()} [${m.location().url}]`); });
   page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   page.on("request", (r) => requests.push(`${r.method()} ${r.url()}`));
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP violation: ${e.violatedDirective} ${e.blockedURI}`)));
@@ -105,8 +105,10 @@ test("installation list in the browser: only own data, no Guildbook link or coun
   await expect(page.getByText("Guilds", { exact: true })).toHaveCount(0);
   expect((await new AxeBuilder({ page: page as never }).withTags(AXE_TAGS).analyze()).violations.map((v) => v.id)).toEqual([]);
   await info.attach("installations", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
-  const gb = await page.goto("/account/guildbook");
-  expect(gb?.status()).toBe(404);
+  // The retired page is a 404 for a signed-in person too. Checked through the context's request API (same session cookies) and NOT by a
+  // browser navigation: a navigation to a deliberate 404 makes the browser log "Failed to load resource: 404" to the console, which this
+  // test's strict console collector (`problems`) rightly counts. The collector stays strict; only the probe changed.
+  expect((await page.request.get("/account/guildbook")).status()).toBe(404);
   await page.goto("/account/installations");
 
   // narrow screen: no horizontal PAGE scroll
@@ -129,8 +131,7 @@ test("a person with no installation sees helpful empty states; an anonymous visi
   const { ctx, page } = await browserFor(browser, e);
   await page.goto("/account/installations");
   await expect(page.getByText("No installation is linked to this account yet.")).toBeVisible();
-  const guildbook = await page.goto("/account/guildbook");
-  expect(guildbook?.status()).toBe(404);
+  expect((await page.request.get("/account/guildbook")).status()).toBe(404);
   await ctx.close();
   const anon = await browser.newContext({ baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
   const p = await anon.newPage();

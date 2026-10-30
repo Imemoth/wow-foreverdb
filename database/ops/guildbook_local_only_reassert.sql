@@ -15,9 +15,15 @@ declare
     r record;
     v_src text;
     v_sig text;
+    v_active boolean;
 begin
-    if to_regclass('private.guildbook_cloud_sync_guard') is null
-       or not exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = 'disabled') then
+    -- Two separate statements on purpose: PL/pgSQL plans a statement before running it, so a single expression that mentions the table
+    -- fails with "relation does not exist" when the table is absent. A missing table must be a controlled refusal (fail-closed), not an error.
+    v_active := false;
+    if to_regclass('private.guildbook_cloud_sync_guard') is not null then
+        select exists (select 1 from private.guildbook_cloud_sync_guard where guard_name = 'disabled') into v_active;
+    end if;
+    if not v_active then
         raise exception 'reassert refused: the Guildbook local-only kill switch (0018) is not active on this database';
     end if;
 

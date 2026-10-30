@@ -88,10 +88,23 @@ test("4. valid login, server-confirmed profile, closed redirect allowlist for `n
     ["%2f%2fevil.example", "/account"],
     ["javascript:alert(1)", "/account"],
   ];
-  for (const [next, want] of nexts) {
-    const r = await post(await newClient(playwright), "/account/api/login", { email, password, next });
-    expect((await json<{ redirect: string }>(r)).redirect, next).toBe(want);
+  // Every sign-in counts toward the per-address budget (login: 10 per 900 s, see lib/account/limits.ts), and this test has already used 3.
+  // The values are therefore split over TWO accounts (each with its own budget); the limiter and the allowlist are not touched, and a
+  // rate-limited answer would fail the assertion below instead of being mistaken for a redirect.
+  const second = await signedInClient(playwright, "login2");
+  const budgets = [
+    { who: { email, password }, values: nexts.slice(0, 6) },
+    { who: { email: second.email, password: second.password }, values: nexts.slice(6) },
+  ];
+  expect(budgets.reduce((n, b) => n + b.values.length, 0)).toBe(nexts.length);
+  for (const { who, values } of budgets) {
+    for (const [next, want] of values) {
+      const r = await post(await newClient(playwright), "/account/api/login", { ...who, next });
+      expect(r.status(), `${next}: must not be rate limited`).toBe(200);
+      expect((await json<{ redirect: string }>(r)).redirect, next).toBe(want);
+    }
   }
+  await second.c.dispose();
   await c.dispose();
 });
 

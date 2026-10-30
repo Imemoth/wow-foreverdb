@@ -81,6 +81,9 @@ Read from `origin/feature/guildbook-local-only` (`0016_account_scoped_guildbook.
 4. 0016 mentions account functions, so the web registry/linter must list its RPCs; the account suite's exact-function-count assertions must be reworked on that branch (`11_*`/`12_*` here already tolerate the extra functions by pattern).
 5. Extend `database/tests/account/12_guildbook_migration_order.test.mjs`: add `"0016"` and `"0017"` entries to `STEPS` and orders to `SCENARIOS` (the file is table driven); the #112 version of that test covers both orders.
 
+## 4a. CI regression guard (implemented)
+`web/tests/unit/guildbook-migration-guard.test.ts` runs in the always-on web unit tests. It fails when ANY migration file outside the reviewed set (the 16 files in the release candidate) mentions the private ingest implementation, the `installation_guild*` tables, `guildbook` functions or `fdb_public_snapshot`, and when a `0016_`/`0017_` file appears at all. A later migration (including the sibling branch's 0016) therefore cannot replace the 0018 wrapper or re-introduce Guildbook cloud storage or RPCs without a deliberate, reviewed edit of that test in the same PR. It also pins the properties of 0018 itself (strip-before-persist, catalog revoke sweep, no delete/truncate, refusal messages, marker table) and the fail-closed form of the restore/reassert/cleanup guards. `guildbook-approval-pins.test.ts` pins the content hashes the owner approves (see 0018-approval-checklist.md). This is a review-time guard, not a database-level one: a migration applied by hand outside the repository is not stopped; the post-apply inventory check in the checklist (section E) is what catches that.
+
 ## 5. Not verified / risks
 
 - No SQL was executed. PL/pgSQL syntax, `psql` meta-command behaviour (`\if`, `\gset`, `begin read only` via `\if`), the temp-table plan-cache behaviour inside the wrapper, and every test expectation were checked by reading only.

@@ -31,7 +31,7 @@ const PRODUCTS = [
     name: "Windows Companion",
     tagline: "Connect your adventures to AzerDex.",
     points: [
-      "Sends aggregated observation counters to AzerDex; your Guildbook stays on your computer and is never uploaded",
+      "Sends aggregated observation counters to AzerDex; the current Companion never uploads your Guildbook, which stays on your computer",
       "Lets you search the database and browse zones on your own computer",
       "Links your computer to your AzerDex account",
     ],

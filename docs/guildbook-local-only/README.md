@@ -8,6 +8,7 @@ Stack: `release` ← PR #141 (RC) ← PR #142 (GDPR) ← **this branch, `fix/gui
 | --- | --- |
 | this file | scope, reuse list, data-flow before/after, evidence, acceptance status, blockers |
 | [db-changes.md](db-changes.md) | database changes: what from #112 was reused / adapted / excluded |
+| [0018-approval-checklist.md](0018-approval-checklist.md) | owner approval checklist: project identity, the three distinct approvals, exact SHA-256 of every SQL file (pinned by a CI test), evidence required, recovery ladder, old-vs-new Companion table |
 | [server-deployment-runbook.md](server-deployment-runbook.md) | separately reviewed, **not executed** production procedure for migration 0018 |
 | [historical-guildbook-data.md](historical-guildbook-data.md) | where historical Guildbook rows can exist, read-only inventory, cleanup plan |
 | `../0.9-guildbook-local-only.md` | storage design (DPAPI, namespaces, recovery) |
