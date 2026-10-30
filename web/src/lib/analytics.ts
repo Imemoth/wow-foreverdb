@@ -6,6 +6,8 @@
  * Keep the original event shape so this is compatible with Analytics' pageview
  * and custom-event callbacks, and never pass query strings or fragments.
  */
+import { currentAnalyticsConsent } from "@/lib/consent";
+
 const PUBLIC_HOSTS = new Set(["azerdex.com", "www.azerdex.com", "beta.azerdex.com"]);
 const PRIVATE_PATH = /^\/(?:account|auth|verify|test-fixtures)(?:\/|$)/i;
 
@@ -27,4 +29,13 @@ export function filterAnalyticsEvent<T extends { url: string }>(event: T): T | n
   url.search = "";
   url.hash = "";
   return { ...event, url: url.toString() };
+}
+
+/**
+ * The `beforeSend` hook both Vercel scripts get. Consent is re-read from the visitor's own storage on EVERY event, so even if a script
+ * were already loaded in this page, withdrawing consent (in this tab or another) cancels each following event: Vercel drops an event
+ * when beforeSend returns null. The component that loads the scripts is also unmounted on withdrawal (components/consent/ConsentManager).
+ */
+export function consentedAnalyticsEvent<T extends { url: string }>(event: T, hasConsent: () => boolean = currentAnalyticsConsent): T | null {
+  return hasConsent() ? filterAnalyticsEvent(event) : null;
 }

@@ -1,5 +1,5 @@
 import { z } from "../zod";
-import { AUTH_BODIES, guildKeySchema, installationIdSchema } from "./contracts";
+import { AUTH_BODIES } from "./contracts";
 import { uuidSchema } from "./contracts-enrollment";
 
 /**
@@ -26,12 +26,4 @@ export const INPUTS = {
   link: z
     .object({ code: z.string().min(1).max(80), password: AUTH_BODIES.password_grant.shape.password, confirm: z.literal(true), accountId: z.string().regex(/^[0-9a-f-]{36}$/i) })
     .strict(),
-  /** Guildbook reads: ids are FILTERS, never proof of ownership (the database decides). The page size is fixed server-side. */
-  guildbookGuilds: z.object({ installationId: installationIdSchema }).strict(),
-  guildbookMembers: z
-    .object({ installationId: installationIdSchema, guildKey: guildKeySchema, page: z.number().int().min(0).max(1000) })
-    .strict(),
 } as const;
-
-/** Members per Guildbook page (the database allows up to 200; the website never asks for more than this). */
-export const GUILDBOOK_PAGE_SIZE = 50;

@@ -6,6 +6,7 @@ import { LOGIN_REASONS } from "@/lib/account/messages";
 import { accountRuntime } from "@/lib/account/runtime";
 import { jarFrom, resolveSession } from "@/lib/account/session";
 import { LoginForm } from "../_components/LoginForm";
+import { PrivacyNote } from "../_ui/PrivacyNote";
 
 export const metadata = { title: "Sign in" };
 
@@ -30,6 +31,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </p>
       )}
       <p className="text-sm text-mist">New to AzerDex? <Link href="/account/register">Create account</Link></p>
+      <PrivacyNote>Signing in sets the account cookies described in the</PrivacyNote>
       <LoginForm next={next} />
     </>
   );

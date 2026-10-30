@@ -12,8 +12,8 @@ related:
   articles: [news/introducing-foreverdb-web]
 ---
 
-The ForeverDB backend stores more than public statistics: per-installation snapshots, Guildbook rosters and the
-technical identities the Companion uses to sync. None of that belongs on a public website.
+The ForeverDB backend stores more than public statistics: per-installation snapshots and the technical identities the
+Companion uses to sync. (Your Guildbook is not part of it: it stays on your computer.) None of that belongs on a public website.
 
 ## One-way publication
 

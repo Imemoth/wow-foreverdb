@@ -27,8 +27,8 @@ export default async function AboutDataPage() {
         <h2 id="pipeline">From your bags to this page</h2>
         <ol>
           <li><strong>Addon.</strong> Records each loot window with its source (creature by exact level, gathering node, fishing zone, fishing pool, chest or disenchanted item), the items and quantities, and an approximate position on a 0.5% map grid. The addon never makes network requests.</li>
-          <li><strong>Companion.</strong> The Windows Companion uploads aggregated counters for your installation to the private AzerDex backend.</li>
-          <li><strong>Publication.</strong> A separate, one-way publication job reads only approved aggregate statistics, validates and sanitizes them, and writes them to an isolated public database that powers this website. Private data — installation identifiers, Guildbook rosters, accounts, tokens — is never copied here.</li>
+          <li><strong>Companion.</strong> The Windows Companion uploads aggregated observation counters for your installation to the private AzerDex backend. The current Companion never uploads the Guildbook: it stays on your computer.</li>
+          <li><strong>Publication.</strong> A separate, one-way publication job reads only approved aggregate statistics, validates and sanitizes them, and writes them to an isolated public database that powers this website. Private data — installation identifiers, accounts, tokens — is never copied here, and Guildbook data is not part of what the current Companion sends.</li>
         </ol>
 
         <h2 id="rates">Reading observed drop rates</h2>

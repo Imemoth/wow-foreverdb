@@ -78,9 +78,32 @@ start_postgrest() { # name port admin_port tx_end
 start_postgrest main $REST $REST_ADMIN commit
 # A SECOND instance with the DANGEROUS setting, used only by the test that proves why `db-tx-end` must stay `commit`.
 start_postgrest override $REST_OVERRIDE $REST_OVERRIDE_ADMIN commit-allow-override
-for port in $REST_ADMIN $REST_OVERRIDE_ADMIN; do
-  for i in $(seq 1 60); do curl -fsS -m 2 "http://127.0.0.1:$port/ready" >/dev/null 2>&1 && break || sleep 1; [ "$i" = 60 ] && { echo "PostgREST on $port did not become ready"; tail -30 "$STACK_DIR"/postgrest-*.log; exit 1; }; done
-done
+# Readiness, with REAL diagnostics. (GNU `tail -30 a b` is invalid with several files, which used to hide the log of the instance that failed.)
+diag() { # reason
+  {
+    echo "---- stack diagnostics: $1 ----"
+    for f in "$STACK_DIR"/postgrest-*.log "$STACK_DIR"/gateway.log "$STACK_DIR"/chaos.log "$STACK_DIR"/mailpit.log "$STACK_DIR/run/gotrue.log"; do
+      [ -f "$f" ] && { echo "== $f (last 60 lines) =="; tail -n 60 -- "$f"; }
+    done
+    echo "== processes =="; ps -eo pid,etime,args 2>/dev/null | grep -E 'postgrest|gotrue|mailpit|stack-server|chaos-proxy' | grep -v grep || true
+    echo "== listening ports =="; { ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null; } | grep -E ':(9999|543[0-9][0-9])' || true
+    echo "== /ready answers =="
+    for p in $REST_ADMIN $REST_OVERRIDE_ADMIN; do printf '%s: ' "$p"; curl -s -m 2 -o - -w ' [http %{http_code}]
+' "http://127.0.0.1:$p/ready" || echo "no answer"; done
+    echo "== database sessions of the authenticator role =="; PGPASSWORD="$PGPASSWORD" psql -X -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -At -c "select count(*) || ' authenticator sessions; max_connections=' || current_setting('max_connections') from pg_stat_activity where usename = 'authenticator'" 2>&1 || true
+  } >&2
+}
+wait_ready() { # name admin_port
+  local pid; pid="$(cat "$STACK_DIR/postgrest-$1.pid")"
+  for i in $(seq 1 60); do
+    curl -fsS -m 2 "http://127.0.0.1:$2/ready" >/dev/null 2>&1 && return 0
+    kill -0 "$pid" 2>/dev/null || { echo "PostgREST ($1, pid $pid) EXITED before it became ready (admin port $2)" >&2; diag "$1 exited"; return 1; }
+    sleep 1
+  done
+  echo "PostgREST ($1, pid $pid) on admin port $2 did not become ready within 60 s" >&2; diag "$1 timeout"; return 1
+}
+wait_ready main $REST_ADMIN || exit 1
+wait_ready override $REST_OVERRIDE_ADMIN || exit 1
 
 probe() { curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_installations"; }
 BEFORE="$(probe)"
@@ -92,6 +115,19 @@ for i in $(seq 1 100); do AFTER="$(probe)"; [ "$AFTER" != "$BEFORE" ] && break; 
 T1=$(date +%s%3N)
 echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\": $AFTER, \"reload_observed_ms\": $((T1-T0))}" >"$STACK_DIR/schema-cache.json"
 [ "$BEFORE" = 404 ] && [ "$AFTER" != 404 ] || { echo "schema cache did not reload after 0012 (before=$BEFORE after=$AFTER)"; exit 1; }
+
+# 4b. 0018 is deliberately part of this disposable acceptance environment: the cloud Guildbook RPCs must be unavailable, and a legacy
+# payload that still carries guilds must store none, before the browser/API isolation tests start.
+"$REPO/database/tests/account/stack.sh" apply18
+GUILDBOOK_AFTER=""
+for i in $(seq 1 100); do
+  GUILDBOOK_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{"p_installation_id":"x"}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_guildbook_guilds")"
+  # PostgREST may keep the function in its schema cache while the ACL change lands: 401/403 (known RPC, no EXECUTE) and 404 (cache
+  # omission) are all blocked cloud paths.
+  { [ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ]; } && break
+  sleep 0.2
+done
+[ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ] || { echo "cloud Guildbook revocation not effective after 0018 (status=$GUILDBOOK_AFTER)"; exit 1; }
 
 # 5. What was REALLY started (recorded, not assumed).
 GOTRUE_VERSION="$(curl -fsS "http://127.0.0.1:9999/health" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("unknown")}})')"

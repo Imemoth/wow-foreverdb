@@ -1,0 +1,41 @@
+name: Guildbook local-only policy
+
+on:
+  # The definition and scanner are read from the trusted base branch. PR contents are checked out only as inert SQL data.
+  pull_request_target:
+  push:
+    branches: [main, release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guildbook-local-only-policy:
+    name: guildbook-local-only-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted base branch code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout proposed tree as inert input
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ github.repository }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
+          path: proposed
+          persist-credentials: false
+      - name: Scan proposed SQL migration tree using only trusted base code
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            node trusted/scripts/check-guildbook-local-only-policy.mjs --root proposed
+          else
+            node trusted/scripts/check-guildbook-local-only-policy.mjs
+          fi
+      - name: Run trusted negative tests for old and renamed 0016 content
+        run: node --test trusted/scripts/check-guildbook-local-only-policy.test.mjs

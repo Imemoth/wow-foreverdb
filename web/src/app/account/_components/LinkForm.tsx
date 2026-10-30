@@ -99,7 +99,6 @@ export function LinkForm({ email, accountId }: { email: string; accountId: strin
         )}
         <p className="flex flex-wrap gap-4 text-sm">
           <Link href="/account/installations">Your installations</Link>
-          <Link href="/account/guildbook">Guildbook</Link>
         </p>
       </div>
     );

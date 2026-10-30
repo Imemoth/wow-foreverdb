@@ -39,10 +39,7 @@ export default async function InstallationsPage() {
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                 <dt className="text-mist">Linked</dt><dd className="text-parchment">{fmt(i.linked_at)}</dd>
                 <dt className="text-mist">Last seen</dt><dd className="text-parchment">{fmt(i.last_seen_at)}</dd>
-                <dt className="text-mist">Guilds</dt><dd className="text-parchment">{i.guild_count}</dd>
               </dl>
-              {/* the id travels in the URL FRAGMENT: it is never sent to the server or written to a request log */}
-              <Link href={`/account/guildbook#installation=${encodeURIComponent(i.installation_id)}`}>Open Guildbook</Link>
             </li>
           ))}
         </ul>

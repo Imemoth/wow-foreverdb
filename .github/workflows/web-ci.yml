@@ -87,6 +87,10 @@ jobs:
         run: npx playwright test --project=preview
       - name: Accessibility regression (axe WCAG 2.2 AA) and SEO
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
+      - name: Cookie consent and analytics gate (first visit, refusal, acceptance, reload, navigation, withdrawal, a11y; desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/consent.spec.ts
+      - name: Consent gate by host (public AzerDex hosts load analytics only after opt-in; preview/other hosts never; Speed Insights off)
+        run: npx playwright test --project=public-host
       - name: Class guides and talent calculator (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/talents.spec.ts
       - name: Responsive layout (desktop and mobile)
