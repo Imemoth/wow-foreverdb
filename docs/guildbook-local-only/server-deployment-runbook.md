@@ -159,8 +159,7 @@ All read-only unless stated.
 
 - **0015 (welcome outbox)** is independent of 0018 (neither references the other); both orders are exercised in `database/tests/account/12_*` and end in the same
   privilege state. 0014 and 0015 may be re-applied after 0018 (idempotent). 0012 and `database/restore/0013_*` must not be re-applied after 0018 (see section 5).
-- **The future account-scoped Guildbook migrations (0016/0017 on the other branch, absent from this one)** are *not* part of this deployment and must not be
-  added without a separate decision. If they ever land, read `docs/guildbook-local-only/db-changes.md` section 4 first: 0017 is neutral; 0016 must not replace
+- **The sibling branch's migrations (absent from this one):** 0016 (account-scoped cloud Guildbook) is **permanently retired** and must not be merged in any form; 0017 (independent collectors) is a separate subject, not part of this deployment, and is judged by what it does (the CI guard checks content, not the number: `migration-policy-enforcement.md`). If they ever land, read `docs/guildbook-local-only/db-changes.md` section 4 first: 0017 is neutral; 0016 must not replace
   the 0018 ingest wrapper, must not copy historical rows into private account tables and must keep every Guildbook RPC revoked.
 - 0018 deliberately uses the number reserved for it; gaps in the numbering are normal in this project (0010 and 0013 are not migrations in the sequence either).
 

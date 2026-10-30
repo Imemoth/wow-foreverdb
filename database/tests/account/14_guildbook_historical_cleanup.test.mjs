@@ -176,7 +176,28 @@ describe("inventory (read-only, counts only)", () => {
     assert.deepEqual([now.ownerless, now.anonymous, now.registered, now.ownerMissing], [base.ownerless, base.anonymous + 1, base.registered + 3, base.ownerMissing]);
     assert.match(r.out, /INVENTORY kill_switch_guard_rows 1/);
     assert.match(r.out, /INVENTORY ingest_has_observation_only_projection true/);
-    assert.match(r.out, /guildbook_rpc public\.fdb_account_guildbook_guilds\(text\) public=false anon=false authenticated=false service_role=false/);
+    // The legacy Guildbook RPCs, exactly as PostgreSQL prints them (identity arguments carry the parameter names, flags are t/f), must be
+    // the expected set and closed to every API role. The inventory output is then cross-checked against the catalog itself.
+    const printed = [...r.out.matchAll(/INVENTORY guildbook_rpc (\S+?)\((.*?)\) public=([tf]) anon=([tf]) authenticated=([tf]) service_role=([tf])/g)]
+      .map((m) => ({ name: m[1], args: m[2], flags: m.slice(3, 7) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    assert.deepEqual(
+      printed.map((p) => [p.name, p.args]),
+      [
+        ["public.fdb_account_guildbook_guilds", "p_installation_id text"],
+        ["public.fdb_account_guildbook_members", "p_installation_id text, p_guild_key text, p_limit integer, p_offset integer"],
+      ],
+    );
+    for (const p of printed) assert.deepEqual(p.flags, ["f", "f", "f", "f"], `${p.name} must have no EXECUTE for public, anon, authenticated and service_role`);
+    const catalog = (await admin.query(
+      `select format('%I.%I', n.nspname, p.proname) as name, pg_get_function_identity_arguments(p.oid) as args,
+              has_function_privilege('public', p.oid, 'execute') as pub, has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as auth, has_function_privilege('service_role', p.oid, 'execute') as svc
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname ~* 'guildbook' order by 1`,
+    )).rows;
+    assert.deepEqual(catalog.map((c) => [c.name, c.args]), printed.map((p) => [p.name, p.args]), "the inventory lists exactly the catalog's Guildbook functions");
+    for (const c of catalog) assert.deepEqual([c.pub, c.anon, c.auth, c.svc], [false, false, false, false], `${c.name} is executable by an API role`);
     assert.match(r.out, /INVENTORY account_scoped_guildbook_rows_total 0/);
     assert.deepEqual({ guild: await guildCounts(), rest: await untouched() }, before);
   });
