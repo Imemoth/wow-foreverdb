@@ -582,10 +582,10 @@ test.describe("Talent calculator UI V2 (desktop)", () => {
       await expect(page.getByText("as extracted by the Everloot project")).toHaveCount(0);
       await expect(page.getByText("have a verified description")).toHaveCount(0);
       const footer = page.getByRole("contentinfo");
-      await expect(footer).toContainText("independent, free, non-commercial fan project");
+      await expect(footer).toContainText("independent fan project");
       await expect(footer).toContainText("not affiliated with or endorsed by Blizzard Entertainment");
       await expect(footer).toContainText("Blizzard Entertainment, Inc. All rights reserved");
-      await expect(footer).toContainText("talent names, descriptions and icons");
+      await expect(footer).toContainText("talent and ability names, descriptions and icons");
     }
     // The provenance itself is documented on the data page.
     await page.goto("/about/data");

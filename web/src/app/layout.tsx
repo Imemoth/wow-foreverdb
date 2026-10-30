@@ -13,6 +13,7 @@ import { TrafficSpeedInsights } from "@/components/TrafficSpeedInsights";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
 import { isPublicAnalyticsHost } from "@/lib/analytics";
+import { speedInsightsEnabled } from "@/lib/speed-insights";
 import { BETA_SEO_HOSTNAME, isPublicBetaHost, isPublicBetaPresentationHomepage, requestHostname } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -56,7 +57,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {env.hosted && isPublicAnalyticsHost(hostname) && (
           <>
             <TrafficAnalytics />
-            <TrafficSpeedInsights />
+            {/* Opt-in (AZERDEX_SPEED_INSIGHTS=1): off by default, so a disabled service is never requested by the browser. */}
+            {speedInsightsEnabled() && <TrafficSpeedInsights />}
           </>
         )}
         <JsonLd nonce={nonce} data={{

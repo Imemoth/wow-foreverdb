@@ -33,3 +33,55 @@ test("SEO: canonical, description, breadcrumbs JSON-LD, preview noindex", async 
   const robots = await (await page.request.get("/robots.txt")).text();
   expect(robots).toContain("Disallow: /");
 });
+
+// Public links: every internal link reachable from the key public pages resolves, and the production navigation keeps pointing at
+// /addon-companion (the Download entry stays out of the header, mobile menu and footer; the /download page itself still exists).
+const LINK_SOURCES = ["/", "/addon-companion", "/download", "/about/privacy", "/about/data", "/guides", "/guides/classes", "/guides/races", "/database", "/zones", "/news"];
+
+test("public links: every internal link from the key pages resolves", async ({ page }) => {
+  const targets = new Set<string>();
+  for (const from of LINK_SOURCES) {
+    await page.goto(from);
+    const hrefs = await page.$$eval("a[href^='/']", (as) => as.map((a) => (a as HTMLAnchorElement).getAttribute("href") ?? ""));
+    for (const h of hrefs) {
+      const clean = h.split("#")[0]!;
+      if (clean && !clean.startsWith("//")) targets.add(clean);
+    }
+  }
+  expect(targets.size).toBeGreaterThan(20);
+  const bad: string[] = [];
+  for (const t of [...targets].slice(0, 600)) {
+    const r = await page.request.get(t);
+    if (r.status() >= 400) bad.push(`${r.status()} ${t}`);
+  }
+  expect(bad).toEqual([]);
+});
+
+test("navigation: header and footer link to /addon-companion and never to /download", async ({ page }) => {
+  for (const from of ["/", "/addon-companion", "/about/privacy"]) {
+    await page.goto(from);
+    for (const region of ["banner", "contentinfo"] as const) {
+      const hrefs = await page.getByRole(region).locator("a").evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).getAttribute("href")));
+      expect(hrefs, `${region} on ${from}`).not.toContain("/download");
+    }
+    await expect(page.getByRole("contentinfo").locator('a[href="/addon-companion"]')).toHaveCount(1);
+  }
+});
+
+test("indexing policy: /download and /addon-companion each keep their own canonical", async ({ page }) => {
+  for (const p of ["/download", "/addon-companion"]) {
+    await page.goto(p);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", new RegExp(`${p}$`));
+  }
+});
+
+test("privacy page: discloses accounts, cookies and analytics (no stale 'no accounts' claim)", async ({ page }) => {
+  await page.goto("/about/privacy");
+  const body = page.locator("main");
+  await expect(body).toContainText("Accounts");
+  await expect(body).toContainText("__Secure-fdb_acct");
+  await expect(body).toContainText("Vercel Web Analytics");
+  await expect(body).toContainText("Vercel Speed Insights performance measurement is not enabled on this site");
+  await expect(body).not.toContainText("has no accounts");
+  await expect(body).not.toContainText("no third-party analytics");
+});

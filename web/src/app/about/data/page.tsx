@@ -82,7 +82,7 @@ export default async function AboutDataPage() {
         <p>
           Talent names, descriptions and icons are &copy; Blizzard Entertainment, Inc. and remain Blizzard&apos;s property; AzerDex
           claims no rights to them. Icons were converted from the game&apos;s BLP format to WebP for browser compatibility. AzerDex
-          is an independent, free, non-commercial fan site and is not affiliated with or endorsed by Blizzard Entertainment.
+          is an independent fan site and is not affiliated with or endorsed by Blizzard Entertainment.
         </p>
 
         <h2 id="preview">Test builds and sample data</h2>

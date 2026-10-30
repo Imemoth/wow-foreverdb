@@ -24,10 +24,11 @@ export function SiteFooter() {
           </ul>
         </nav>
         <p className="leading-relaxed">
-          AzerDex is an independent, free, non-commercial fan project and is not affiliated with or endorsed by Blizzard Entertainment.
+          AzerDex is an independent fan project and is not affiliated with or endorsed by Blizzard Entertainment, Inc.
           World of Warcraft and related names are trademarks or registered trademarks of Blizzard Entertainment, Inc.
-          &copy; Blizzard Entertainment, Inc. All rights reserved. Zone map images, talent names, descriptions and icons are
-          taken from the game client and remain Blizzard&apos;s property; AzerDex claims no rights to them.
+          &copy; Blizzard Entertainment, Inc. All rights reserved. Zone map images, talent and ability names, descriptions
+          and icons come from World of Warcraft: Forever and remain Blizzard&apos;s property; AzerDex claims no rights to them.
+          Class and race illustrations, class emblems, talent tree backgrounds and homepage artwork are not game assets.
         </p>
       </div>
     </footer>

@@ -61,11 +61,12 @@ describe("class copy only states what the data supports", () => {
   it("no longer carries a technical provenance panel; the legal notices live in the site footer", () => {
     expect("talentSourceNote" in facts).toBe(false);
     const footer = renderToStaticMarkup(createElement(SiteFooter));
-    expect(footer).toMatch(/independent, free, non-commercial fan project/);
+    expect(footer).toMatch(/independent fan project/);
+    expect(footer).not.toMatch(/non-?commercial/i);
     expect(footer).toMatch(/not affiliated with or endorsed by Blizzard Entertainment/);
     expect(footer).toMatch(/trademarks or registered trademarks of Blizzard Entertainment, Inc\./);
     expect(footer).toMatch(/Blizzard Entertainment, Inc\. All rights reserved/);
-    expect(footer).toMatch(/talent names, descriptions and icons/);
+    expect(footer).toMatch(/talent and ability names, descriptions and icons/);
     expect(footer).toMatch(/claims no rights to them/);
   });
 });

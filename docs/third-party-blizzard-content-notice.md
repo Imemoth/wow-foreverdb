@@ -28,8 +28,11 @@ the manifests and are not redistributed here.
 
 ## Attribution shown on the site
 
-- Site footer (every page): independent, free, non-commercial fan project; not affiliated with or endorsed by Blizzard; trademark and
-  (c) notice; Blizzard's ownership of map images, talent names, descriptions and icons.
+- Site footer (every page): independent fan project; not affiliated with or endorsed by Blizzard; trademark and (c) notice;
+  Blizzard's ownership of map images, talent and ability names, descriptions and icons; and a statement that the class and race
+  illustrations, class emblems, talent tree backgrounds and homepage artwork are not game assets. The footer deliberately makes no
+  "free" or "non-commercial" claim: the site header carries a voluntary support link (Buy Me a Coffee), so whether and how to state
+  non-commercial status is an owner decision (it also underpins the Blizzard fan-site licence reasoning below).
 - `/about/data#class-guides`: build, extraction sources, conversion and the same ownership/non-affiliation statement (the calculator pages no longer carry a technical source panel).
 
 ## Blizzard's published terms (what could be verified)
