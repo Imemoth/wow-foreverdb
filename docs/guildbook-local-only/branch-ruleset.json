@@ -1,0 +1,29 @@
+{
+  "name": "Guildbook local-only policy",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/main",
+        "refs/heads/release",
+        "refs/heads/release-rc/azerdex-beta-20261030",
+        "refs/heads/feat/azerdex-gdpr-consent"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "guildbook-local-only-policy" }
+        ]
+      }
+    }
+  ],
+  "bypass_actors": []
+}

@@ -31,6 +31,23 @@ const guildCount = async (installation) => (await w.row(
 ))[0];
 
 describe("Guildbook local-only kill switch (enrollment surface)", () => {
+  it("has no account-scoped Guildbook cloud storage, and the ingest boundary remains observation-only", async () => {
+    const shape = (await w.row(`
+      select to_regclass('private.account_guildbook_guilds') is null as no_account_guilds,
+             to_regclass('private.account_guildbook_members') is null as no_account_members,
+             to_regprocedure('private.fdb_public_snapshot(jsonb)') is not null as has_projection,
+             has_function_privilege('anon', 'private.foreverdb_ingest_snapshot_impl_v1(jsonb)', 'execute') as anon_impl,
+             has_function_privilege('authenticated', 'private.foreverdb_ingest_snapshot_impl_v1(jsonb)', 'execute') as auth_impl
+    `))[0];
+    assert.deepEqual(shape, {
+      no_account_guilds: true,
+      no_account_members: true,
+      has_projection: true,
+      anon_impl: false,
+      auth_impl: false,
+    });
+  });
+
   it("retains the definitions and the data but revokes every client EXECUTE grant", async () => {
     const rows = await w.row(
       `select p.oid::regprocedure::text as sig,
