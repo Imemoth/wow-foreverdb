@@ -35,6 +35,20 @@ describe("Vercel Analytics traffic policy", () => {
     }
   });
 
+  it("applies the same privacy rules to Speed Insights Web Vitals", () => {
+    const vital = {
+      type: "vital" as const,
+      url: "https://beta.azerdex.com/database?q=private&token=abc#search",
+      route: "/database",
+    };
+    expect(filterAnalyticsEvent(vital)).toEqual({
+      ...vital,
+      url: "https://beta.azerdex.com/database",
+    });
+    expect(filterAnalyticsEvent({ ...vital, url: "https://beta.azerdex.com/account" })).toBeNull();
+    expect(filterAnalyticsEvent({ ...vital, url: "https://wow-foreverdb-abc.vercel.app/database" })).toBeNull();
+  });
+
   it("rejects malformed event URLs", () => {
     for (const url of ["/database", "", "javascript:alert(1)", "not a url"]) {
       expect(filterAnalyticsEvent(event(url))).toBeNull();

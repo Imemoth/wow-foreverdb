@@ -9,8 +9,8 @@
  * Public side  : staging INSERT + pub_admin.* only (role foreverdb_publisher; the Edge Function
  *                assumes it with SET LOCAL ROLE inside each transaction).
  */
-import type { PublicationConfig } from "./contract.ts";
-import { countsOf, type Projection } from "./project.ts";
+import { DEFAULT_MAX_EXPORT_ROWS, MAX_CONFIGURABLE_EXPORT_ROWS, type ExportSection, type PublicationConfig } from "./contract.ts";
+import { countsOf, PublicationError, type Projection } from "./project.ts";
 
 export interface SqlClient {
   query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
@@ -31,20 +31,47 @@ export function counting(client: SqlClient): SqlClient & { ops: () => number } {
   };
 }
 
-/** Read the whole export in ONE repeatable-read, read-only snapshot. */
-export async function readPrivateExport(c: SqlClient, grid: number): Promise<unknown> {
+/**
+ * Read the export in ONE repeatable-read, read-only snapshot, with a hard bound on the rows that are ever loaded.
+ *
+ * The aggregate budget (`maxRows`, summed over the five collections) is enforced IN the query: every collection is read with
+ * `limit <rows still allowed> + 1`, so the database never sends (and this process never materialises) more than `maxRows + 1`
+ * rows, and one more row than allowed is the proof that the export is too large. There is no separate count, so nothing can
+ * change between counting and fetching, and the single snapshot keeps the collections consistent with each other. An oversized
+ * export fails closed (rollback, `export_too_large`, counts only) before any further collection is requested and before
+ * validation or any write. For an export within the budget the result is exactly what the unbounded queries returned.
+ * The metadata query is bounded the same way (limit 2, exactly one row is the contract).
+ */
+export async function readPrivateExport(c: SqlClient, grid: number, maxRows: number = DEFAULT_MAX_EXPORT_ROWS): Promise<unknown> {
+  // The ceiling is enforced here too, so the read boundary does not depend on what the caller computed.
+  if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_CONFIGURABLE_EXPORT_ROWS) throw new PublicationError("invalid_export_limit");
   await c.query("begin isolation level repeatable read read only");
   try {
     const q = async (sql: string, params: unknown[] = []) => (await c.query(sql, params)).rows;
-    const [meta] = await q("select * from publication_export.export_meta_v1()");
-    const out = {
-      meta,
-      sources: await q("select * from publication_export.export_sources_v1()"),
-      items: await q("select * from publication_export.export_items_v1()"),
-      buckets: await q("select * from publication_export.export_buckets_v1()"),
-      drops: await q("select * from publication_export.export_drops_v1()"),
-      locations: await q("select * from publication_export.export_locations_v1($1::numeric)", [grid]),
-    };
+    // export_meta_v1() is a single-row contract (one SELECT without FROM). Bounded like everything else: at most 2 rows are read, and a
+    // second one proves the contract is broken. No rows at all stays a validation matter (meta missing -> export_contract_violation).
+    const metaRows = await q("select * from publication_export.export_meta_v1() limit 2");
+    if (metaRows.length > 1) throw new PublicationError("export_meta_invalid", { reason: "more_than_one_row" });
+    const meta = metaRows[0];
+    const collections: [ExportSection, string, unknown[]][] = [
+      ["sources", "select * from publication_export.export_sources_v1()", []],
+      ["items", "select * from publication_export.export_items_v1()", []],
+      ["buckets", "select * from publication_export.export_buckets_v1()", []],
+      ["drops", "select * from publication_export.export_drops_v1()", []],
+      ["locations", "select * from publication_export.export_locations_v1($1::numeric)", [grid]],
+    ];
+    const out: Record<string, unknown> = { meta };
+    let remaining = maxRows;
+    const read: Record<string, number> = {};
+    for (const [name, sql, params] of collections) {
+      const rows = await q(`${sql} limit $${params.length + 1}::bigint`, [...params, remaining + 1]);
+      if (rows.length > remaining) {
+        throw new PublicationError("export_too_large", { limit: maxRows, section: name, rowsReadBeforeStop: maxRows - remaining + rows.length, sections: read });
+      }
+      read[name] = rows.length;
+      remaining -= rows.length;
+      out[name] = rows;
+    }
     await c.query("commit");
     return out;
   } catch (e) {

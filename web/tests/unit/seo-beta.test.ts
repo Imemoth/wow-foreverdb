@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const meta = vi.fn();
 vi.mock("@/lib/data", () => ({ data: () => ({ meta }) }));
 
-import { hasGenuinePublication, isIndexablePublicBetaHomepage, isIndexablePublicBetaHost, isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
+import { PUBLIC_BETA_INDEXING_ENABLED, hasGenuinePublication, isIndexablePublicBetaHomepage, isIndexablePublicBetaHost, isPublicBetaPresentationHomepage, isPublicBetaHomepage, isPublicBetaHost, robotsFor } from "@/lib/seo";
 
 /**
  * Pure allow-list logic for the narrowly-scoped public-beta homepage SEO exception (see
@@ -55,10 +55,11 @@ describe("isPublicBetaHomepage: adds the exact path condition", () => {
   });
 });
 
-describe("robotsFor: the beta override short-circuits before the thin-content policy", () => {
-  it("indexes whenever the betaHomepage flag is explicitly passed, regardless of the indexable arg", () => {
-    expect(robotsFor(false, true)).toEqual({ index: true, follow: true });
-    expect(robotsFor(true, true)).toEqual({ index: true, follow: true });
+describe("robotsFor: retired beta indexing exception", () => {
+  it("cannot make preview indexable, even if a legacy caller passes the beta override", () => {
+    expect(PUBLIC_BETA_INDEXING_ENABLED).toBe(false);
+    expect(robotsFor(false, true)).toEqual({ index: false, follow: false });
+    expect(robotsFor(true, true)).toEqual({ index: false, follow: false });
   });
 });
 
@@ -80,15 +81,21 @@ describe("genuine active publication requirement (async)", () => {
     meta.mockImplementation(async () => { throw new Error("public_data_unavailable"); });
     expect(await hasGenuinePublication()).toBe(false);
   });
-  it("the indexable host/homepage checks need BOTH the static allow-list and the publication", async () => {
+  it("preserves publication-aware beta presentation while disabling indexability", async () => {
     meta.mockResolvedValue(published);
-    expect(await isIndexablePublicBetaHost(eligible, HOST)).toBe(true);
-    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/")).toBe(true);
-    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/zones")).toBe(false);
-    expect(await isIndexablePublicBetaHomepage(eligible, "x.vercel.app", "/")).toBe(false);
-    meta.mockImplementation(async () => { throw new Error("down"); });
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/")).toBe(true);
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/zones")).toBe(false);
+    meta.mockResolvedValue({ ...published, publicationId: null });
+    expect(await isPublicBetaPresentationHomepage(eligible, HOST, "/")).toBe(false);
+  });
+  it("never indexes the beta after production launch, even with an authorized live publication", async () => {
+    meta.mockResolvedValue(published);
     expect(await isIndexablePublicBetaHost(eligible, HOST)).toBe(false);
     expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/")).toBe(false);
+    expect(await isIndexablePublicBetaHomepage(eligible, HOST, "/zones")).toBe(false);
+    expect(await isIndexablePublicBetaHomepage(eligible, "x.vercel.app", "/")).toBe(false);
+    // The retired exception does not make an additional database query.
+    expect(meta).not.toHaveBeenCalled();
   });
   it("does not even query the database when the static allow-list already fails", async () => {
     await isIndexablePublicBetaHomepage({ ...eligible, betaSeoBranchAuthorized: false }, HOST, "/");

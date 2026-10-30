@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PublicationConfig } from "./core/contract.ts";
+import { maxExportRows, PublicationConfig } from "./core/contract.ts";
 import { buildProjection, PublicationError } from "./core/project.ts";
 import { runPublication, type RunMode } from "./core/run.ts";
 import { readPrivateExport } from "./core/sql.ts";
@@ -49,7 +49,7 @@ async function main() {
     if (!out) throw new Error("--out is required");
     const c = await openPg(requireUrl("PRIVATE_EXPORT_DATABASE_URL"), "foreverdb-publisher-export");
     try {
-      writeFileSync(out, `${JSON.stringify(await readPrivateExport(c, config.locationGrid), null, 1)}\n`);
+      writeFileSync(out, `${JSON.stringify(await readPrivateExport(c, config.locationGrid, maxExportRows(config)), null, 1)}\n`);
     } finally {
       await c.close();
     }

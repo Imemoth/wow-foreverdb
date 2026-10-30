@@ -18,7 +18,8 @@ from pathlib import Path
 
 from .assetset import asset_set_sha256
 from .heroes import HeroLedger, inventory_sha256, load_inventory, load_sources, renditions, validate_inventory
-from .packaging import (ASSET_PATH_RE, HEADERS, HERO_PATH_RE, PAGES_MAX_FILES, PAGES_MAX_FILE_BYTES, UNIFIED_HEADERS, PackageError, check_limits,
+from . import talenticons
+from .packaging import (ASSET_PATH_RE, HEADERS, HERO_PATH_RE, PAGES_MAX_FILES, PAGES_MAX_FILE_BYTES, UNIFIED_HEADERS, UNIFIED_ICONS_HEADERS, PackageError, check_limits,
                         file_table, list_files, sha256_file, verify_catalog, verify_manifests, verify_superset, write_deterministic_zip)
 from .versioning import Ledger
 
@@ -160,14 +161,16 @@ EXPECTED_HEADERS = (
     ("atlas/", {"Cache-Control": "public, max-age=300, must-revalidate", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff"}),
     ("zone-heroes/", {"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff",
                       "Timing-Allow-Origin": "*"}),
+    ("talent-icons/", {"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*", "X-Content-Type-Options": "nosniff"}),
 )
 
 
-def verify_headers(root: Path, files: list[str]) -> list[str]:
+def verify_headers(root: Path, files: list[str], with_icons: bool = False) -> list[str]:
     p: list[str] = []
     text = (root / "_headers").read_text(encoding="utf-8")
-    if text != UNIFIED_HEADERS:
-        p.append("_headers differs from the reviewed unified rules (baseline rules + /zone-heroes/*)")
+    expected = UNIFIED_ICONS_HEADERS if with_icons else UNIFIED_HEADERS
+    if text != expected:
+        p.append("_headers differs from the reviewed unified rules (baseline rules + /zone-heroes/*" + (" + /talent-icons/*)" if with_icons else ")"))
     if not text.startswith(HEADERS):
         p.append("_headers: the baseline /forever/* and /atlas/* rules are not preserved verbatim")
     try:
@@ -190,16 +193,20 @@ def verify_headers(root: Path, files: list[str]) -> list[str]:
 
 # --- unified verification ---------------------------------------------------------------------------------------------------------
 
-def expected_file_set(pin: dict, inv: dict) -> set[str]:
-    return set(pin["files"]) | {r.dist_path for r in renditions(inv)}
+def expected_file_set(pin: dict, inv: dict, icon_inv: dict | None = None) -> set[str]:
+    return set(pin["files"]) | {r.dist_path for r in renditions(inv)} | (set(talenticons.icon_records(icon_inv)) if icon_inv else set())
 
 
 def verify_unified(root: Path, pin: dict, inv: dict, map_ledger: Ledger | None = None, hero_ledger: HeroLedger | None = None,
-                   hero_sources: dict[str, bytes] | None = None) -> list[str]:
+                   hero_sources: dict[str, bytes] | None = None, icon_inv: dict | None = None) -> list[str]:
     """Everything a unified dist must satisfy. Returns all problems (empty = ready for an approved upload)."""
     p: list[str] = validate_inventory(inv)
+    if icon_inv is not None:
+        p += talenticons.validate_inventory(icon_inv)
+        if p:
+            return p
     files = list_files(root)
-    want = expected_file_set(pin, inv)
+    want = expected_file_set(pin, inv, icon_inv)
     p += [f"unexpected file {f}" for f in sorted(set(files) - want)]
     p += [f"missing file {f}" for f in sorted(want - set(files))]
     table = file_table(root)
@@ -207,7 +214,11 @@ def verify_unified(root: Path, pin: dict, inv: dict, map_ledger: Ledger | None =
         if n != "_headers" and n in table and table[n] != meta:
             p.append(f"previously published file {n} is not byte-identical to the baseline")
     if (root / "_headers").is_file():
-        p += verify_headers(root, files)
+        p += verify_headers(root, files, icon_inv is not None)
+    if icon_inv is not None:  # every icon must be exactly the inventoried, decodable 64x64 WebP
+        for rel, rec in talenticons.icon_records(icon_inv).items():
+            if (root / rel).is_file():
+                p += talenticons.verify_icon_bytes(rel, (root / rel).read_bytes(), rec)
     for r in renditions(inv):
         t = table.get(r.dist_path)
         if t and (t["sha256"] != r.sha256 or t["bytes"] != r.bytes):
@@ -222,6 +233,8 @@ def verify_unified(root: Path, pin: dict, inv: dict, map_ledger: Ledger | None =
     for f in files:
         if f.endswith(".json") and b"zone-heroes" in (root / f).read_bytes():
             p.append(f"{f}: atlas metadata must not reference zone-heroes")
+        if f.endswith(".json") and b"talent-icons" in (root / f).read_bytes():
+            p.append(f"{f}: atlas metadata must not reference talent-icons")
     p += verify_manifests(root) + verify_catalog(root)
     if map_ledger is not None:
         p += verify_superset(root, map_ledger.data)
@@ -267,6 +280,10 @@ class UnifiedOptions:
     map_ledger_path: Path
     hero_ledger_path: Path
     expect_baseline_sha256: str | None = None
+    # Optional talent icons (Class Guides). Both or neither: the inventory (ids + hashes, committed) and the staging directory that holds
+    # `talent-icons/<build>/<FileDataID>.webp` (the Blizzard-owned images, never in Git).
+    talent_icons_inventory_path: Path | None = None
+    talent_icons_source_root: Path | None = None
 
 
 def build_unified(o: UnifiedOptions) -> dict:
@@ -283,6 +300,17 @@ def build_unified(o: UnifiedOptions) -> dict:
     hero_files, hp = load_sources(inv, o.hero_source_root)
     if hp:
         raise PackageError("hero artwork refused: " + "; ".join(hp[:8]))
+    if (o.talent_icons_inventory_path is None) != (o.talent_icons_source_root is None):
+        raise PackageError("talent icons need both the inventory and the staging directory")
+    icon_inv, icon_files = None, {}
+    if o.talent_icons_inventory_path is not None:
+        try:
+            icon_inv = talenticons.load_inventory(o.talent_icons_inventory_path)
+        except talenticons.IconError as e:
+            raise PackageError("talent icon inventory refused: " + str(e)) from e
+        icon_files, ip = talenticons.load_sources(icon_inv, o.talent_icons_source_root)
+        if ip:
+            raise PackageError("talent icons refused: " + "; ".join(ip[:8]))
     map_ledger = Ledger.load(o.map_ledger_path)
     hero_ledger = HeroLedger.load(o.hero_ledger_path)
 
@@ -292,11 +320,11 @@ def build_unified(o: UnifiedOptions) -> dict:
     try:
         if files["_headers"].decode("utf-8") != HEADERS:
             raise PackageError("baseline _headers is not the reviewed atlas rule set; refusing to extend it")
-        for n, b in {**{k: v for k, v in files.items() if k != "_headers"}, **hero_files}.items():
+        for n, b in {**{k: v for k, v in files.items() if k != "_headers"}, **hero_files, **icon_files}.items():
             (dist / n).parent.mkdir(parents=True, exist_ok=True)
             (dist / n).write_bytes(b)
-        (dist / "_headers").write_text(UNIFIED_HEADERS, encoding="utf-8")
-        problems = verify_unified(dist, pin, inv, map_ledger, hero_ledger, hero_files)
+        (dist / "_headers").write_text(UNIFIED_ICONS_HEADERS if icon_inv else UNIFIED_HEADERS, encoding="utf-8")
+        problems = verify_unified(dist, pin, inv, map_ledger, hero_ledger, hero_files, icon_inv)
         if problems:
             raise PackageError("unified distribution failed validation: " + "; ".join(problems[:8]))
     except Exception:
@@ -306,19 +334,23 @@ def build_unified(o: UnifiedOptions) -> dict:
     table = file_table(dist)
     lim = check_limits(dist)
     rev = hashlib.sha256(json.dumps(table, sort_keys=True).encode()).hexdigest()[:12]
-    label = f"{pin['client']['version']}+heroes.{rev}"
+    label = f"{pin['client']['version']}+heroes.{rev}" + ("+talenticons" if icon_inv else "")
     zip_info = write_deterministic_zip(dist, o.out / f"azerdex-cdn-dist-{pin['client']['version']}-{rev}.zip")
     (o.out / "dist-files.json").write_text(canonical_json(table), encoding="utf-8")
     # The commit-able release record of this exact snapshot: what the owner's read-only verification (Verify-AzerdexCdn.ps1, verify-remote) expects to be served.
     (o.out / "unified-release.json").write_text(canonical_json({
         "schemaVersion": 1, "kind": RELEASE_KIND, "distLabel": label, "client": pin["client"], "baselineZipSha256": pin.get("distributionZipSha256"),
-        "zip": zip_info, "heroInventorySha256": inventory_sha256(inv), "counts": {"files": len(table), "totalBytes": sum(m["bytes"] for m in table.values())},
+        "zip": zip_info, "heroInventorySha256": inventory_sha256(inv),
+        "talentIcons": ({"build": icon_inv["build"], "files": len(icon_files), "inventorySha256": talenticons.inventory_sha256(icon_inv)} if icon_inv else None),
+        "counts": {"files": len(table), "totalBytes": sum(m["bytes"] for m in table.values())},
         "files": table}), encoding="utf-8")
     (o.out / "SHA256SUMS.txt").write_text("".join(f"{m['sha256']}  {p}\n" for p, m in table.items()), encoding="utf-8")
     inv_sha = inventory_sha256(inv)
     (o.out / "zone-heroes-ledger.next.json").write_text(hero_ledger.proposed(inv, inv_sha, label).to_text(), encoding="utf-8")
     (o.out / "ledger.next.json").write_text(propose_map_ledger(map_ledger, files, pin).to_text(), encoding="utf-8")
     report = build_report(o, pin, inv, inv_sha, table, lim, zip_info, label, zip_sha)
+    if icon_inv:
+        report["talentIcons"] = {"build": icon_inv["build"], "files": len(icon_files), "inventorySha256": talenticons.inventory_sha256(icon_inv)}
     (o.out / "unified-report.json").write_text(canonical_json(report), encoding="utf-8")
     (o.out / "unified-report.md").write_text(render_report(report), encoding="utf-8")
     (o.out / "zone-heroes-inventory.json").write_text(canonical_json(audit_inventory(inv, table)), encoding="utf-8")
@@ -338,10 +370,10 @@ def audit_inventory(inv: dict, table: dict) -> dict:
 
 
 def build_report(o: UnifiedOptions, pin: dict, inv: dict, inv_sha: str, table: dict, lim: dict, zip_info: dict, label: str, baseline_zip_sha: str | None) -> dict:
-    ns = {"atlas": [], "forever": [], "zone-heroes": [], "_headers": []}
+    ns = {"atlas": [], "forever": [], "zone-heroes": [], "talent-icons": [], "_headers": []}
     for p, m in table.items():
         ns[p.split("/", 1)[0]].append(m)
-    nsum = {k: {"files": len(v), "bytes": sum(m["bytes"] for m in v)} for k, v in ns.items()}
+    nsum = {k: {"files": len(v), "bytes": sum(m["bytes"] for m in v)} for k, v in ns.items() if v or k != "talent-icons"}
     largest = sorted(((m["bytes"], p) for p, m in table.items()), reverse=True)[:5]
     return {
         "status": "READY_FOR_APPROVED_UPLOAD", "distLabel": label, "uploaded": False,

@@ -56,6 +56,27 @@ pass "first publication activated"
 out=$(npx tsx src/cli.ts publish); echo "$out" | grep -q '"outcome":"duplicate"' || fail "idempotent republish: $out"
 pass "identical republish is an idempotent no-op"
 
+# Oversized export (#137): refused at the database READ boundary (limit enforced in the query, in the export snapshot) before it is loaded,
+# validated or written; the active publication and the publication set are untouched. Exactness: limit == rows passes, rows - 1 fails.
+rows=$(node -e 'const d=require(process.argv[1]);console.log(["sources","items","buckets","drops","locations"].reduce((n,k)=>n+d[k].length,0))' "$TMP/export.json")
+limit_cfg() { node -e 'const c=JSON.parse(require("fs").readFileSync("publication-config.json","utf8"));c.limits={maxExportRows:Number(process.argv[2])};require("fs").writeFileSync(process.argv[1],JSON.stringify(c))' "$TMP/limit-$1.json" "$1"; }
+active_before=$($PSQL -d $PUB -Atc "select active_publication_id from pub.state")
+pubs_before=$($PSQL -d $PUB -Atc "select count(*) from pub.publications")
+limit_cfg "$((rows - 1))"
+if npx tsx src/cli.ts publish --config "$TMP/limit-$((rows - 1)).json" > "$TMP/big.log"; then fail "private export over the limit was published"; fi
+grep -q export_too_large "$TMP/big.log" || fail "unexpected failure mode for an oversized export: $(cat "$TMP/big.log")"
+grep -q '"outcome":"failed"' "$TMP/big.log" || fail "oversized export: failure not reported: $(cat "$TMP/big.log")"
+! grep -Eq 'source_id|item_id|"name"' "$TMP/big.log" || fail "oversized-export failure echoed row content"
+[ "$($PSQL -d $PUB -Atc "select active_publication_id from pub.state")" = "$active_before" ] || fail "active publication changed after an oversized export"
+[ "$($PSQL -d $PUB -Atc "select count(*) from pub.publications")" = "$pubs_before" ] || fail "oversized export left publication rows behind"
+if npx tsx src/cli.ts export --config "$TMP/limit-$((rows - 1)).json" --out "$TMP/never-written.json" > "$TMP/big-export.log" 2>&1; then fail "oversized export command succeeded"; fi
+[ ! -e "$TMP/never-written.json" ] || fail "oversized export wrote a file"
+limit_cfg "$rows"
+out=$(npx tsx src/cli.ts publish --config "$TMP/limit-$rows.json"); echo "$out" | grep -q '"outcome":"duplicate"' || fail "export exactly at the limit was not accepted: $out"
+pass "oversized private export refused at the read boundary ($rows rows: limit $((rows - 1)) fails closed, limit $rows accepted); active publication untouched"
+[ "$($PSQL -d $PRIV -Atc "select count(*) from publication_export.export_meta_v1()")" = "1" ] || fail "export_meta_v1() must return exactly one row (the read boundary reads at most 2 and refuses more than 1)"
+pass "export_meta_v1() single-row contract holds on the real export function"
+
 # Fail closed: non-allowlisted column in the export.
 node -e 'const f=process.argv[1];const d=require(f);d.buckets[0].installation_id="leak";require("fs").writeFileSync(f+".bad.json",JSON.stringify(d))' "$TMP/export.json"
 if npx tsx src/cli.ts publish --from-export "$TMP/export.json.bad.json" > "$TMP/bad.log"; then fail "tampered export was published"; fi
