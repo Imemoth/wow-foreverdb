@@ -59,6 +59,6 @@ describe("guildbook-local-only-policy", () => {
       sql: readFileSync(resolve(root, "database/migrations", name), "utf8"),
     }));
     expect(guildbookPolicyViolations([approved, ...historical])).toEqual([]);
-    expect(guildbookPolicyViolations([approved, { ...historical[1], name: "0019_copied_history.sql" }]).length).toBeGreaterThan(0);
+    expect(guildbookPolicyViolations([approved, { ...historical[1]!, name: "0019_copied_history.sql" }]).length).toBeGreaterThan(0);
   });
 });
