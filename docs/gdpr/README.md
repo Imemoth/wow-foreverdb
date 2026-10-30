@@ -21,12 +21,11 @@ account-page notices (`web/src/app/account/_ui/PrivacyNote.tsx`), retention scri
 
 ## Release blockers (need an owner decision before any production release containing the Companion)
 
-1. **The Companion uploads the Guildbook (guild roster with other players' character names) to the private backend** in this RC. The
-   "Guildbook Companion-local only" change (PR #112) was merged into `feature/account-independent-collector-credentials`, **not** into this RC or `release`.
-   Only the *hosted website* is Guildbook-free today. Decide: (a) land the local-only change (and the notice section then needs updating; a
-   test in `web/tests/unit/companion-disclosure.test.ts` fails the moment the upload code is removed, to force that), or (b) keep the upload and accept the
-   disclosure now in the notice, including a documented legitimate-interests assessment for the third-party names. Several public pages still say the Companion
-   sends only "aggregated counters" (see the audit doc, section 5); they contradict the code and the new notice.
+1. **Guildbook upload (other players' character names): code fixed in `fix/guildbook-local-only-rc`, NOT yet released.** The RC Companion uploaded the whole
+   snapshot including the Guildbook. The stacked Guildbook PR makes it local-only (explicit public projection + transport allowlist + DPAPI local store) and
+   prepares the server kill switch (migration 0018, **not applied**). Still required before any release: (a) the Guildbook PR merged through the stack, (b) a new
+   Companion build and the interactive Windows/real-client acceptance on it, (c) separately authorized application of 0018, (d) the **historical Guildbook rows already uploaded
+   remain in the private backend** until the separately authorized cleanup (the notice says so and does not claim deletion). See `docs/guildbook-local-only/`.
 2. **No erasure path exists in the product.** Deleting an `auth.users` row does **not** remove installation, device, claim or audit data (no FK to `auth.users`,
    and `account_installations` / `devices` are `ON DELETE RESTRICT`). The runbook gives a manual, ordered, reviewed procedure; it has not been rehearsed
    on a real project.
@@ -39,9 +38,9 @@ account-page notices (`web/src/app/account/_ui/PrivacyNote.tsx`), retention scri
 - Retention periods for data that has none (device registry and its audit trail, `map_asset_diagnostics`, idle installations and their Guildbook, anonymous auth users, privacy-inbox correspondence). None was invented.
 - Re-ask interval for the consent choice (it currently only re-asks when the notice version changes; the date is stored, so an expiry is trivial to add).
 - Whether to publish a postal address (not published; email is the contact).
-- Legitimate-interests assessment for third-party character names in Guildbook uploads (if the upload stays).
+- Authorization (and timing) of the historical Guildbook cleanup, and of applying migration 0018, each separately (`docs/guildbook-local-only/`).
+- Companion version bump / installer publication for the local-only build (not done here; no installer was built or published).
 - Whether the email templates and the welcome email should carry a privacy link (templates live in `docs/azerdex-auth-email/` and are published to Resend; changing them is an owner action).
-- Whether to correct the public pages that describe the Companion as sending only aggregated counters.
 - Supabase backup retention (plan-dependent) to state in the runbook; Resend retention of sent-mail logs.
 - Admin MFA / least-privilege confirmation for Vercel, Supabase, Resend (inbox), Cloudflare, GitHub (checklist in the incident runbook; not verifiable from the repo).
 - Update `docs/account-v1/README.md` (stale: still says production account auth is blocked).

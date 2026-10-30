@@ -20,7 +20,7 @@ export const GET = accountApi({ route: "installations", mutating: false }, async
     a.auth,
     jsonResponse({
       ok: true,
-      installations: out.data.map((i) => ({ installationId: i.installation_id, linkedAt: i.linked_at, lastSeenAt: i.last_seen_at, guildCount: i.guild_count })),
+      installations: out.data.map((i) => ({ installationId: i.installation_id, linkedAt: i.linked_at, lastSeenAt: i.last_seen_at })),
     }),
   );
   });

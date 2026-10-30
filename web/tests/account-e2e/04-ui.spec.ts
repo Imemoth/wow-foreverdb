@@ -6,7 +6,7 @@ import { admin, logoutLocal, ownerOf } from "./stack";
 import type pg from "pg";
 
 /**
- * Real browser against the real stack: the linking page, installation list and private Guildbook as a person uses them, the
+ * Real browser against the real stack: the linking page and the installation list as a person uses them (the Guildbook is Companion-local: no website page), the
  * hygiene of the claim code in the browser (never in a URL, storage, cookie or a request line), accessibility and layout.
  */
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -21,7 +21,7 @@ async function browserFor(browser: Browser, u: WebUser, viewport = { width: 1280
   const page = await ctx.newPage();
   const problems: string[] = [];
   const requests: string[] = [];
-  page.on("console", (m) => { if (m.type() === "error" && !/status of (401|403|409|422)/.test(m.text())) problems.push(`console: ${m.text()}`); });
+  page.on("console", (m) => { if (m.type() === "error" && !/status of (401|403|409|422)/.test(m.text())) problems.push(`console: ${m.text()} [${m.location().url}]`); });
   page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   page.on("request", (r) => requests.push(`${r.method()} ${r.url()}`));
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP violation: ${e.violatedDirective} ${e.blockedURI}`)));
@@ -84,7 +84,7 @@ test("the person's journey: open the link page, paste the code, enter the passwo
   await ctx.close();
 });
 
-test("installation list and private Guildbook in the browser: only own data, paging, keyboard-operable, accessible, no horizontal scroll at 375px", async ({ browser, playwright }, info) => {
+test("installation list in the browser: only own data, no Guildbook link or count, accessible, no horizontal scroll at 375px, revocation drops the private UI", async ({ browser, playwright }, info) => {
   const a = await webUser(playwright, "uiG");
   const b = await webUser(playwright, "uiGB");
   const big = await companionWithInstallation({ guilds: 2, members: 60, tag: "GB" });
@@ -100,41 +100,28 @@ test("installation list and private Guildbook in the browser: only own data, pag
   await expect(page.getByTestId("installation-row")).toHaveCount(2);
   await expect(page.getByText(big.installationId)).toBeVisible();
   await expect(page.getByText(theirs.installationId)).toHaveCount(0);
+  // the Guildbook stays on the person's computer: no link, no count, no page
+  await expect(page.getByRole("link", { name: /guildbook/i })).toHaveCount(0);
+  await expect(page.getByText("Guilds", { exact: true })).toHaveCount(0);
   expect((await new AxeBuilder({ page: page as never }).withTags(AXE_TAGS).analyze()).violations.map((v) => v.id)).toEqual([]);
   await info.attach("installations", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  // The retired page is a 404 for a signed-in person too. Checked through the context's request API (same session cookies) and NOT by a
+  // browser navigation: a navigation to a deliberate 404 makes the browser log "Failed to load resource: 404" to the console, which this
+  // test's strict console collector (`problems`) rightly counts. The collector stays strict; only the probe changed.
+  expect((await page.request.get("/account/guildbook")).status()).toBe(404);
+  await page.goto("/account/installations");
 
-  // "Open Guildbook" carries the id in the URL FRAGMENT (never sent to the server)
-  await page.getByTestId("installation-row").filter({ hasText: big.installationId }).getByRole("link", { name: "Open Guildbook" }).click();
-  await expect(page).toHaveURL(/\/account\/guildbook#installation=/);
-  await expect(page.getByRole("button", { name: /Guild 1/ })).toBeVisible();
-  await page.getByRole("button", { name: /Guild 1/ }).click();
-  await expect(page.getByTestId("guild-title")).toHaveText("Guild 1");
-  await expect(page.getByTestId("member-row")).toHaveCount(50);
-  await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByTestId("member-row")).toHaveCount(10);
-  await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
-  await expect(page.getByRole("columnheader", { name: "Rank" })).toBeVisible();
-  expect(await page.content()).not.toMatch(/Player-|member_guid/);
-  expect((await new AxeBuilder({ page: page as never }).withTags(AXE_TAGS).analyze()).violations.map((v) => v.id)).toEqual([]);
-  await info.attach("guildbook", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
-  // keyboard: the guild buttons are reachable and operable without a mouse
-  await page.getByRole("button", { name: /Guild 2/ }).focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("guild-title")).toHaveText("Guild 2");
-  await expect(page.getByTestId("member-row")).toHaveCount(50);
-
-  // narrow screen: no horizontal PAGE scroll (the table scrolls inside its own container)
+  // narrow screen: no horizontal PAGE scroll
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await hscroll(page)).toBe(false);
-  await info.attach("guildbook-375", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  await info.attach("installations-375", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
-  // revocation invalidates the private UI at once: the server-side session dies, the next click sends the person to sign in and the DOM is dropped
+  // revocation invalidates the private UI at once: the server-side session dies, the next navigation sends the person to sign in and the DOM is dropped
   expect(await logoutLocal(a.accessToken)).toBe(204);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("button", { name: /Guild 1/ }).click();
+  await page.goto("/account/installations");
   await expect(page).toHaveURL(/\/account\/login/);
-  expect(await page.content()).not.toContain("GB1x");
+  expect(await page.content()).not.toContain(big.installationId);
   expect(problems).toEqual([]);
   await ctx.close();
 });
@@ -144,15 +131,15 @@ test("a person with no installation sees helpful empty states; an anonymous visi
   const { ctx, page } = await browserFor(browser, e);
   await page.goto("/account/installations");
   await expect(page.getByText("No installation is linked to this account yet.")).toBeVisible();
-  await page.goto("/account/guildbook");
-  await expect(page.getByText("No installation is linked to this account yet.")).toBeVisible();
+  expect((await page.request.get("/account/guildbook")).status()).toBe(404);
   await ctx.close();
   const anon = await browser.newContext({ baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
   const p = await anon.newPage();
-  for (const path of ["/account/link", "/account/installations", "/account/guildbook"]) {
+  for (const path of ["/account/link", "/account/installations"]) {
     await p.goto(path);
     await expect(p).toHaveURL(new RegExp(`/account/login\\?next=${encodeURIComponent(path)}`));
   }
+  expect((await p.goto("/account/guildbook"))?.status()).toBe(404); // no page, nothing to sign in for
   await anon.close();
 });
 

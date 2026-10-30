@@ -127,8 +127,8 @@ Supabase keeps its own backups for the period of the plan in use (**owner to rec
 
 ## 7. Never disclose another person's records
 
-- Guildbook rows hold **other players' character names, classes, ranks, zones and professions**. In an access/portability response include only the requester's *own* installation context: your own characters/professions and the guild name, and
-  **omit or reduce** the other members (counts, or their entries redacted) unless the requester is the data subject of those rows. Record the reasoning.
+- **Historical** Guildbook rows (uploaded by earlier Companion versions; current versions upload none) hold **other players' character names, classes, ranks, zones and professions**. In an access/portability response include only the requester's *own* installation context: their own characters/professions and the guild name, and
+  **omit or reduce** the other members (counts, or their entries redacted) unless the requester is the data subject of those rows. Record the reasoning. The cleanup script `database/ops/guildbook_historical_cleanup.sql` is the supported way to erase these rows once the owner has authorized it; do not hand-delete them.
 - Never answer "does an account exist for this address?" to anyone who has not proven control of it.
 - Never export by installation id alone; identifiers are not secrets (see section 2).
 - Two accounts, one person, or an installation transferred between accounts: the *previous* owner has no access to the new owner's data (the product enforces this); do not bypass it.

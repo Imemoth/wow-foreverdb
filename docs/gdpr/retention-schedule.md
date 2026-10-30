@@ -15,7 +15,8 @@ Investigated `database/ops/0012_prune_account_claims.sql` and every prune path i
 | `azerdex_welcome_candidates`, `_trigger_failures` | 30 days | `private.azerdex_welcome_prune()`; cron `azerdex-welcome-prune` 03:17 daily (owner-run script, reported active) | **scheduled** (only this and `azerdex-welcome-worker` are) |
 | `azerdex_welcome_outbox` | until the account is deleted (FK cascade) | cascade | by design |
 | `private.devices`, `private.device_audit` | none ("audit rows are retained", ADR-017) | - | **kept indefinitely** |
-| `public.installations` + statistics + Guildbook tables | replaced on each sync; installation never deleted | - | **kept indefinitely**; idle installations never removed |
+| `public.installations` + statistics tables | replaced on each sync; installation never deleted | - | **kept indefinitely**; idle installations never removed |
+| `installation_guilds`, `installation_guild_members`, `installation_guild_professions` (**historical only**: current Companion uploads no Guildbook) | none; rows were replaced on each sync by older Companions and are no longer written | - | **kept until the owner-authorized cleanup**; the notice says removal is pending (inventory/cleanup scripts: `database/ops/guildbook_historical_*.sql`) |
 | `public.map_asset_diagnostics` | none (table created "directly", not in `migrations/`) | - | **kept indefinitely** |
 | `auth.users` anonymous Companion identities | none | - | never pruned |
 | Rate-limit counters (Upstash/memory) | expire at 2× window | store TTL | enforced |
@@ -41,7 +42,7 @@ The notice (`PrivacyContent.tsx`, section *Retention*) states exactly this: the 
 | Private | SECURITY DEFINER, `search_path=''`, no grant to public/anon/authenticated/service_role, log table RLS-on |
 | Reviewable first run | `select private.azerdex_retention_run(p_dry_run := true);` counts without deleting |
 
-**Not covered (no rule exists; decision needed)**: `device_audit`, `devices`, idle installations/Guildbook, `map_asset_diagnostics`, anonymous auth users, privacy-inbox correspondence.
+**Not covered (no rule exists; decision needed)**: `device_audit`, `devices`, idle installations, `map_asset_diagnostics`, anonymous auth users, privacy-inbox correspondence.
 
 ### Installation sequence (each step needs separate owner authorization; none has been run)
 1. Staging project: apply `retention_cleanup_install.sql`; run the dry run; review counts; run once for real; run `retention_cleanup_monitoring.sql`.

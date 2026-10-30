@@ -31,16 +31,17 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
           <li>Paste it below, enter your password again and confirm.</li>
         </ol>
         <p className="text-sm text-mist">
-          Linking moves the installation, its history and its Guildbook to this account. Only a code created by the Companion
-          that currently owns the installation can be redeemed. Never share a code with anyone.
+          Linking moves the installation and its observation history to this account. The Guildbook stays on your computer and is
+          not part of an account. Only a code created by the Companion that currently owns the installation can be redeemed. Never
+          share a code with anyone.
         </p>
         <p className="text-sm text-mist">
           You will be asked for this account&apos;s password. If you do not know it, someone else may have registered your address
           before you: do not link anything, <Link href="/account/forgot-password">reset the password</Link> first.
         </p>
         <PrivacyNote anchor="companion">
-          Linking associates the installation identifier with this account and records a linking event. What the Companion sends,
-          including the Guildbook, is described in the Addon and Companion section of the
+          Linking associates the installation identifier with this account and records a linking event. What the Companion sends
+          (public observations only; the Guildbook stays on your computer) is described in the Addon and Companion section of the
         </PrivacyNote>
       </section>
       <LinkForm email={p.user.email} accountId={p.user.id} />

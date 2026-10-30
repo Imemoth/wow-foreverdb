@@ -192,6 +192,11 @@ export const ACCOUNT_RPCS = {
       )
       .max(50),
   },
+  /**
+   * RETIRED (Companion-local Guildbook): migration 0018 revokes the two Guildbook functions below from every API role and the
+   * website never calls them (not in WEB_RPCS; the routes are 404). They stay in this registry ONLY because it pins migration
+   * 0012, which still defines them, for the conformance linter (an unregistered function there is a violation).
+   */
   fdb_account_guildbook_guilds: {
     input: z.object({ p_installation_id: installationIdSchema }).strict(),
     output: z
@@ -281,7 +286,6 @@ export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
   "/account/link",
   "/account/installations",
   "/account/devices",
-  "/account/guildbook",
   "/account/security",
 ];
 

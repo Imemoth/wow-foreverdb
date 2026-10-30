@@ -50,7 +50,7 @@ public class CompanionRegressionTests
         Assert.Equal(SyncOutcome.Synced, first!.Outcome);
         Assert.Equal(SyncOutcome.Synced, second!.Outcome);      // manual Sync always uploads
         Assert.Equal(2, rig.Server.IngestCount);
-        Assert.Contains("synced:Manual:1:3", events);
+        Assert.Contains("synced:Manual:1:0", events);
         Assert.Equal(anon.UserId, rig.Server.OwnerOf("inst-1"));
     }
 
@@ -99,8 +99,7 @@ public class CompanionRegressionTests
 
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
         Assert.Equal(BlockReason.NoCredential, attempt.Reason);
-        Assert.Single(guilds);                              // the local Guildbook still received the roster
-        Assert.Equal(2, guilds[0].Single().Members.Count);
+        Assert.Empty(guilds);                               // the private Guildbook is unavailable anonymously/offline: local-only and account-gated
         Assert.Equal(new[] { 1 }, maps);                    // map metadata merged
         Assert.Empty(events);                               // no "synced"/"auth" claims
         Assert.Equal(new[] { BlockReason.NoCredential }, blocks);
@@ -119,7 +118,7 @@ public class CompanionRegressionTests
 
         var attempt = await service.SyncFileAsync(path, force: true);
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Single(guilds);
+        Assert.Empty(guilds);
         Assert.Empty(events);
         Assert.Single(blocks);
         Assert.Equal(0, rig.Server.SignupCount);
