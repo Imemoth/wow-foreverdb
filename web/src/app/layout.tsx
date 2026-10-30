@@ -8,8 +8,8 @@ import { DatasetBanner } from "@/components/DatasetBanner";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { TrafficAnalytics } from "@/components/TrafficAnalytics";
-import { TrafficSpeedInsights } from "@/components/TrafficSpeedInsights";
+import { ConsentManager } from "@/components/consent/ConsentManager";
+import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
 import { isPublicAnalyticsHost } from "@/lib/analytics";
@@ -45,22 +45,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const h = await headers();
   const hostname = (h.get("host") ?? "").split(":")[0]!.toLowerCase();
   const pathname = h.get("x-request-pathname") ?? "";
+  // Real public AzerDex hosts only. The local Playwright harness is the sole other case (e2eFixturesAllowed refuses every hosted deployment).
+  const analyticsAvailable = (env.hosted && isPublicAnalyticsHost(hostname)) || e2eFixturesAllowed();
   const jsonLdBase = (await isPublicBetaPresentationHomepage(env, hostname, pathname)) ? `https://${BETA_SEO_HOSTNAME}` : baseUrl;
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">
         <a href="#main" className="skip-link">Skip to content</a>
+        {/* Early in the DOM so keyboard and screen-reader users reach the choices first. A non-blocking bar, never a cookie wall.
+            Optional measurement (Vercel Web Analytics, and Speed Insights when AZERDEX_SPEED_INSIGHTS=1) exists only AFTER an opt-in made here. */}
+        <ConsentManager analyticsAvailable={analyticsAvailable} speedInsightsAvailable={analyticsAvailable && speedInsightsEnabled()} />
         {meta && <DatasetBanner meta={meta} />}
         <SiteHeader />
         <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">{children}</main>
         <SiteFooter />
-        {env.hosted && isPublicAnalyticsHost(hostname) && (
-          <>
-            <TrafficAnalytics />
-            {/* Opt-in (AZERDEX_SPEED_INSIGHTS=1): off by default, so a disabled service is never requested by the browser. */}
-            {speedInsightsEnabled() && <TrafficSpeedInsights />}
-          </>
-        )}
         <JsonLd nonce={nonce} data={{
           "@context": "https://schema.org",
           "@type": "WebSite",

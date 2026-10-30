@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requirePageUser } from "@/lib/account/page-session";
 import { Unavailable } from "../_ui/Unavailable";
 import { LinkForm } from "../_components/LinkForm";
+import { PrivacyNote } from "../_ui/PrivacyNote";
 
 export const metadata = { title: "Link an installation" };
 
@@ -37,6 +38,10 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
           You will be asked for this account&apos;s password. If you do not know it, someone else may have registered your address
           before you: do not link anything, <Link href="/account/forgot-password">reset the password</Link> first.
         </p>
+        <PrivacyNote anchor="companion">
+          Linking associates the installation identifier with this account and records a linking event. What the Companion sends,
+          including the Guildbook, is described in the Addon and Companion section of the
+        </PrivacyNote>
       </section>
       <LinkForm email={p.user.email} accountId={p.user.id} />
     </>
