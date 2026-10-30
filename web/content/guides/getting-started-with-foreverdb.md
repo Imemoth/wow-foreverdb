@@ -33,10 +33,10 @@ creature or gather a node, then run `/fdb last` to see the most recent observati
 
 ## 3. Sync with the Companion
 
-The Companion watches your SavedVariables and uploads aggregated counters after you log out or reload. Its sync panel
+The Companion watches your SavedVariables and uploads aggregated observation counters after you log out or reload. Your Guildbook stays on your computer and is never uploaded. Its sync panel
 shows when the last successful sync happened. Only the latest Companion version is supported.
 
 ## What gets shared
 
-The public website only ever receives aggregated statistics. Installation identifiers and Guildbook rosters stay in the
-private backend.
+The public website only ever receives aggregated statistics. Installation identifiers stay in the private backend. The
+Guildbook stays on your computer and is never uploaded.

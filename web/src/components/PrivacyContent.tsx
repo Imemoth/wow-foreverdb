@@ -223,8 +223,8 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
       <p>
         The ForeverDB addon runs inside World of Warcraft and the ForeverDB Companion is a Windows application on your computer.
         They are separate from this website. They are optional, and what follows is what they actually do in the current
-        source code. Legal basis for the processing described here: providing the service you set them up for, Article 6(1)(b)
-        GDPR, and, for third parties&apos; character names in a guild roster, legitimate interests, Article 6(1)(f) GDPR.
+        source code. Legal basis for the processing AzerDex does with what they send: providing the service you set them up for,
+        Article 6(1)(b) GDPR. The Guildbook is not processed by AzerDex: it stays on your computer (see below).
       </p>
       <h3>What the addon records on your computer</h3>
       <ul>
@@ -235,7 +235,7 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
         <li>
           A <strong>Guildbook</strong>: for your guild, its name and realm, and for each member the character name, class, level,
           rank, online state, zone, how long ago they were last online and their professions, plus your own character&apos;s
-          professions. Officer notes are not collected.
+          professions. Officer notes are not collected. The Guildbook is kept on your computer only: it is never uploaded.
         </li>
         <li>
           A <strong>session tracker</strong> (your character name and realm, gold and experience accounting, recent session
@@ -245,10 +245,15 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
       <h3>What the Companion sends</h3>
       <ul>
         <li>
-          The Companion reads the addon&apos;s export and uploads it to AzerDex&apos;s private Supabase backend (the same
-          Supabase service as accounts). The upload contains the installation identifier, versions, the observation statistics
-          and <strong>the Guildbook</strong>, including the guild roster described above. Those character names belong to other
-          people; they are stored privately and are not published.
+          The Companion reads the addon&apos;s export and uploads <strong>public observations only</strong> to AzerDex&apos;s
+          private Supabase backend (the same Supabase service as accounts): the installation identifier, versions, the
+          observation statistics (sources, items, quantities and coarse-grid locations) and map metadata.
+        </li>
+        <li>
+          <strong>The Guildbook is never uploaded.</strong> No guild name or roster, member character name or identifier,
+          profession, rank, online activity or capture detail is sent, whether you use it anonymously, with an account or on a
+          registered computer. The Companion builds the upload from an explicit list of observation fields and checks every
+          request against that list before it is sent; anything else is refused and nothing is sent.
         </li>
         <li>
           To upload, the Companion signs in to Supabase Auth either with an anonymous identity created for the installation or,
@@ -275,9 +280,20 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
       </ul>
       <h3>What stays on your computer, and what the website shows</h3>
       <p>
-        The Companion&apos;s Guildbook view is shown in the Companion itself. The hosted AzerDex website does not display, serve or
-        link the Guildbook, and the public database pages cannot read it. The Guildbook that the Companion uploads is a separate
-        private copy held by the backend, and is not the &ldquo;local-only&rdquo; session tracker above.
+        The Companion stores the Guildbook only on your computer, under <code>%LOCALAPPDATA%\ForeverDB\guildbook\</code>,
+        separated by account and installation and protected with Windows encryption for your Windows user (DPAPI). It is shown in
+        the Companion only while a verified ForeverDB account is signed in; signing out hides it and keeps the files, and a
+        different account cannot read them. You can delete those files yourself at any time. The addon&apos;s own SavedVariables
+        file in your WoW folder still contains the raw export and is not encrypted by the Companion. The hosted AzerDex website
+        does not display, serve or link the Guildbook, and has no way to read one.
+      </p>
+      <h3>Historical Guildbook data from earlier versions</h3>
+      <p>
+        Earlier Companion versions uploaded the Guildbook to the private backend, and records uploaded then may still exist there,
+        including character names of guild members. They are private, are not published, cannot be read through this website, and
+        are not changed by current Companion versions. <strong>They have not yet been deleted</strong>; removing them is pending and
+        this notice will say when that has been done and checked. Until then you can ask for them to be deleted by writing to{" "}
+        <a href={`mailto:${PRIVACY_CONTACT_EMAIL}`}>{PRIVACY_CONTACT_EMAIL}</a>.
       </p>
       <h3>What is published</h3>
       <p>
@@ -300,8 +316,12 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           <strong>Link between an installation and an account:</strong> kept while the installation stays linked to the account.
         </li>
         <li>
-          <strong>Installation statistics and Guildbook (private):</strong> replaced by each upload and kept while the installation
-          exists. There is no automatic removal of installations that stop uploading; they are removed on request.
+          <strong>Installation statistics (private):</strong> replaced by each upload and kept while the installation exists. There
+          is no automatic removal of installations that stop uploading; they are removed on request.
+        </li>
+        <li>
+          <strong>Historical Guildbook records uploaded by earlier Companion versions (private):</strong> kept until they are
+          removed; the removal is pending and has not been done. Current versions upload no Guildbook data.
         </li>
         <li>
           <strong>Welcome-email queue:</strong> unverified candidate records and handled failure markers are removed after 30
