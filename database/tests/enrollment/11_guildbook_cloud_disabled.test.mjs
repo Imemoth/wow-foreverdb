@@ -35,6 +35,8 @@ describe("Guildbook local-only kill switch (enrollment surface)", () => {
     const shape = (await w.row(`
       select to_regclass('private.account_guildbook_guilds') is null as no_account_guilds,
              to_regclass('private.account_guildbook_members') is null as no_account_members,
+             to_regclass('private.account_guildbook_captures') is null as no_account_captures,
+             to_regclass('private.account_guildbook_professions') is null as no_account_professions,
              to_regprocedure('private.fdb_public_snapshot(jsonb)') is not null as has_projection,
              has_function_privilege('anon', 'private.foreverdb_ingest_snapshot_impl_v1(jsonb)', 'execute') as anon_impl,
              has_function_privilege('authenticated', 'private.foreverdb_ingest_snapshot_impl_v1(jsonb)', 'execute') as auth_impl
@@ -42,6 +44,8 @@ describe("Guildbook local-only kill switch (enrollment surface)", () => {
     assert.deepEqual(shape, {
       no_account_guilds: true,
       no_account_members: true,
+      no_account_captures: true,
+      no_account_professions: true,
       has_projection: true,
       anon_impl: false,
       auth_impl: false,
