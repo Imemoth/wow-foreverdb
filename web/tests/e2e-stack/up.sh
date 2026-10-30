@@ -93,6 +93,19 @@ T1=$(date +%s%3N)
 echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\": $AFTER, \"reload_observed_ms\": $((T1-T0))}" >"$STACK_DIR/schema-cache.json"
 [ "$BEFORE" = 404 ] && [ "$AFTER" != 404 ] || { echo "schema cache did not reload after 0012 (before=$BEFORE after=$AFTER)"; exit 1; }
 
+# 4b. 0018 is deliberately part of this disposable acceptance environment: the cloud Guildbook RPCs must be unavailable, and a legacy
+# payload that still carries guilds must store none, before the browser/API isolation tests start.
+"$REPO/database/tests/account/stack.sh" apply18
+GUILDBOOK_AFTER=""
+for i in $(seq 1 100); do
+  GUILDBOOK_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{"p_installation_id":"x"}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_guildbook_guilds")"
+  # PostgREST may keep the function in its schema cache while the ACL change lands: 401/403 (known RPC, no EXECUTE) and 404 (cache
+  # omission) are all blocked cloud paths.
+  { [ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ]; } && break
+  sleep 0.2
+done
+[ "$GUILDBOOK_AFTER" = 401 ] || [ "$GUILDBOOK_AFTER" = 403 ] || [ "$GUILDBOOK_AFTER" = 404 ] || { echo "cloud Guildbook revocation not effective after 0018 (status=$GUILDBOOK_AFTER)"; exit 1; }
+
 # 5. What was REALLY started (recorded, not assumed).
 GOTRUE_VERSION="$(curl -fsS "http://127.0.0.1:9999/health" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("unknown")}})')"
 PGRST_VERSION="$("$POSTGREST_BIN" --version | head -1)"

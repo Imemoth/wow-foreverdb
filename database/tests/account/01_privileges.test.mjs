@@ -52,8 +52,11 @@ describe("function privileges", () => {
     }
   });
   it("no overloads and no unexpected account functions exist", async () => {
-    const r = await admin.query(`select oid::regprocedure::text s from pg_proc where proname ~ '^fdb_' and pronamespace in ('public'::regnamespace, 'private'::regnamespace) order by 1`);
-    assert.deepEqual(r.rows.map((x) => x.s), [
+    const r = await admin.query(`select oid::regprocedure::text s from pg_proc where proname ~ '^fdb_' and pronamespace in ('public'::regnamespace, 'private'::regnamespace)`);
+    // Migration 0018 (Guildbook local-only kill switch) adds exactly one private helper. It is expected ONLY when 0018 is applied (its marker
+    // table exists); the 0018 suites apply it on clones, so this shared database normally has none.
+    const killSwitch = (await admin.query("select to_regclass('private.guildbook_cloud_sync_guard') is not null as v")).rows[0].v;
+    assert.deepEqual(r.rows.map((x) => x.s).sort(), [
       "fdb_account_claim_redeem(text)",
       "fdb_account_claim_start(text)",
       "fdb_account_guildbook_guilds(text)",
@@ -63,6 +66,7 @@ describe("function privileges", () => {
       "private.fdb_anonymous_caller()",
       "private.fdb_caller()",
       "private.fdb_registered_caller()",
+      ...(killSwitch ? ["private.fdb_public_snapshot(jsonb)"] : []),
     ].sort());
   });
   it("every account function is free of dynamic SQL and of exception handlers (defence beyond the linter)", async () => {
@@ -111,10 +115,26 @@ describe("existing functions are untouched by 0012", () => {
     const now = (await admin.query(`select p.oid::regprocedure::text sig, pg_get_userbyid(p.proowner) owner, coalesce(p.proacl::text, '') acl, coalesce(p.proconfig, '{}') config, md5(p.prosrc) md5
                                      from pg_proc p where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)`)).rows;
     const bySig = new Map(now.map((r) => [r.sig, r]));
+    // Only when migration 0018 is applied (marker table present): the ingest implementation is the designed exception. Its body now lives under
+    // the *_legacy name (byte-identical, owner and config unchanged, ACL deliberately closed further) and the original name is the wrapper.
+    const killSwitch = (await admin.query("select to_regclass('private.guildbook_cloud_sync_guard') is not null as v")).rows[0].v;
+    const IMPL = "private.foreverdb_ingest_snapshot_impl_v1(jsonb)";
+    const LEGACY = "private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)";
     for (const b of before) {
+      if (killSwitch && b.sig === IMPL) {
+        const l = bySig.get(LEGACY);
+        assert.ok(l, "the legacy ingest body is retained under its compatibility name");
+        assert.deepEqual({ owner: l.owner, config: l.config, md5: l.md5 }, { owner: b.owner, config: b.config, md5: b.md5 }, "legacy body unchanged");
+        continue;
+      }
       const a = bySig.get(b.sig);
       assert.ok(a, `${b.sig} still exists`);
-      assert.deepEqual({ owner: a.owner, acl: a.acl, config: a.config, md5: a.md5 }, { owner: b.owner, acl: b.acl, config: b.config, md5: b.md5 }, b.sig);
+      const aclClosedBy0018 = killSwitch && /guildbook/.test(b.sig); // 0018 closes the Guildbook RPC ACLs (bodies stay)
+      assert.deepEqual(
+        { owner: a.owner, acl: aclClosedBy0018 ? "-" : a.acl, config: a.config, md5: a.md5 },
+        { owner: b.owner, acl: aclClosedBy0018 ? "-" : b.acl, config: b.config, md5: b.md5 },
+        b.sig,
+      );
     }
     // Migration 0015 (AzerDex welcome outbox) is a SEPARATE feature whose own suite (database/tests/welcome) owns these twelve functions. They are
     // excluded by exact signature, not by prefix or count: any other new function, or any change to the 0012 set, still fails this assertion.
@@ -132,11 +152,16 @@ describe("existing functions are untouched by 0012", () => {
       "private.azerdex_welcome_require_server_role()",
       "private.azerdex_welcome_set_switch(boolean,boolean)",
     ]);
-    const added = now.filter((r) => !before.some((b) => b.sig === r.sig) && !WELCOME_0015.has(r.sig)).map((r) => r.sig).sort();
+    const KILL_SWITCH_0018 = new Set(killSwitch ? ["private.fdb_public_snapshot(jsonb)", LEGACY] : []);
+    const added = now.filter((r) => !before.some((b) => b.sig === r.sig) && !WELCOME_0015.has(r.sig) && !KILL_SWITCH_0018.has(r.sig)).map((r) => r.sig).sort();
     assert.equal(added.length, 9, `exactly the nine new functions were added: ${added.join(", ")}`);
   });
   it("the ingest implementation still takes the same advisory lock key as the account functions", async () => {
-    const impl = (await admin.query("select prosrc from pg_proc where oid = 'private.foreverdb_ingest_snapshot_impl_v1(jsonb)'::regprocedure")).rows[0].prosrc;
+    // With 0018 applied the pinned legacy body lives under the *_legacy name; the original name is the observation-only wrapper.
+    const implName = (await admin.query("select to_regclass('private.guildbook_cloud_sync_guard') is not null as v")).rows[0].v
+      ? "private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb)"
+      : "private.foreverdb_ingest_snapshot_impl_v1(jsonb)";
+    const impl = (await admin.query("select prosrc from pg_proc where oid = $1::regprocedure", [implName])).rows[0].prosrc;
     assert.match(impl, /pg_advisory_xact_lock\(\s*hashtextextended\(\s*installation,\s*0\s*\)\s*\)/);
     for (const fn of ["fdb_account_claim_start", "fdb_account_claim_redeem"]) {
       const src = (await admin.query("select prosrc from pg_proc where proname = $1", [fn])).rows[0].prosrc;

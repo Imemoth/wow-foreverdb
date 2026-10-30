@@ -2,7 +2,7 @@ name: Account end-to-end integration (GoTrue + PostgREST)
 
 # Account System V1, PR E acceptance: the website's linking flow, private Guildbook and the Companion-style anonymous/registered clients
 # against a REAL, EPHEMERAL stack:  PostgreSQL 16  +  real GoTrue (pinned supabase/auth tag AND commit)  +  real PostgREST (pinned release,
-# checksum-verified)  +  Mailpit (captured mail), with the repository migrations 0001-0006, 0008, 0009, 0011 and 0012 applied (0007 is skipped exactly as in the SQL suite; 0010 and 0013 are never applied) exactly as the SQL suite does.
+# checksum-verified)  +  Mailpit (captured mail), with the repository migrations 0001-0006, 0008, 0009, 0011, 0012 and 0018 applied (0007 is skipped exactly as in the SQL suite; 0010 and 0013 are never applied) exactly as the SQL suite does.
 # PostgREST and GoTrue are the real programs (the SQL suite emulates PostgREST; this one does not); only the API gateway (Kong) is a small pass-through shim. Nothing real is touched: no Supabase project, no production
 # credential, no Vercel. If any component cannot start the job FAILS (integrated acceptance BLOCKED); it never falls back to stubs.
 #
