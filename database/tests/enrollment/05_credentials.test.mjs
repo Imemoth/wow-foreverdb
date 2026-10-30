@@ -224,7 +224,8 @@ describe("account and identity standing", () => {
 
   it("budgets: device introspection is rate limited (PT429) per identity", async () => {
     const e = await w.enrolled(await w.account());
-    await w.fx.resetBudgets();
+    // the 61 calls must share one 60 s budget window (see resetBudgetsInFreshWindow)
+    await w.fx.resetBudgetsInFreshWindow(60);
     for (let i = 0; i < 60; i += 1) await e.device.call("fdb_device_status", [e.secret]);
     await expectCode(e.device.call("fdb_device_status", [e.secret]), "PT429");
   });
@@ -232,7 +233,7 @@ describe("account and identity standing", () => {
   it("device ingest is charged to the DEVICE identity's ingest budget (5 per window), exactly like anonymous ingest; the account's budget is untouched", async () => {
     const acct = await w.account();
     const e = await w.enrolled(acct);
-    await w.fx.resetBudgets();
+    await w.fx.resetBudgetsInFreshWindow(300);
     for (let i = 0; i < 5; i += 1) assert.equal((await e.device.call("fdb_device_ingest", [e.secret, snapshot(e.installationId, { updatedAt: (ts += 10) })])).ok, true);
     await expectCode(e.device.call("fdb_device_ingest", [e.secret, snapshot(e.installationId, { updatedAt: (ts += 10) })]), "PT429");
     const buckets = (await w.row("select bucket from private.foreverdb_api_budgets where bucket like 'ingest:uid:%'")).map((r) => r.bucket);
