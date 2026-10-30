@@ -24,6 +24,10 @@ const ACCOUNT_FUNCTIONS: [string, Record<string, unknown>][] = [
   ["fdb_account_claim_redeem", { p_code: "0123456789ABCDEF0123456789ABCDEF" }],
   ["fdb_installation_link_status", { p_installation_id: "x-1" }],
   ["fdb_account_installations", {}],
+];
+// The cloud Guildbook is retired (Companion-local only): migration 0018 revokes these from every API role. They are deliberately not in
+// ACCOUNT_FUNCTIONS (whose loops assert the identity-guard verdicts of LIVE functions); a dedicated test below pins the denial.
+const RETIRED_GUILDBOOK_FUNCTIONS: [string, Record<string, unknown>][] = [
   ["fdb_account_guildbook_guilds", { p_installation_id: "x-1" }],
   ["fdb_account_guildbook_members", { p_installation_id: "x-1", p_guild_key: "g", p_limit: 10, p_offset: 0 }],
 ];
@@ -70,7 +74,7 @@ test("SQL role and EXECUTE privileges as PostgREST applies them: anon and servic
     expect(r.body.code, `service_role ${name}`).toBe("42501");
   }
   // identity kinds: registered-only functions refuse an anonymous user (403); claim_start refuses a registered user (403)
-  for (const name of ["fdb_account_claim_redeem", "fdb_account_installations", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members"]) {
+  for (const name of ["fdb_account_claim_redeem", "fdb_account_installations"]) {
     const args = ACCOUNT_FUNCTIONS.find(([n]) => n === name)![1];
     const r = await rpc(anon.token, name, args);
     expect(r.status, `anonymous ${name}`).toBe(403);
@@ -82,6 +86,22 @@ test("SQL role and EXECUTE privileges as PostgREST applies them: anon and servic
   // the Companion-facing status function is open to every live session
   expect((await rpc(anon.token, "fdb_installation_link_status", { p_installation_id: "x-1" })).body).toEqual({ state: "unknown" });
   expect((await rpc(registered.token, "fdb_installation_link_status", { p_installation_id: "x-1" })).body).toEqual({ state: "unknown" });
+});
+
+test("the retired cloud Guildbook functions are not callable by any API role (anon key, anonymous, registered, service_role)", async ({ playwright }) => {
+  const anon = await anonymous();
+  const w = await webUser(playwright, "pgretired");
+  const registered = await registeredSession(w.email, w.password);
+  const serviceRole = sign({ role: "service_role", aud: "authenticated", exp: Math.floor(Date.now() / 1000) + 600 });
+  for (const [name, args] of RETIRED_GUILDBOOK_FUNCTIONS) {
+    for (const [who, tok] of [["anonymous", anon.token], ["registered", registered.token], ["service_role", serviceRole]] as const) {
+      const r = await rpc(tok, name, args);
+      expect([401, 403, 404], `${who} ${name}`).toContain(r.status); // EXECUTE revoked (42501) or no longer exposed: never a row, never a guard verdict
+      expect(Array.isArray(r.body), `${who} ${name}`).toBe(false);
+    }
+    const bare = await fetch(`${process.env.ACCOUNT_STACK_URL}/rest/v1/rpc/${name}`, { method: "POST", headers: { apikey: process.env.ACCOUNT_STACK_ANON_KEY!, "content-type": "application/json" }, body: JSON.stringify(args) });
+    expect([401, 403, 404], `anon key ${name}`).toContain(bare.status);
+  }
 });
 
 test("session claims propagate: a correctly signed token for a session that does not exist, belongs to another user, or has no session_id is PT401; sign-out kills an unexpired token; a banned user is refused", async ({ playwright }) => {
@@ -239,10 +259,10 @@ test("response format and error assumptions of the website's client hold against
   const redeem = await rpc(s.token, "fdb_account_claim_redeem", { p_code: "00000000000000000000000000000000" });
   expect(Array.isArray(redeem.body)).toBe(false); // jsonb -> a bare object
   expect(redeem.body).toEqual({ ok: false, error: "invalid_claim" });
-  const err = await rpc(s.token, "fdb_account_guildbook_members", { p_installation_id: "bad id", p_guild_key: "g", p_limit: 10, p_offset: 0 });
-  expect([err.status, err.body.code]).toEqual([400, "PT400"]);
+  // PostgREST's own error body shape (an unknown function: PGRST202), and the retired Guildbook has no response path
+  const err = await rpc(s.token, "fdb_account_no_such_function", {});
+  expect([err.status, err.body.code]).toEqual([404, "PGRST202"]);
   expect(Object.keys(err.body).sort()).toEqual(["code", "details", "hint", "message"]);
-  const guilds = await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId });
-  expect(typeof guilds.body[0].captured_at).toBe("number"); // bigint -> JSON number (the Zod contract expects an integer)
+  expect([401, 403, 404]).toContain((await rpc(s.token, "fdb_account_guildbook_guilds", { p_installation_id: comp.installationId })).status);
   void auth; void uniq;
 });

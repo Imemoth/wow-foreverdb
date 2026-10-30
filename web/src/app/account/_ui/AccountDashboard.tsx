@@ -9,7 +9,7 @@ const CARD_TITLE = "flex items-center gap-2.5 font-[family-name:var(--font-displ
 export function AccountDashboard({ email, since, installations, welcome }: {
   email: string;
   since: string | null;
-  installations: { guild_count: number }[] | null;
+  installations: { installation_id: string }[] | null;
   welcome: boolean;
 }) {
   return (

@@ -78,8 +78,10 @@ test("4. valid login, server-confirmed profile, closed redirect allowlist for `n
   expect(again.status()).toBe(200);
   // `next`: only an exact allowlisted pathname survives.
   const nexts: [string, string][] = [
-    ["/account/guildbook", "/account/guildbook"],
-    ["/account/guildbook?x=1#y", "/account/guildbook"],
+    ["/account/devices", "/account/devices"],
+    ["/account/devices?x=1#y", "/account/devices"],
+    ["/account/guildbook", "/account"], // the Guildbook is Companion-local: not a return path any more
+    ["/account/guildbook?x=1#y", "/account"],
     ["https://evil.example/", "/account"],
     ["//evil.example", "/account"],
     ["/\\evil.example", "/account"],

@@ -45,7 +45,8 @@ describe("account web zone (static)", () => {
       const methods = [...text.matchAll(/export (?:async function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g)].map((m) => m[1]);
       expect(methods.every((m) => m === "GET" || m === "POST"), `${rel(f)}: ${methods}`).toBe(true);
       expect(methods.length, rel(f)).toBe(1);
-      if (methods[0] === "POST") expect(text, rel(f)).toMatch(/export const POST = accountApi\(\{[^}]*mutating: true/);
+      // the two retired Guildbook routes are deny-by-default 404 stubs (asserted below), not accountApi handlers
+      if (methods[0] === "POST" && !rel(f).includes("/guildbook/")) expect(text, rel(f)).toMatch(/export const POST = accountApi\(\{[^}]*mutating: true/);
       expect(text, rel(f)).not.toMatch(/export const (revalidate|runtime|fetchCache)\b/);
     }
   });
@@ -100,7 +101,7 @@ describe("account web zone (static)", () => {
 
   it("PR E: the PostgREST client is closed (registry subset, fixed method/path, publishable key + user token, no redirects, bounded, no caller headers)", () => {
     const text = code(join(SRC, "lib/account/rpc-client.ts"));
-    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*"fdb_account_guildbook_guilds",\s*"fdb_account_guildbook_members",\s*\] as const satisfies/);
+    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*\] as const satisfies/);
     expect(text).not.toMatch(/fdb_account_claim_start|fdb_installation_link_status/); // Companion-only functions are unreachable from the website
     expect(text).toMatch(/isAccountRpc\(name\)/);
     expect(text).toMatch(/\$\{cfg\.authOrigin\}\/rest\/v1\/rpc\/\$\{name\}/);
@@ -142,7 +143,7 @@ describe("account web zone (static)", () => {
   });
 
   it("PR E: every private handler authenticates through the approved resolver and nothing takes ownership from the request", () => {
-    for (const r of ["link", "installations", "guildbook/guilds", "guildbook/members"]) {
+    for (const r of ["link", "installations"]) {
       const text = code(join(SRC, `app/account/api/${r}/route.ts`));
       expect(text, r).toMatch(/authenticate\(c(, \{ read: true \})?\)/);
       expect(text, r).toMatch(/\bsession\.at\b/);
@@ -150,8 +151,8 @@ describe("account web zone (static)", () => {
     }
     const priv = code(join(SRC, "lib/account/private.ts"));
     expect(priv).toMatch(/resolveSession\(c\.ac\.cfg, c\.jar, c\.ac\.https, \{ kind: "user", canWrite: true \}\)/);
-    // the Guildbook member endpoint fixes the page size: the strict body has no limit/offset
-    expect(code(join(SRC, "lib/account/inputs.ts"))).toMatch(/guildbookMembers: z\s*\.object\(\{ installationId: installationIdSchema, guildKey: guildKeySchema, page: z\.number\(\)\.int\(\)\.min\(0\)\.max\(1000\) \}\)\s*\.strict\(\)/);
+    // the website has no Guildbook request body at all
+    expect(code(join(SRC, "lib/account/inputs.ts"))).not.toMatch(/guildbook|GUILDBOOK_PAGE_SIZE/i);
   });
 
   it("PR E: the claim code is never placed in a URL, Web Storage, a cookie or a log by the linking UI", () => {
@@ -213,18 +214,41 @@ describe("account web zone (static)", () => {
     }
   });
 
-  it("hosted AzerDex never serves or links the legacy cloud Guildbook", () => {
+  it("the Guildbook is Companion-local: the website has no Guildbook page, route, RPC or link", () => {
     const dashboard = code(join(SRC, "app/account/_ui/AccountDashboard.tsx"));
     expect(dashboard).not.toContain('href="/account/guildbook"');
     expect(dashboard).not.toContain("synchronized characters");
     expect(dashboard).not.toContain("sync your characters and guilds");
+    // the page is unconditionally a 404: it imports nothing from the account libraries and never reaches an RPC or a session
     const page = code(join(SRC, "app/account/guildbook/page.tsx"));
-    expect(page).toContain('p.ac.env.FOREVERDB_DEPLOYMENT !== "local") notFound()');
+    expect(page).toMatch(/notFound\(\);/);
+    expect(importsOf(join(SRC, "app/account/guildbook/page.tsx"))).toEqual(["next/navigation"]);
+    expect(page).not.toMatch(/callWebRpc|requirePageUser|FOREVERDB_DEPLOYMENT|GuildbookBrowser/);
+    expect(existsSync(join(SRC, "app/account/_components/GuildbookBrowser.tsx"))).toBe(false);
+    // the two retired API routes: deny-by-default 404, no authentication, no body parsing, no RPC
     for (const route of ["guildbook/guilds", "guildbook/members"]) {
-      const routeCode = code(join(SRC, `app/account/api/${route}/route.ts`));
-      expect(routeCode).toContain('c.ac.env.FOREVERDB_DEPLOYMENT !== "local") return withSession(c, a.auth, failure(404, "not_found"))');
-      expect(routeCode.indexOf('failure(404, "not_found")')).toBeLessThan(routeCode.indexOf("callWebRpc("));
+      const file = join(SRC, `app/account/api/${route}/route.ts`);
+      const routeCode = code(file);
+      expect(importsOf(file), route).toEqual([]);
+      expect(routeCode, route).not.toMatch(/callWebRpc|accountApi|authenticate|guarded|withSession|INPUTS|fdb_account_guildbook|rpc/i);
+      expect(routeCode, route).toMatch(/export const POST = async \(\) => new Response\(null, \{ status: 404 \}\);/);
     }
+    // no account source file other than the contracts registry (which pins migration 0012 for the conformance linter) names a Guildbook RPC
+    for (const f of zone.filter((x) => rel(x) !== "lib/account/contracts.ts")) expect(read(f), rel(f)).not.toMatch(/fdb_account_guildbook/);
+    expect(code(join(SRC, "lib/account/contracts.ts"))).not.toMatch(/\/account\/guildbook/); // not a login redirect target either
+    // WEB_RPCS (the only RPC names the website client can call) has no Guildbook entry
+    expect(code(join(SRC, "lib/account/rpc-client.ts"))).not.toMatch(/guildbook/i);
+    // no navigation entry (header menu, installations, linking, dashboard, account home) links the dead page
+    for (const f of zone) {
+      if (/^app\/account\/guildbook\/|^app\/account\/api\/guildbook\//.test(rel(f))) continue;
+      expect(code(f), rel(f)).not.toMatch(/\/account\/guildbook|Open Guildbook|BookIcon/);
+    }
+    expect(code(join(SRC, "app/account/installations/page.tsx"))).not.toMatch(/guild/i);
+    expect(code(join(SRC, "app/account/_components/HeaderAccountMenu.tsx"))).not.toMatch(/guildbook/i);
+    expect(code(join(SRC, "app/account/_components/LinkForm.tsx"))).not.toMatch(/guildbook/i);
+    expect(code(join(SRC, "app/account/page.tsx"))).not.toMatch(/guildbook/i);
+    // the installation list API and page expose no Guildbook figure (the database still returns a legacy `guild_count`; it is not forwarded)
+    expect(code(join(SRC, "app/account/api/installations/route.ts"))).not.toMatch(/guild/i);
   });
 
   it("robots and the sitemap do not advertise account routes", () => {
