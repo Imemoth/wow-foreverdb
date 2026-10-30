@@ -29,7 +29,7 @@ describe("Addon and Companion disclosure matches the source", () => {
     expect(read("companion/ForeverDB.Companion.Account/DeviceRpcClient.cs")).toContain("PublicSnapshotGuard.Check(");
     expect(read("companion/ForeverDB.Companion.Account/PublicSnapshotGuard.cs")).toMatch(/fail-closed/i);
     expect(text).toMatch(/uploads\s+public observations only\s+to AzerDex's private Supabase backend/);
-    expect(text).toMatch(/The Guildbook is never uploaded\./);
+    expect(text).toMatch(/The current Companion does not upload the Guildbook\./);
     expect(text).toMatch(/checks every request against that list before it is sent; anything else is refused and nothing is sent/);
   });
 
@@ -59,11 +59,16 @@ describe("Addon and Companion disclosure matches the source", () => {
     expect(text).toMatch(/hosted AzerDex website does not display, serve or link the Guildbook, and has no way to read one/);
   });
 
-  it("the server kill switch exists and the notice does not overstate it", () => {
+  it("the production 0018 server kill switch and privacy notice describe the same Guildbook guarantee", () => {
+    // The 0018 production rollout was separately verified on October 30, 2026 (migration ledger, guard and RPC ACLs).
+    // This source-level regression pins the notice to the rollout code; it cannot itself prove live DB state.
     const m = read("database/migrations/0018_disable_guildbook_cloud_sync.sql");
     expect(m).toMatch(/Guildbook is Companion-local only/);
     expect(m).toMatch(/guildbook_cloud_sync_guard/);
-    expect(text).not.toMatch(/server[^.]*(blocks|rejects|revokes)/i); // the migration is not applied anywhere yet; the notice must not describe it as live
+    expect(m).toMatch(/fdb_public_snapshot/);
+    expect(text).toMatch(/server-side protection activated on October 30,\s+2026 discards Guildbook fields on receipt instead of storing them/);
+    expect(text).toMatch(/Guildbook read RPCs are disabled for API clients/);
+    expect(text).not.toMatch(/until the AzerDex server is changed/i);
   });
 
   it("historical Guildbook data is disclosed as still present; deletion is never claimed", () => {
@@ -75,15 +80,14 @@ describe("Addon and Companion disclosure matches the source", () => {
     expect(exists("docs/guildbook-local-only/historical-cleanup-completed.md")).toBe(false);
   });
 
-  it("three cases are kept apart: the current Companion never sends it, older installed ones still can, historical rows remain", () => {
+  it("keeps all three cases distinct: current client sends none, older clients can send but the server discards, history is untouched", () => {
     expect(text).toMatch(/Only the current Companion is built never to send the Guildbook/);
-    expect(text).toMatch(/Older Companion versions that are still installed\s+can still upload it/);
-    expect(text).toMatch(/until the AzerDex server is changed to discard it on arrival, whatever they send is stored privately/);
-    expect(text).toMatch(/it does not describe protection that is not yet active/);
-    // The notice must not claim the server already discards it. When migration 0018 is applied in production this test and the notice are
-    // updated together (see docs/guildbook-local-only/0018-approval-checklist.md, "Documents to change with the rollout").
-    expect(text).not.toMatch(/(server|AzerDex) (already )?(discards|drops|blocks|rejects) (it|the Guildbook|guild)/i);
-    expect(text).not.toMatch(/cannot (upload|send) (it|the Guildbook)/i);
+    expect(text).toMatch(/Older Companion versions that are still installed\s+may still send Guildbook fields to the private AzerDex server/);
+    expect(text).toMatch(/discards Guildbook fields on receipt instead of storing them/);
+    expect(text).toMatch(/Updating the Companion is still recommended: it prevents Guildbook data from leaving your computer/);
+    expect(text).toMatch(/This protection does not delete historical records uploaded before it was activated/);
+    expect(text).not.toMatch(/until the AzerDex server is changed/i);
+    expect(text).not.toMatch(/Older Companion versions[^.]*cannot (upload|send)/i);
   });
 
   it("officer notes are not collected, as stated", () => {

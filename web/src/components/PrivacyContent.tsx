@@ -9,7 +9,7 @@ import { PRIVACY_CONTACT_EMAIL } from "@/lib/privacy";
  * pins the cookie names and lifetimes to the code): lib/account/session.ts and csrf.ts (account cookies), proxy.ts
  * (fdb_sid), api/v1/challenge/route.ts (fdb_pass), lib/consent.ts and components/consent (the consent choice and the opt-in
  * gate), lib/analytics.ts (Analytics and Speed Insights filter), lib/speed-insights.ts (opt-in flag), database/migrations 0005,
- * 0012, 0014 and 0015 (account, Companion and Guildbook tables) and database/ops (the retention scripts), companion/ (what the
+ * 0012, 0014, 0015 and 0018 (account, Companion and the Guildbook server-side guard), database/ops (the retention scripts), companion/ (what the
  * Companion sends). Third-party behaviour is attributed to the provider and linked, never restated as our own guarantee. Do not
  * add a claim here that the code or the provider's own documentation does not support, and do not state a retention period that
  * is not enforced. docs/gdpr/ holds the working notes (processor inventory, retention schedule, Companion data-flow audit).
@@ -224,7 +224,8 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
         The ForeverDB addon runs inside World of Warcraft and the ForeverDB Companion is a Windows application on your computer.
         They are separate from this website. They are optional, and what follows is what they actually do in the current
         source code. Legal basis for the processing AzerDex does with what they send: providing the service you set them up for,
-        Article 6(1)(b) GDPR. The Guildbook is not processed by AzerDex: it stays on your computer (see below).
+        Article 6(1)(b) GDPR. The current Companion does not send the Guildbook. Older versions may still send it, but the
+        server now discards those fields without storing them (see below).
       </p>
       <h3>What the addon records on your computer</h3>
       <ul>
@@ -235,7 +236,7 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
         <li>
           A <strong>Guildbook</strong>: for your guild, its name and realm, and for each member the character name, class, level,
           rank, online state, zone, how long ago they were last online and their professions, plus your own character&apos;s
-          professions. Officer notes are not collected. The Guildbook is kept on your computer only: it is never uploaded.
+          professions. Officer notes are not collected. The current Companion does not upload the Guildbook; see older versions below.
         </li>
         <li>
           A <strong>session tracker</strong> (your character name and realm, gold and experience accounting, recent session
@@ -250,7 +251,7 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           observation statistics (sources, items, quantities and coarse-grid locations) and map metadata.
         </li>
         <li>
-          <strong>The Guildbook is never uploaded.</strong> No guild name or roster, member character name or identifier,
+          <strong>The current Companion does not upload the Guildbook.</strong> No guild name or roster, member character name or identifier,
           profession, rank, online activity or capture detail is sent, whether you use it anonymously, with an account or on a
           registered computer. The Companion builds the upload from an explicit list of observation fields and checks every
           request against that list before it is sent; anything else is refused and nothing is sent.
@@ -298,9 +299,11 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
       <h3>Older Companion versions still installed</h3>
       <p>
         Only the current Companion is built never to send the Guildbook. <strong>Older Companion versions that are still installed
-        can still upload it</strong>, and until the AzerDex server is changed to discard it on arrival, whatever they send is
-        stored privately as described above. Updating the Companion stops this. This notice will be updated when the server-side
-        change is in place; it does not describe protection that is not yet active.
+        may still send Guildbook fields to the private AzerDex server.</strong> The server-side protection activated on October 30,
+        2026 discards Guildbook fields on receipt instead of storing them on either the account or enrolled-device upload path.
+        Observation statistics are still processed. Guildbook read RPCs are disabled for API clients. Updating the Companion
+        is still recommended: it prevents Guildbook data from leaving your computer. This protection does not delete historical
+        records uploaded before it was activated.
       </p>
       <h3>What is published</h3>
       <p>
