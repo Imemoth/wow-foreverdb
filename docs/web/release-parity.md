@@ -25,7 +25,7 @@ Every variable of the effective beta and production configuration lands in exact
 
 | # | Class | Rule | Examples |
 | --- | --- | --- | --- |
-| 1 | **required-match** | Production must carry the exact value; beta must not drift from it. Missing, wrong, or unreadable (sensitive) = **fail**. | the four switches above, the asset host |
+| 1 | **required-match** | Production must carry the exact value; beta must not drift from it. Missing, wrong, or unreadable (sensitive) = **fail**. `AZERDEX_TALENT_TEXT` is the one exception on the beta side: `talentTextPublished` publishes the text on every non-production designation, so the beta legitimately has **no** such variable and passes while its `FOREVERDB_DEPLOYMENT` is a readable `preview` (any explicit beta value must still be `1`). The other switches are explicit in both. | the four switches above, the asset host |
 | 2 | **intentional** | Allowed to differ by design. Some carry pinned expectations. | `FOREVERDB_DEPLOYMENT` (production vs preview), `BETA_SEO_AUTHORIZED_BRANCH` (must not exist in production; must equal the beta branch in beta), `AZERDEX_READ_DB_URL`, `RATE_LIMIT_*`, `UPSTASH_*`, `TRUSTED_IP_HEADER`, `TURNSTILE_*`, `ACCOUNT_*`, preview feedback settings, `SITE_URL` |
 | 3 | **requires-approval** | Third-party content with **no** recorded approval: must stay off in production. | `AZERDEX_POC_MAPS` |
 | 4 | **unexpected** | Anything unclassified that differs (presence or value), and any forbidden name (`SUPABASE*`, `*SERVICE_ROLE*`, `DATABASE_URL`, `POSTGRES_URL*`) anywhere. **Fails** until classified or aligned. | |
@@ -52,8 +52,7 @@ deployment was created, if the deployment is not a production-target build, or (
 ### Secrets
 
 The report contains variable **names**, classes and verdicts. A value appears only for the policy-public switches (the four flags,
-the asset host, `FOREVERDB_DEPLOYMENT`). `decrypt` is never requested; encrypted/sensitive values stay opaque, and an approved
-switch stored as sensitive is reported as **unverifiable = fail**, never as a pass. A test pins that canary secrets never reach the output.
+the asset host, `FOREVERDB_DEPLOYMENT`). `decrypt` is never requested on the list call. Vercel stores a new variable as `encrypted` by default, so for the **policy-public keys only** (the four switches, the asset host, the designations) the value is read one variable at a time (`GET /v1/projects/{id}/env/{envId}`, the token must be allowed to read it); no other variable is ever decrypted, and a failed read leaves the variable opaque. A `sensitive` variable can never be read: an approved switch stored as sensitive, or an unreadable one, is reported as **unverifiable = fail**, never as a pass. A test pins that canary secrets never reach the output.
 
 ## Running it
 
@@ -66,6 +65,8 @@ node web/scripts/release-parity.mjs --live --deployment dpl_xxx --expect-sha <re
 
 # Functional probe of a deployment: nine class pages, icons in the HTML, CSP img-src, no unsafe-inline, no raw template tokens
 node web/scripts/release-parity.mjs --probe https://<staged-deployment>.vercel.app --bypass-env VERCEL_AUTOMATION_BYPASS_SECRET
+# ... or with a temporary, deployment-scoped Vercel shareable link (exchanged once for a session cookie; *.vercel.app hosts only)
+node web/scripts/release-parity.mjs --probe https://<staged-deployment>.vercel.app --share-env STAGED_SHARE_SECRET
 ```
 
 Exit 0 = pass, 1 = a check failed, 2 = unusable input (**NO-GO**, never a pass).
@@ -85,13 +86,19 @@ The Vercel connector used by the automation can read neither environment variabl
 
 1. Vercel project `prj_2NOZDdocNiHfZqhnYzxTRTHwxpOQ` -> Settings -> Environment Variables -> **Production only** (do not touch Preview or
    unrelated secrets), as plain (not sensitive) variables so they can be verified:
-   `AZERDEX_TALENT_ICONS=cdn`, `AZERDEX_TALENT_TEXT=1`. Confirm `AZERDEX_ZONE_MAPS=1`, `AZERDEX_ZONE_HERO_SOURCE=cdn` and
+   `AZERDEX_TALENT_ICONS=cdn`, `AZERDEX_TALENT_TEXT=1` (plain or encrypted; **not** sensitive, which cannot be verified). Confirm `AZERDEX_ZONE_MAPS=1`, `AZERDEX_ZONE_HERO_SOURCE=cdn` and
    `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev` are present.
 2. `node web/scripts/verify-talent-icons-cdn.mjs --dataset web/src/data/talents/forever/1.60.1.70634 --base https://azerdex-assets.pages.dev` (358/358, 404 control).
 3. Create a **new** production deployment from the final `release` commit (a push to `release`, or "Redeploy" in the dashboard, which rebuilds with the variables as they are now). Never promote the previously promoted build: it was built without them.
 4. Run the gate against it: `--live --deployment <dpl> --expect-sha <sha>` (Actions -> "Release parity gate (trusted)").
 5. Verify the **staged** deployment (protection-bypass secret in an env var, never on the command line): `--probe`; then the browser acceptance below.
 6. Promote exactly that deployment to `azerdex.com` and `www.azerdex.com`; keep the previous production deployment for rollback.
+
+### Staged acceptance access
+
+The staged deployment is behind Vercel Deployment Protection, which stays on for the whole project. Use a **temporary, deployment-scoped shareable link** (Vercel API `PATCH /aliases/{deploymentId}/protection-bypass` with a short `ttl`, e.g. 3600 s), keep the secret out of logs, reports and the repository, and **revoke it** (`revoke: {secret, regenerate: false}`) as soon as acceptance is done. Prove the revoke by checking that the old secret redirects to Vercel SSO again.
+
+On a `*.vercel.app` deployment URL, Vercel itself adds `X-Robots-Tag: noindex` (the application sets none for a production designation, and when it blocks it sends `noindex, nofollow`), and a slightly different `Strict-Transport-Security`. These are host artifacts: judge the app by `<meta name="robots">`, the apex canonical, `X-ForeverDB-Deployment: production`, robots.txt and the sitemap, and **re-check the headers on the apex immediately after promotion**.
 
 ### Acceptance (all mandatory; any failure or "cannot verify" = NO-GO)
 
