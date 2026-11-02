@@ -213,9 +213,17 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Production dependency audit (high and critical fail)
         run: npm audit --omit=dev --audit-level=high
-      - name: Full dependency audit incl. devDependencies (moderate and above fail)
+      # The FULL audit still runs and every moderate-or-higher advisory still fails, except an advisory covered by an exact, in-force,
+      # owner-approved exception (.github/audit-exceptions.json; docs/web/dependency-audit-exceptions.md). The gate parses the structured
+      # JSON, fails closed on a malformed report, an expired/obsolete/non-matching exception, and from 2026-12-16 00:00 UTC for the
+      # current one. `|| true` only keeps npm's own non-zero exit (it exits 1 whenever it finds anything) from skipping the gate: the
+      # gate's exit code is the step result. The production audit above is unchanged and independent.
+      - name: Full dependency audit incl. devDependencies (moderate and above fail; owner-approved time-limited exceptions only)
         if: ${{ !cancelled() }}
-        run: npm audit --audit-level=moderate
+        run: |
+          npm audit --json > "$RUNNER_TEMP/audit-full.json" || true
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-prod.json" || true
+          node ../web/scripts/audit-gate.mjs --project '${{ matrix.project }}' --audit "$RUNNER_TEMP/audit-full.json" --prod-audit "$RUNNER_TEMP/audit-prod.json" --package package.json --exceptions ../.github/audit-exceptions.json
       - name: Audit findings in the job summary (advisory ids, severity, dependency path)
         if: failure()
         run: |
