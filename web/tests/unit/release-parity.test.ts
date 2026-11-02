@@ -250,6 +250,19 @@ describe("assessClassPage (live-site probe)", () => {
     expect(P.hasRawTemplateToken("Increases damage by ?% for ? sec. Costs $5 or 5$")).toBe(false);
     expect(P.visibleText('<script>var a="$s1"</script><p>ok</p>')).not.toMatch(/\$s1/);
     expect(P.hasRawTemplateToken("Deals $s1 damage")).toBe(true);
+  });
+  it("visibleText drops script/style content for every legal end-tag spelling (CodeQL js/bad-tag-filter)", () => {
+    for (const end of ["</script>", "</script >", "</SCRIPT\n>", "</script foo='bar'>", "</ScRiPt\t>"]) {
+      expect(P.visibleText(`<p>ok</p><script>var a="$s1";${end}<p>after</p>`)).not.toMatch(/\$s1/);
+      expect(P.visibleText(`<p>ok</p><script>var a="$s1";${end}<p>after</p>`)).toMatch(/after/);
+    }
+    expect(P.visibleText("<style>.a{content:'$s1'}</style >x")).not.toMatch(/\$s1/);
+    expect(P.visibleText("<p>a</p><script>never closed $s1")).not.toMatch(/\$s1/); // unterminated: all of it is script
+    expect(P.visibleText("1 < 2 and <b>bold</b> text")).toMatch(/bold/);
+    expect(P.visibleText("<scripts>kept</scripts>")).toMatch(/kept/); // not a script tag
+  });
+  it("visibleText strips tags without regex HTML filtering", () => {
+    expect(P.visibleText('<a href="x>y">link</a>')).toMatch(/link/);
     expect(P.hasRawTemplateToken("{{spell:1}}")).toBe(true);
   });
 });

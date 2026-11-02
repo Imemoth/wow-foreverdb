@@ -277,7 +277,31 @@ export function hasRawTemplateToken(text) {
   return /\$\{|\{\{|\$[a-z]\d{0,3}(?![a-z0-9])|\$\d+[a-z]\d?/i.test(text);
 }
 
-/** Visible text only: scripts/styles removed, tags stripped. */
+/**
+ * Visible text only: script/style content and all tags removed. A linear scanner, deliberately NOT regex-based HTML filtering: a regex
+ * for the end tag misses legal spellings such as `</script >` or `</SCRIPT\n>` (CodeQL js/bad-tag-filter), which would let script
+ * content count as visible text. An unterminated script/style swallows the rest of the document (that is what a browser does too).
+ */
 export function visibleText(html) {
-  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) {
+      out += html.slice(i);
+      break;
+    }
+    out += `${html.slice(i, lt)} `;
+    const name = /^<([a-z]+)/.exec(lower.slice(lt, lt + 12))?.[1];
+    let from = lt + 1;
+    if (name === "script" || name === "style") {
+      const close = lower.indexOf(`</${name}`, lt + 1);
+      if (close === -1) break;
+      from = close + 1;
+    }
+    const gt = html.indexOf(">", from);
+    i = gt === -1 ? html.length : gt + 1;
+  }
+  return out;
 }
