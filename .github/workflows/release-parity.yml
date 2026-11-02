@@ -1,0 +1,70 @@
+name: Release parity gate (trusted)
+
+# Compares the EFFECTIVE Vercel configuration of the beta and of production and fails when an approved public feature switch is
+# missing or wrong (talent icons = cdn, talent text = 1, zone maps = 1, zone hero source = cdn, shared asset CDN host). A green
+# build alone never proved those switches were live: they are runtime variables a build does not validate.
+#
+# TRUST MODEL (docs/web/release-parity.md)
+#   * Never runs on pull_request / pull_request_target: a pull request (including a fork) can change the code that would run next to the
+#     Vercel token. The offline policy + evaluator tests (web/tests/unit/release-parity.test.ts) run in the normal PR CI WITHOUT any secret.
+#   * Runs only from the protected `release` branch, on demand, or on a schedule (default branch), inside the `release-parity` GitHub
+#     environment. Put VERCEL_TOKEN (READ-ONLY scope: project environment variables + deployments), VERCEL_PROJECT_ID and VERCEL_TEAM_ID
+#     in that ENVIRONMENT's secrets, not in repository secrets, and restrict the environment to the `release` branch.
+#   * Read-only: GET requests to api.vercel.com (and the staged deployment for --probe). Variable values are never printed except the
+#     public switches. Nothing is deployed, promoted or modified.
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: "Staged production deployment to verify (dpl_… id). Empty = configuration check only."
+        required: false
+        default: ""
+      expect_sha:
+        description: "Commit the deployment must have been built from (with `deployment`)."
+        required: false
+        default: ""
+  push:
+    branches: [release]
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-parity
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    name: Release parity (live Vercel configuration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-parity
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Compare beta and production configuration
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          DEPLOYMENT: ${{ github.event.inputs.deployment }}
+          EXPECT_SHA: ${{ github.event.inputs.expect_sha }}
+        run: |
+          set -euo pipefail
+          args=(--live --json)
+          if [ -n "${DEPLOYMENT}" ]; then args+=(--deployment "${DEPLOYMENT}"); fi
+          if [ -n "${EXPECT_SHA}" ]; then args+=(--expect-sha "${EXPECT_SHA}"); fi
+          node web/scripts/release-parity.mjs "${args[@]}" | tee parity-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-parity-report
+          path: parity-report.json
+          if-no-files-found: ignore
+          retention-days: 90

@@ -58,8 +58,8 @@ excerpts, not as the authoritative text:
 notices and credit retained, a visible unofficial/non-affiliation statement, no claim of ownership, no sale of Blizzard art. The one
 point the excerpts do not settle is whether the FAQ's licence wording ("home ... personal use") extends to **public hosting of assets
 extracted from an installed client and converted from BLP to WebP**; the excerpts neither grant nor prohibit that specifically, and no
-clause prohibiting format conversion was seen. The project owner has authorised the publication on this basis (2026-10-28) and
-accepts that Blizzard may revoke the permission. If Blizzard objects, remove `talent-icons/*` from the asset host (the calculator then
+clause prohibiting format conversion was seen. The project owner has authorised the publication on this basis (2026-10-28, beta) and approved
+production publication of the talent icons and rank descriptions (2026-11-02), and accepts that Blizzard may revoke the permission. If Blizzard objects, remove `talent-icons/*` from the asset host (the calculator then
 falls back to name plates by itself) and set `AZERDEX_TALENT_ICONS` to anything but `cdn`.
 
 **To close the verification gap:** allow `www.blizzard.com` in the environment's network settings so the two pages can be read in full,
