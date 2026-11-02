@@ -315,3 +315,115 @@ describe("trusted release gate workflow", () => {
     expect(wf.split("\n").filter((l) => /secrets\.VERCEL_/.test(l)).every((l) => /^\s+VERCEL_[A-Z_]+:\s*\$\{\{ secrets\.VERCEL_[A-Z_]+ \}\}\s*$/.test(l))).toBe(true);
   });
 });
+
+describe("gate assumptions checked against the real configuration (no false positives, still fail closed)", () => {
+  const betaNoText = () => without(healthy(), "AZERDEX_TALENT_TEXT", "preview");
+
+  describe("AZERDEX_TALENT_TEXT is implicit in the beta (any non-production designation publishes it)", () => {
+    it("matches the application: preview publishes the text without the variable, production withholds it", () => {
+      expect(talentTextPublished({ FOREVERDB_DEPLOYMENT: "preview" })).toBe(true);
+      expect(talentTextPublished({ FOREVERDB_DEPLOYMENT: "production" })).toBe(false);
+    });
+    it("a beta without the variable passes while its designation is a readable `preview` (beta is NOT changed to satisfy the gate)", () => {
+      const res = P.evaluateParity(betaNoText());
+      expect(res.ok).toBe(true);
+      expect(row(res, "AZERDEX_TALENT_TEXT")).toMatchObject({ status: "pass" });
+      expect(row(res, "AZERDEX_TALENT_TEXT").reason).toMatch(/implicitly/);
+    });
+    it("production still needs the exact value: missing, wrong or opaque in production fails even though beta is implicit", () => {
+      expect(row(P.evaluateParity(without(betaNoText(), "AZERDEX_TALENT_TEXT", "production")), "AZERDEX_TALENT_TEXT").status).toBe("fail");
+      const wrong = betaNoText().map((x) => (x.key === "AZERDEX_TALENT_TEXT" ? { ...x, value: "true" } : x));
+      expect(row(P.evaluateParity(wrong), "AZERDEX_TALENT_TEXT").status).toBe("fail");
+    });
+    it("the implicit path needs a readable `preview` designation: missing, production or opaque designation in beta fails", () => {
+      for (const designation of [undefined, "production", "local"]) {
+        const e = betaNoText().filter((x) => !(x.key === "FOREVERDB_DEPLOYMENT" && (x.target as string[]).includes("preview")));
+        if (designation) e.push(plain("FOREVERDB_DEPLOYMENT", designation, ["preview"]));
+        const r = P.evaluateParity(e);
+        expect(row(r, "AZERDEX_TALENT_TEXT").status, String(designation)).toBe("fail");
+      }
+      const opaque = betaNoText().map((x) => (x.key === "FOREVERDB_DEPLOYMENT" && (x.target as string[]).includes("preview") ? { ...x, type: "sensitive", value: undefined } : x));
+      expect(row(P.evaluateParity(opaque), "AZERDEX_TALENT_TEXT").status).toBe("fail");
+    });
+    it("an explicit wrong beta value is still drift, and the other switches are NOT implicit (icons, zone maps, hero stay required in beta)", () => {
+      const drift = healthy().map((x) => (x.key === "AZERDEX_TALENT_TEXT" && (x.target as string[]).includes("preview") ? { ...x, value: "0" } : x));
+      expect(row(P.evaluateParity(drift), "AZERDEX_TALENT_TEXT").status).toBe("fail");
+      for (const key of ["AZERDEX_TALENT_ICONS", "AZERDEX_ZONE_MAPS", "AZERDEX_ZONE_HERO_SOURCE"]) {
+        expect(row(P.evaluateParity(without(healthy(), key, "preview")), key).reason).toMatch(/missing in beta/);
+      }
+    });
+  });
+
+  describe("encrypted variables (the Vercel default type) are verifiable for the public switches only", () => {
+    const encrypted = (key: string, target: string[], id: string, extra: Record<string, unknown> = {}) => ({ key, type: "encrypted", value: "CIPHERTEXT-CANARY-77aa", id, target, gitBranch: null, ...extra });
+    const asEncryptedProd = () => healthy().map((x, i) => ((x.target as string[]).includes("production") && ["AZERDEX_TALENT_ICONS", "AZERDEX_TALENT_TEXT"].includes(x.key) ? encrypted(x.key, ["production"], `envid${i}`) : x));
+
+    it("without decryption an encrypted switch is unreadable and fails (fail closed)", () => {
+      const r = P.evaluateParity(asEncryptedProd());
+      expect(r.ok).toBe(false);
+      expect(row(r, "AZERDEX_TALENT_ICONS").reason).toMatch(/not readable/);
+    });
+    it("with the per-variable read it verifies the exact value and passes", async () => {
+      const truth: Record<string, string> = { AZERDEX_TALENT_ICONS: "cdn", AZERDEX_TALENT_TEXT: "1" };
+      const resolved = await P.resolvePublicValues(asEncryptedProd(), async (e: { key: string }) => truth[e.key]);
+      const r = P.evaluateParity(resolved);
+      expect(r.ok).toBe(true);
+      expect(row(r, "AZERDEX_TALENT_ICONS")).toMatchObject({ status: "pass" });
+    });
+    it("a decrypted wrong value still fails (icons=1 is not cdn, text=true is not 1)", async () => {
+      const resolved = await P.resolvePublicValues(asEncryptedProd(), async (e: { key: string }) => (e.key === "AZERDEX_TALENT_ICONS" ? "1" : "true"));
+      const r = P.evaluateParity(resolved);
+      expect(row(r, "AZERDEX_TALENT_ICONS").status).toBe("fail");
+      expect(row(r, "AZERDEX_TALENT_TEXT").status).toBe("fail");
+    });
+    it("a failed or empty read leaves the variable opaque, so the gate fails closed", async () => {
+      for (const reader of [async () => { throw new Error("403"); }, async () => undefined, async () => 42]) {
+        const r = P.evaluateParity(await P.resolvePublicValues(asEncryptedProd(), reader));
+        expect(r.ok).toBe(false);
+        expect(row(r, "AZERDEX_TALENT_ICONS").reason).toMatch(/not readable/);
+      }
+    });
+    it("only policy-public encrypted keys are ever read: secrets, other encrypted values and sensitive variables never are", async () => {
+      const seen: string[] = [];
+      const entries = [
+        ...asEncryptedProd(),
+        encrypted("AZERDEX_READ_DB_URL", ["production"], "envdb"),
+        encrypted("RATE_LIMIT_SALT", ["production"], "envsalt"),
+        encrypted("ACCOUNT_AUTH_PUBLISHABLE_KEY", ["production"], "envacct"),
+        encrypted("MYSTERY_ENCRYPTED", ["production"], "envmystery"),
+        encrypted("AZERDEX_TALENT_TEXT", ["production"], "envsens", { type: "sensitive" }),
+      ];
+      await P.resolvePublicValues(entries, async (e: { key: string }) => { seen.push(e.key); return "x"; });
+      expect(seen.sort()).toEqual(["AZERDEX_TALENT_ICONS", "AZERDEX_TALENT_TEXT"]);
+      expect(P.isPublicKey("AZERDEX_READ_DB_URL")).toBe(false);
+      expect(P.isPublicKey("AZERDEX_TALENT_ICONS")).toBe(true);
+    });
+    it("rejects an unsafe variable id instead of putting it in a URL", async () => {
+      const seen: unknown[] = [];
+      await P.resolvePublicValues([encrypted("AZERDEX_TALENT_ICONS", ["production"], "../../team/secrets")], async (e: unknown) => { seen.push(e); return "cdn"; });
+      expect(seen).toEqual([]);
+    });
+    it("never leaks the ciphertext or any non-public value into the report", async () => {
+      const resolved = await P.resolvePublicValues([...asEncryptedProd(), encrypted("RATE_LIMIT_SALT", ["production"], "envsalt")], async () => "cdn");
+      const out = JSON.stringify(P.evaluateParity(resolved));
+      expect(out).not.toContain("CIPHERTEXT-CANARY");
+    });
+  });
+
+  describe("probe authentication with a temporary Vercel shareable link", () => {
+    const probe = async (args: string[], env: Record<string, string> = {}) => {
+      try { const r = await run(process.execPath, [SCRIPT, ...args], { env: { PATH: process.env.PATH ?? "", ...env } as unknown as NodeJS.ProcessEnv }); return { code: 0, out: r.stdout + r.stderr }; }
+      catch (e) { const x = e as { code: number; stdout: string; stderr: string }; return { code: x.code, out: x.stdout + x.stderr }; }
+    };
+    it("refuses a non-*.vercel.app host, an unset variable, and mixing both secrets: exit 2 (NO-GO), secret never echoed", async () => {
+      const a = await probe(["--probe", "https://azerdex.com", "--share-env", "S"], { S: "super-secret-canary" });
+      expect(a.code).toBe(2);
+      expect(a.out).toMatch(/not https:\/\/\*\.vercel\.app/);
+      expect(a.out).not.toContain("super-secret-canary");
+      expect((await probe(["--probe", "https://x.vercel.app", "--share-env", "NOT_SET"])).code).toBe(2);
+      const both = await probe(["--probe", "https://x.vercel.app", "--share-env", "S", "--bypass-env", "S"], { S: "v" });
+      expect(both.code).toBe(2);
+      expect(both.out).toMatch(/not both/);
+    });
+  });
+});

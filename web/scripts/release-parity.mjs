@@ -3,14 +3,14 @@
 //
 //   node scripts/release-parity.mjs --snapshot env.json [--json]                       offline (tests, review): no network
 //   node scripts/release-parity.mjs --live [--deployment <id|host>] [--expect-sha <sha>] [--json]   reads Vercel (read-only GET)
-//   node scripts/release-parity.mjs --probe https://<deployment> [--bypass-env NAME] [--asset-origin https://azerdex-assets.pages.dev]
+//   node scripts/release-parity.mjs --probe https://<deployment> [--bypass-env NAME | --share-env NAME] [--asset-origin https://azerdex-assets.pages.dev]
 //
-// --live needs VERCEL_TOKEN (read-only scope), VERCEL_PROJECT_ID and VERCEL_TEAM_ID in the ENVIRONMENT. It must only ever run from a
+// --live needs VERCEL_TOKEN (read-only scope; to verify approved switches stored as `encrypted` it must also be allowed to read those variables' values), VERCEL_PROJECT_ID and VERCEL_TEAM_ID in the ENVIRONMENT. It must only ever run from a
 // trusted workflow (.github/workflows/release-parity.yml: never on pull_request). Secrets are never printed: variable values are only
 // reported for the policy-public switches (talent icons/text, zone maps/heroes, asset host, deployment designation).
 // Exit codes: 0 all pass, 1 a parity/probe check failed, 2 usage or an unverifiable input (treated as NO-GO, never as a pass).
 import { readFileSync } from "node:fs";
-import { evaluateParity, assessClassPage, CLASS_SLUGS, BETA_BRANCH } from "./lib/release-parity.mjs";
+import { evaluateParity, assessClassPage, resolvePublicValues, CLASS_SLUGS, BETA_BRANCH } from "./lib/release-parity.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
@@ -19,14 +19,17 @@ const asJson = has("json");
 const die = (msg, code = 2) => { console.error(msg); process.exit(code); };
 
 const VERCEL_API = "https://api.vercel.com";
-async function vercel(path, query = {}) {
+async function vercel(path, query = {}, { soft = false } = {}) {
   const token = process.env.VERCEL_TOKEN;
   if (!token) die("VERCEL_TOKEN is not set (live mode runs only from the trusted release gate)");
   const url = new URL(path, VERCEL_API);
   for (const [k, v] of Object.entries(query)) if (v !== undefined) url.searchParams.set(k, v);
   if (url.origin !== VERCEL_API) die("refusing to send the token to a host other than api.vercel.com");
   const r = await fetch(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000), redirect: "error" });
-  if (!r.ok) die(`Vercel API ${path}: HTTP ${r.status} (the token needs read access to project environment variables; this is a NO-GO, not a pass)`);
+  if (!r.ok) {
+    if (soft) return null;
+    die(`Vercel API ${path}: HTTP ${r.status} (the token needs read access to project environment variables; this is a NO-GO, not a pass)`);
+  }
   return r.json();
 }
 
@@ -43,7 +46,8 @@ async function loadEntries() {
   if (!/^prj_[A-Za-z0-9]+$/.test(project) || !/^team_[A-Za-z0-9]+$/.test(team)) die("malformed VERCEL_PROJECT_ID / VERCEL_TEAM_ID");
   // decrypt is deliberately NOT requested: encrypted/sensitive values stay opaque; the approved switches are plain variables.
   const envs = await vercel(`/v10/projects/${project}/env`, { teamId: team });
-  const entries = [...(envs.envs ?? [])];
+  // Policy-public encrypted variables are read one by one (a failed read leaves them opaque: the gate then fails closed); nothing else is decrypted.
+  const entries = await resolvePublicValues([...(envs.envs ?? [])], async (e) => (await vercel(`/v1/projects/${project}/env/${encodeURIComponent(e.id)}`, { teamId: team }, { soft: true }))?.value);
   let deployment;
   const dep = flag("deployment");
   if (dep) {
@@ -80,10 +84,24 @@ async function runProbe() {
   const bypass = bypassEnv ? process.env[bypassEnv] : undefined;
   if (bypassEnv && !bypass) die(`environment variable ${bypassEnv} is not set`);
   if (bypassEnv && !/^https:\/\/[a-z0-9.-]+\.vercel\.app$/i.test(origin)) die("refusing to send a protection-bypass secret to a host that is not https://*.vercel.app");
+  // A temporary, deployment-scoped Vercel shareable link (the `_vercel_share` secret) instead of the project-wide automation bypass: it is
+  // exchanged once for a session cookie, which is all that is sent afterwards. Never printed, never sent anywhere but a *.vercel.app origin.
+  const shareEnv = flag("share-env");
+  const share = shareEnv ? process.env[shareEnv] : undefined;
+  if (shareEnv && bypassEnv) die("use --bypass-env or --share-env, not both");
+  if (shareEnv && !share) die(`environment variable ${shareEnv} is not set`);
+  if (shareEnv && !/^https:\/\/[a-z0-9.-]+\.vercel\.app$/i.test(origin)) die("refusing to send a share secret to a host that is not https://*.vercel.app");
+  let cookie = "";
+  if (share) {
+    const r0 = await fetch(`${origin}/?_vercel_share=${encodeURIComponent(share)}`, { headers: { "user-agent": "foreverdb-parity/1" }, signal: AbortSignal.timeout(30000), redirect: "manual" });
+    cookie = (r0.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).filter((c) => c.startsWith("_vercel_jwt=")).join("; ");
+    if (!cookie) die("the share link did not authenticate (no session cookie): expired or revoked? (NO-GO, not a pass)");
+  }
   const out = [];
   for (const slug of CLASS_SLUGS) {
     const headers = { "user-agent": "foreverdb-parity/1" };
     if (bypass) { headers["x-vercel-protection-bypass"] = bypass; headers["x-vercel-set-bypass-cookie"] = "false"; }
+    if (cookie) headers.cookie = cookie;
     const r = await fetch(`${origin}/guides/classes/${slug}`, { headers, signal: AbortSignal.timeout(30000), redirect: "manual" });
     const html = await r.text();
     const a = r.status === 200 ? assessClassPage({ html, csp: r.headers.get("content-security-policy") ?? "" }, { assetOrigin }) : { icons: 0, problems: [`HTTP ${r.status}`] };

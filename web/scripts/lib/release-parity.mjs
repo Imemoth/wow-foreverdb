@@ -37,7 +37,9 @@ const APPROVAL_NOTE = "Owner approval recorded for production publication (docs/
  */
 export const REQUIRED_FEATURES = [
   { key: "AZERDEX_TALENT_ICONS", value: "cdn", evaluation: "runtime", feature: "Talent icons (cdn, not 1: src/lib/talents/icons.ts)", approval: APPROVAL_NOTE },
-  { key: "AZERDEX_TALENT_TEXT", value: "1", evaluation: "runtime", feature: "Talent rank descriptions (src/lib/talents/text.ts)", approval: APPROVAL_NOTE },
+  // implicitInPreview: talentTextPublished() publishes the text on EVERY non-production designation, so the beta legitimately has no
+  // AZERDEX_TALENT_TEXT variable; only production needs it. The beta may omit it only while its designation is a readable `preview`.
+  { key: "AZERDEX_TALENT_TEXT", value: "1", evaluation: "runtime", feature: "Talent rank descriptions (src/lib/talents/text.ts)", approval: APPROVAL_NOTE, implicitInPreview: true },
   { key: "AZERDEX_ZONE_MAPS", value: "1", evaluation: "runtime", feature: "Zone maps (src/lib/maps/zone-maps-gate.ts)", approval: APPROVAL_NOTE },
   { key: "AZERDEX_ZONE_HERO_SOURCE", value: "cdn", evaluation: "runtime", feature: "Zone hero art from the asset CDN", approval: APPROVAL_NOTE },
 ].map((f) => Object.freeze({ ...f, publicValue: true }));
@@ -79,6 +81,29 @@ export const FORBIDDEN_NAME = /(^|_)SUPABASE(_|$)|SERVICE_ROLE|^DATABASE_URL$|^P
 /** Platform variables Vercel injects itself: never compared. */
 const SYSTEM = /^(NEXT_PUBLIC_)?VERCEL_|^TURBO_|^VERCEL$/;
 
+/** Variables whose VALUE is public by construction (the approved switches, the asset host, designations): the only ones ever decrypted. */
+export function isPublicKey(key) {
+  return REQUIRED_FEATURES.some((f) => f.key === key) || key === ASSET_BASE_KEY || INTENTIONAL.some((r) => r.publicValue && typeof r.match === "string" && r.match === key);
+}
+
+/**
+ * Vercel stores a new variable as `encrypted` by default, and the list endpoint returns it as ciphertext. For the policy-PUBLIC keys only,
+ * the value is read through `readDecrypted(entry)` (one variable at a time) so a correctly configured production is not reported as
+ * unverifiable. Every other variable is never decrypted, a `sensitive` variable cannot be read at all, and a read that fails leaves the entry
+ * opaque, which the gate reports as a failure (fail closed), never as a pass.
+ */
+export async function resolvePublicValues(entries, readDecrypted) {
+  const out = [];
+  for (const e of entries ?? []) {
+    if (e && e.type === "encrypted" && isPublicKey(e.key) && typeof e.id === "string" && /^[A-Za-z0-9]+$/.test(e.id)) {
+      let v;
+      try { v = await readDecrypted(e); } catch { v = undefined; }
+      out.push(typeof v === "string" ? { ...e, value: v, decrypted: true } : e);
+    } else out.push(e);
+  }
+  return out;
+}
+
 const matches = (m, key) => (typeof m === "string" ? m === key : m.test(key));
 const intentionalRule = (key) => INTENTIONAL.find((r) => matches(r.match, key));
 
@@ -115,8 +140,9 @@ export function effectiveEnv(entries, which, opts = {}) {
     out.set(e.key, {
       rank: layer,
       type: e.type ?? "unknown",
-      // Only a plain value is ever readable; sensitive/encrypted values are opaque and must never be treated as a value.
-      value: e.type === "plain" || e.type === "shared" ? (typeof e.value === "string" ? e.value : undefined) : undefined,
+      // Only a plain value (or an encrypted one resolved by resolvePublicValues, for a policy-public key) is readable; sensitive and every
+      // other encrypted value stay opaque and are never treated as a value.
+      value: e.type === "plain" || e.type === "shared" || e.decrypted === true ? (typeof e.value === "string" ? e.value : undefined) : undefined,
       layer: ["shared", "project", "shared-branch", "branch"][layer],
       updatedAt: typeof e.updatedAt === "number" ? e.updatedAt : undefined,
     });
@@ -170,11 +196,18 @@ export function evaluateParity(entries, opts = {}) {
     if (!p) { status = "fail"; reasons.push(`MISSING in production: required value is ${f.value}`); }
     else if (p.value === undefined) { status = "fail"; reasons.push("production value is not readable: store it as a plain variable so it can be verified exactly"); }
     else if (p.value !== f.value) { status = "fail"; reasons.push(`production value must be exactly ${f.value}`); }
+    let note = "";
     if (opts.requireBeta !== false) {
-      if (!b) { status = "fail"; reasons.push("missing in beta (beta must preview what production serves)"); }
+      if (!b) {
+        if (f.implicitInPreview) {
+          const designation = beta.get("FOREVERDB_DEPLOYMENT");
+          if (designation?.value === "preview") note = "ok (beta publishes it implicitly: any non-production designation does)";
+          else { status = "fail"; reasons.push("missing in beta, and the beta designation is not a readable `preview`, so the implicit preview publication cannot be relied on"); }
+        } else { status = "fail"; reasons.push("missing in beta (beta must preview what production serves)"); }
+      }
       else if (b.value !== undefined && b.value !== f.value) { status = "fail"; reasons.push(`beta value differs from the approved value ${f.value}`); }
     }
-    add({ key: f.key, class: CLASS.REQUIRED, evaluation: f.evaluation, feature: f.feature, status, production: describe(p, true), beta: describe(b, true), reason: reasons.join("; ") || "ok" });
+    add({ key: f.key, class: CLASS.REQUIRED, evaluation: f.evaluation, feature: f.feature, status, production: describe(p, true), beta: describe(b, true), reason: reasons.join("; ") || note || "ok" });
   }
 
   // Class 1b: the shared asset CDN host.
