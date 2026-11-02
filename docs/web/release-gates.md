@@ -10,7 +10,7 @@
 | `Web E2E (Playwright)` | browser and HTTP behaviour | build · search and navigation journeys · security headers, CSP, API validation and rate limiting · **preview safety** (synthetic banner, noindex header/meta, `robots.txt`, sitemap, headers, cookie flags, generic errors, no secrets, fail-closed misconfigurations) · accessibility regression (axe WCAG 2.2 AA) and SEO · responsive layout (desktop + mobile) |
 | `publisher-and-pipeline` | unchanged | publisher tests · Supabase Edge Function lockfile frozen check and type-check · end-to-end publication pipeline on ephemeral PostgreSQL · website against the published read model (Postgres adapter) · fixture ↔ PostgreSQL parity |
 | `codeql` | unchanged | CodeQL `security-extended` |
-| `Dependency audit (web)` · `Dependency audit (publisher)` | npm advisories in both package roots | `npm ci --ignore-scripts` · production audit (**high/critical fail**) · full audit incl. devDependencies (**moderate and above fail**); on failure the findings go to the job summary and a 14-day `npm-audit-<root>` artifact. See §5 |
+| `Dependency audit (web)` · `Dependency audit (publisher)` | npm advisories in both package roots | `npm ci --ignore-scripts` · production audit (**high/critical fail**) · full audit incl. devDependencies (**moderate and above fail**, judged by `web/scripts/audit-gate.mjs` on the structured JSON; the only exception is the owner-approved, time-limited one in [`dependency-audit-exceptions.md`](dependency-audit-exceptions.md)); on failure the findings go to the job summary and a 14-day `npm-audit-<root>` artifact. See §5 |
 | `Web release gate` | aggregate | fails unless every one of the five jobs above (the two audits count as one job) is `success` (failed, cancelled and **skipped** all fail it) |
 
 Design points:
@@ -47,7 +47,7 @@ PR [#45](https://github.com/Imemoth/wow-foreverdb/pull/45) was squash-merged as 
 
 ## 5. Dependency audit gate: investigating a finding
 
-`Dependency audit (web)` and `Dependency audit (publisher)` fail on any production advisory of severity high or above, or any advisory of severity moderate or above anywhere in the tree (devDependencies included). The failing job's summary lists the advisories and `npm-audit-<root>` holds the JSON. Locally:
+`Dependency audit (web)` and `Dependency audit (publisher)` fail on any production advisory of severity high or above, or any advisory of severity moderate or above anywhere in the tree (devDependencies included), **except** an advisory covered by an exact, in-force, owner-approved exception in `.github/audit-exceptions.json` (currently one: GHSA-g3hv-75wg-m249, expiring 2026-12-15; see [`dependency-audit-exceptions.md`](dependency-audit-exceptions.md)). The production audit has no exception mechanism. The failing job's summary lists the advisories and `npm-audit-<root>` holds the JSON. Locally:
 
 ```bash
 cd publisher            # or web
