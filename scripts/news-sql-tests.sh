@@ -61,5 +61,11 @@ after=$($SU -tAc "select (select count(*) from pub.news_entries) || '/' || (sele
 [ "$($SU -tAc "select count(*) from web_api.news_list(null,'',50,0) where source_entry_id = 'post:2'")" = "0" ] || { echo "FAIL: V1 reader exposed a reply after rollback"; exit 1; }
 $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0011 after rollback"; exit 1; }
 [ "$($SU -tAc "select count(*) from web_api.news_cards(null,'',null,false,50,0) where source_post_number = 2")" = "1" ] || { echo "FAIL: reply not restored after re-applying 0011"; exit 1; }
+# Seeding: openers that exist when 0011 is (re-)applied are enrolled in revision tracking, staggered into the future.
+$SU -c "delete from pub.news_tracked_topics where source_key = 'rb-us'" >/dev/null
+$A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0011 for seeding"; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_tracked_topics where source_key = 'rb-us' and topic_id = 'topic:7' and official_post_ids = array[1::bigint] and next_check_at > now()")" = "1" ] || { echo "FAIL: existing opener was not seeded into revision tracking"; exit 1; }
+echo "PASS: existing verified openers are seeded into revision tracking"
+
 echo "PASS: rollback restores V1 functions without touching rows; re-applying 0011 restores the verified reply"
 echo "NEWS SQL CHECKS PASSED"

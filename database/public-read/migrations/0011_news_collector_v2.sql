@@ -98,10 +98,27 @@ create table if not exists pub.news_tracked_topics (
     last_http_status smallint,
     last_error text,
     state text not null default 'active' check (state in ('active', 'warm', 'dormant')),
+    official_post_ids bigint[] not null default '{}',
     primary key (source_key, topic_id)
 );
+alter table pub.news_tracked_topics add column if not exists official_post_ids bigint[] not null default '{}';
 create index if not exists news_tracked_topics_due_idx
     on pub.news_tracked_topics (source_key, next_check_at);
+
+-- Seed revision tracking with the verified openers that already exist, staggered 2 minutes apart. Idempotent.
+insert into pub.news_tracked_topics (source_key, topic_id, thread_key, thread_origin, last_official_at, official_post_ids, next_check_at)
+select q.source_key, q.source_topic_id, q.thread_key, 'official', q.last_official_at, array[q.post_id],
+       now() + (row_number() over (order by q.published_at desc)) * interval '2 minutes'
+from (
+    select n.source_key, n.source_topic_id, n.thread_key, n.published_at,
+           greatest(n.published_at, coalesce(n.modified_at, n.published_at)) as last_official_at,
+           substring(n.source_entry_id from 6)::bigint as post_id
+    from pub.news_entries n
+    join pub.news_sources s using (source_key)
+    where s.source_type = 'bluepost' and n.source_post_number = 1 and n.status = 'published' and n.suppressed_at is null
+      and n.source_topic_id ~ '^topic:[0-9]{1,12}$' and n.source_entry_id ~ '^post:[0-9]{1,15}$'
+) q
+on conflict (source_key, topic_id) do nothing;
 
 alter table pub.news_official_groups enable row level security;
 alter table pub.news_verified_staff enable row level security;
@@ -405,13 +422,18 @@ begin
             v_topic_id := nullif(v_entry ->> 'sourceTopicId', '');
             v_newest_official := greatest(v_newest_official,
                 greatest((v_entry ->> 'publishedAt')::timestamptz, coalesce(v_official_at, (v_entry ->> 'publishedAt')::timestamptz)));
-            if v_topic_id ~ '^topic:[0-9]{1,12}$' then
-                insert into pub.news_tracked_topics (source_key, topic_id, thread_key, thread_origin, last_official_at)
+            if v_topic_id ~ '^topic:[0-9]{1,12}$' and v_source_entry_id ~ '^post:[0-9]{1,15}$' then
+                insert into pub.news_tracked_topics (source_key, topic_id, thread_key, thread_origin, last_official_at, official_post_ids)
                 values (v_source_key, v_topic_id, nullif(v_entry ->> 'threadKey', ''), v_origin,
-                        greatest((v_entry ->> 'publishedAt')::timestamptz, coalesce(v_official_at, (v_entry ->> 'publishedAt')::timestamptz)))
+                        greatest((v_entry ->> 'publishedAt')::timestamptz, coalesce(v_official_at, (v_entry ->> 'publishedAt')::timestamptz)),
+                        array[substring(v_source_entry_id from 6)::bigint])
                 on conflict (source_key, topic_id) do update set
                     last_official_at = greatest(pub.news_tracked_topics.last_official_at, excluded.last_official_at),
-                    thread_origin = coalesce(pub.news_tracked_topics.thread_origin, excluded.thread_origin);
+                    thread_origin = coalesce(pub.news_tracked_topics.thread_origin, excluded.thread_origin),
+                    -- bounded: the 50 newest official post ids per topic
+                    official_post_ids = (select coalesce(array_agg(x order by x desc), '{}')
+                                         from (select distinct x from unnest(pub.news_tracked_topics.official_post_ids || excluded.official_post_ids) x
+                                               order by x desc limit 50) q);
             end if;
         elsif v_source_type <> 'bluepost' and v_entry ->> 'status' = 'published' then
             v_newest_official := greatest(v_newest_official, (v_entry ->> 'publishedAt')::timestamptz);
@@ -514,7 +536,9 @@ begin
             where s.source_key = p_source_key), '[]'::jsonb),
         'dueTopics', coalesce((
             select jsonb_agg(jsonb_build_object('topicId', d.topic_id, 'threadOrigin', d.thread_origin,
-                                                'consecutiveFailures', d.consecutive_failures) order by d.next_check_at)
+                                                'consecutiveFailures', d.consecutive_failures,
+                                                'lastOfficialAt', d.last_official_at, 'firstSeenAt', d.first_seen_at,
+                                                'officialPostIds', to_jsonb(d.official_post_ids)) order by d.next_check_at)
             from (select t.* from pub.news_tracked_topics t
                   where t.source_key = p_source_key and t.next_check_at <= now()
                   order by t.next_check_at asc, t.topic_id limit p_limit) d), '[]'::jsonb),

@@ -258,6 +258,11 @@ begin
     assert jsonb_array_length(r -> 'dueTopics') = 3, format('due batch wrong: %s', r);
     assert jsonb_array_length(pub_admin.news_revision_batch('t-us', 1) -> 'dueTopics') = 1, 'batch must honour the limit';
     assert (r -> 'verifiedStaff') @> '[{"userId": 3390, "group": "community-manager"}]'::jsonb, 'verified staff missing';
+    -- coverage anchors for edit-refresh without resurrecting history
+    assert exists (select 1 from jsonb_array_elements(r -> 'dueTopics') d
+                   where d ->> 'topicId' = 'topic:77' and d -> 'officialPostIds' @> '[1001, 1002]'::jsonb
+                     and (d ->> 'lastOfficialAt')::timestamptz >= '2026-11-03T03:20:33Z' and d ->> 'firstSeenAt' is not null),
+            format('coverage anchors missing: %s', r -> 'dueTopics');
     assert not ((pub_admin.news_revision_batch('t-eu', 25) -> 'verifiedStaff') @> '[{"userId": 3390}]'::jsonb), 'staff identities leaked across regions';
     r := pg_temp.sync('t-us', 'us', '[]'::jsonb, jsonb_build_object('mode', 'revision', 'topicChecks', jsonb_build_array(
         jsonb_build_object('topicId', 'topic:77', 'ok', true, 'httpStatus', 200, 'threadOrigin', 'official', 'openerUserId', 3390, 'topicCreatedAt', opener_at),
