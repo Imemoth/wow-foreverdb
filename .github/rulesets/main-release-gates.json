@@ -5,11 +5,11 @@
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
+      "exclude": [],
       "include": [
         "~DEFAULT_BRANCH",
         "refs/heads/release"
-      ],
-      "exclude": []
+      ]
     }
   },
   "rules": [
@@ -24,9 +24,16 @@
       "parameters": {
         "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": true,
+        "required_reviewers": [],
         "require_code_owner_review": false,
         "require_last_push_approval": false,
-        "required_review_thread_resolution": true
+        "required_review_thread_resolution": true,
+        "require_extra_approval_for_unattributed_changes": true,
+        "allowed_merge_methods": [
+          "merge",
+          "squash",
+          "rebase"
+        ]
       }
     },
     {
@@ -57,6 +64,22 @@
           },
           {
             "context": "collector-smoke",
+            "integration_id": 15368
+          },
+          {
+            "context": "Account web auth (real GoTrue)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Account ownership SQL + real GoTrue",
+            "integration_id": 15368
+          },
+          {
+            "context": "Companion account auth (Windows)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Account end-to-end (GoTrue + PostgREST)",
             "integration_id": 15368
           }
         ]
