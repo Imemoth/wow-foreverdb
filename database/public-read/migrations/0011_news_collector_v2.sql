@@ -583,14 +583,16 @@ begin
                min(c.published_at) over (partition by c.card_key) as first_pub,
                count(*) over (partition by c.card_key) as upd,
                bool_or(c.featured) over (partition by c.card_key) as any_featured,
-               max(c.importance) over (partition by c.card_key) as max_importance
+               max(c.importance) over (partition by c.card_key) as max_importance,
+               -- a query matches the thread when ANY verified update in it matches (not only the newest post)
+               bool_or(v_query = '' or lower(c.title || ' ' || c.excerpt) like '%' || v_query || '%') over (partition by c.card_key) as q_match
         from pub.news_card_entries c
     ), cards as (
         select r.* from ranked r
         where r.rn = 1
           and (p_category is null or r.category = p_category)
           and (p_region is null or r.region = p_region)
-          and (v_query = '' or lower(r.title || ' ' || r.excerpt) like '%' || v_query || '%')
+          and r.q_match
     )
     select cd.id, cd.slug, cd.source_type, cd.source_key, cd.source_entry_id, cd.source_topic_id,
            cd.source_post_number, cd.thread_key, cd.canonical_url, cd.title, cd.author, cd.region,

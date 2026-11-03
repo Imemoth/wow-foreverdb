@@ -252,10 +252,13 @@ export function evaluatePost(post: RawPost, source: BluepostSource, ctx: Admissi
     origin = "official";
     relevance = classifyRelevance(post.title, post.excerpt, source.sourceType);
   } else {
+    // Cheap, origin-independent screens first so the reject reason is the real one (a Midnight hotfix reply is "irrelevant",
+    // not "origin_unverified"). Title+excerpt irrelevance implies excerpt-only irrelevance, so this never admits extra posts.
+    if (post.excerpt.length < MIN_OFFICIAL_REPLY_CHARS) return { reject: "reply_too_short" };
+    if (classifyRelevance(post.title, post.excerpt, source.sourceType) === "irrelevant") return { reject: "irrelevant" };
     const resolved = ctx.origins.get(post.topicId);
     if (!resolved) return { reject: "origin_unverified" };
     origin = resolved;
-    if (post.excerpt.length < MIN_OFFICIAL_REPLY_CHARS) return { reject: "reply_too_short" };
     // In a player-created thread the title is player-controlled text: relevance must come from the staff post itself.
     relevance = classifyRelevance(origin === "official" ? post.title : "", post.excerpt, source.sourceType);
     if (relevance === "irrelevant") return { reject: "irrelevant" };
@@ -674,7 +677,7 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
   const entries = new Map<string, NormalizedNewsEntry>();
   const topicChecks: TopicCheck[] = [];
   let pages = 0;
-  let examined = 0;
+  const examinedIds = new Set<string>();
   let error: string | undefined;
   let errorCategory: string | undefined;
   let httpStatus: number | undefined;
@@ -726,7 +729,7 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
 
     const admission: AdmissionContext = { staff, origins };
     const admit = (post: RawPost) => {
-      examined += 1;
+      examinedIds.add(post.id);
       const decision = evaluatePost(post, source, admission);
       if ("entry" in decision) {
         // Replies are persisted only when they would be published; openers keep V1 audit behaviour (rejected/review rows).
@@ -757,7 +760,7 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
       };
       for (const post of posts) {
         if (o.windowed && post.postNumber !== 1 && !inRange(post)) continue;
-        examined += 1;
+        examinedIds.add(post.id);
         const decision = evaluatePost(post, source, topicCtx);
         if ("reject" in decision) { reject(`topic_${decision.reject}`); continue; }
         const isReply = (decision.entry.sourcePostNumber ?? 0) > 1;
@@ -847,6 +850,7 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
     if (!feed.posts.length) fetchOk = false;
   }
 
+  const examined = examinedIds.size;
   for (const [id, info] of staffObserved) staff.set(id, info.group);
   const finishedAt = now().toISOString();
   const toApply = [...entries.values()];

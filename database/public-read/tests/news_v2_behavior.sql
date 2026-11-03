@@ -177,6 +177,10 @@ begin
               union all select * from web_api.news_cards(null, '', null, false, 2, 2)) c)
            = least(4, n), 'pages must be disjoint';
     assert (select count(*) from web_api.news_cards(null, 'announcement', null, false, 50, 0)) = 1, 'search must match the thread representative';
+    -- the opener's text is no longer the newest post of thread 77, but it must still find the (single) thread card
+    update pub.news_entries set excerpt = 'zzopenerphrase' where source_key = 't-us' and source_entry_id = 'post:1001';
+    assert (select count(*) from web_api.news_cards(null, 'zzopenerphrase', 'us', false, 50, 0) c where c.source_topic_id = 'topic:77') = 1, 'search must match any update of the thread';
+    assert (select count(*) from web_api.news_cards(null, 'zzopenerphrase', 'eu', false, 50, 0) c where c.source_topic_id = 'topic:77') = 0, 'search must respect the region filter';
     raise notice 'PASS: pagination, totals and search are consistent';
 
     -- ----------------------------------------------------------------- 9
