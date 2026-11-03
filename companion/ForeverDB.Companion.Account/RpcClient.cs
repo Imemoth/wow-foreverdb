@@ -291,6 +291,20 @@ public sealed class OwnershipRpcClient
     public async Task<RpcResult<bool>> IngestAsync(string accessToken, string snapshotJson, CancellationToken ct)
     {
         if (!_allowWrites) return RpcResult<bool>.Fail(RpcFailure.Forbidden);
+        // Transport boundary: only the public observation shape may leave the process. Guildbook is Companion-local; a payload with
+        // anything outside the allowlist is refused here and never sent (see PublicSnapshotGuard).
+        try
+        {
+            if (!PublicSnapshotGuard.CheckBody(System.Text.Json.Nodes.JsonNode.Parse(snapshotJson)).IsPublic)
+            {
+                return RpcResult<bool>.Fail(RpcFailure.InvalidRequest);
+            }
+        }
+        catch (JsonException)
+        {
+            return RpcResult<bool>.Fail(RpcFailure.InvalidRequest);
+        }
+
         var reply = await PostAsync("ingest_foreverdb_snapshot_auth", snapshotJson, accessToken, ct, isIngest: true).ConfigureAwait(false);
         return reply.Failure == RpcFailure.None
             ? RpcResult<bool>.Success(true, reply.Status)

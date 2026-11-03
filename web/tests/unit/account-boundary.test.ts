@@ -36,9 +36,18 @@ describe("account boundary (static)", () => {
     expect(SOURCE_FILE.test("a.cjs") && SOURCE_FILE.test("a.mts") && SOURCE_FILE.test("a.jsx") && SOURCE_FILE.test("a.cts")).toBe(true);
     expect(files.length).toBeGreaterThan(30);
   });
-  it("only env.ts and the account zone may load account modules", () => {
+  it("only env.ts and the account zone may load account modules (plus the one header seam)", () => {
     const offenders = files.filter((f) => !inZone(rel(f)) && rel(f) !== "lib/env.ts").filter((f) => importsOf(f).some(reachesAccount)).map(rel);
-    expect(offenders).toEqual([]);
+    // The public-beta Account entry: SiteHeader may load exactly ONE module from the zone, the HeaderAccount seam, which
+    // renders nothing unless Account is enabled and ready. Nothing else outside the zone may.
+    expect(offenders).toEqual(["components/SiteHeader.tsx"]);
+    expect(importsOf(join(SRC, "components/SiteHeader.tsx")).filter(reachesAccount)).toEqual(["@/app/account/_ui/HeaderAccount"]);
+  });
+  it("the header chrome never reads account configuration or session state itself", () => {
+    for (const f of ["components/SiteHeader.tsx", "components/MobileNav.tsx"]) {
+      expect(read(join(SRC, f)), f).not.toMatch(/accountRuntime|accountAuth|serverEnv|resolveSession|cookies\(|ACCOUNT_/);
+    }
+    expect(importsOf(join(SRC, "components/MobileNav.tsx")).filter(reachesAccount)).toEqual([]);
   });
   it("env.ts loads only the pure configuration module from the account zone", () => {
     expect(importsOf(join(SRC, "lib/env.ts")).filter(reachesAccount)).toEqual(["./account/config"]);

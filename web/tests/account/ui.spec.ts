@@ -21,6 +21,14 @@ async function visitor(browser: Browser, viewport?: { width: number; height: num
   return { ctx, page, problems };
 }
 
+/** Sign-out lives in the header's Account dropdown (behind the hamburger on narrow screens). */
+async function signOut(page: Page) {
+  const burger = page.getByRole("button", { name: "Open menu" });
+  if (await burger.isVisible()) await burger.click();
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+}
+
 async function registerAndConfirmViaUi(page: Page, email: string, password = PASSWORD) {
   await page.goto("/account/register");
   await page.getByLabel("Email address").fill(email);
@@ -56,7 +64,7 @@ test("registration, e-mail confirmation (interstitial), welcome, profile and sig
   expect(page.url()).not.toMatch(/token/);
 
   // Sign out (ends this session; stays on the sign-in page with a message). The back button does not resurrect the account page.
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/account\/login\?reason=signed_out$/);
   await expect(page.getByText("You have been signed out.")).toBeVisible();
   await page.goBack();
@@ -70,7 +78,7 @@ test("sign-in by keyboard: errors are announced and focused, success lands on th
   const { ctx, page, problems } = await visitor(browser);
   const email = uniqueEmail("kb");
   await registerAndConfirmViaUi(page, email);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/signed_out/);
 
   await page.goto("/account/login");
@@ -87,7 +95,7 @@ test("sign-in by keyboard: errors are announced and focused, success lands on th
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/account$/);
-  await expect(page.getByRole("heading", { name: "Your account" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "My Account" })).toBeVisible();
   expect(problems).toEqual([]);
   await ctx.close();
 });
@@ -96,7 +104,7 @@ test("password recovery in the browser: scanner-safe link, restricted session, n
   const { ctx, page, problems } = await visitor(browser);
   const email = uniqueEmail("rec-ui");
   await registerAndConfirmViaUi(page, email);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/signed_out/);
 
   await page.goto("/account/forgot-password");
@@ -167,7 +175,7 @@ test("an expired access token is refreshed transparently on page navigation (coo
   await sleep(Math.max(0, (p0.ex - 15 - Math.floor(Date.now() / 1000) + 1) * 1000));
   await page.goto("/account");
   await expect(page).toHaveURL(/\/account$/);
-  await expect(page.getByRole("heading", { name: "Your account" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "My Account" })).toBeVisible();
   const after = (await ctx.cookies()).find((c) => c.name === "fdb_acct")!;
   const p1 = (await openSessionCookie(after.value))!;
   expect(p1.rt).not.toBe(p0.rt);
@@ -217,7 +225,7 @@ test.describe("accessibility (WCAG 2.2 AA, axe) and layout", () => {
     const run = async () => (await new AxeBuilder({ page: page as never }).withTags(AXE_TAGS).analyze()).violations.map((v) => `${v.id}: ${v.nodes.length}`);
     expect(await run()).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await signOut(page);
     await expect(page).toHaveURL(/signed_out/);
     // error state with the alert shown
     await page.getByLabel("Email address").fill("x");

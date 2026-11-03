@@ -97,7 +97,12 @@ describe("cookies", () => {
     await writeSession(SECRET, sink, jar({}), true, stored());
     expect(sink.headers).toHaveLength(1);
     expect(sink.headers[0]).toMatch(/^__Secure-fdb_acct=[A-Za-z0-9_.-]+; Path=\/account; Max-Age=1209600; HttpOnly; Secure; SameSite=Lax$/);
-    expect(sink.headers[0]).not.toMatch(/eyJ|refresh-token/);
+    // opaque = the plaintext credentials are nowhere in the value. Deterministic on purpose: the sealed value is random base64url, so a bare /eyJ/ search
+    // (the JWT prefix) matches by chance about once in 400 runs. The full token, its (fixed) header segment and the refresh token cannot occur by chance.
+    const plain = stored();
+    expect(sink.headers[0]).not.toContain(plain.at);
+    expect(sink.headers[0]).not.toContain(plain.at.split(".")[0]!);
+    expect(sink.headers[0]).not.toContain(plain.rt);
   });
   it("a recovery session is short-lived", async () => {
     const sink = new Sink();

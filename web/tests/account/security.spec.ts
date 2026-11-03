@@ -131,8 +131,11 @@ test.describe("12. redirects", () => {
       expect(page).not.toContain("<script>alert(1)</script>");
     }
     // An allowlisted target is kept (query and fragment dropped).
-    const ok = await c.get(`/account/api/session/refresh?next=${encodeURIComponent("/account/guildbook?x=1#f")}`, { maxRedirects: 0 });
-    expect(ok.headers().location).toBe("http://localhost:3210/account/login?next=%2Faccount%2Fguildbook");
+    const ok = await c.get(`/account/api/session/refresh?next=${encodeURIComponent("/account/devices?x=1#f")}`, { maxRedirects: 0 });
+    expect(ok.headers().location).toBe("http://localhost:3210/account/login?next=%2Faccount%2Fdevices");
+    // The retired web Guildbook is deliberately not an allowed return target.
+    const retired = await c.get(`/account/api/session/refresh?next=${encodeURIComponent("/account/guildbook?x=1#f")}`, { maxRedirects: 0 });
+    expect(retired.headers().location).toBe("http://localhost:3210/account/login?next=%2Faccount");
     // A cross-site navigation is not even processed.
     const cross = await c.get("/account/api/session/refresh?next=/account/guildbook", { maxRedirects: 0, headers: { "sec-fetch-site": "cross-site" } });
     expect(cross.headers().location).toBe("http://localhost:3210/account");

@@ -45,18 +45,31 @@ const CONF_CLASS: Record<Confidence, string> = {
 };
 const CONF_BARS: Record<Confidence, number> = { high: 3, medium: 2, low: 1, insufficient: 0 };
 
-export function ConfidenceBadge({ confidence, dominated }: { confidence: Confidence; dominated?: boolean }) {
+/**
+ * `wrap`: the desktop table's Sample quality column and the bucket-summary pills (SourcePage.tsx)
+ * have room for the "dominated" note to sit inline on one line, so they keep the original
+ * `whitespace-nowrap` behavior unchanged. The mobile observation card (DropTable.tsx) puts this
+ * badge in a narrow half-width grid column, where that same `nowrap` text pushed the card past
+ * the viewport edge; `wrap` drops the nowrap constraint and gives the note its own line instead.
+ */
+export function ConfidenceBadge({ confidence, dominated, wrap }: { confidence: Confidence; dominated?: boolean; wrap?: boolean }) {
   const bars = CONF_BARS[confidence];
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs whitespace-nowrap ${CONF_CLASS[confidence]}`}>
-      <svg viewBox="0 0 14 10" className="h-2.5 w-3.5" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <rect key={i} x={i * 5} y={6 - i * 3} width="4" height={4 + i * 3} rx="0.5"
-            fill="currentColor" opacity={i < bars ? 1 : 0.25} />
-        ))}
-      </svg>
-      {CONFIDENCE_LABEL[confidence]}
-      {dominated && <span className="text-mist" title="Most of this sample comes from a single collector installation">· mostly one collector</span>}
+    <span className={`inline-flex items-center gap-1.5 text-xs ${wrap ? "flex-wrap" : "whitespace-nowrap"} ${CONF_CLASS[confidence]}`}>
+      <span className="inline-flex items-center gap-1.5">
+        <svg viewBox="0 0 14 10" className="h-2.5 w-3.5" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <rect key={i} x={i * 5} y={6 - i * 3} width="4" height={4 + i * 3} rx="0.5"
+              fill="currentColor" opacity={i < bars ? 1 : 0.25} />
+          ))}
+        </svg>
+        {CONFIDENCE_LABEL[confidence]}
+      </span>
+      {dominated && (
+        <span className={`text-mist ${wrap ? "block w-full" : ""}`} title="Most of this sample comes from a single collector installation">
+          {wrap ? "mostly one collector" : "· mostly one collector"}
+        </span>
+      )}
     </span>
   );
 }

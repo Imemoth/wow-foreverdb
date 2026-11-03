@@ -1,0 +1,146 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Blizzard beta development notes, 26 Oct 2026 (final racial pass)",
+  "records": [
+    {
+      "id": "2026-10-26-final-racial-pass",
+      "announcedOn": "2026-10-26",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "official",
+      "sources": [
+        "blz-notes-1026"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Published in Blizzard's WoW Forever Beta development notes; the notes describe the beta client. Whether the release client matches, and the in-game effective date and build, are not verified. Blizzard describes this as a final pass on racial abilities ahead of launch; weapon-specialization racials were deliberately not restored. The post was edited on 2026-10-27 (see that record).",
+      "ops": [
+        {
+          "entity": "human.ruthless",
+          "type": "modified",
+          "set": {
+            "description": "Increases your critical strike chance by 1%."
+          },
+          "summary": "Critical strike bonus reduced from 2% to 1%.",
+          "previous": {
+            "description": "Increases your critical strike chance by 2%."
+          }
+        },
+        {
+          "entity": "human.the-human-spirit",
+          "type": "modified",
+          "set": {
+            "description": "Increases Spirit by 10%."
+          },
+          "summary": "Spirit bonus doubled from 5% to 10%.",
+          "previous": {
+            "description": "Increases Spirit by 5%."
+          }
+        },
+        {
+          "entity": "dwarf.earth-fury",
+          "type": "removed",
+          "summary": "Earth Fury (2% critical damage and healing) was removed."
+        },
+        {
+          "entity": "dwarf.artisans-precision",
+          "type": "added",
+          "kind": "ability",
+          "set": {
+            "name": "Artisan's Precision",
+            "type": "passive",
+            "races": [
+              "dwarf"
+            ],
+            "description": "Increases your hit chance with spells and attacks by 1%.",
+            "cooldown": null,
+            "duration": null,
+            "details": [],
+            "communityNotes": null
+          },
+          "summary": "New passive replacing Earth Fury: 1% hit chance with spells and attacks."
+        },
+        {
+          "entity": "tauren.plainsrunning",
+          "type": "modified",
+          "set": {
+            "description": "Grants 2% movement speed per stack the longer you stay moving, for a total of up to 60%. It does not increase mounted movement speed."
+          },
+          "summary": "Bonus doubled to 2% per stack (60% maximum, was 30%), and it no longer works while mounted.",
+          "previous": {
+            "description": "Increases movement speed the longer you stay moving, and increases mounted movement speed by 3% (stacks with other mounted speed increases)."
+          }
+        },
+        {
+          "entity": "tauren.endurance",
+          "type": "modified",
+          "set": {
+            "description": "Increases total Health by 5%."
+          },
+          "summary": "Now only grants the 5% Health bonus; the other modifiers were removed.",
+          "previous": {
+            "description": "Increases total Health by 5% and your critical strike bonus to damage and healing by 2%."
+          }
+        },
+        {
+          "entity": "orc.savage",
+          "type": "removed",
+          "summary": "Savage (1% critical strike chance) was removed."
+        },
+        {
+          "entity": "orc.command",
+          "type": "added",
+          "kind": "ability",
+          "set": {
+            "name": "Command",
+            "type": "passive",
+            "races": [
+              "orc"
+            ],
+            "description": "Increases Warlock and Hunter pet damage by 5%.",
+            "cooldown": null,
+            "duration": null,
+            "details": [],
+            "communityNotes": null
+          },
+          "summary": "Command is back (it is a Classic racial): Warlock and Hunter pets deal 5% more damage."
+        },
+        {
+          "entity": "skyborne.wind-blessed",
+          "type": "modified",
+          "set": {
+            "description": "Increases melee, ranged and spellcasting Haste by 2%."
+          },
+          "summary": "Haste bonus reduced from 3% to 2%.",
+          "previous": {
+            "description": "Increases melee, ranged and spellcasting Haste by 3%."
+          }
+        },
+        {
+          "entity": "high-order-skyborne.read-leyline",
+          "type": "modified",
+          "set": {
+            "description": "Increases Mana and Health regeneration by 50%. Cannot be used while Innervate is active, and Innervate replaces it as the more powerful effect. Using it at a ley line also grants Attuned for 1 hour, which raises the regeneration bonus to 100% and persists through death.",
+            "duration": "15 sec"
+          },
+          "summary": "Regeneration bonus halved to 50% for 15 seconds, with a stronger Attuned state at ley lines.",
+          "previous": {
+            "description": "Activate a ley line to gain 100% increased Health and Mana regeneration.",
+            "duration": "At least 30 sec"
+          }
+        },
+        {
+          "entity": "windshaper-skyborne.skysight",
+          "type": "modified",
+          "set": {
+            "description": "Increases movement speed by 15%. Using it at an elemental convergence also grants Charged for 1 hour, which raises the speed bonus to 30% and persists through death.",
+            "duration": "15 sec"
+          },
+          "summary": "Speed bonus raised to 15% for 15 seconds, with a stronger Charged state at elemental convergences.",
+          "previous": {
+            "description": "Receive an Elemental Blessing that increases run speed by 10%."
+          }
+        }
+      ]
+    }
+  ]
+}

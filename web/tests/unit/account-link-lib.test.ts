@@ -44,11 +44,12 @@ function stub(handler: (c: Call) => Reply) {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); __setAccountStoreForTests(null); });
 
 describe("closed PostgREST client", () => {
-  it("offers exactly the four web functions, all from the reviewed registry; claim_start and link_status are unreachable", async () => {
-    expect([...WEB_RPCS].sort()).toEqual(["fdb_account_claim_redeem", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members", "fdb_account_installations"]);
+  it("offers exactly the two web functions, all from the reviewed registry; claim_start, link_status and every Guildbook function are unreachable", async () => {
+    expect([...WEB_RPCS].sort()).toEqual(["fdb_account_claim_redeem", "fdb_account_installations"]);
+    expect([...WEB_RPCS].some((n) => /guildbook/i.test(n))).toBe(false);
     for (const n of WEB_RPCS) expect(Object.keys(ACCOUNT_RPCS)).toContain(n);
     stub(() => ({ status: 200, body: {} }));
-    for (const bad of ["fdb_account_claim_start", "fdb_installation_link_status", "installations", "../fdb_account_installations", "pg_sleep", "constructor", "__proto__", ""]) {
+    for (const bad of ["fdb_account_claim_start", "fdb_installation_link_status", "fdb_account_guildbook_guilds", "fdb_account_guildbook_members", "installations", "../fdb_account_installations", "pg_sleep", "constructor", "__proto__", ""]) {
       await expect(callWebRpc(cfg, bad as never, {} as never, TOKEN)).rejects.toThrow("rpc_not_allowed");
     }
     expect(fetch).not.toHaveBeenCalled();
@@ -77,7 +78,6 @@ describe("closed PostgREST client", () => {
     await expect(callWebRpc(cfg, "fdb_account_claim_redeem", { p_code: CODE.toLowerCase() } as never, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_claim_redeem", { p_code: CODE, extra: 1 } as never, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_installations", { p_user: UID } as never, TOKEN)).rejects.toThrow();
-    await expect(callWebRpc(cfg, "fdb_account_guildbook_members", { p_installation_id: "i", p_guild_key: "g", p_limit: 201, p_offset: 0 }, TOKEN)).rejects.toThrow();
     await expect(callWebRpc(cfg, "fdb_account_installations", {}, "short")).rejects.toThrow("rpc_bad_token");
     await expect(callWebRpc(cfg, "fdb_account_installations", {}, `${TOKEN}\r\nPrefer: tx=rollback`)).rejects.toThrow("rpc_bad_token");
     expect(fetch).not.toHaveBeenCalled();
@@ -109,21 +109,16 @@ describe("closed PostgREST client", () => {
     expect(await callWebRpc(cfg, "fdb_account_installations", {}, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
     stub(() => ({ status: 200, body: [{ ...row(1), owner_user_id: UID }] }));
     expect(await callWebRpc(cfg, "fdb_account_installations", {}, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
-    stub(() => ({ status: 200, body: [{ member_name: "x", member_guid: "Player-1-2" }] }));
-    expect(await callWebRpc(cfg, "fdb_account_guildbook_members", { p_installation_id: "i", p_guild_key: "g", p_limit: 50, p_offset: 0 }, TOKEN)).toEqual({ ok: false, kind: "unavailable" });
   });
 });
 
 describe("link request bodies", () => {
-  it("are strict: code, password and an explicit literal-true confirmation; Guildbook bodies have no limit/offset", () => {
+  it("are strict: code, password and an explicit literal-true confirmation; there is no Guildbook request body", () => {
     expect(INPUTS.link.safeParse({ code: "FDB-0123", password: "pw", confirm: true, accountId: UID }).success).toBe(true);
     for (const bad of [{ code: "x", password: "pw" }, { code: "x", password: "pw", confirm: false }, { code: "x", password: "pw", confirm: "true" }, { code: "x", password: "pw", confirm: true }, { code: "x", password: "pw", confirm: true, accountId: "not-a-uuid" }, { code: "x", password: "pw", confirm: true, accountId: UID, installationId: "i" }, { code: "", password: "pw", confirm: true, accountId: UID }, { code: "x", password: "", confirm: true, accountId: UID }].map((b) => ({ accountId: UID, ...b, ...("accountId" in b ? {} : { accountId: undefined }) }))) {
       expect(INPUTS.link.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }
-    expect(INPUTS.guildbookMembers.safeParse({ installationId: "i1", guildKey: "g", page: 0 }).success).toBe(true);
-    for (const bad of [{ installationId: "i1", guildKey: "g", page: 0, limit: 200 }, { installationId: "i1", guildKey: "g", page: 0, offset: 5 }, { installationId: "i1", guildKey: "g", page: -1 }, { installationId: "i1", guildKey: "g", page: 1001 }, { installationId: "i1", guildKey: "g", page: 1.5 }, { installationId: "bad id", guildKey: "g", page: 0 }]) {
-      expect(INPUTS.guildbookMembers.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
-    }
+    expect(Object.keys(INPUTS).filter((k) => /guild/i.test(k))).toEqual([]);
   });
 });
 

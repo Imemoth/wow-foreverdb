@@ -1,0 +1,153 @@
+{
+ "description": "Auditable inventory of the cinematic zone hero renditions published under zone-heroes/{uiMapID}/{version}/. Append-only: an artwork change adds a new version; a published version's files never change. `source` names the same-origin rollback copy in web/public/zones/hero.",
+ "kind": "azerdex-zone-heroes",
+ "namespace": "zone-heroes",
+ "schemaVersion": 1,
+ "zones": {
+  "1424": {
+   "name": "Hillsbrad Foothills",
+   "versions": {
+    "v1": {
+     "approval": {
+      "approvedBy": "repository owner",
+      "date": "2026-10-21",
+      "legalClearance": "not-cleared",
+      "note": "Owner-supplied and visually approved for the beta; NOT legally cleared (see the provenance record).",
+      "status": "approved"
+     },
+     "privateMaster": {
+      "inRepository": false
+     },
+     "provenance": {
+      "attestation": "AI-generated, owner-supplied artwork per the repository owner; not independently verified, not legal clearance.",
+      "encoder": "Pillow WebP q78 method 6, EXIF/XMP not carried over",
+      "masterDimensions": "2000x667",
+      "masterSha256": "a0e6b402237e6ab39cc9b5e7651d8bcda58e543347214aef8af41049d7111504",
+      "mobileCrop": "x760-2000 of the master",
+      "reference": "docs/azerdex-hero-art/provenance.md#zone-cinematic-hero-artwork-hillsbrad-foothills-uimapid-1424"
+     },
+     "renditions": [
+      {
+       "bytes": 56890,
+       "file": "desktop-1280.webp",
+       "height": 427,
+       "sha256": "9dc58eb3afdd2f86d0beec90f0230cd0c27e492e6b8122b502acb2184f74e880",
+       "source": "1424-hillsbrad-foothills-1280.webp",
+       "width": 1280
+      },
+      {
+       "bytes": 103602,
+       "file": "desktop-2000.webp",
+       "height": 667,
+       "sha256": "fbc70e484f13e6eea1ad965d1dc4c211c731dc08893daeb426d7e41b416fde07",
+       "source": "1424-hillsbrad-foothills-2000.webp",
+       "width": 2000
+      },
+      {
+       "bytes": 30614,
+       "file": "mobile-600.webp",
+       "height": 323,
+       "sha256": "50e481ad12038ba65ab06fe838ea8ab4e721c91d963a6e9dec58c73e6c1d91d2",
+       "source": "1424-hillsbrad-foothills-mobile-600.webp",
+       "width": 600
+      },
+      {
+       "bytes": 57650,
+       "file": "mobile-900.webp",
+       "height": 484,
+       "sha256": "cc87be9a4b5970afcf5b28fb5a05b0741721b65c22b980c52e8f3e25434dae72",
+       "source": "1424-hillsbrad-foothills-mobile-900.webp",
+       "width": 900
+      }
+     ],
+     "watermark": {
+      "appliedBeforeResize": true,
+      "centre": [
+       985,
+       40
+      ],
+      "emblem": "web/public/icon.svg",
+      "masterWidth": 2000,
+      "opacity": 0.17,
+      "sizePx": 56,
+      "status": "embedded",
+      "tint": "#e8cf8f"
+     }
+    }
+   }
+  },
+  "1431": {
+   "name": "Duskwood",
+   "versions": {
+    "v1": {
+     "approval": {
+      "approvedBy": "repository owner",
+      "date": "2026-10-22",
+      "legalClearance": "not-cleared",
+      "note": "Owner-supplied and visually approved for the beta; NOT legally cleared (see the provenance record).",
+      "status": "approved"
+     },
+     "privateMaster": {
+      "inGitHistory": false,
+      "inRepository": false
+     },
+     "provenance": {
+      "attestation": "AI-generated, owner-supplied artwork per the repository owner; not independently verified, not legal clearance.",
+      "encoder": "Pillow WebP q78 method 6, EXIF/XMP not carried over",
+      "masterDimensions": "1916x821",
+      "masterSha256": "61997e34e01be51b74ff5e0e8d9d621dfa19c56f13eec6d1977837fdd28393f5",
+      "mobileCrop": "x960-1916 of the master",
+      "reference": "docs/azerdex-hero-art/provenance.md#zone-cinematic-hero-artwork-duskwood-uimapid-1431"
+     },
+     "renditions": [
+      {
+       "bytes": 63462,
+       "file": "desktop-1280.webp",
+       "height": 548,
+       "sha256": "0202c6857a61696c6e3d0a298e5ded5a0a5dfb43ead3de011a850d77d1c27299",
+       "source": "1431-duskwood-1280.webp",
+       "width": 1280
+      },
+      {
+       "bytes": 112782,
+       "file": "desktop-1916.webp",
+       "height": 821,
+       "sha256": "bf118ae7764a4c20b3392ea245cee272e0bd2b43147579c940b1579e30e49080",
+       "source": "1431-duskwood-1916.webp",
+       "width": 1916
+      },
+      {
+       "bytes": 45462,
+       "file": "mobile-600.webp",
+       "height": 515,
+       "sha256": "5d27f395774108672465042d1ffcba9cf515ede847382f21a08dc4632903a8e0",
+       "source": "1431-duskwood-mobile-600.webp",
+       "width": 600
+      },
+      {
+       "bytes": 83146,
+       "file": "mobile-900.webp",
+       "height": 773,
+       "sha256": "60652b0d84f17a919b980caa2f9eb3b382002885c84c8c59aa47239d85cb0985",
+       "source": "1431-duskwood-mobile-900.webp",
+       "width": 900
+      }
+     ],
+     "watermark": {
+      "appliedBeforeResize": true,
+      "centre": [
+       1215,
+       62
+      ],
+      "emblem": "web/public/icon.svg",
+      "masterWidth": 1916,
+      "opacity": 0.17,
+      "sizePx": 54,
+      "status": "embedded",
+      "tint": "#e8cf8f"
+     }
+    }
+   }
+  }
+ }
+}

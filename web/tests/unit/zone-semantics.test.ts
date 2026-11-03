@@ -105,7 +105,10 @@ describe("zone directory semantics (API route + website labels)", () => {
     const html = renderToStaticMarkup(ResultsTable({ rows, zones, caption: "t", observationsLabel: "Observed in this zone" }));
     expect(html).toContain("Observed in this zone");
     expect(html).not.toContain("In-zone obs.");
-    expect(html.match(/Not measured/g)).toHaveLength(4);
+    // ResultsTable server-renders BOTH the desktop table and the mobile card list for the same rows
+    // (CSS `hidden`/`sm:hidden` picks one per viewport - see ResultsTable.tsx) so each of the 4 item
+    // rows contributes one "Not measured" from each presentation: 4 rows x 2 presentations = 8.
+    expect(html.match(/Not measured/g)).toHaveLength(8);
     expect(html).toContain("inferred via 2 sources");
     expect(html).toContain("inferred via 1 source<");
     const cells = [...html.matchAll(/<td class="num[^>]*>(.*?)<\/td>/g)].map((m) => m[1]!.replace(/<[^>]+>/g, " ").trim());

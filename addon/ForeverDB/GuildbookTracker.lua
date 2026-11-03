@@ -8,6 +8,7 @@ local expandedSkillLines = {}
 local lastRefreshAt = 0
 local refreshTicker
 local periodicFallbackStarted = false
+local guildbookCaptureSequence = 0
 
 local GUILDBOOK_REFRESH_INTERVAL_SECONDS =
     30 * 60
@@ -35,6 +36,156 @@ local function guildKey(guildName, realmName)
     return tostring(realmName or "")
         .. "|"
         .. tostring(guildName or "")
+end
+
+local function sortedKeys(source)
+    local keys = {}
+
+    for key in pairs(source or {}) do
+        keys[#keys + 1] = key
+    end
+
+    table.sort(keys, function(a, b)
+        return tostring(a) < tostring(b)
+    end)
+
+    return keys
+end
+
+local function appendFingerprintPart(parts, value)
+    local text = tostring(value or "")
+
+    parts[#parts + 1] = tostring(#text)
+    parts[#parts + 1] = ":"
+    parts[#parts + 1] = text
+end
+
+local function hashPart(seed, salt)
+    local hash = (5381 + salt) % 4294967296
+
+    for index = 1, #seed do
+        hash = (
+            hash * 131
+            + string.byte(seed, index)
+            + salt
+        ) % 4294967296
+    end
+
+    return string.format("%08x", hash)
+end
+
+local function guildbookSnapshotFingerprint()
+    local parts = {}
+
+    for _, guildKeyValue in ipairs(sortedKeys(FDB.DB and FDB.DB.guilds)) do
+        local guild = FDB.DB.guilds[guildKeyValue]
+
+        appendFingerprintPart(parts, guildKeyValue)
+        appendFingerprintPart(parts, guild.guildKey)
+        appendFingerprintPart(parts, guild.name)
+        appendFingerprintPart(parts, guild.realmName)
+
+        for _, memberKey in ipairs(sortedKeys(guild.members)) do
+            local member = guild.members[memberKey]
+
+            appendFingerprintPart(parts, memberKey)
+            appendFingerprintPart(parts, member.guid)
+            appendFingerprintPart(parts, member.name)
+            appendFingerprintPart(parts, member.className)
+            appendFingerprintPart(parts, member.classFile)
+            appendFingerprintPart(parts, member.level)
+            appendFingerprintPart(parts, member.rankName)
+            appendFingerprintPart(parts, member.rankIndex)
+            appendFingerprintPart(parts, member.online and 1 or 0)
+            appendFingerprintPart(parts, member.zone)
+            appendFingerprintPart(parts, member.lastOnlineHours)
+
+            for _, professionKey in ipairs(sortedKeys(member.professions)) do
+                local profession = member.professions[professionKey]
+
+                appendFingerprintPart(parts, professionKey)
+                appendFingerprintPart(parts, profession.skillLineId)
+                appendFingerprintPart(parts, profession.name)
+                appendFingerprintPart(parts, profession.skill)
+                appendFingerprintPart(parts, profession.maxSkill)
+                appendFingerprintPart(parts, profession.source)
+                appendFingerprintPart(
+                    parts,
+                    profession.isSecondary and 1 or 0
+                )
+            end
+        end
+    end
+
+    local seed = table.concat(parts)
+
+    return hashPart(seed, 17)
+        .. hashPart(seed, 97)
+        .. hashPart(seed, 193)
+        .. hashPart(seed, 389)
+end
+
+local function sourceCharacter()
+    local guid =
+        type(UnitGUID) == "function"
+        and UnitGUID("player")
+        or ""
+    local name =
+        type(UnitName) == "function"
+        and UnitName("player")
+        or ""
+    local realm =
+        type(GetRealmName) == "function"
+        and GetRealmName()
+        or ""
+
+    return tostring(guid or ""),
+        tostring(name or ""),
+        tostring(realm or "")
+end
+
+local function createGuildbookCaptureId(capturedAt)
+    guildbookCaptureSequence = guildbookCaptureSequence + 1
+
+    local seed = table.concat({
+        tostring(FDB.DB and FDB.DB.installationId or ""),
+        tostring(capturedAt),
+        tostring(GetTimePreciseSec and GetTimePreciseSec() or ""),
+        tostring(debugprofilestop and debugprofilestop() or ""),
+        tostring(UnitGUID and UnitGUID("player") or ""),
+        tostring(guildbookCaptureSequence),
+        tostring({}),
+    }, "|")
+
+    return "gb-"
+        .. hashPart(seed, 17)
+        .. hashPart(seed, 97)
+        .. hashPart(seed, 193)
+        .. hashPart(seed, 389)
+end
+
+local function captureGuildbookProvenance(beforeFingerprint)
+    local afterFingerprint = guildbookSnapshotFingerprint()
+
+    if afterFingerprint == beforeFingerprint then
+        return false
+    end
+
+    local sourceGuid, sourceName, sourceRealm = sourceCharacter()
+    local capturedAt = now()
+
+    FDB.DB.guildbookCapture = {
+        captureId = createGuildbookCaptureId(capturedAt),
+        capturedAt = capturedAt,
+        sourceCharacterGuid = sourceGuid,
+        sourceCharacterName = sourceName,
+        sourceCharacterRealm = sourceRealm,
+        fingerprint = afterFingerprint,
+    }
+
+    FDB.DB.updatedAt = now()
+
+    return true
 end
 
 local function getCurrentGuild()
@@ -122,14 +273,14 @@ local function captureOwnProfessions(guild)
         or type(GetProfessions) ~= "function"
         or type(GetProfessionInfo) ~= "function"
         or type(UnitGUID) ~= "function" then
-        return
+        return false
     end
 
     local playerGuid =
         UnitGUID("player")
 
     if type(playerGuid) ~= "string" then
-        return
+        return false
     end
 
     local member =
@@ -236,9 +387,13 @@ local function captureOwnProfessions(guild)
             end
         end
     end
+
+    return true
 end
 
 local function captureRoster()
+    local beforeFingerprint =
+        guildbookSnapshotFingerprint()
     local guild =
         getCurrentGuild()
 
@@ -322,12 +477,23 @@ local function captureRoster()
 
     captureOwnProfessions(guild)
 
+    local changed =
+        captureGuildbookProvenance(
+            beforeFingerprint
+        )
+
+    if changed and FDB.BuildExportSnapshot then
+        FDB:BuildExportSnapshot()
+    end
+
     FDB.DB.updatedAt = now()
 
     return true
 end
 
 local function captureGuildTradeSkills()
+    local beforeFingerprint =
+        guildbookSnapshotFingerprint()
     local guild =
         getCurrentGuild()
 
@@ -420,6 +586,16 @@ local function captureGuildTradeSkills()
     captureOwnProfessions(guild)
 
     guild.capturedAt = now()
+
+    local changed =
+        captureGuildbookProvenance(
+            beforeFingerprint
+        )
+
+    if changed and FDB.BuildExportSnapshot then
+        FDB:BuildExportSnapshot()
+    end
+
     FDB.DB.updatedAt = now()
 
     return true
@@ -463,11 +639,22 @@ local function startProfessionCapture()
     if professionCapturePending
         or type(GetNumGuildTradeSkill) ~= "function"
         or type(GetGuildTradeSkillInfo) ~= "function" then
-        captureOwnProfessions(
+        local beforeFingerprint =
+            guildbookSnapshotFingerprint()
+
+        local observed = captureOwnProfessions(
             getCurrentGuild()
         )
 
-        if FDB.BuildExportSnapshot then
+        local changed = false
+
+        if observed then
+            changed = captureGuildbookProvenance(
+                beforeFingerprint
+            )
+        end
+
+        if changed and FDB.BuildExportSnapshot then
             FDB:BuildExportSnapshot()
         end
 
@@ -715,11 +902,22 @@ function FDB:InitializeGuildbookTracker()
             end
 
             if event == "SKILL_LINES_CHANGED" then
-                captureOwnProfessions(
+                local beforeFingerprint =
+                    guildbookSnapshotFingerprint()
+
+                local observed = captureOwnProfessions(
                     getCurrentGuild()
                 )
 
-                if FDB.BuildExportSnapshot then
+                local changed = false
+
+                if observed then
+                    changed = captureGuildbookProvenance(
+                        beforeFingerprint
+                    )
+                end
+
+                if changed and FDB.BuildExportSnapshot then
                     FDB:BuildExportSnapshot()
                 end
             end

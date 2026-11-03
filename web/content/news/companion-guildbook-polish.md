@@ -19,3 +19,5 @@ Companion **0.8.2-alpha** focuses on the Guildbook tab:
 
 Guildbook information is private to the installation that collected it. It is **not** part of the public database and
 is never published on this website.
+
+**Update (2026-10-30):** the Guildbook now stays on your computer only. Companion versions released before this change uploaded it to AzerDex's private backend; current versions never upload it. Earlier uploads have not yet been deleted. See the [privacy notice](/about/privacy#companion).

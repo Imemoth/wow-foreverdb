@@ -1,0 +1,104 @@
+{
+  "schema": "azerdex.versioned-sources/1",
+  "sources": [
+    {
+      "id": "blz-deep-dive",
+      "url": "https://news.blizzard.com/en-us/article/24303313/world-of-warcraft-forever-deep-dive-panel-recap",
+      "title": "World of Warcraft: Forever Deep Dive Panel Recap",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-article",
+      "publishedOn": "2026-09-13",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-overview",
+      "url": "https://news.blizzard.com/en-us/article/24304075/create-the-hero-you-want-to-be-in-world-of-warcraft-forever",
+      "title": "Create the Hero You Want to Be in World of Warcraft: Forever",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-article",
+      "publishedOn": "2026-09-22",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-skyborne",
+      "url": "https://news.blizzard.com/en-us/article/24302071/wow-forever-meet-the-new-skyborne",
+      "title": "WoW: Forever Meet the New Skyborne",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-article",
+      "publishedOn": "2026-09-22",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-notes-0924",
+      "url": "https://us.forums.blizzard.com/en/wow/t/2360696/1",
+      "title": "WoW Forever Beta Development Notes - Sep 24 build notes (post 1; later edited, last edit 2026-10-26)",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-dev-notes",
+      "publishedOn": "2026-09-24",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-notes-1001",
+      "url": "https://us.forums.blizzard.com/en/wow/t/2360696/4",
+      "title": "WoW Forever Beta Development Notes - Oct 1 build notes (post 4)",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-dev-notes",
+      "publishedOn": "2026-10-01",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-notes-1015",
+      "url": "https://us.forums.blizzard.com/en/wow/t/2360696/6",
+      "title": "WoW Forever Beta Development Notes - Oct 15 build notes (post 6, posted 2026-10-16 00:15 UTC)",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-dev-notes",
+      "publishedOn": "2026-10-15",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-notes-1026",
+      "url": "https://us.forums.blizzard.com/en/wow/t/2360696/7",
+      "title": "WoW Forever Beta Development Notes - Racial Abilities and Traits, Oct 26 (post 7, edited 2026-10-27)",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-dev-notes",
+      "publishedOn": "2026-10-26",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "blz-notes-1027",
+      "url": "https://us.forums.blizzard.com/en/wow/t/2360696/8",
+      "title": "WoW Forever Beta Development Notes - Oct 27 additions to the racial update (post 8)",
+      "publisher": "Blizzard Entertainment",
+      "kind": "official-dev-notes",
+      "publishedOn": "2026-10-27",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "tavern-0912",
+      "url": "https://www.warcrafttavern.com/forever/news/all-racial-abilities-in-world-of-warcraft-forever/",
+      "title": "All Racial Abilities in World of Warcraft Forever (BlizzCon demo catalogue) - Warcraft Tavern",
+      "publisher": "Warcraft Tavern",
+      "kind": "community",
+      "publishedOn": "2026-09-12",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "tierlist-racials",
+      "url": "https://wowforevertierlist.com/races/racials",
+      "title": "WoW Forever Racials: Every Racial Ability and What Changed - WoW Forever Tier List",
+      "publisher": "WoW Forever Tier List",
+      "kind": "community",
+      "publishedOn": "2026-10-08",
+      "retrievedOn": "2026-10-29"
+    },
+    {
+      "id": "sktools-races",
+      "url": "https://sktools.gg/forever/races",
+      "title": "Races & Racials - WoW Forever - SKTools (page stamped build 1.60.1.70685, updated Oct 28 2026)",
+      "publisher": "SKTools",
+      "kind": "community",
+      "publishedOn": "2026-10-28",
+      "retrievedOn": "2026-10-29"
+    }
+  ]
+}

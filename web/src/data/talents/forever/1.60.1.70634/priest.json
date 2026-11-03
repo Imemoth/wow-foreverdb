@@ -1,0 +1,597 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "priest",
+  "className": "Priest",
+  "gameClassId": 5,
+  "build": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11608,
+      "name": "Discipline",
+      "slug": "discipline",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 110853,
+          "name": "Power in Light",
+          "spellId": 1309969,
+          "row": 0,
+          "col": 0,
+          "maxRank": 5
+        },
+        {
+          "id": 105850,
+          "name": "Wand Specialization",
+          "spellId": 14524,
+          "row": 0,
+          "col": 1,
+          "maxRank": 2
+        },
+        {
+          "id": 105849,
+          "name": "Twin Disciplines",
+          "spellId": 1225132,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105848,
+          "name": "Silent Resolve",
+          "spellId": 14523,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110852,
+          "name": "Holy Precision",
+          "spellId": 1309957,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105837,
+          "name": "Mental Strength",
+          "spellId": 18551,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105845,
+          "name": "Martyrdom",
+          "spellId": 14531,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105842,
+          "name": "Mental Agility",
+          "spellId": 14520,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105844,
+          "name": "Inner Focus",
+          "spellId": 14751,
+          "row": 2,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105846,
+          "name": "Improved Power Word: Shield",
+          "spellId": 14748,
+          "row": 2,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105843,
+          "name": "Meditation",
+          "spellId": 14521,
+          "row": 2,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "assumed-tree"
+        },
+        {
+          "id": 105841,
+          "name": "Improved Inner Fire",
+          "spellId": 14747,
+          "row": 3,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105838,
+          "name": "Improved Mana Burn",
+          "spellId": 14750,
+          "row": 3,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105839,
+          "name": "Soul Warding",
+          "spellId": 402000,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105846,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105834,
+          "name": "Penance",
+          "spellId": 402174,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105835,
+          "name": "Renewed Hope",
+          "spellId": 425280,
+          "row": 4,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105839,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105840,
+          "name": "Divine Aegis",
+          "spellId": 431622,
+          "row": 5,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105836,
+          "name": "Power Infusion",
+          "spellId": 10060,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105834,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11615,
+      "name": "Holy",
+      "slug": "holy",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105867,
+          "name": "Twilight Focus",
+          "spellId": 14913,
+          "row": 0,
+          "col": 0,
+          "maxRank": 3
+        },
+        {
+          "id": 105866,
+          "name": "Improved Renew",
+          "spellId": 14908,
+          "row": 0,
+          "col": 1,
+          "maxRank": 3
+        },
+        {
+          "id": 110855,
+          "name": "Holy Specialization",
+          "spellId": 14889,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105864,
+          "name": "Spell Warding",
+          "spellId": 27900,
+          "row": 1,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105863,
+          "name": "Divine Fury",
+          "spellId": 18530,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105862,
+          "name": "Holy Nova",
+          "spellId": 15237,
+          "row": 2,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105861,
+          "name": "Blessed Recovery",
+          "spellId": 27811,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105860,
+          "name": "Inspiration",
+          "spellId": 14892,
+          "row": 2,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105859,
+          "name": "Holy Reach",
+          "spellId": 27789,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105858,
+          "name": "Improved Healing",
+          "spellId": 14912,
+          "row": 3,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105857,
+          "name": "Searing Light",
+          "spellId": 14909,
+          "row": 3,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105863,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105856,
+          "name": "Binding Heal",
+          "spellId": 401937,
+          "row": 3,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105855,
+          "name": "Litany of Light",
+          "spellId": 1317006,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105854,
+          "name": "Spirit of Redemption",
+          "spellId": 20711,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105853,
+          "name": "Spiritual Guidance",
+          "spellId": 14901,
+          "row": 4,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105852,
+          "name": "Spiritual Healing",
+          "spellId": 14898,
+          "row": 5,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105851,
+          "name": "Prayer of Mending",
+          "spellId": 401859,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105854,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11622,
+      "name": "Shadow Magic",
+      "slug": "shadow-magic",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 110851,
+          "name": "Shadow Focus",
+          "spellId": 15260,
+          "row": 0,
+          "col": 0,
+          "maxRank": 5
+        },
+        {
+          "id": 105832,
+          "name": "Blackout",
+          "spellId": 15326,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105833,
+          "name": "Spirit Tap",
+          "spellId": 15270,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105831,
+          "name": "Improved Mind Blast",
+          "spellId": 15273,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105830,
+          "name": "Improved Shadow Word: Pain",
+          "spellId": 15275,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105829,
+          "name": "Shadow Reach",
+          "spellId": 17322,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105828,
+          "name": "Improved Psychic Scream",
+          "spellId": 15392,
+          "row": 2,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105832,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105826,
+          "name": "Mind Flay",
+          "spellId": 15407,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105825,
+          "name": "Improved Mind Flay",
+          "spellId": 1225139,
+          "row": 2,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105826,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105823,
+          "name": "Dark Inspiration",
+          "spellId": 1326159,
+          "row": 3,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105820,
+          "name": "Vampiric Embrace",
+          "spellId": 15286,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105821,
+          "name": "Shadow Weaving",
+          "spellId": 15257,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105824,
+          "name": "Silence",
+          "spellId": 15487,
+          "row": 4,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105819,
+          "name": "Devouring Contagion",
+          "spellId": 1309950,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110854,
+          "name": "Early Demise",
+          "spellId": 1310076,
+          "row": 5,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105818,
+          "name": "Darkness",
+          "spellId": 15259,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105817,
+          "name": "Shadowform",
+          "spellId": 15473,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105820,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

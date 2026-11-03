@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "../zod";
 
 /**
  * Server-side Cloudflare Turnstile verification for the sign-up, resend and recovery routes.

@@ -1,0 +1,1007 @@
+{
+  "schema": "azerdex.versioned-baseline/1",
+  "asOf": "2026-09-22",
+  "title": "Blizzard racial documentation of 13 and 22 Sep 2026, completed with the BlizzCon demo catalogue",
+  "entities": [
+    {
+      "id": "race.human",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "hunter",
+          "mage",
+          "paladin",
+          "priest",
+          "rogue",
+          "warlock",
+          "warrior"
+        ],
+        "newClasses": [
+          "hunter"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.dwarf",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "hunter",
+          "paladin",
+          "priest",
+          "rogue",
+          "shaman",
+          "warrior"
+        ],
+        "newClasses": [
+          "shaman"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.night-elf",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "druid",
+          "hunter",
+          "priest",
+          "rogue",
+          "warrior"
+        ],
+        "newClasses": []
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.gnome",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "mage",
+          "priest",
+          "rogue",
+          "warlock",
+          "warrior"
+        ],
+        "newClasses": [
+          "priest"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.high-order-skyborne",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "druid",
+          "hunter",
+          "mage",
+          "rogue",
+          "warrior"
+        ],
+        "newClasses": []
+      },
+      "sources": [
+        "blz-overview",
+        "blz-skyborne"
+      ]
+    },
+    {
+      "id": "race.orc",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "hunter",
+          "mage",
+          "rogue",
+          "shaman",
+          "warlock",
+          "warrior"
+        ],
+        "newClasses": [
+          "mage"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.tauren",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "druid",
+          "hunter",
+          "shaman",
+          "warrior"
+        ],
+        "newClasses": []
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.troll",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "hunter",
+          "mage",
+          "priest",
+          "rogue",
+          "shaman",
+          "warlock",
+          "warrior"
+        ],
+        "newClasses": [
+          "warlock"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.undead",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "mage",
+          "paladin",
+          "priest",
+          "rogue",
+          "warlock",
+          "warrior"
+        ],
+        "newClasses": [
+          "paladin"
+        ]
+      },
+      "sources": [
+        "blz-overview"
+      ]
+    },
+    {
+      "id": "race.windshaper-skyborne",
+      "kind": "race",
+      "evidence": "official",
+      "props": {
+        "classes": [
+          "druid",
+          "hunter",
+          "rogue",
+          "shaman",
+          "warrior"
+        ],
+        "newClasses": []
+      },
+      "sources": [
+        "blz-overview",
+        "blz-skyborne"
+      ]
+    },
+    {
+      "id": "human.will-to-survive",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Will to Survive",
+        "type": "active",
+        "races": [
+          "human"
+        ],
+        "description": "Removes Stun effects.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "human.perception",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Perception",
+        "type": "active",
+        "races": [
+          "human"
+        ],
+        "description": "Lets you detect stealthed enemies for 20 seconds.",
+        "cooldown": null,
+        "duration": "20 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "human.sword-specialization",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Sword Specialization",
+        "type": "passive",
+        "races": [
+          "human"
+        ],
+        "description": "Equipped swords increase your critical strike chance with all spells and abilities by 2%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ]
+    },
+    {
+      "id": "human.the-human-spirit",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "The Human Spirit",
+        "type": "passive",
+        "races": [
+          "human"
+        ],
+        "description": "Increases Spirit by 5%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1026"
+      ],
+      "propEvidence": {
+        "description": "official"
+      }
+    },
+    {
+      "id": "dwarf.stoneform",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Stoneform",
+        "type": "active",
+        "races": [
+          "dwarf"
+        ],
+        "description": "Removes Bleed, Poison and Disease effects, grants immunity to them, and reduces Physical damage taken.",
+        "cooldown": null,
+        "duration": "8 sec",
+        "details": [
+          "The defensive bonus reduces Physical damage taken instead of increasing Armor."
+        ],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ],
+      "propEvidence": {
+        "duration": "corroborated"
+      }
+    },
+    {
+      "id": "dwarf.find-treasure",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Find Treasure",
+        "type": "active",
+        "races": [
+          "dwarf"
+        ],
+        "description": "Tracks nearby treasure chests.",
+        "cooldown": null,
+        "duration": null,
+        "details": [
+          "Can stay active alongside other tracking abilities."
+        ],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ],
+      "propEvidence": {
+        "details": "official"
+      }
+    },
+    {
+      "id": "dwarf.mace-specialization",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Mace Specialization",
+        "type": "passive",
+        "races": [
+          "dwarf"
+        ],
+        "description": "Equipped maces increase your critical strike chance with all spells and abilities by 1%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "dwarf.big-game-hunter",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Big Game Hunter",
+        "type": "passive",
+        "races": [
+          "dwarf"
+        ],
+        "description": "Increases damage dealt to Beasts by 5%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "night-elf.elunes-light",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Elune's Light",
+        "type": "active",
+        "races": [
+          "night-elf"
+        ],
+        "description": "Increases your critical strike chance by 10% for 15 seconds.",
+        "cooldown": null,
+        "duration": "15 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "night-elf.shadowmeld",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Shadowmeld",
+        "type": "active",
+        "races": [
+          "night-elf"
+        ],
+        "description": "Lets you slip into stealth while standing still.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "night-elf.quickness",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Quickness",
+        "type": "passive",
+        "races": [
+          "night-elf"
+        ],
+        "description": "Increases Dodge chance by 1% and run speed by 2%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "night-elf.wisp-spirit",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Wisp Spirit",
+        "type": "passive",
+        "races": [
+          "night-elf"
+        ],
+        "description": "Increases run speed by 75% while you are dead.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "gnome.escape-artist",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Escape Artist",
+        "type": "active",
+        "races": [
+          "gnome"
+        ],
+        "description": "Grants brief immunity to Root and Snare effects.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "gnome.eureka",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Eureka!",
+        "type": "active",
+        "races": [
+          "gnome"
+        ],
+        "description": "Reduces the cost of your next 3 spells or abilities and increases their damage or healing by 10%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-0924"
+      ]
+    },
+    {
+      "id": "gnome.expansive-mind",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Expansive Mind",
+        "type": "passive",
+        "races": [
+          "gnome"
+        ],
+        "description": "Increases maximum Mana, Rage or Energy by 5%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "gnome.engineering-specialization",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Engineering Specialization",
+        "type": "passive",
+        "races": [
+          "gnome"
+        ],
+        "description": "Makes engineering devices more reliable.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "skyborne.walk-on-air",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Walk on Air",
+        "type": "active",
+        "races": [
+          "high-order-skyborne",
+          "windshaper-skyborne"
+        ],
+        "description": "Glide downward through the air for 10 seconds.",
+        "cooldown": "2 min",
+        "duration": "10 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-skyborne",
+        "blz-notes-1015"
+      ]
+    },
+    {
+      "id": "high-order-skyborne.read-leyline",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Read Leyline",
+        "type": "active",
+        "races": [
+          "high-order-skyborne"
+        ],
+        "description": "Activate a ley line to gain 100% increased Health and Mana regeneration.",
+        "cooldown": null,
+        "duration": "At least 20 sec",
+        "details": [
+          "Blizzard's September 22 article spells the name “Read Ley Line”."
+        ],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-skyborne",
+        "blz-notes-1015"
+      ]
+    },
+    {
+      "id": "windshaper-skyborne.skysight",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Skysight",
+        "type": "active",
+        "races": [
+          "windshaper-skyborne"
+        ],
+        "description": "Receive an Elemental Blessing that increases run speed by 10%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-skyborne"
+      ]
+    },
+    {
+      "id": "skyborne.wind-blessed",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Wind Blessed",
+        "type": "passive",
+        "races": [
+          "high-order-skyborne",
+          "windshaper-skyborne"
+        ],
+        "description": "Increases melee, ranged and spellcasting Haste by 1%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-skyborne"
+      ]
+    },
+    {
+      "id": "skyborne.elemental-insight",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Elemental Insight",
+        "type": "passive",
+        "races": [
+          "high-order-skyborne",
+          "windshaper-skyborne"
+        ],
+        "description": "Increases damage dealt to Elementals by 5%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-skyborne"
+      ]
+    },
+    {
+      "id": "orc.blood-fury",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Blood Fury",
+        "type": "active",
+        "races": [
+          "orc"
+        ],
+        "description": "Increases Attack Power and Spell Power by 10% for 15 seconds.",
+        "cooldown": "2 min",
+        "duration": "15 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ],
+      "propEvidence": {
+        "cooldown": "official"
+      }
+    },
+    {
+      "id": "orc.shatter-curse",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Shatter Curse",
+        "type": "active",
+        "races": [
+          "orc"
+        ],
+        "description": "Grants immunity to Curses and Banes and reduces Magical damage taken by 15%.",
+        "cooldown": null,
+        "duration": "8 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-notes-1015",
+        "tavern-0912"
+      ],
+      "propEvidence": {
+        "duration": "corroborated"
+      }
+    },
+    {
+      "id": "orc.axe-specialization",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Axe Specialization",
+        "type": "passive",
+        "races": [
+          "orc"
+        ],
+        "description": "Equipped axes increase your critical strike chance with all spells and abilities by 1%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ]
+    },
+    {
+      "id": "orc.hardiness",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Hardiness",
+        "type": "passive",
+        "races": [
+          "orc"
+        ],
+        "description": "Reduces the duration of Stun effects on you by 20%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "tauren.war-stomp",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "War Stomp",
+        "type": "active",
+        "races": [
+          "tauren"
+        ],
+        "description": "Stuns nearby enemies for 2 seconds.",
+        "cooldown": "2 min",
+        "duration": "2 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ],
+      "propEvidence": {
+        "cooldown": "official"
+      }
+    },
+    {
+      "id": "tauren.cultivation",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Cultivation",
+        "type": "active",
+        "races": [
+          "tauren"
+        ],
+        "description": "Grows bonus herbs that can be gathered without Herbalism.",
+        "cooldown": "60 min",
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ],
+      "propEvidence": {
+        "cooldown": "official"
+      }
+    },
+    {
+      "id": "tauren.plainsrunning",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Plainsrunning",
+        "type": "passive",
+        "races": [
+          "tauren"
+        ],
+        "description": "Increases movement speed the longer you stay moving.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "tauren.endurance",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Endurance",
+        "type": "passive",
+        "races": [
+          "tauren"
+        ],
+        "description": "Increases total Health by 5% and hit chance by 1%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015",
+        "blz-notes-1026"
+      ]
+    },
+    {
+      "id": "troll.berserking",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Berserking",
+        "type": "active",
+        "races": [
+          "troll"
+        ],
+        "description": "Increases casting and attack speed by 10% for 10 seconds.",
+        "cooldown": null,
+        "duration": "10 sec",
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1027"
+      ],
+      "propEvidence": {
+        "duration": "official"
+      }
+    },
+    {
+      "id": "troll.rapid-regeneration",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Rapid Regeneration",
+        "type": "active",
+        "races": [
+          "troll"
+        ],
+        "description": "Regenerates 50% of your maximum Health over time.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "troll.beast-slaying",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Beast Slaying",
+        "type": "passive",
+        "races": [
+          "troll"
+        ],
+        "description": "Increases damage dealt to Beasts by 5%.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "troll.regeneration",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Regeneration",
+        "type": "passive",
+        "races": [
+          "troll"
+        ],
+        "description": "10% of your Health regeneration continues during combat.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "tavern-0912",
+        "blz-notes-1015"
+      ]
+    },
+    {
+      "id": "undead.will-of-the-forsaken",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Will of the Forsaken",
+        "type": "active",
+        "races": [
+          "undead"
+        ],
+        "description": "Removes Charm, Fear and Sleep effects without granting immunity to them.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "undead.cannibalize",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Cannibalize",
+        "type": "active",
+        "races": [
+          "undead"
+        ],
+        "description": "Consume a corpse to restore Health and Mana over time.",
+        "cooldown": null,
+        "duration": null,
+        "details": [
+          "Restores 35% of your Health and Mana in total (community catalogue)."
+        ],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ],
+      "propEvidence": {
+        "details": "corroborated"
+      }
+    },
+    {
+      "id": "undead.underwater-breathing",
+      "kind": "ability",
+      "evidence": "corroborated",
+      "props": {
+        "name": "Underwater Breathing",
+        "type": "passive",
+        "races": [
+          "undead"
+        ],
+        "description": "Your underwater breath lasts 300% longer than normal.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ]
+    },
+    {
+      "id": "undead.touch-of-the-grave",
+      "kind": "ability",
+      "evidence": "official",
+      "props": {
+        "name": "Touch of the Grave",
+        "type": "passive",
+        "races": [
+          "undead"
+        ],
+        "description": "Your attacks have a chance to drain life from enemies.",
+        "cooldown": null,
+        "duration": null,
+        "details": [],
+        "communityNotes": null
+      },
+      "sources": [
+        "blz-deep-dive",
+        "tavern-0912"
+      ]
+    }
+  ]
+}

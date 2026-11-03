@@ -182,6 +182,26 @@ export class Fixtures {
     await this.admin.query("delete from private.foreverdb_api_budgets");
   }
 
+  /**
+   * resetBudgets() for a test that drives a budget to its limit and expects the NEXT call to be refused (PT429).
+   * Budget windows are wall-clock aligned (private.foreverdb_take_budget: floor(epoch / seconds) * seconds), so a burst that straddles a
+   * window boundary silently gets a fresh counter and never hits the limit. This waits (on the DATABASE clock, the one the windows use)
+   * until at least `headroomMs` remain in the current `seconds`-long window, then clears the budgets; the whole burst must fit in that
+   * headroom. Waits at most `headroomMs`; usually none.
+   */
+  async resetBudgetsInFreshWindow(seconds, headroomMs = 10_000) {
+    for (;;) {
+      const { rows } = await this.admin.query(
+        "select ($1::numeric - mod(extract(epoch from clock_timestamp()), $1::numeric)) * 1000 as remaining_ms",
+        [seconds],
+      );
+      const remainingMs = Number(rows[0].remaining_ms);
+      if (remainingMs >= headroomMs) break;
+      await sleep(remainingMs + 50);
+    }
+    await this.resetBudgets();
+  }
+
   async owner(installationId) {
     const r = await this.admin.query("select owner_user_id from public.installations where id = $1", [installationId]);
     return r.rows[0]?.owner_user_id ?? null;

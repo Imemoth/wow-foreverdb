@@ -91,7 +91,7 @@ jobs:
           FOREVERDB_DEPLOYMENT: local
           ACCOUNT_AUTH_MODE: local
           ACCOUNT_CSRF_SECRET: CANARY-csrf-secret-0123456789abcdefghijklmnopqrstuvwxyz
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: |

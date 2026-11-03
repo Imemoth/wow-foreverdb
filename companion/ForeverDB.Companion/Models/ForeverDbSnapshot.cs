@@ -6,6 +6,9 @@ public sealed class ForeverDbSnapshot
     public string AddonVersion { get; set; } = "";
     public string InstallationId { get; set; } = "";
     public long UpdatedAt { get; set; }
+    public string? GuildbookCaptureId { get; set; }
+    public long? GuildbookCapturedAt { get; set; }
+    public string? GuildbookSourceCharacter { get; set; }
     public List<ForeverDbSource> Sources { get; set; } = new();
     public List<ForeverDbMap> Maps { get; set; } = new();
     public List<ForeverDbGuild> Guilds { get; set; } = new();

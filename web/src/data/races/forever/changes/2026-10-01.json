@@ -1,0 +1,47 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Blizzard beta development notes, 1 Oct 2026",
+  "records": [
+    {
+      "id": "2026-10-01-build-notes",
+      "announcedOn": "2026-10-01",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "official",
+      "sources": [
+        "blz-notes-1001"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Published in Blizzard's WoW Forever Beta development notes; the notes describe the beta client. Whether the release client matches, and the in-game effective date and build, are not verified.",
+      "ops": [
+        {
+          "entity": "gnome.eureka",
+          "type": "modified",
+          "set": {
+            "description": "Reduces the Mana, Rage or Energy cost of your next 3 spells or abilities by 10% and increases their damage or healing by 10%. It does not affect periodic effects; channeled spells do not count as periodic."
+          },
+          "summary": "No longer boosts periodic effects.",
+          "previous": {
+            "description": "Reduces the Mana, Rage or Energy cost of your next 3 spells or abilities by 10% and increases their damage or healing by 10%."
+          }
+        },
+        {
+          "entity": "undead.cannibalize",
+          "type": "modified",
+          "set": {
+            "details": [
+              "Restores 35% of your Health and Mana in total (community catalogue).",
+              "Cannot be used while you are immune to Physical damage."
+            ]
+          },
+          "summary": "Cannot be used while immune to Physical damage.",
+          "previous": {
+            "details": [
+              "Restores 35% of your Health and Mana in total (community catalogue)."
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

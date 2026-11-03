@@ -2,7 +2,7 @@ import "server-only";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import { z } from "../zod";
 import { serverEnv } from "../env";
 
 /**
@@ -53,7 +53,7 @@ const Frontmatter = z
         articles: z.array(z.string().regex(/^(news|guides|blog)\/[a-z0-9-]{3,80}$/)).max(6).default([]),
       })
       .strict()
-      .default({}),
+      .prefault({}),
   })
   .strict();
 

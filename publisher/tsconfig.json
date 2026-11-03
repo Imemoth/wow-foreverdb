@@ -8,8 +8,14 @@
     "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "outDir": "dist"
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test"
+  ]
 }

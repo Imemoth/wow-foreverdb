@@ -5,7 +5,7 @@ import { pageContext } from "@/lib/page";
 
 export const metadata = {
   title: "How the data works",
-  description: "How ForeverDB collects, aggregates and publishes observed WoW: Forever loot and gathering data, and how to read observed drop rates.",
+  description: "How AzerDex collects, aggregates and publishes observed WoW: Forever loot and gathering data, and how to read observed drop rates.",
   alternates: { canonical: "/about/data" },
 };
 
@@ -19,15 +19,16 @@ export default async function AboutDataPage() {
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">How the data works</h1>
       <div className="prose-fdb">
         <p>
-          ForeverDB is an <strong>observation database</strong>. Nothing here is datamined or copied from game files: every
-          number comes from what players running the ForeverDB addon actually saw while playing World of Warcraft: Forever.
+          AzerDex is an <strong>observation database</strong>. Its loot, gathering and drop data is not datamined or copied from game
+          files: every number comes from what players running the ForeverDB addon actually saw while playing World of Warcraft:
+          Forever. The class guides are the one exception, see <a href="#class-guides">Class guides and the talent calculator</a>.
         </p>
 
         <h2 id="pipeline">From your bags to this page</h2>
         <ol>
           <li><strong>Addon.</strong> Records each loot window with its source (creature by exact level, gathering node, fishing zone, fishing pool, chest or disenchanted item), the items and quantities, and an approximate position on a 0.5% map grid. The addon never makes network requests.</li>
-          <li><strong>Companion.</strong> The Windows Companion uploads aggregated counters for your installation to the private ForeverDB backend.</li>
-          <li><strong>Publication.</strong> A separate, one-way publication job reads only approved aggregate statistics, validates and sanitizes them, and writes them to an isolated public database that powers this website. Private data — installation identifiers, Guildbook rosters, accounts, tokens — is never copied here.</li>
+          <li><strong>Companion.</strong> The Windows Companion uploads aggregated observation counters for your installation to the private AzerDex backend. The current Companion never uploads the Guildbook: it stays on your computer.</li>
+          <li><strong>Publication.</strong> A separate, one-way publication job reads only approved aggregate statistics, validates and sanitizes them, and writes them to an isolated public database that powers this website. Private data — installation identifiers, accounts, tokens — is never copied here, and Guildbook data is not part of what the current Companion sends.</li>
         </ol>
 
         <h2 id="rates">Reading observed drop rates</h2>
@@ -55,18 +56,40 @@ export default async function AboutDataPage() {
           <li>A player can run more than one installation, and overlapping snapshots may be counted more than once; sample thresholds are not proof of distinct contributors.</li>
         </ul>
 
-        <h2 id="maps">Why there is no map artwork</h2>
+        <h2 id="maps">Map artwork</h2>
         <p>
-          The Companion draws maps from your own game installation. That artwork belongs to Blizzard Entertainment and is not
-          ours to redistribute, so the website shows coordinate plots on a neutral grid instead. Positions are aggregated to a
-          coarse grid, and fishing-pool positions are best-effort projections.
+          Zone maps on this site are images exported from the WoW: Forever game client and served from AzerDex&apos;s own asset
+          host. That artwork belongs to Blizzard Entertainment; AzerDex claims no ownership of it and its use here is a fan-site
+          reference that is subject to review and removal on request. Observation markers are aggregated to a 1&nbsp;% coordinate
+          grid and only shown where a cell was observed at least twice; fishing-pool positions are best-effort projections.
+        </p>
+        <p>
+          <strong>Map calibration is provisional.</strong> Markers are positioned from the game&apos;s own normalized map coordinates.
+          That the artwork loads does not prove the markers are geographically verified; registration against independently
+          identifiable landmarks is still pending.
         </p>
 
-        <h2 id="preview">Preview builds and sample data</h2>
+        <h2 id="class-guides">Class guides and the talent calculator</h2>
         <p>
-          Until the isolated public database is provisioned, preview builds run on <strong>synthetic sample data</strong>
-          generated from invented test inputs by the real publication pipeline. Those pages carry a permanent banner and are not
-          indexed by search engines.
+          The class guides are the one part of AzerDex that is <em>not</em> built from player observations. Their talent trees,
+          ranks, grid positions, prerequisites, tier requirements, description text and icons are World of Warcraft: Forever game
+          data read from the game client (beta build 1.60.1.70634): the talent structure through the Everloot project&apos;s
+          extraction of the client files, and the description text, per-rank numbers and icons from a local client export.
+          Description templates are accepted only where they reproduce the client&apos;s own text hash for that build; a number the
+          data cannot supply is shown as a <strong>?</strong> instead of a guess. The game data is unconfirmed for the release client
+          and may change.
+        </p>
+        <p>
+          Talent names, descriptions and icons are &copy; Blizzard Entertainment, Inc. and remain Blizzard&apos;s property; AzerDex
+          claims no rights to them. Icons were converted from the game&apos;s BLP format to WebP for browser compatibility. AzerDex
+          is an independent, free, non-commercial fan site and is not affiliated with or endorsed by Blizzard Entertainment.
+        </p>
+
+        <h2 id="preview">Test builds and sample data</h2>
+        <p>
+          Local development and automated tests use a <strong>synthetic sample dataset</strong> generated from invented inputs.
+          Such builds carry a permanent banner. The public beta never uses it: it reads only the published public database, and if
+          that database is unreachable it shows an error instead of substituting other data.
         </p>
 
         <h2 id="freshness">Freshness</h2>

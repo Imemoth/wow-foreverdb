@@ -20,6 +20,13 @@ public sealed class AuthSession
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Email { get; set; }
 
+    /// <summary>
+    /// Unix timestamp of the last server-confirmed registered identity. This is
+    /// stored inside the DPAPI-protected credential and is only an offline
+    /// continuity proof; server-side revocation is learned on the next check.
+    /// </summary>
+    public long LastVerifiedAt { get; set; }
+
     public AuthSession Clone() => (AuthSession)MemberwiseClone();
 
     public override string ToString() => "AuthSession(redacted)";
@@ -89,7 +96,8 @@ public sealed record AccountStatus(
     bool AccountsEnabled,
     long Generation,
     bool IdentityVerified = false,
-    bool PrimaryCredentialPresent = false)
+    bool PrimaryCredentialPresent = false,
+    string? AccountId = null)
 {
     public static AccountStatus Initial(bool accountsEnabled) =>
         new(SessionState.LoggedOut, SessionFault.None, null, false, SessionFault.None, false, accountsEnabled, 0);

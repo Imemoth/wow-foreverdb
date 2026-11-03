@@ -12,7 +12,7 @@ const FORBIDDEN = [
   /klxhikdlfwgxurdyexdi/, // private production project ref
   /service_role/i,
   /postgres(ql)?:\/\//i,
-  /PUBLIC_READ_DATABASE_URL/,
+  /AZERDEX_READ_DB_URL/,
   /UPSTASH_REDIS_REST_TOKEN/,
   /RATE_LIMIT_SALT/,
   /CHALLENGE_COOKIE_SECRET/,
@@ -31,7 +31,7 @@ const FORBIDDEN = [
   /fdb_account_(claim_start|claim_redeem|installations|guildbook_)/,
   /fdb_installation_link_status/,
 ];
-const SECRET_ENV = ["PUBLIC_READ_DATABASE_URL", "UPSTASH_REDIS_REST_TOKEN", "RATE_LIMIT_SALT", "CHALLENGE_COOKIE_SECRET", "TURNSTILE_SECRET_KEY", "ACCOUNT_CSRF_SECRET", "ACCOUNT_AUTH_PUBLISHABLE_KEY", "ACCOUNT_AUTH_URL"];
+const SECRET_ENV = ["AZERDEX_READ_DB_URL", "UPSTASH_REDIS_REST_TOKEN", "RATE_LIMIT_SALT", "CHALLENGE_COOKIE_SECRET", "TURNSTILE_SECRET_KEY", "ACCOUNT_CSRF_SECRET", "ACCOUNT_AUTH_PUBLISHABLE_KEY", "ACCOUNT_AUTH_URL"];
 const values = SECRET_ENV.map((k) => process.env[k]).filter((v) => v && v.length >= 8);
 
 function* walk(dir) {

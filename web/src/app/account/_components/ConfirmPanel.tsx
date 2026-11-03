@@ -48,7 +48,7 @@ export function ConfirmPanel({ type, tokenHash }: { type: "signup" | "email" | "
           <Link href={recovery ? "/account/forgot-password" : "/account/login"}>{recovery ? "Request a new reset link" : "Back to sign in"}</Link>
         </p>
       ) : (
-        <button type="button" className="btn-gold w-full" onClick={go} disabled={busy} aria-busy={busy}>
+        <button type="button" className="btn-primary w-full" onClick={go} disabled={busy} aria-busy={busy}>
           {busy ? "Working…" : recovery ? "Continue to reset password" : "Confirm email address"}
         </button>
       )}

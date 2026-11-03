@@ -150,7 +150,8 @@ public sealed class DeviceRpcClient
             snapshot = JsonNode.Parse(snapshotJson) is JsonObject { Count: 1 } wrapper && wrapper.TryGetPropertyValue("p_snapshot", out var s) && s is JsonObject
                 ? s
                 : null;
-            if (snapshot is null)
+            // Transport boundary: only the public observation shape may leave the process (Guildbook is Companion-local).
+            if (snapshot is null || !PublicSnapshotGuard.Check(snapshot).IsPublic)
             {
                 return RpcResult<DeviceCallReply>.Fail(RpcFailure.InvalidRequest);
             }

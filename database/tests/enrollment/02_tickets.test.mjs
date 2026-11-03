@@ -93,7 +93,7 @@ describe("issuance", () => {
 
   it("the per-account call budget raises PT429 (rate limit) after 10 calls in a window", async () => {
     const a = await w.account();
-    await w.fx.resetBudgets();
+    await w.fx.resetBudgetsInFreshWindow(300);
     for (let i = 0; i < 10; i += 1) await a.call("fdb_account_enrollment_ticket_issue", []);
     await expectCode(a.call("fdb_account_enrollment_ticket_issue", []), "PT429");
   });
@@ -199,7 +199,7 @@ describe("redemption refusals (replay, expiry, revocation, format)", () => {
 
   it("repeated invalid redemptions hit the per-identity budget (PT429), and the budget is charged even though failures are results", async () => {
     const d = await w.device();
-    await w.fx.resetBudgets();
+    await w.fx.resetBudgetsInFreshWindow(300);
     const bad = "fdba1_" + "B".repeat(43);
     for (let i = 0; i < 5; i += 1) assert.deepEqual(await d.call("fdb_device_enroll", [bad, instId(), "x"]), { ok: false, error: "invalid_ticket" });
     await expectCode(d.call("fdb_device_enroll", [bad, instId(), "x"]), "PT429");

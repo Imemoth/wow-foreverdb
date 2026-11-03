@@ -1,0 +1,607 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "rogue",
+  "className": "Rogue",
+  "gameClassId": 4,
+  "build": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11580,
+      "name": "Assassination",
+      "slug": "assassination",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105742,
+          "name": "Improved Gouge",
+          "spellId": 13741,
+          "row": 0,
+          "col": 0,
+          "maxRank": 3
+        },
+        {
+          "id": 105723,
+          "name": "Remorseless Attacks",
+          "spellId": 14144,
+          "row": 0,
+          "col": 1,
+          "maxRank": 2
+        },
+        {
+          "id": 105722,
+          "name": "Malice",
+          "spellId": 14138,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105721,
+          "name": "Ruthlessness",
+          "spellId": 14156,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105720,
+          "name": "Murder",
+          "spellId": 14158,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105739,
+          "name": "Improved Slice and Dice",
+          "spellId": 14165,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105759,
+          "name": "Relentless Strikes",
+          "spellId": 14179,
+          "row": 2,
+          "col": 0,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105717,
+          "name": "Improved Expose Armor",
+          "spellId": 14168,
+          "row": 2,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105716,
+          "name": "Lethality",
+          "spellId": 14128,
+          "row": 2,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105722,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105714,
+          "name": "Vile Poisons",
+          "spellId": 16513,
+          "row": 3,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105715,
+          "name": "Cold Blood",
+          "spellId": 14177,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105713,
+          "name": "Improved Poisons",
+          "spellId": 14113,
+          "row": 3,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105718,
+          "name": "Vigor",
+          "spellId": 14983,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105709,
+          "name": "Mutilate",
+          "spellId": 1310707,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105711,
+          "name": "Improved Kidney Shot",
+          "spellId": 14174,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105710,
+          "name": "Seal Fate",
+          "spellId": 14186,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105712,
+          "name": "Venom",
+          "spellId": 1310703,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105709,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11573,
+      "name": "Combat",
+      "slug": "combat",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105708,
+          "name": "Improved Eviscerate",
+          "spellId": 14162,
+          "row": 0,
+          "col": 0,
+          "maxRank": 3
+        },
+        {
+          "id": 105741,
+          "name": "Improved Sinister Strike",
+          "spellId": 13732,
+          "row": 0,
+          "col": 1,
+          "maxRank": 2
+        },
+        {
+          "id": 113398,
+          "name": "Lightning Reflexes",
+          "spellId": 13712,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105719,
+          "name": "Puncturing Wounds",
+          "spellId": 1224716,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105738,
+          "name": "Deflection",
+          "spellId": 13713,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105737,
+          "name": "Precision",
+          "spellId": 13705,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105736,
+          "name": "Endurance",
+          "spellId": 13742,
+          "row": 2,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105735,
+          "name": "Riposte",
+          "spellId": 14251,
+          "row": 2,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105738,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105732,
+          "name": "Improved Sprint",
+          "spellId": 13743,
+          "row": 2,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105733,
+          "name": "Improved Kick",
+          "spellId": 13754,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 108100,
+          "name": "Flawless Execution",
+          "spellId": 1310711,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105740,
+          "name": "Dual Wield Specialization",
+          "spellId": 13715,
+          "row": 3,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105737,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105728,
+          "name": "Blade Flurry",
+          "spellId": 13877,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105727,
+          "name": "Hack and Slash",
+          "spellId": 13960,
+          "row": 4,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105726,
+          "name": "Weapon Expertise",
+          "spellId": 30919,
+          "row": 5,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105728,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105730,
+          "name": "Aggression",
+          "spellId": 18427,
+          "row": 5,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105724,
+          "name": "Adrenaline Rush",
+          "spellId": 13750,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree"
+        }
+      ]
+    },
+    {
+      "id": 11572,
+      "name": "Subtlety",
+      "slug": "subtlety",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105756,
+          "name": "Camouflage",
+          "spellId": 13975,
+          "row": 0,
+          "col": 0,
+          "maxRank": 5
+        },
+        {
+          "id": 105761,
+          "name": "Master of Deception",
+          "spellId": 13958,
+          "row": 0,
+          "col": 1,
+          "maxRank": 3
+        },
+        {
+          "id": 105760,
+          "name": "Opportunity",
+          "spellId": 14057,
+          "row": 0,
+          "col": 2,
+          "maxRank": 2
+        },
+        {
+          "id": 105751,
+          "name": "Setup",
+          "spellId": 13983,
+          "row": 1,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105753,
+          "name": "Elusiveness",
+          "spellId": 13981,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105757,
+          "name": "Dirty Tricks",
+          "spellId": 1224782,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105749,
+          "name": "Improved Ambush",
+          "spellId": 14079,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105755,
+          "name": "Initiative",
+          "spellId": 13976,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105754,
+          "name": "Ghostly Strike",
+          "spellId": 14278,
+          "row": 2,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110868,
+          "name": "Improved Distract",
+          "spellId": 14084,
+          "row": 2,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105747,
+          "name": "Heightened Senses",
+          "spellId": 30894,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105743,
+          "name": "Premeditation",
+          "spellId": 14183,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105752,
+          "name": "Serrated Blades",
+          "spellId": 14171,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105745,
+          "name": "Dirty Deeds",
+          "spellId": 14082,
+          "row": 4,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105746,
+          "name": "Preparation",
+          "spellId": 14185,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105748,
+          "name": "Hemorrhage",
+          "spellId": 16511,
+          "row": 4,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105752,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 110867,
+          "name": "Quietus",
+          "spellId": 1310728,
+          "row": 5,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105745,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105750,
+          "name": "Cutthroat",
+          "spellId": 462708,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 110866,
+          "name": "Thousand Cuts",
+          "spellId": 1310721,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105746,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

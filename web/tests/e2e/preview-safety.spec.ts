@@ -66,6 +66,19 @@ test.describe("synthetic preview is labelled and not indexable", () => {
   });
 });
 
+test.describe("synthetic e2e harness pages never exist on a hosted deployment", () => {
+  // playwright.config.ts starts this server WITH E2E_FIXTURES_ENABLED=1 (the accidental misconfiguration): the flag alone must not expose anything.
+  for (const path of ["/test-fixtures/creature-map/multi-level", "/test-fixtures/creature-map/no-locations", "/test-fixtures/creature-map/nope", "/test-fixtures/lightbox", "/test-fixtures/lightbox-test-image.webp"]) {
+    test(`${path} is a 404 with E2E_FIXTURES_ENABLED=1`, async ({ request }) => {
+      const r = await request.get(path, { headers: client() });
+      expect(r.status()).toBe(404);
+      const body = await r.text();
+      for (const leak of [/Harness Boar/, /synthetic/i, /Test Grove/, /TEST FIXTURE/]) expect(body).not.toMatch(leak);
+      expect(r.headers()["x-robots-tag"]).toMatch(/noindex/);
+    });
+  }
+});
+
 test.describe("security headers, cookies and caching (HTTP level)", () => {
   test("HTML response headers", async ({ request }) => {
     const r = await request.get("/database?q=copper", { headers: client() });
@@ -154,7 +167,7 @@ test.describe("security headers, cookies and caching (HTTP level)", () => {
  * from env.ts therefore makes its case fail (the server would start serving).
  */
 
-const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|PUBLIC_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_)/;
+const SENSITIVE_PREFIXES = /^(FOREVERDB_|VERCEL|SITE_URL|RATE_LIMIT|UPSTASH|AZERDEX_READ|TRUSTED_IP|TURNSTILE|NEXT_PUBLIC_TURNSTILE|CHALLENGE_|SUPABASE|DATABASE_URL|POSTGRES_)/;
 
 async function withServer(port: number, env: Record<string, string>, run: (base: string, log: () => string) => Promise<void>) {
   const clean: Record<string, string | undefined> = {};
@@ -207,7 +220,7 @@ const validProductionShape: Record<string, string> = {
   VERCEL_PROJECT_PRODUCTION_URL: "foreverdb.example",
   FOREVERDB_DEPLOYMENT: "production",
   FOREVERDB_DATA_SOURCE: "postgres",
-  PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
+  AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.com:6543/postgres",
   SITE_URL: "https://foreverdb.example",
   RATE_LIMIT_BACKEND: "upstash",
   UPSTASH_REDIS_REST_URL: "https://fake-upstash.invalid",
@@ -234,7 +247,7 @@ const cases: Array<{ name: string; port: number; env: Record<string, string>; re
   {
     name: "public database URL that references the private Supabase project",
     port: 3214,
-    env: { ...validDemo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
+    env: { ...validDemo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" },
     reason: /PRIVATE production/,
     mustNotMention: /must use the least-privilege|not a valid URL/,
   },

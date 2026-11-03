@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { consentStorageState } from "./tests/consent-seed";
 
 /**
  * Account System V1 acceptance against a REAL, ephemeral Auth stack (GoTrue + PostgreSQL + Mailpit; see
@@ -66,7 +67,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [["list"], ["json", { outputFile: "test-results/account-results.json" }]],
-  use: { baseURL: "http://localhost:3210", launchOptions: executablePath ? { executablePath } : {}, trace: "retain-on-failure" },
+  use: { baseURL: "http://localhost:3210", storageState: consentStorageState("http://localhost:3210"), launchOptions: executablePath ? { executablePath } : {}, trace: "retain-on-failure" },
   projects: [{ name: "account", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } } }],
   webServer: [
     server(3210, { ...accountsLocal, FOREVERDB_DEPLOYMENT: "local", SITE_URL: "http://localhost:3210" }),

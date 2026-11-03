@@ -1,0 +1,2 @@
+# Pinned to the version the exporter was validated with (BLP2 DXT decode + WebP encode are Pillow/libwebp features).
+Pillow==12.3.0

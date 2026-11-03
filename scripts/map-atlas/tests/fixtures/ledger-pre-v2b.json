@@ -1,0 +1,25 @@
+{
+  "maps": {
+    "1420": {
+      "v1": {
+        "files": {
+          "manifest.json": {
+            "bytes": 1406,
+            "sha256": "342ae5fad6190ef599e45f518de0dc3b75dda6c928b7390368176346e8ba21d7"
+          },
+          "tirisfal-glades.webp": {
+            "bytes": 255442,
+            "sha256": "a2856ed85f2545f2604e0a7e7fc41e9f270c78e84bf6c08885f43dd500b97678"
+          }
+        },
+        "firstBuild": "legacy-poc",
+        "layoutSha256": "6145108ca7408d564d21650ed95abc699f68e500eaee15e495674f678668022e",
+        "pixelSha256": "77364647acc33ca5f8e55a7209ede348b527bd7f5f410de99cd1948ad5d3d57e",
+        "seenBuilds": [
+          "legacy-poc"
+        ]
+      }
+    }
+  },
+  "schemaVersion": 1
+}

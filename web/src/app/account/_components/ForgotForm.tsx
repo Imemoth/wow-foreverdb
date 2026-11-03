@@ -64,7 +64,7 @@ export function ForgotForm({ turnstileSiteKey }: { turnstileSiteKey: string | nu
       <FormAlert message={error} alertRef={alertRef} />
       <TextField label="Email address" name="email" type="email" inputMode="email" value={email} onChange={setEmail} autoComplete="email" error={emailError} />
       {turnstileSiteKey && <AccountTurnstile siteKey={turnstileSiteKey} onToken={onToken} resetSignal={resetSignal} />}
-      <button type="submit" className="btn-gold w-full" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
+      <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
       <p className="text-sm text-mist"><Link href="/account/login">Back to sign in</Link></p>
     </form>
   );

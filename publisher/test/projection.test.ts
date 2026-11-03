@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PublicationConfig } from "../src/contract.js";
-import { buildProjection, canonicalJson, displayKindOf, PublicationError } from "../src/project.js";
-import { sanitizeName } from "../src/sanitize.js";
-import { confidenceFor, wilson } from "../src/stats.js";
+import { PublicationConfig } from "../src/core/contract.ts";
+import { buildProjection, canonicalJson, displayKindOf, PublicationError } from "../src/core/project.ts";
+import { sanitizeName } from "../src/core/sanitize.ts";
+import { confidenceFor, wilson } from "../src/core/stats.ts";
 
 const config = PublicationConfig.parse(JSON.parse(readFileSync(resolve(__dirname, "../publication-config.json"), "utf8")));
 const synthetic = () =>

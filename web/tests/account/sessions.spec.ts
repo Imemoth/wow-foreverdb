@@ -14,8 +14,33 @@ async function untilRefreshWindow(exp: number) {
 test("10a. the cookie is opaque; a refresh rotates the refresh token, keeps the session id and the absolute start", async ({ playwright }) => {
   const { c } = await signedInClient(playwright, "rot");
   const first = (await cookieOf(c))!;
-  expect(() => JSON.parse(Buffer.from(first.value.split(".")[1] ?? "", "base64url").toString())).toThrow(); // not readable without the key
   const before = (await openSessionCookie(first.value))!;
+
+  /**
+   * Deterministic structural checks that the cookie is sealed ciphertext, never a directly-readable
+   * token - NOT a substring guess. A prior version asserted `.not.toMatch(/eyJ/)` ("no JWT visible"):
+   * AES-256-GCM ciphertext is, by design, indistinguishable from random bytes, and "eyJ" is just one
+   * specific 3-character sequence in the base64url alphabet. Over a ~200-500 char cookie that is a
+   * roughly 1-in-500 to 1-in-1000 chance of a false failure on any given run with no security meaning
+   * either way - its absence was never the actual property this test wanted to establish. These
+   * checks instead hold by construction (seal()'s format) or by cryptographic guarantee (AES-GCM
+   * authentication), so none of them can flake:
+   */
+  // Shape: `iv.ciphertext` (crypto.ts seal()) - two segments, never the three-segment
+  // header.payload.signature shape of a JWT.
+  const segments = first.value.split(".");
+  expect(segments).toHaveLength(2);
+  const iv = Buffer.from((segments[0] ?? "").replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  expect(iv.length).toBe(12); // AES-GCM IV size, not a JWT header
+  // The payload is unrecoverable without the real key: decrypting with a different (but
+  // well-formed) secret must fail outright on AES-GCM's authentication tag, every time.
+  const { unseal } = await import("../../src/lib/account/crypto");
+  expect(await unseal("a-completely-different-secret-0123456789abcdefgh", first.value, "fdb-acct-session-v1|fdb_acct")).toBeNull();
+  // None of the real, known session fields appear as plaintext in the sealed value.
+  for (const secretField of [before.uid, before.sid, before.at, before.rt]) {
+    expect(first.value).not.toContain(secretField);
+  }
+
   expect(before.k).toBe("user");
   expect(before.ex - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(JWT_EXP_SEC);
 

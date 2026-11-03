@@ -23,6 +23,42 @@ export interface DatasetMeta {
   thresholds: { minBucketObservationsForRate?: number; lowConfidenceBelow?: number; highConfidenceAtLeast?: number } | null;
 }
 
+export const NEWS_CATEGORIES = ["bluepost", "official_news", "patch_notes", "azerdex"] as const;
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+export type NewsSourceType = "bluepost" | "official_news" | "azerdex";
+export type NewsRegion = "us" | "eu" | "global";
+
+export interface NewsEntry {
+  id: number;
+  slug: string;
+  sourceType: NewsSourceType;
+  sourceKey: string;
+  sourceEntryId: string;
+  sourceTopicId: string | null;
+  sourcePostNumber: number | null;
+  threadKey: string | null;
+  canonicalUrl: string;
+  title: string;
+  author: string | null;
+  region: NewsRegion;
+  publishedAt: string;
+  modifiedAt: string | null;
+  ingestedAt: string;
+  excerpt: string;
+  category: NewsCategory;
+  importance: number;
+  featured: boolean;
+}
+
+export interface NewsQuery {
+  category: NewsCategory | null;
+  query: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface NewsPage { rows: NewsEntry[]; total: number }
+
 export interface EntityRef {
   entityKind: "item" | "source";
   displayKind: DisplayKind;
@@ -106,6 +142,38 @@ export interface SourceDetail {
   locations: LocationPoint[];
 }
 
+/**
+ * One published, aggregated (1% cell) location of a source inside one zone, as returned by the zone-wide map read
+ * (web_api.zone_map_points). No contributor/installation/account fields exist here by construction.
+ */
+export interface ZoneMapPointRow {
+  sourceType: SourceType; sourceId: number; sourceLevel: number; name: string; lootKind: LootKind;
+  subzone: string; x: number; y: number; observations: number;
+}
+
+/**
+ * `totalCells` counts published cells of the zone that pass the publication rules (not hidden/suppressed ones);
+ * `truncated` is true when `points` is capped below it.
+ */
+export interface ZoneMapPoints { mapId: number; points: ZoneMapPointRow[]; totalCells: number; truncated: boolean }
+
+/**
+ * One published, aggregated (1% cell) location of a SOURCE (web_api.source_map_points). Same privacy rules as the zone read; carries
+ * the UiMapID because a source can be observed in several zones.
+ */
+export interface SourceMapPointRow extends ZoneMapPointRow { mapId: number }
+
+export interface SourceMapPointsQuery {
+  sourceType: SourceType; sourceId: number; mapId: number | null; lootKind: LootKind | null; sourceLevel: number | null; limit: number;
+}
+
+/** `totalCells` counts published cells that pass the publication rules for the filter; `truncated` is true when `points` is capped below it. */
+export interface SourceMapPoints { sourceType: SourceType; sourceId: number; points: SourceMapPointRow[]; totalCells: number; truncated: boolean }
+
+export const ZONE_MAP_POINT_LIMIT = 3000;
+/** Loot kinds that have a map location. Disenchant results are never located. */
+export const LOCATED_LOOT_KINDS = LOOT_KINDS.filter((k) => k !== "disenchant");
+
 export interface ZoneSummary { mapId: number; zoneName: string; observations: number; sourceCount: number; itemCount: number }
 
 export interface ZoneDetail extends ZoneSummary {
@@ -141,7 +209,14 @@ export interface PublicDataAdapter {
   zones(): Promise<ZoneSummary[]>;
   zone(mapId: number): Promise<ZoneDetail | null>;
   zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>>;
+  /** Zone-wide published map cells (bounded, deterministic order). */
+  zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints>;
+  /** Published map cells of ONE source (bounded, deterministic order, same rules as the zone read). */
+  sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints>;
   recent(limit: number): Promise<RecentRow[]>;
+  newsList(query: NewsQuery): Promise<NewsPage>;
+  newsFeatured(limit: number): Promise<NewsEntry[]>;
+  newsEntry(slug: string): Promise<NewsEntry | null>;
   sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]>;
 }
 

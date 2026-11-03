@@ -29,7 +29,11 @@ export async function loginAgain(playwright: Playwright, u: Pick<WebUser, "email
 
 export interface Companion { id: Identity; installationId: string }
 
-/** An anonymous Companion identity that has really ingested one installation (sources, loot, locations, quest drops, Guildbook). */
+/**
+ * An anonymous Companion identity that has really ingested one installation (sources, loot, locations, quest drops). `guilds`/`members`
+ * make the snapshot carry a Guildbook the way an OLD Companion still uploads it: the server (migration 0018) drops it, so no test may
+ * expect a stored Guildbook (the specs assert zero rows).
+ */
 export async function companionWithInstallation(o: { guilds?: number; members?: number; tag?: string; sources?: number } = {}): Promise<Companion> {
   await relaxFixtureCeilings();
   const id = await anonymous();

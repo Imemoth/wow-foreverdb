@@ -1,0 +1,42 @@
+name: Talent icons CDN read-only verification
+
+# READ-ONLY: HTTP GET requests to the asset host only. No secrets, no upload, no deployment, no Cloudflare/Vercel API calls.
+# Run on demand after the owner has staged the talent icons (Actions -> "Talent icons CDN read-only verification" -> Run workflow).
+# Checks every distinct icon of the dataset's icons.json against icons-inventory.json (HTTP 200, image/webp, byte length, sha256,
+# cache headers) plus a 404 control; an unreachable host or a host that answers 200 to everything is a FAIL, never a pass.
+# It does not run on pull requests, so it can never block them. See docs/web/class-guides-talents.md ("Publishing the icons").
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Origin to verify (azerdex-assets.pages.dev, assets.azerdex.com or <deployment>.azerdex-assets.pages.dev)"
+        default: "https://azerdex-assets.pages.dev"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify talent icons on the asset host
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify every icon
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url }}
+        run: |
+          set -euo pipefail
+          build=$(node -e 'console.log(require("./web/src/data/talents/forever/1.60.1.70634/icons.json").build)')
+          echo "dataset icon build: $build"
+          node web/scripts/verify-talent-icons-cdn.mjs --dataset "web/src/data/talents/forever/$build" --base "$BASE_URL" | tee talent-icons-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: talent-icons-cdn-evidence
+          path: talent-icons-evidence.json
+          if-no-files-found: ignore
+          retention-days: 90

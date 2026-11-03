@@ -18,7 +18,8 @@ test("1-8. registered account A signs in; the Companion's anonymous owner issues
   const code = await startClaim(comp);
   expect(code).toMatch(/^[0-9A-F]{32}$/);
 
-  // 5: the ingest stored representative observations of every kind (sources, loot, locations incl. quest drops, Guildbook members, professions)
+  // 5: the ingest stored representative observations of every kind (sources, loot, locations incl. quest drops). The snapshot also carries a
+  //    Guildbook (as an old Companion would send it): migration 0018 drops it before the legacy ingest, so nothing of it is stored.
   const rows = (await db.query(`select (select count(*) from public.installation_source_stats where installation_id = $1)::int sources,
                                       (select count(*) from public.installation_item_stats where installation_id = $1)::int loot,
                                       (select count(*) from public.installation_item_stats where installation_id = $1 and quest_drop_count > 0)::int quest,
@@ -26,7 +27,7 @@ test("1-8. registered account A signs in; the Companion's anonymous owner issues
                                       (select count(*) from public.installation_guilds where installation_id = $1)::int guilds,
                                       (select count(*) from public.installation_guild_members where installation_id = $1)::int members,
                                       (select count(*) from public.installation_guild_professions where installation_id = $1)::int professions`, [comp.installationId])).rows[0];
-  expect(rows).toEqual({ sources: 3, loot: 6, quest: 3, locations: 3, guilds: 2, members: 8, professions: 8 });
+  expect(rows).toEqual({ sources: 3, loot: 6, quest: 3, locations: 3, guilds: 0, members: 0, professions: 0 });
 
   // 3-4: the anonymous identity is a real anonymous Auth user with a session id; the installation exists and is owned by it
   expect(claimsOf(comp.id.token)).toMatchObject({ is_anonymous: true, role: "authenticated" });
@@ -158,7 +159,7 @@ test("12. a revoked, replaced or stale web session cannot redeem; the pending cl
   expect(ok.status()).toBe(200);
 });
 
-test("13-15. a valid redemption transfers the installation exactly once, A sees it and its Guildbook, B sees nothing, the temporary session is gone", async ({ playwright }) => {
+test("13-15. a valid redemption transfers the installation exactly once, A sees it (and there is no website Guildbook), B sees nothing, the temporary session is gone", async ({ playwright }) => {
   const a = await webUser(playwright, "acctA13");
   const b = await webUser(playwright, "acctB13");
   const comp = await companionWithInstallation({ guilds: 2, members: 4, tag: "AA" });
@@ -187,33 +188,32 @@ test("13-15. a valid redemption transfers the installation exactly once, A sees 
   const after = await fingerprint(db);
   for (const t of Object.keys(frozen)) expect(after[t], t).toEqual(frozen[t]); // installations too: the fingerprint excludes only owner_user_id
 
-  // 15: A sees the installation and the Guildbook through the website; the page shows the id
+  // 15: A sees the installation through the website (no Guildbook count, link or API); the page shows the id
   const list = await a.c.get("/account/api/installations");
   expect(list.status()).toBe(200);
-  const listed = (await json<{ installations: { installationId: string; guildCount: number }[] }>(list)).installations;
+  const listed = (await json<{ installations: Record<string, unknown>[] }>(list)).installations;
   expect(listed.map((i) => i.installationId)).toEqual([comp.installationId]);
-  expect(listed[0]!.guildCount).toBe(2);
+  expect(Object.keys(listed[0]!).sort()).toEqual(["installationId", "lastSeenAt", "linkedAt"]);
   const pageHtml = await (await a.c.get("/account/installations")).text();
   expect(pageHtml).toContain(comp.installationId);
   expect(pageHtml).not.toContain(compB.installationId);
-  const guilds = await json<{ guilds: { guildKey: string; guildName: string; memberCount: number }[] }>(await post(a.c, "/account/api/guildbook/guilds", { installationId: comp.installationId }));
-  expect(guilds.guilds.map((g) => g.guildName).sort()).toEqual(["Guild 1", "Guild 2"]);
-  const members = await json<{ members: Record<string, unknown>[]; pageSize: number }>(await post(a.c, "/account/api/guildbook/members", { installationId: comp.installationId, guildKey: guilds.guilds[0]!.guildKey, page: 0 }));
-  expect(members.members).toHaveLength(4);
-  expect(members.members.map((m) => m.name).every((n) => String(n).startsWith("AA"))).toBe(true);
-  expect(Object.keys(members.members[0]!).sort()).toEqual(["classFile", "className", "lastOnlineHours", "level", "name", "online", "rank", "rankIndex", "zone"]);
-  expect(JSON.stringify(members)).not.toMatch(/Player-|guid/i);
+  expect(pageHtml).not.toContain("/account/guildbook");
+  // the retired Guildbook routes are a bare 404 for everyone, the owner included (no RPC is reachable from the website)
+  for (const [who, client] of [["owner", a.c], ["other account", b.c]] as const) {
+    for (const [path, body] of [
+      ["/account/api/guildbook/guilds", { installationId: comp.installationId }],
+      ["/account/api/guildbook/members", { installationId: comp.installationId, guildKey: "Realm:Guild1", page: 0 }],
+    ] as const) {
+      expect((await post(client, path, body)).status(), `${who} ${path}`).toBe(404);
+    }
+    expect((await client.get("/account/guildbook")).status(), `${who} page`).toBe(404);
+  }
 
-  // 16: B (registered, owns nothing) sees none of it; even with A's REAL installation id and guild key
+  // 16: B (registered, owns nothing) sees none of it
   expect((await json<{ installations: unknown[] }>(await b.c.get("/account/api/installations"))).installations).toEqual([]);
-  const bGuilds = await json<{ guilds: unknown[] }>(await post(b.c, "/account/api/guildbook/guilds", { installationId: comp.installationId }));
-  expect(bGuilds.guilds).toEqual([]);
-  const bMembers = await json<{ members: unknown[] }>(await post(b.c, "/account/api/guildbook/members", { installationId: comp.installationId, guildKey: guilds.guilds[0]!.guildKey, page: 0 }));
-  expect(bMembers.members).toEqual([]);
   expect(await (await b.c.get("/account/installations")).text()).not.toContain(comp.installationId);
   // an installation owned by ANOTHER (anonymous) identity is not visible to A either
-  const aOther = await json<{ guilds: unknown[] }>(await post(a.c, "/account/api/guildbook/guilds", { installationId: compB.installationId }));
-  expect(aOther.guilds).toEqual([]);
+  expect(JSON.stringify(listed)).not.toContain(compB.installationId);
 });
 
 test("17-19. the former anonymous owner loses ingest on the transferred installation, learns `transferred`; the account owner keeps ingesting without duplicates", async ({ playwright }) => {

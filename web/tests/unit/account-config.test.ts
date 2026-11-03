@@ -190,15 +190,41 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(issues(productionSpoof, releaseCtx)).toMatch(/owner-approved code change/);
   });
 
+  it("allows the owner-approved public Account release ONLY for release branch + canonical azerdex.com", () => {
+    const exact: AccountAuthContext = {
+      hosted: true, deployment: "production", platformEnv: "production", gitBranch: "release",
+    };
+    const approved = { ...production, SITE_URL: "https://azerdex.com" };
+    const ok = evaluateAccountAuth(approved, exact);
+    expect(ok.issues).toEqual([]);
+    expect(ok.config?.mode).toBe("production");
+
+    for (const ctx of [
+      { ...exact, gitBranch: "main" },
+      { ...exact, gitBranch: "web/azerdex-beta" },
+      { ...exact, gitBranch: undefined },
+      { ...exact, platformEnv: "preview" },
+      { ...exact, deployment: "preview" },
+      { ...exact, hosted: false },
+    ] as AccountAuthContext[]) {
+      expect(evaluateAccountAuth(approved, ctx).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    for (const site of [undefined, "https://beta.azerdex.com", "https://www.azerdex.com", "https://azerdex.com/path", "http://azerdex.com"]) {
+      expect(evaluateAccountAuth({ ...approved, SITE_URL: site }, exact).issues.join(" ")).toMatch(/owner-approved release branch/);
+    }
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_URL: STAGING_URL, ACCOUNT_AUTH_PROJECT_REF: "abcdefghijklmnopqrst" }, exact).issues.join(" ")).toMatch(/approved PRIVATE production project/);
+    expect(evaluateAccountAuth({ ...approved, ACCOUNT_AUTH_PUBLISHABLE_KEY: "sb_secret_" + "x".repeat(40) }, exact).issues.join(" ")).toMatch(/SECRET key/);
+  });
+
   it("accepts ONLY a precise private-project pilot on Vercel Preview if code is owner-approved", () => {
     const r = evaluateAccountAuth(pilot, previewCtx, ownerPilot);
     expect(r.issues).toEqual([]);
     expect(r.config).toMatchObject({
       mode: "pilot", authOrigin: PRIVATE_URL, projectRef: PRIVATE_PRODUCTION_PROJECT_REF,
     });
-    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
-    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(evaluateAccountAuth(pilot, demoCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, releaseCtx, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
+    expect(evaluateAccountAuth(pilot, local, ownerPilot).issues.join(" ")).toMatch(/Vercel preview deployment/);
   });
 
   it("accepts production only after separate code approval and matching real Vercel Production signals", () => {
@@ -273,7 +299,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const prod: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
       FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
-      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
       SITE_URL: "https://wow-foreverdb.vercel.app",
       RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
       UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
@@ -284,10 +310,23 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const good = evaluateEnv(prod, ownerProduction);
     expect(good.ok).toBe(true);
     expect(good.ok && good.env.accountAuth?.mode).toBe("production");
+    const released: RawEnv = {
+      ...prod, SITE_URL: "https://azerdex.com", VERCEL_PROJECT_PRODUCTION_URL: "azerdex.com",
+      VERCEL_GIT_COMMIT_REF: "release",
+    };
+    const live = evaluateEnv(released); // Real code defaults; NO injected approval flag.
+    expect(live.ok).toBe(true);
+    expect(live.ok && live.env.accountAuth?.mode).toBe("production");
+    const wrongBranch = evaluateEnv({ ...released, VERCEL_GIT_COMMIT_REF: "main" });
+    expect(wrongBranch.ok).toBe(false);
+    expect(!wrongBranch.ok && wrongBranch.issues.join(" ")).toMatch(/owner-approved release branch/);
+    const noChallenge = evaluateEnv({ ...released, TURNSTILE_SECRET_KEY: undefined });
+    expect(noChallenge.ok).toBe(false);
+    expect(!noChallenge.ok && noChallenge.issues.join(" ")).toMatch(/production Account requires server-side Turnstile/);
     const fixture = evaluateEnv({ ...prod, FOREVERDB_DATA_SOURCE: "fixture" }, ownerProduction);
     expect(fixture.ok).toBe(false);
     expect(!fixture.ok && fixture.issues.join(" ")).toMatch(/synthetic fixture/);
-    const privateDb = evaluateEnv({ ...prod, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
+    const privateDb = evaluateEnv({ ...prod, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db." + PRIVATE_PRODUCTION_PROJECT_REF + ".supabase.co/postgres" }, ownerProduction);
     expect(privateDb.ok).toBe(false);
     expect(!privateDb.ok && privateDb.issues.join(" ")).toMatch(/PRIVATE production database/);
   });
@@ -296,7 +335,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     const base: RawEnv = {
       VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "wow-foreverdb.vercel.app",
       FOREVERDB_DEPLOYMENT: "production", FOREVERDB_DATA_SOURCE: "postgres",
-      PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
+      AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@public-db.example.net:6543/postgres",
       SITE_URL: "https://wow-foreverdb.vercel.app",
       RATE_LIMIT_BACKEND: "upstash", RATE_LIMIT_SALT: "s".repeat(40),
       UPSTASH_REDIS_REST_URL: "https://x.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t".repeat(40),
@@ -307,7 +346,7 @@ describe("single-project Auth pilot and production candidate: owner-gated polici
     expect(!r.ok && r.issues.join(" ")).toMatch(/owner-approved code change/);
     const rp = evaluateEnv({ ...base, FOREVERDB_DEPLOYMENT: "preview", FOREVERDB_DATA_SOURCE: "fixture", ...pilot });
     expect(rp.ok).toBe(false);
-    expect(!rp.ok && rp.issues.join(" ")).toMatch(/protected Vercel preview/);
+    expect(!rp.ok && rp.issues.join(" ")).toMatch(/Vercel preview deployment/);
     // The pilot's source-code approval must not create public access or a public backend credential.
     const x = evaluateEnv({ ...base, ...production, NEXT_PUBLIC_ACCOUNT_BACKEND: PRIVATE_URL });
     expect(x.ok).toBe(false);
@@ -338,7 +377,7 @@ describe("integration with the global environment validator", () => {
   });
   it("does NOT weaken the global guard: the private project is still refused everywhere else", () => {
     const ref = PRIVATE_PRODUCTION_PROJECT_REF;
-    const r1 = evaluateEnv({ ...demo, FOREVERDB_DATA_SOURCE: "postgres", PUBLIC_READ_DATABASE_URL: `postgresql://foreverdb_web_reader:pw@db.${ref}.supabase.co/postgres` });
+    const r1 = evaluateEnv({ ...demo, FOREVERDB_DATA_SOURCE: "postgres", AZERDEX_READ_DB_URL: `postgresql://foreverdb_web_reader:pw@db.${ref}.supabase.co/postgres` });
     expect(!r1.ok && r1.issues.join(" ")).toMatch(/PRIVATE production database/);
     const r2 = evaluateEnv({ ...demo, NEXT_PUBLIC_API_BASE: `https://${ref}.supabase.co` });
     expect(!r2.ok && r2.issues.join(" ")).toMatch(/NEXT_PUBLIC_API_BASE: references the PRIVATE/);

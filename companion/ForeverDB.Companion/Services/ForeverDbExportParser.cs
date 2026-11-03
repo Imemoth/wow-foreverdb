@@ -51,6 +51,19 @@ public sealed class ForeverDbExportParser
             UpdatedAt = long.Parse(header[4])
         };
 
+        // Schema 9 headers remain valid without Guildbook provenance. The addon
+        // appends these fields only after a genuine roster/profession capture.
+        if (header.Length >= 8 &&
+            !string.IsNullOrWhiteSpace(header[5]) &&
+            long.TryParse(header[6], out var guildbookCapturedAt) &&
+            guildbookCapturedAt > 0 &&
+            !string.IsNullOrWhiteSpace(header[7]))
+        {
+            snapshot.GuildbookCaptureId = DecodeField(header[5]);
+            snapshot.GuildbookCapturedAt = guildbookCapturedAt;
+            snapshot.GuildbookSourceCharacter = DecodeField(header[7]);
+        }
+
         if (snapshot.SchemaVersion < 7)
         {
             throw new InvalidOperationException(

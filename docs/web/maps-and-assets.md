@@ -7,10 +7,16 @@
 | cjber/tweaks-forever overlay data | Comparison evidence only | Not imported | Not used |
 | Fonts: Cinzel, Inter, JetBrains Mono | Fontsource npm packages | SIL OFL 1.1 | Self-hosted |
 | ForeverDB logo, category glyphs, location plots | Original SVG in `web/src/components` | Project-owned | Used |
-| Item/spell icons | Blizzard | Not licensed | **Not used** |
+| Item/spell icons | Blizzard | Not licensed | **Not used.** The Class Guides talent calculator has an optional, **off-by-default** path for talent icons from the allow-listed asset host only (never git). 358 icons (build 1.60.1.70634) are uploaded and verified (358/358, 2026-11-02); the owner authorised publication on 2026-10-28 (beta) and approved production publication on 2026-11-02 (`AZERDEX_TALENT_ICONS=cdn`, enforced by the release parity gate); see [`class-guides-talents.md`](class-guides-talents.md#icons), [Publication and rights](class-guides-talents.md#publication-and-rights) and [`third-party-blizzard-content-notice.md`](../third-party-blizzard-content-notice.md) |
+| Talent names, ranks, positions and description text (Class Guides) | Blizzard game data read from the Forever client (Everloot catalog; owner's local export) | Not licensed; attribution shown | Shown on beta/preview/local; on production shown with `AZERDEX_TALENT_TEXT=1` (**owner approved 2026-11-02**; enforced by the release parity gate) |
+| Everloot / TalentForge / extraction tooling | Third-party code and data | Everloot AGPL-3.0 code (its data is Blizzard's); TalentForge has no licence | References and cross-checks only; no code redistributed |
+| Class/tree backdrops (Class Guides) | Original inline SVG in `web/src/components/classes/backdrops.tsx` | Project-owned | Used |
 
 ## V1 decision
 Location data is shown as **coordinate plots on a neutral 0–100 % grid**, aggregated to 1 % cells with cells below 2 observations hidden. A text table of the densest cells goes with each plot for accessibility. This delivers useful "where" information without proprietary imagery.
 
 ## Extensible path (Phase D)
 `LocationPlot` takes points in map-percent coordinates, so a future map layer can sit underneath it unchanged. Acceptable future backgrounds: (a) original, self-drawn zone outlines; (b) community maps under a compatible licence with recorded attribution; (c) explicit written permission. Clustering and heatmaps can be computed server-side from `pub.locations` without new data.
+
+## P2-D proof of concept
+An isolated interactive map POC (`/poc/maps/tirisfal`, off by default, non-indexable, synthetic data only) uses an owner-supplied map image. This does **not** change the V1 decision above for the public site: the image's licensing is unreviewed and it must not be deployed publicly or published to a CDN until the owner decides. Details: [`maps-poc.md`](maps-poc.md).

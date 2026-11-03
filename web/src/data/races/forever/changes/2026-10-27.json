@@ -1,0 +1,78 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Blizzard beta development notes, 27 Oct 2026 (racial additions)",
+  "records": [
+    {
+      "id": "2026-10-27-racial-additions",
+      "announcedOn": "2026-10-27",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "official",
+      "sources": [
+        "blz-notes-1027",
+        "blz-notes-1026"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Published in Blizzard's WoW Forever Beta development notes; the notes describe the beta client. Whether the release client matches, and the in-game effective date and build, are not verified. These additions were announced on 2026-10-27 as items that had been intended for the 2026-10-26 list.",
+      "ops": [
+        {
+          "entity": "orc.blood-fury",
+          "type": "modified",
+          "set": {
+            "cooldown": "2 min"
+          },
+          "summary": "Cooldown reduced back to 2 minutes (it was 3).",
+          "previous": {
+            "cooldown": "3 min"
+          }
+        },
+        {
+          "entity": "troll.berserking",
+          "type": "modified",
+          "set": {
+            "description": "Increases casting and attack speed by 10% for 15 seconds.",
+            "duration": "15 sec"
+          },
+          "summary": "Duration increased from 10 to 15 seconds.",
+          "previous": {
+            "description": "Increases casting and attack speed by 10% for 10 seconds.",
+            "duration": "10 sec"
+          }
+        },
+        {
+          "entity": "undead.touch-of-the-grave",
+          "type": "modified",
+          "set": {
+            "cooldown": "15 sec (internal)"
+          },
+          "summary": "Internal cooldown reduced from 25 to 15 seconds.",
+          "previous": {
+            "cooldown": "25 sec (internal)"
+          }
+        },
+        {
+          "entity": "high-order-skyborne.read-leyline",
+          "type": "modified",
+          "set": {
+            "description": "Increases Mana and Health regeneration by 50%. Cannot be used while Innervate is active, and Innervate replaces it as the more powerful effect. Using it at a ley line also grants Attuned for 1 hour, which raises the regeneration bonus to 100% and persists through death. Attuned is removed when you enter a raid."
+          },
+          "summary": "Clarified: Attuned is removed when you enter a raid.",
+          "previous": {
+            "description": "Increases Mana and Health regeneration by 50%. Cannot be used while Innervate is active, and Innervate replaces it as the more powerful effect. Using it at a ley line also grants Attuned for 1 hour, which raises the regeneration bonus to 100% and persists through death."
+          }
+        },
+        {
+          "entity": "windshaper-skyborne.skysight",
+          "type": "modified",
+          "set": {
+            "description": "Increases movement speed by 15%. Using it at an elemental convergence also grants Charged for 1 hour, which raises the speed bonus to 30% and persists through death. Charged is removed when you enter a raid."
+          },
+          "summary": "Clarified: Charged is removed when you enter a raid.",
+          "previous": {
+            "description": "Increases movement speed by 15%. Using it at an elemental convergence also grants Charged for 1 hour, which raises the speed bonus to 30% and persists through death."
+          }
+        }
+      ]
+    }
+  ]
+}

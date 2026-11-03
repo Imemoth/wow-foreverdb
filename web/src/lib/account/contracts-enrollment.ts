@@ -7,7 +7,7 @@
  * Companion-only (the installation's own anonymous identity) and are deliberately absent: nothing in the website can name them.
  * Specification: docs/account-v1/zero-touch-rpc-contract.md.
  */
-import { z } from "zod";
+import { z } from "../zod";
 import { installationIdSchema } from "./contracts";
 
 export const uuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);

@@ -1,0 +1,76 @@
+{
+  "schema": "azerdex.versioned-changes/1",
+  "title": "Community-reported racial details, 28 Oct 2026",
+  "records": [
+    {
+      "id": "2026-10-28-community-details",
+      "announcedOn": "2026-10-28",
+      "effectiveOn": null,
+      "build": null,
+      "evidence": "corroborated",
+      "sources": [
+        "sktools-races",
+        "tierlist-racials"
+      ],
+      "verifiedOn": "2026-10-29",
+      "notes": "Details reported by community sites that Blizzard has not published. These are shown as community-reported, are not changes in the game, and never override Blizzard's own statements. Only values on which both sites agree are recorded.",
+      "ops": [
+        {
+          "entity": "dwarf.stoneform",
+          "type": "documented",
+          "set": {
+            "cooldown": "3 min",
+            "communityNotes": [
+              "Physical damage taken is reduced by 10%."
+            ]
+          },
+          "summary": "Community sites report a 3-minute cooldown and a 10% Physical damage reduction."
+        },
+        {
+          "entity": "night-elf.elunes-light",
+          "type": "documented",
+          "set": {
+            "cooldown": "3 min"
+          },
+          "summary": "Community sites report a 3-minute cooldown."
+        },
+        {
+          "entity": "high-order-skyborne.read-leyline",
+          "type": "documented",
+          "set": {
+            "cooldown": "2 min"
+          },
+          "summary": "Community sites report a 2-minute cooldown."
+        },
+        {
+          "entity": "windshaper-skyborne.skysight",
+          "type": "documented",
+          "set": {
+            "cooldown": "2 min"
+          },
+          "summary": "Community sites report a 2-minute cooldown."
+        },
+        {
+          "entity": "tauren.war-stomp",
+          "type": "documented",
+          "set": {
+            "communityNotes": [
+              "Stuns up to 5 enemies within 8 yards."
+            ]
+          },
+          "summary": "Community sites report the area of effect."
+        },
+        {
+          "entity": "tauren.cultivation",
+          "type": "documented",
+          "set": {
+            "communityNotes": [
+              "Each herb can only be cultivated once."
+            ]
+          },
+          "summary": "Community sites report a once-per-herb limit."
+        }
+      ]
+    }
+  ]
+}

@@ -53,13 +53,13 @@ jobs:
         run: npx vitest run tests/unit/env.test.ts tests/unit/env-matrix.test.ts
       - name: Production build (canary secrets present in the build environment)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run build
       - name: Bundle-secret scan (no canaries, DB URLs, private project reference or source maps in browser bundles)
         env:
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run check:bundle-secrets
@@ -87,8 +87,30 @@ jobs:
         run: npx playwright test --project=preview
       - name: Accessibility regression (axe WCAG 2.2 AA) and SEO
         run: npx playwright test --project=desktop tests/e2e/a11y-seo.spec.ts
+      - name: Cookie consent and analytics gate (first visit, refusal, acceptance, reload, navigation, withdrawal, a11y; desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/consent.spec.ts
+      - name: Consent gate by host (public AzerDex hosts load analytics only after opt-in; preview/other hosts never; Speed Insights off)
+        run: npx playwright test --project=public-host
+      - name: Class guides and talent calculator (desktop and mobile)
+        run: npx playwright test --project=desktop --project=mobile tests/e2e/talents.spec.ts
       - name: Responsive layout (desktop and mobile)
         run: npx playwright test --project=desktop --project=mobile tests/e2e/responsive.spec.ts
+      # Zone atlas maps (feature-gated, off by default): needs a second build WITH the CDN origin baked in. Runs against a real local HTTPS
+      # server standing in for the CDN host (synthetic atlas generated from the bundled catalog snapshot): wiring, scaling, CSP and CORS
+      # are enforced by the real browser; no private artwork and no network access to the real CDN are involved.
+      - name: Zone atlas maps (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+        run: |
+          npm run build
+          npx playwright test -c playwright.zone-maps.config.ts
+      # Same build, cinematic heroes served from the CDN host's zone-heroes/ namespace (AZERDEX_ZONE_HERO_SOURCE=cdn, default is same-origin).
+      # The stand-in CDN serves the public watermarked derivatives with the headers of the unified _headers; checks headers, 404s, CSP, CORS, timing.
+      - name: Zone atlas maps with CDN-served cinematic heroes (desktop and mobile, synthetic CDN)
+        env:
+          NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL: https://azerdex-assets.pages.dev
+          E2E_HERO_SOURCE: cdn
+        run: npx playwright test -c playwright.zone-maps.config.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: web-e2e-results, path: web/test-results, retention-days: 14 }
@@ -120,18 +142,39 @@ jobs:
       - name: Publisher unit tests
         working-directory: publisher
         run: npm ci && npm run typecheck && npm test
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.1.4 }  # the Supabase Edge runtime's Deno-compatible version
+      # Must run BEFORE `deno check`: a non-frozen check silently rewrites an out-of-date lock inside the runner and would hide drift.
+      # `deno cache --frozen`, not `deno check --frozen`: Deno < 2.6 type-checking injects an implicit @types/node that it never
+      # writes to the lock, so `check --frozen` fails on this pinned Deno whatever lock is committed (docs/web/release-gates.md §6).
+      - name: Supabase Edge Function lockfile is frozen-consistent (deno.json <-> deno.lock, integrity hashes)
+        working-directory: supabase/functions/publish-observations
+        run: deno cache --frozen index.ts
+      - name: Supabase Edge Function type-check (the function is a thin adapter over publisher/src/core)
+        run: |
+          node scripts/sync-edge-core.mjs --check
+          cd supabase/functions/publish-observations && deno check index.ts
+      - name: Public-read migrations 0001-0005 applied as a NON-superuser admin (hosted-like), publication, ops and security SQL tests
+        run: ./scripts/public-hosted-compat.sh
+      - name: Failure, recovery, idempotency and concurrency of the publication pipeline (isolated, hosted-like database)
+        run: ./scripts/public-failure-recovery-tests.sh
       - name: End-to-end publication pipeline on ephemeral PostgreSQL
         run: ./scripts/public-pipeline-integration.sh
       - name: Website against the published public read model (Postgres adapter)
         working-directory: web
         env:
           FOREVERDB_DATA_SOURCE: postgres
-          PUBLIC_READ_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
         run: |
           npm ci
           npm run build
           npx playwright install --with-deps chromium
           npx playwright test --project=desktop tests/e2e/journeys.spec.ts tests/e2e/security.spec.ts
+      - name: Public-beta SEO against a published read model (genuine active publication, real HTTP, beta.azerdex.com Host)
+        working-directory: web
+        env:
+          BETA_SEO_DATABASE_URL: postgresql://foreverdb_web_reader:it-only@localhost:5432/fdb_it_public
+        run: npx playwright test --project=desktop tests/e2e/beta-seo.spec.ts
       - name: Fixture <-> PostgreSQL adapter parity (zone semantics regression dataset)
         working-directory: web
         env:
@@ -150,10 +193,57 @@ jobs:
       - uses: github/codeql-action/analyze@v3
 
   # ---------------------------------------------------------------------------------------------
+  # Both npm roots. publisher/ was never audited before, so an advisory in its production dependencies (zod, GHSA-mrhx-c7xc-m3w5)
+  # was invisible to CI. Joins the aggregate gate below, so the required `Web release gate` fails with it (no ruleset change).
+  #   production tree: high and critical fail, independent of the dev-dependency policy
+  #   full tree (incl. devDependencies): moderate and above fail
+  # `npm ci --ignore-scripts`: audit only reads the resolved tree, so no package lifecycle script needs to run. Investigation: release-gates.md §5.
+  dependency-audit:
+    name: Dependency audit (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: { project: [web, publisher] }
+    defaults: { run: { working-directory: '${{ matrix.project }}' } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: '${{ matrix.project }}/package-lock.json' }
+      - run: npm ci --ignore-scripts
+      - name: Production dependency audit (high and critical fail)
+        run: npm audit --omit=dev --audit-level=high
+      # The FULL audit still runs and every moderate-or-higher advisory still fails, except an advisory covered by an exact, in-force,
+      # owner-approved exception (.github/audit-exceptions.json; docs/web/dependency-audit-exceptions.md). The gate parses the structured
+      # JSON, fails closed on a malformed report, an expired/obsolete/non-matching exception, and from 2026-12-16 00:00 UTC for the
+      # current one. `|| true` only keeps npm's own non-zero exit (it exits 1 whenever it finds anything) from skipping the gate: the
+      # gate's exit code is the step result. The production audit above is unchanged and independent.
+      - name: Full dependency audit incl. devDependencies (moderate and above fail; owner-approved time-limited exceptions only)
+        if: ${{ !cancelled() }}
+        run: |
+          npm audit --json > "$RUNNER_TEMP/audit-full.json" || true
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-prod.json" || true
+          node ../web/scripts/audit-gate.mjs --project '${{ matrix.project }}' --audit "$RUNNER_TEMP/audit-full.json" --prod-audit "$RUNNER_TEMP/audit-prod.json" --package package.json --exceptions ../.github/audit-exceptions.json
+      - name: Audit findings in the job summary (advisory ids, severity, dependency path)
+        if: failure()
+        run: |
+          {
+            echo '### npm audit findings in `${{ matrix.project }}/`'
+            echo '```'
+            npm audit || true
+            echo '```'
+            echo 'How to investigate and fix: docs/web/release-gates.md section 5.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm audit --json > "$RUNNER_TEMP/npm-audit-${{ matrix.project }}.json" || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: 'npm-audit-${{ matrix.project }}', path: '${{ runner.temp }}/npm-audit-${{ matrix.project }}.json', retention-days: 14 }
+
+  # ---------------------------------------------------------------------------------------------
   web-gate:
     name: Web release gate
     if: always()
-    needs: [web-quality, web-e2e, publisher-and-pipeline, codeql]
+    needs: [web-quality, web-e2e, publisher-and-pipeline, codeql, dependency-audit]
     runs-on: ubuntu-latest
     steps:
       - name: Every upstream job must have succeeded (failed, cancelled and skipped all fail the gate)

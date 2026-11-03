@@ -74,7 +74,7 @@ public sealed class DeviceRig : IDisposable
     }
 
     public string Snapshot(string? installation = null, long updatedAt = 1) =>
-        "{\"p_snapshot\":{\"installationId\":\"" + (installation ?? Installation) + "\",\"schemaVersion\":9,\"updatedAt\":" + updatedAt + ",\"sources\":[],\"guilds\":[]}}";
+        "{\"p_snapshot\":{\"installationId\":\"" + (installation ?? Installation) + "\",\"schemaVersion\":9,\"updatedAt\":" + updatedAt + ",\"sources\":[]}}";
 
     public DeviceCredential StoredCredential() => Context.Store.Read().Credential!;
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 async function load(env: Record<string, string>) {
   vi.resetModules();
-  for (const k of Object.keys(process.env)) if (k.startsWith("FOREVERDB_") || /RATE_LIMIT|UPSTASH|PUBLIC_READ|SITE_URL|TRUSTED_IP|TURNSTILE|CHALLENGE/.test(k)) delete process.env[k];
+  for (const k of Object.keys(process.env)) if (k.startsWith("FOREVERDB_") || /RATE_LIMIT|UPSTASH|AZERDEX_READ|SITE_URL|TRUSTED_IP|TURNSTILE|CHALLENGE/.test(k)) delete process.env[k];
   Object.assign(process.env, env);
   const m = await import("@/lib/env");
   return () => m.serverEnv();
@@ -11,7 +11,7 @@ async function load(env: Record<string, string>) {
 const prodBase = {
   FOREVERDB_DEPLOYMENT: "production",
   FOREVERDB_DATA_SOURCE: "postgres",
-  PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader.abcdefghijklmnop:pw@aws-0-eu.pooler.supabase.com:6543/postgres",
+  AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader.abcdefghijklmnop:pw@aws-0-eu.pooler.supabase.com:6543/postgres",
   SITE_URL: "https://foreverdb.example",
   RATE_LIMIT_BACKEND: "upstash",
   UPSTASH_REDIS_REST_URL: "https://x.upstash.io",
@@ -22,6 +22,20 @@ const prodBase = {
 
 afterEach(() => vi.resetModules());
 
+describe("AZERDEX_READ_DB_URL naming (server-only, not a PUBLIC_-prefixed variable)", () => {
+  const { AZERDEX_READ_DB_URL: url, ...withoutUrl } = prodBase;
+  it("the previous PUBLIC_READ_DATABASE_URL name no longer configures the database (fails closed)", async () => {
+    expect(await load({ ...withoutUrl, PUBLIC_READ_DATABASE_URL: url })).toThrow(/AZERDEX_READ_DB_URL is required/);
+  });
+  it("is scanned for the private project reference like every other database variable", async () => {
+    const f = await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" });
+    expect(f).toThrow(/PRIVATE production/);
+  });
+  it("still requires the least-privilege reader role", async () => {
+    expect(await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://postgres:pw@aws-0-eu.pooler.supabase.com:6543/postgres" })).toThrow(/foreverdb_web_reader/);
+  });
+});
+
 describe("fail-closed configuration", () => {
   it("accepts a correct production configuration", async () => {
     expect((await load(prodBase))().FOREVERDB_DATA_SOURCE).toBe("postgres");
@@ -30,12 +44,12 @@ describe("fail-closed configuration", () => {
     expect(await load({ ...prodBase, FOREVERDB_DATA_SOURCE: "fixture" })).toThrow(/fixture/);
   });
   it("refuses the private production database", async () => {
-    const f = await load({ ...prodBase, PUBLIC_READ_DATABASE_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" });
+    const f = await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://foreverdb_web_reader:pw@db.klxhikdlfwgxurdyexdi.supabase.co:5432/postgres" });
     expect(f).toThrow(/PRIVATE production/);
   });
   it("refuses privileged database roles", async () => {
-    expect(await load({ ...prodBase, PUBLIC_READ_DATABASE_URL: "postgresql://postgres:pw@db.otherproject.supabase.co:5432/postgres" })).toThrow(/foreverdb_web_reader/);
-    expect(await load({ ...prodBase, PUBLIC_READ_DATABASE_URL: "postgresql://service_role:pw@host/db" })).toThrow(/foreverdb_web_reader/);
+    expect(await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://postgres:pw@db.otherproject.supabase.co:5432/postgres" })).toThrow(/foreverdb_web_reader/);
+    expect(await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://service_role:pw@host/db" })).toThrow(/foreverdb_web_reader/);
   });
   it("requires distributed rate limiting, trusted IP header, salt and https in production", async () => {
     expect(await load({ ...prodBase, RATE_LIMIT_BACKEND: "memory" })).toThrow(/upstash/);
@@ -44,7 +58,7 @@ describe("fail-closed configuration", () => {
     expect(await load({ ...prodBase, SITE_URL: "http://foreverdb.example" })).toThrow(/https/);
   });
   it("error messages never echo secret values", async () => {
-    try { (await load({ ...prodBase, PUBLIC_READ_DATABASE_URL: "postgresql://postgres:SuperSecret123@db.x.supabase.co/postgres" }))(); } catch (e) {
+    try { (await load({ ...prodBase, AZERDEX_READ_DB_URL: "postgresql://postgres:SuperSecret123@db.x.supabase.co/postgres" }))(); } catch (e) {
       expect(String(e)).not.toContain("SuperSecret123");
     }
   });

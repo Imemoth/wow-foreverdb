@@ -1,0 +1,48 @@
+name: Guildbook Windows acceptance harness synthetic
+on:
+  pull_request:
+    paths:
+      - 'scripts/guildbook-acceptance/**'
+      - 'tests/companion-account/SyntheticFixtureContractTests.cs'
+      - '.github/workflows/guildbook-acceptance-synthetic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core Windows DPAPI and report self-test (synthetic only)
+        shell: powershell
+        run: .\scripts\guildbook-acceptance\Test-GuildbookAcceptance.Synthetic.ps1
+      - name: Fixture lifecycle, tamper safety and account stages
+        shell: powershell
+        run: .\scripts\guildbook-acceptance\Test-GuildbookSyntheticFixture.ps1
+      - name: Resumable checkpoint, tamper and offline safety self-test
+        shell: powershell
+        run: .\scripts\guildbook-acceptance\Test-GuildbookSyntheticResume.ps1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Generate synthetic account A fixture
+        shell: powershell
+        run: |
+          Import-Module .\scripts\guildbook-acceptance\GuildbookSynthetic.Core.psm1 -Force
+          $parent = Join-Path $env:RUNNER_TEMP 'synthetic-fixtures'
+          $fixture = New-GuildbookSyntheticFixture -OutputParent $parent
+          $fixture = Set-GuildbookSyntheticFixturePhase -FixtureRoot $fixture.Root -Phase A
+          "FOREVERDB_SYNTHETIC_FIXTURE_ROOT=$($fixture.Root)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FOREVERDB_SYNTHETIC_FIXTURE_FILE=$($fixture.ActivePath)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FOREVERDB_SYNTHETIC_FIXTURE_STAGE=A" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Parse A using production Companion parser
+        run: dotnet test tests/companion-account/Companion.Account.Tests.csproj -c Release --filter FullyQualifiedName~SyntheticFixtureContractTests --logger "console;verbosity=normal"
+      - name: Switch fixture to synthetic account B
+        shell: powershell
+        run: |
+          Import-Module .\scripts\guildbook-acceptance\GuildbookSynthetic.Core.psm1 -Force
+          Set-GuildbookSyntheticFixturePhase -FixtureRoot $env:FOREVERDB_SYNTHETIC_FIXTURE_ROOT -Phase B | Out-Null
+          "FOREVERDB_SYNTHETIC_FIXTURE_STAGE=B" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Parse B using production Companion parser
+        run: dotnet test tests/companion-account/Companion.Account.Tests.csproj -c Release --filter FullyQualifiedName~SyntheticFixtureContractTests --logger "console;verbosity=normal"

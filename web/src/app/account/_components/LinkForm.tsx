@@ -99,7 +99,6 @@ export function LinkForm({ email, accountId }: { email: string; accountId: strin
         )}
         <p className="flex flex-wrap gap-4 text-sm">
           <Link href="/account/installations">Your installations</Link>
-          <Link href="/account/guildbook">Guildbook</Link>
         </p>
       </div>
     );
@@ -139,7 +138,7 @@ export function LinkForm({ email, accountId }: { email: string; accountId: strin
           Companion identity that created the code will lose upload access to it.
         </span>
       </label>
-      <button type="submit" className="btn-gold w-full" disabled={busy}>{busy ? "Linking…" : "Link this installation to my account"}</button>
+      <button type="submit" className="btn-primary w-full" disabled={busy}>{busy ? "Linking…" : "Link this installation to my account"}</button>
     </form>
   );
 }

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PublicationConfig } from "../src/contract.js";
-import { buildProjection, canonicalJson } from "../src/project.js";
+import { PublicationConfig } from "../src/core/contract.ts";
+import { buildProjection, canonicalJson } from "../src/core/project.ts";
 
 /**
  * P2 regression: zone membership must never carry a zone-specific ITEM drop count.

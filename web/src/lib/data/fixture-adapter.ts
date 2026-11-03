@@ -1,4 +1,5 @@
 import "server-only";
+import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
 import {
   InvalidQueryError,
@@ -9,6 +10,9 @@ import {
   type LootKind,
   type Page,
   type PublicDataAdapter,
+  type NewsEntry,
+  type NewsPage,
+  type NewsQuery,
   type RecentRow,
   type SearchQuery,
   type SearchRow,
@@ -18,6 +22,9 @@ import {
   type ZoneDetail,
   type ZoneEntityQuery,
   type ZoneEntityRow,
+  type SourceMapPoints,
+  type SourceMapPointsQuery,
+  type ZoneMapPoints,
   type ZoneSummary,
 } from "./types";
 
@@ -70,6 +77,98 @@ function searchRow(si: Pick<SI, "entity_kind" | "display_kind" | "item_id" | "so
 
 const byDropOrder = (a: DropRow, b: DropRow) =>
   confRank(a.confidence) - confRank(b.confidence) || (b.rateLower ?? -1) - (a.rateLower ?? -1) || b.observations - a.observations;
+
+type FixtureNewsEntry = NewsEntry & { authoritative?: boolean };
+
+/**
+ * Deterministic News fixtures exercise the same public-read contract as the
+ * beta database. The two replies and the player-created topic are retained in
+ * this raw fixture set so E2E tests prove that the adapter exposes only an
+ * authoritative Bluepost opener. The edited US opener deliberately keeps its
+ * original publication time while carrying a later modifiedAt value.
+ */
+const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
+  {
+    id: 9001, slug: "us-bluepost-opener-forever-beta", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9001", sourceTopicId: "topic:us-forever-beta", sourcePostNumber: 1, threadKey: "us:topic:us-forever-beta",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/forever-beta/9001/1", title: "US Bluepost opener — Forever Beta",
+    author: "Kaivax", region: "us", publishedAt: "2026-10-22T00:00:00.000Z", modifiedAt: "2026-10-22T03:00:00.000Z",
+    ingestedAt: "2026-10-22T03:01:00.000Z", excerpt: "The edited Blizzard announcement for the Forever beta.", category: "bluepost", importance: 90, featured: true,
+  },
+  {
+    id: 9002, slug: "eu-bluepost-opener-forever-beta", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu",
+    sourceEntryId: "post:9002", sourceTopicId: "topic:eu-forever-beta", sourcePostNumber: 1, threadKey: "eu:topic:eu-forever-beta",
+    canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/forever-beta/9002/1", title: "EU Bluepost opener — Forever Beta",
+    author: "Kaivax", region: "eu", publishedAt: "2026-10-21T23:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-21T23:01:00.000Z", excerpt: "The European Blizzard announcement for the Forever beta.", category: "bluepost", importance: 80, featured: false,
+  },
+  ...Array.from({ length: 12 }, (_, index): FixtureNewsEntry => {
+    const number = index + 3;
+    const day = String(21 - Math.floor(index / 2)).padStart(2, "0");
+    const region = index % 2 === 0 ? "us" : "eu";
+    return {
+      id: 9000 + number, slug: `${region}-bluepost-opener-${number}`, sourceType: "bluepost", sourceKey: `blizzard-bluepost-${region}`,
+      sourceEntryId: `post:${9000 + number}`, sourceTopicId: `topic:${region}-fixture-${number}`, sourcePostNumber: 1,
+      threadKey: `${region}:topic:${region}-fixture-${number}`, canonicalUrl: `https://${region}.forums.blizzard.com/en/wow/t/fixture/${9000 + number}/1`,
+      title: `${region.toUpperCase()} Bluepost opener — Fixture ${number}`, author: "Blizzard Tracker", region,
+      publishedAt: `2026-10-${day}T${String(index + 1).padStart(2, "0")}:00:00.000Z`, modifiedAt: null,
+      ingestedAt: `2026-10-${day}T${String(index + 1).padStart(2, "0")}:01:00.000Z`, excerpt: `A deterministic ${region.toUpperCase()} Blizzard Tracker opener fixture.`,
+      category: "bluepost", importance: 10, featured: false,
+    };
+  }),
+  {
+    id: 9015, slug: "official-news-fixture", sourceType: "official_news", sourceKey: "blizzard-news-us",
+    sourceEntryId: "article:9015", sourceTopicId: null, sourcePostNumber: null, threadKey: null,
+    canonicalUrl: "https://worldofwarcraft.blizzard.com/en-us/news/9015/forever-news-fixture", title: "Official News fixture — Forever update",
+    author: "Blizzard Entertainment", region: "global", publishedAt: "2026-10-20T12:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-20T12:01:00.000Z", excerpt: "A deterministic official news fixture.", category: "official_news", importance: 20, featured: false,
+  },
+  {
+    id: 9016, slug: "azerdex-news-fixture", sourceType: "azerdex", sourceKey: "azerdex-news",
+    sourceEntryId: "article:9016", sourceTopicId: null, sourcePostNumber: null, threadKey: null,
+    canonicalUrl: "https://beta.azerdex.com/news/azerdex-news-fixture", title: "AzerDex News fixture — archive improvements",
+    author: "AzerDex", region: "global", publishedAt: "2026-10-19T12:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-19T12:01:00.000Z", excerpt: "A deterministic AzerDex editorial fixture.", category: "azerdex", importance: 15, featured: false,
+  },
+  // This topic has a Blizzard reply but its opener was never in the authoritative
+  // tracker feed. It must remain absent from every public News query.
+  {
+    id: 9017, slug: "user-created-topic-opener", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9017", sourceTopicId: "topic:user-created", sourcePostNumber: 1, threadKey: "us:topic:user-created",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/user-created/9017/1", title: "User-created topic opener",
+    author: "ordinary-player", region: "us", publishedAt: "2026-10-18T12:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-18T12:01:00.000Z", excerpt: "A player topic with a later Blizzard reply.", category: "bluepost", importance: 100, featured: true,
+    authoritative: false,
+  },
+  {
+    id: 9018, slug: "player-reply-must-not-appear", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9018", sourceTopicId: "topic:us-forever-beta", sourcePostNumber: 2, threadKey: "us:topic:us-forever-beta",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/forever-beta/9001/2", title: "Player reply must not appear",
+    author: "ordinary-player", region: "us", publishedAt: "2026-10-23T00:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-23T00:01:00.000Z", excerpt: "A reply that must never become a news item.", category: "bluepost", importance: 100, featured: true,
+  },
+  {
+    id: 9019, slug: "staff-reply-must-not-appear", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9019", sourceTopicId: "topic:us-forever-beta", sourcePostNumber: 3, threadKey: "us:topic:us-forever-beta",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/forever-beta/9001/3", title: "Blizzard staff reply must not appear",
+    author: "Blizzard Tracker", region: "us", publishedAt: "2026-10-23T01:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-23T01:01:00.000Z", excerpt: "A staff reply that is not an independent news item.", category: "bluepost", importance: 100, featured: true,
+  },
+  {
+    id: 9020, slug: "user-topic-blizzard-reply", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9020", sourceTopicId: "topic:user-created", sourcePostNumber: 2, threadKey: "us:topic:user-created",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/user-created/9017/2", title: "Blizzard reply to user topic",
+    author: "Kaivax", region: "us", publishedAt: "2026-10-18T13:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-18T13:01:00.000Z", excerpt: "A reply in a user-created topic.", category: "bluepost", importance: 100, featured: true,
+  },
+];
+
+function visibleNewsFixtures(): NewsEntry[] {
+  return NEWS_FIXTURE_ENTRIES
+    .filter((entry) => entry.authoritative !== false)
+    .filter((entry) => entry.sourceType !== "bluepost" || entry.sourcePostNumber === 1)
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id - a.id);
+}
 
 export class FixtureAdapter implements PublicDataAdapter {
   readonly mode = "synthetic-sample" as const;
@@ -184,6 +283,25 @@ export class FixtureAdapter implements PublicDataAdapter {
     return { mapId, zoneName: z.zone_name, observations: z.observations, sourceCount: z.source_count, itemCount: z.item_count, displayKinds, lootKinds };
   }
 
+  async zoneMapPoints(mapId: number, lootKind: LootKind | null, limit: number): Promise<ZoneMapPoints> {
+    if (!Number.isInteger(mapId) || mapId < 1 || mapId > 999_999 || !Number.isInteger(limit) || limit < 1 || limit > 3000 || lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateZoneMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), mapId, lootKind, limit);
+  }
+
+  async sourceMapPoints(q: SourceMapPointsQuery): Promise<SourceMapPoints> {
+    if (!["creature", "gameobject", "fishing"].includes(q.sourceType) || !Number.isInteger(q.sourceId) || q.sourceId < -2_147_483_648 || q.sourceId > 999_999_999
+        || (q.mapId != null && (!Number.isInteger(q.mapId) || q.mapId < 1 || q.mapId > 999_999))
+        || (q.sourceLevel != null && (!Number.isInteger(q.sourceLevel) || q.sourceLevel < 0 || q.sourceLevel > 255))
+        || !Number.isInteger(q.limit) || q.limit < 1 || q.limit > 3000 || q.lootKind === "disenchant") {
+      throw new InvalidQueryError("invalid_parameters");
+    }
+    const names = new Map(this.proj.sources.map((s) => [sKey(s.source_type, s.source_id, s.source_level), s.name]));
+    return aggregateSourceMapPoints(this.proj.locations, (t, i, l) => names.get(sKey(t, i, l)), q);
+  }
+
   async zoneEntities(q: ZoneEntityQuery): Promise<Page<ZoneEntityRow>> {
     const text = q.q.toLowerCase();
     // Mirrors web_api.zone_entities: measured source observations first, then items
@@ -224,6 +342,27 @@ export class FixtureAdapter implements PublicDataAdapter {
         sourceLevel: null, name: i.name, lastObservedAt: i.last_observed_at })),
     ];
     return rows.sort((a, b) => (b.lastObservedAt ?? "").localeCompare(a.lastObservedAt ?? "") || a.name.localeCompare(b.name)).slice(0, limit);
+  }
+
+  async newsList(query: NewsQuery): Promise<NewsPage> {
+    const text = query.query.trim().toLowerCase();
+    const rows = visibleNewsFixtures().filter((entry) =>
+      (query.category == null || entry.category === query.category)
+      && (text === "" || `${entry.title} ${entry.excerpt}`.toLowerCase().includes(text)));
+    const start = (query.page - 1) * query.pageSize;
+    const pageRows = rows.slice(start, start + query.pageSize);
+    return { rows: pageRows, total: pageRows.length ? rows.length : 0 };
+  }
+
+  async newsFeatured(limit: number): Promise<NewsEntry[]> {
+    return [...visibleNewsFixtures()]
+      .sort((a, b) => Number(b.featured) - Number(a.featured) || b.importance - a.importance
+        || b.publishedAt.localeCompare(a.publishedAt) || b.id - a.id)
+      .slice(0, Math.min(Math.max(limit, 1), 12));
+  }
+
+  async newsEntry(slug: string): Promise<NewsEntry | null> {
+    return visibleNewsFixtures().find((entry) => entry.slug === slug) ?? null;
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {

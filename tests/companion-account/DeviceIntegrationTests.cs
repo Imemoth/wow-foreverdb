@@ -78,7 +78,7 @@ public class DeviceIntegrationTests
         Assert.Equal(new[] { "auth", "synced:Manual" }, w.Events);
         Assert.Equal(1, w.Backend.DeviceIngests);
         Assert.Equal(0, AnonymousIngests(w));
-        Assert.Equal(1, w.GuildbookCalls);
+        Assert.Equal(0, w.GuildbookCalls);         // the Guildbook view is fed ONLY by the account-gated local boundary, never by a public sync
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class DeviceIntegrationTests
         Assert.Equal(0, w.Backend.Count("fdb_device_ingest"));
         Assert.Empty(w.Events);
         Assert.Empty(w.Blocks);                    // by design, not an error message on every save
-        Assert.Equal(1, w.GuildbookCalls);         // the local Guildbook still updates
+        Assert.Equal(0, w.GuildbookCalls);         // local processing continues (maps), but the raw parsed snapshot never drives the Guildbook view
         Assert.Contains("Sync now", AccountMessages.Describe(BlockReason.DeviceAutoSyncOff));
     }
 
@@ -212,5 +212,38 @@ public class DeviceIntegrationTests
         var attempt = await plain.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
         Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
         Assert.Equal(1, w.Server.IngestCount);
+    }
+
+    [Fact]
+    public async Task Registered_device_upload_carries_observations_but_no_guildbook_value()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+
+        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Synced, attempt!.Outcome);
+        var body = Assert.Single(w.Server.RequestsTo("/rest/v1/rpc/fdb_device_ingest")).Body;
+        // The fixture export carries guild "Guild", member "Member0" (guid0) and rank "Officer": none of it may be on the wire.
+        foreach (var value in new[] { "Guild", "Member0", "guid0", "Officer" })
+            Assert.DoesNotContain(value, body, StringComparison.Ordinal);
+        Assert.True(PublicSnapshotGuard.CheckBody(System.Text.Json.Nodes.JsonNode.Parse(body)).IsPublic);
+        Assert.Contains("\"sources\"", body);
+        Assert.DoesNotContain(w.Server.Requests, r => r.Path.Contains("guild", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task The_device_transport_refuses_a_payload_with_guildbook_data_and_sends_nothing()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        var before = w.Backend.DeviceIngests;
+
+        var legacy = "{\"p_snapshot\":{\"schemaVersion\":9,\"installationId\":\"" + w.Installation + "\",\"updatedAt\":5,\"sources\":[],\"guilds\":[{\"name\":\"Zzguild-Canary\"}]}}";
+        var result = await w.Runtime.Device!.Sync.SyncNowAsync(legacy);
+
+        Assert.NotEqual(DeviceSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(before, w.Backend.DeviceIngests);
+        Assert.DoesNotContain(w.Server.Requests, r => r.Body.Contains("Zzguild-Canary", StringComparison.Ordinal));
     }
 }

@@ -1,0 +1,609 @@
+{
+  "schema": "azerdex.talent-class/1",
+  "classId": "mage",
+  "className": "Mage",
+  "gameClassId": 8,
+  "build": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "layoutCompatibleWith": [
+      "1.60.1.70630"
+    ]
+  },
+  "pointBudget": {
+    "total": 51,
+    "firstPointLevel": 10,
+    "lastPointLevel": 60
+  },
+  "trees": [
+    {
+      "id": 11582,
+      "name": "Arcane",
+      "slug": "arcane",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105815,
+          "name": "Wand Specialization",
+          "spellId": 6057,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105814,
+          "name": "Arcane Focus",
+          "spellId": 11222,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105813,
+          "name": "Improved Channeling",
+          "spellId": 11237,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105802,
+          "name": "Missile Barrage",
+          "spellId": 400588,
+          "row": 0,
+          "col": 3,
+          "maxRank": 2
+        },
+        {
+          "id": 105812,
+          "name": "Arcane Subtlety",
+          "spellId": 11210,
+          "row": 1,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105811,
+          "name": "Magic Absorption",
+          "spellId": 29441,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105810,
+          "name": "Arcane Concentration",
+          "spellId": 11213,
+          "row": 1,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105809,
+          "name": "Arcane Resilience",
+          "spellId": 28574,
+          "row": 1,
+          "col": 3,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105808,
+          "name": "Arcane Geometry",
+          "spellId": 11247,
+          "row": 2,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105807,
+          "name": "Arcane Impact",
+          "spellId": 11242,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105806,
+          "name": "Arcane Blast",
+          "spellId": 400574,
+          "row": 2,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105805,
+          "name": "Arcane Shielding",
+          "spellId": 11252,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105804,
+          "name": "Improved Counterspell",
+          "spellId": 11255,
+          "row": 3,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105803,
+          "name": "Arcane Meditation",
+          "spellId": 18462,
+          "row": 3,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105810,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 113627,
+          "name": "Arcane Wrath",
+          "spellId": 1326079,
+          "row": 3,
+          "col": 3,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105806,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105801,
+          "name": "Presence of Mind",
+          "spellId": 12043,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105800,
+          "name": "Arcane Mind",
+          "spellId": 11232,
+          "row": 4,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105799,
+          "name": "Arcane Instability",
+          "spellId": 15058,
+          "row": 5,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105798,
+          "name": "Arcane Power",
+          "spellId": 12042,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105801,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11594,
+      "name": "Fire",
+      "slug": "fire",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105797,
+          "name": "Improved Fire Blast",
+          "spellId": 11078,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105796,
+          "name": "Incineration",
+          "spellId": 18459,
+          "row": 0,
+          "col": 1,
+          "maxRank": 3
+        },
+        {
+          "id": 105795,
+          "name": "Improved Fireball",
+          "spellId": 11069,
+          "row": 0,
+          "col": 2,
+          "maxRank": 5
+        },
+        {
+          "id": 105794,
+          "name": "Ignite",
+          "spellId": 11119,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105793,
+          "name": "Flame Throwing",
+          "spellId": 11100,
+          "row": 1,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105792,
+          "name": "Impact",
+          "spellId": 11103,
+          "row": 1,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105789,
+          "name": "Burning Soul",
+          "spellId": 11083,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105791,
+          "name": "Improved Flamestrike",
+          "spellId": 11108,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105790,
+          "name": "Pyroblast",
+          "spellId": 11366,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105788,
+          "name": "Improved Scorch",
+          "spellId": 11095,
+          "row": 3,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105787,
+          "name": "Improved Fire Ward",
+          "spellId": 11094,
+          "row": 3,
+          "col": 1,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105786,
+          "name": "Heating Up",
+          "spellId": 400624,
+          "row": 3,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105790,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105785,
+          "name": "Master of Elements",
+          "spellId": 29074,
+          "row": 3,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105784,
+          "name": "Critical Mass",
+          "spellId": 11115,
+          "row": 4,
+          "col": 1,
+          "maxRank": 5,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105783,
+          "name": "Blast Wave",
+          "spellId": 11113,
+          "row": 4,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105782,
+          "name": "Fire Power",
+          "spellId": 11124,
+          "row": 5,
+          "col": 2,
+          "maxRank": 3,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105781,
+          "name": "Combustion",
+          "spellId": 11129,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105784,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11601,
+      "name": "Frost",
+      "slug": "frost",
+      "rows": 7,
+      "cols": 4,
+      "talents": [
+        {
+          "id": 105780,
+          "name": "Frost Warding",
+          "spellId": 11189,
+          "row": 0,
+          "col": 0,
+          "maxRank": 2
+        },
+        {
+          "id": 105779,
+          "name": "Improved Frostbolt",
+          "spellId": 11070,
+          "row": 0,
+          "col": 1,
+          "maxRank": 5
+        },
+        {
+          "id": 105778,
+          "name": "Elemental Precision",
+          "spellId": 29438,
+          "row": 0,
+          "col": 2,
+          "maxRank": 3
+        },
+        {
+          "id": 105777,
+          "name": "Ice Shards",
+          "spellId": 11207,
+          "row": 1,
+          "col": 0,
+          "maxRank": 5,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105774,
+          "name": "Frostbite",
+          "spellId": 11071,
+          "row": 1,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105775,
+          "name": "Improved Frost Nova",
+          "spellId": 11165,
+          "row": 1,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105776,
+          "name": "Permafrost",
+          "spellId": 11175,
+          "row": 1,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 5,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105772,
+          "name": "Frost Channeling",
+          "spellId": 11160,
+          "row": 2,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105771,
+          "name": "Improved Blizzard",
+          "spellId": 11185,
+          "row": 2,
+          "col": 1,
+          "maxRank": 3,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105767,
+          "name": "Ice Lance",
+          "spellId": 1312002,
+          "row": 2,
+          "col": 2,
+          "maxRank": 1,
+          "pointsRequired": 10,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105770,
+          "name": "Arctic Reach",
+          "spellId": 16757,
+          "row": 3,
+          "col": 0,
+          "maxRank": 2,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105769,
+          "name": "Ice Block",
+          "spellId": 11958,
+          "row": 3,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105768,
+          "name": "Shatter",
+          "spellId": 11170,
+          "row": 3,
+          "col": 3,
+          "maxRank": 3,
+          "pointsRequired": 15,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105765,
+          "name": "Improved Cone of Cold",
+          "spellId": 11190,
+          "row": 4,
+          "col": 0,
+          "maxRank": 3,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105766,
+          "name": "Cold Snap",
+          "spellId": 12472,
+          "row": 4,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105764,
+          "name": "Fingers of Frost",
+          "spellId": 400647,
+          "row": 4,
+          "col": 2,
+          "maxRank": 2,
+          "pointsRequired": 20,
+          "pointsRequiredScope": "tree",
+          "requires": [
+            {
+              "talentId": 105767,
+              "rule": "any"
+            }
+          ]
+        },
+        {
+          "id": 105763,
+          "name": "Winter's Chill",
+          "spellId": 11180,
+          "row": 5,
+          "col": 2,
+          "maxRank": 5,
+          "pointsRequired": 25,
+          "pointsRequiredScope": "tree"
+        },
+        {
+          "id": 105762,
+          "name": "Ice Barrier",
+          "spellId": 11426,
+          "row": 6,
+          "col": 1,
+          "maxRank": 1,
+          "pointsRequired": 30,
+          "pointsRequiredScope": "assumed-tree",
+          "requires": [
+            {
+              "talentId": 105766,
+              "rule": "any"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

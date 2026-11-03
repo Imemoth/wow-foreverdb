@@ -1,0 +1,42 @@
+{
+ "cloudflare": {
+  "branch": "main",
+  "deploymentId": "04effe36-d1e6-45b8-a529-fa32136d1b38",
+  "environment": "production",
+  "project": "azerdex-assets",
+  "rollbackDeploymentId": "3ae723a0-df00-4dcd-9159-8ba93d0583aa",
+  "servedFiles": 179,
+  "source": "deployment id and status confirmed by the owner through the authenticated Cloudflare API",
+  "status": "success"
+ },
+ "note": "Integrity record only; not licensing clearance for the artwork.",
+ "package": {
+  "distLabel": "1.60.1.70450+heroes.8da4f1345f65",
+  "files": 180,
+  "releaseRecord": "baseline/unified-dist-1.60.1.70450-8da4f1345f65.release.json",
+  "zip": {
+   "bytes": 26625948,
+   "file": "azerdex-cdn-dist-1.60.1.70450-8da4f1345f65.zip",
+   "sha256": "339858b25d42eb06699510ab63092917138264efbd993d79e702df76768b1e15"
+  }
+ },
+ "promoted": {
+  "atlasLedger": {
+   "file": "ledger/published.json",
+   "sha256": "70fffa93afcda133692f788239ab3c5623f3cb71b7ba209f7acbd739d9314d17",
+   "versions": 61
+  },
+  "heroLedger": {
+   "file": "ledger/zone-heroes.json",
+   "sha256": "d35865967f66724739bf713b09d183b39416104eae372efc3dc5d95ad869203c",
+   "versions": 2
+  }
+ },
+ "schemaVersion": 1,
+ "verification": {
+  "mode": "Post",
+  "result": "PASS 179/179, 0 failures, 0 warnings",
+  "run": "https://github.com/Imemoth/wow-foreverdb/actions/runs/39816836056",
+  "url": "https://azerdex-assets.pages.dev"
+ }
+}

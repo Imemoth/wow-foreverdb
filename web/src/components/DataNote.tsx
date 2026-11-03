@@ -16,7 +16,7 @@ export function ObservedRateNote() {
   return (
     <DataNote>
       <strong className="text-parchment">Observed drop rate</strong> = times seen ÷ observed loots from that source and method.
-      It is a sample rate from ForeverDB players, not Blizzard&apos;s drop chance; empty corpses may be under-counted.{" "}
+      It is a sample rate from AzerDex players, not Blizzard&apos;s drop chance; empty corpses may be under-counted.{" "}
       <Link href="/about/data#rates">How to read these numbers</Link>
     </DataNote>
   );

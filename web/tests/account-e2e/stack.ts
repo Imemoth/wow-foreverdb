@@ -107,7 +107,7 @@ export const sessionCount = async (db: pg.Client, uid: string): Promise<number> 
 
 export const uniq = (prefix: string) => `${prefix}-${randomUUID().slice(0, 8)}`;
 
-/** A snapshot the real ingest function accepts: sources with loot, locations, quest drops, guilds with members and professions. */
+/** A snapshot the real ingest function accepts: sources with loot, locations, quest drops, and (as an old Companion would send it) guilds with members and professions, which migration 0018 drops. */
 export function snapshot(installationId: string, o: { updatedAt?: number; sources?: number; guilds?: number; members?: number; tag?: string } = {}) {
   const { updatedAt = 1000, sources = 3, guilds = 2, members = 4, tag = "M" } = o;
   const src = [];

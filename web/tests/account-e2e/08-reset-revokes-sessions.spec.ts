@@ -38,8 +38,6 @@ const liveSessions = async (uid: string) => (await db.query("select count(*)::in
 const liveRefreshTokens = async (uid: string) => (await db.query("select count(*)::int n from auth.refresh_tokens where user_id = $1 and not revoked", [uid])).rows[0].n as number;
 const PRIVATE: [string, Record<string, unknown>][] = [
   ["fdb_account_installations", {}],
-  ["fdb_account_guildbook_guilds", { p_installation_id: "x-1" }],
-  ["fdb_account_guildbook_members", { p_installation_id: "x-1", p_guild_key: "Realm:Guild1", p_limit: 10, p_offset: 0 }],
   ["fdb_account_claim_redeem", { p_code: "0123456789ABCDEF0123456789ABCDEF" }],
 ];
 
@@ -56,7 +54,7 @@ test("a successful reset revokes every session of the account (attacker, other b
   const companion2 = await registeredSession(victim.email, victim.password);
   expect(await liveSessions(victim.uid)).toBeGreaterThanOrEqual(5);
   for (const [n, a] of PRIVATE) expect((await rpc(companion.token, n, a)).status, `before: ${n}`).toBe(200);
-  expect((await attacker.c.get("/account/api/installations")).status()).toBe(200); // the attacker can read the Guildbook inventory now
+  expect((await attacker.c.get("/account/api/installations")).status()).toBe(200); // the attacker can read the installation inventory now
   const historyBefore = await fingerprint(db);
   await resetBudgets(db);
   const statsBefore = (await rpc(companion.token, "get_foreverdb_item_stats", { p_item_id: 7001 })).body;
@@ -76,7 +74,8 @@ test("a successful reset revokes every session of the account (attacker, other b
     expect((await old.c.get("/account/api/me")).status()).toBe(401); // server-confirmed identity: session_not_found
     expect((await old.c.get("/account/api/installations")).status()).toBe(401);
     const stolen = await clientWithSessionCookie(playwright, (await cookieOf(old.c))?.value ?? "x");
-    expect((await post(stolen, "/account/api/guildbook/guilds", { installationId: mine.installationId })).status()).toBe(401);
+    // the retired Guildbook route has no session handling at all: 404 for every caller, a stolen cookie included (it is never an oracle for session validity)
+    expect((await post(stolen, "/account/api/guildbook/guilds", { installationId: mine.installationId })).status()).toBe(404);
     expect((await post(stolen, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: fresh, confirm: true, accountId: victim.uid })).status()).toBe(401);
   }
   // refresh tokens are dead: they cannot mint new access tokens
@@ -104,7 +103,7 @@ test("a successful reset revokes every session of the account (attacker, other b
   expect(await ownerOf(db, mine.installationId)).toBe(victim.uid);
   const newCompanion = await registeredSession(victim.email, fresh); // the Companion signs in again with the new password
   expect((await rpc(newCompanion.token, "fdb_account_installations")).status).toBe(200);
-  expect(await fingerprint(db)).toEqual(historyBefore); // no observation, location, loot, Guildbook row or owner changed
+  expect(await fingerprint(db)).toEqual(historyBefore); // no observation, location, loot or owner changed
   expect(sha((await rpc(newCompanion.token, "get_foreverdb_item_stats", { p_item_id: 7001 })).body)).toBe(sha(statsBefore));
   // the separate anonymous legacy identity: same user, same session, still the owner, still able to use its installation
   await relaxFixtureCeilings();

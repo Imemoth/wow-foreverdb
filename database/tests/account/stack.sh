@@ -6,6 +6,7 @@
 #                      then apply repository migrations 0001..0011 as the non-superuser migration role
 #   stack.sh apply     apply 0012 (and nothing else) as the migration role
 #   stack.sh apply14   apply 0014 (zero-touch enrollment) as the migration role; requires `apply` first
+#   stack.sh apply18   apply 0018 (Guildbook cloud sync disabled) as the migration role; requires `apply` first
 #   stack.sh down      stop GoTrue and drop the database
 #
 # Required env: PGHOST PGPORT PGUSER PGPASSWORD of a SUPERUSER on a disposable cluster; GOTRUE_BIN = built GoTrue binary.
@@ -87,9 +88,12 @@ case "${1:-}" in
   apply14)
     as_migrator -f "$REPO/database/migrations/0014_zero_touch_enrollment.sql"
     ;;
+  apply18)
+    as_migrator -f "$REPO/database/migrations/0018_disable_guildbook_cloud_sync.sql"
+    ;;
   down)
     gotrue_stop
     su_psql postgres -c "drop database if exists $DB with (force)"
     ;;
-  *) echo "usage: $0 up|apply|apply14|down" >&2; exit 64 ;;
+  *) echo "usage: $0 up|apply|apply14|apply18|down" >&2; exit 64 ;;
 esac

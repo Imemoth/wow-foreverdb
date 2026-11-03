@@ -8,12 +8,12 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: { default: "Account", template: "%s · ForeverDB account" },
+  title: { default: "Account", template: "%s · AzerDex account" },
   robots: { index: false, follow: false, nocache: true },
   referrer: SENSITIVE_PAGE_REFERRER_POLICY,
 };
 
-export default function AccountLayout({ children }: { children: React.ReactNode }) {
+export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const rt = accountRuntime();
   if (rt.state === "disabled") notFound(); // accounts are off unless explicitly enabled and validated
   if (rt.state === "unavailable") {
@@ -26,6 +26,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
       </div>
     );
   }
-  // Narrow by default (forms); a page that renders an element with `data-account-wide` (installation list, Guildbook) widens it.
-  return <div className="mx-auto w-full max-w-md space-y-6 has-[[data-account-wide]]:max-w-4xl">{children}</div>;
+  // Narrow by default (forms); a page that renders an element with `data-account-wide` (dashboard, installation list,
+  // Guildbook) widens it. Navigation between account pages lives in the header's Account dropdown, not here.
+  return <div className="mx-auto w-full max-w-md space-y-6 has-[[data-account-wide]]:max-w-5xl">{children}</div>;
 }

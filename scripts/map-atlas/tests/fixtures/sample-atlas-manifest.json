@@ -1,0 +1,206 @@
+{
+  "artNotInReviewedAtlas": false,
+  "calibration": {
+    "note": "Image extent is the client's own UiMapArtStyleLayer canvas. Registration of normalized-percent coordinates against known landmarks has not been verified.",
+    "registration": {
+      "aspectDelta": 0.0101,
+      "bestShift": [
+        6,
+        0
+      ],
+      "exportedSize": [
+        100,
+        66
+      ],
+      "meanErrorAligned": 83.95,
+      "meanErrorBest": 83.34,
+      "referenceSize": [
+        1002,
+        668
+      ],
+      "sameDimensions": false,
+      "verdict": "differs"
+    },
+    "status": "provisional",
+    "worldBounds": [
+      {
+        "areaId": 1,
+        "mapId": 0,
+        "orderIndex": 0,
+        "region": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "uiMax": [
+          1,
+          1
+        ],
+        "uiMin": [
+          0,
+          0
+        ]
+      }
+    ]
+  },
+  "category": "zone",
+  "categorySource": "uimap-type",
+  "classificationConfidence": "confirmed",
+  "classificationEvidence": "UiMap.Type=3",
+  "clientBuild": {
+    "buildKey": "84bea4233331e390fda8724c6f91ffa5",
+    "buildNumber": 70450,
+    "product": "wow_classic_beta",
+    "version": "1.60.1.70450"
+  },
+  "defaultImage": {
+    "file": "full-reveal.webp",
+    "policy": {
+      "revealCompleteness": [
+        "complete",
+        "tileless-declared-overlays-skipped"
+      ],
+      "revealStatuses": [
+        "client-metadata-matches-reviewed-atlas"
+      ]
+    },
+    "reason": "verified full-reveal (client-metadata-matches-reviewed-atlas; complete)",
+    "variant": "full-reveal"
+  },
+  "flags": 2,
+  "floor": null,
+  "image": {
+    "bytes": 1,
+    "complete": true,
+    "file": "full-reveal.webp",
+    "format": "webp",
+    "height": 66,
+    "layerIndex": 0,
+    "role": "overview",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "tilesExpected": 12,
+    "tilesPlaced": 12,
+    "variant": "full-reveal",
+    "width": 100
+  },
+  "internalMapId": 0,
+  "kind": "azerdex-atlas-map",
+  "layout": "variants-v1",
+  "mapArtIds": [
+    3420
+  ],
+  "parentUiMapId": 1414,
+  "projection": {
+    "origin": "top-left",
+    "pixelX": "imageWidth * xPercent / 100",
+    "pixelY": "imageHeight * yPercent / 100",
+    "range": [
+      0,
+      100
+    ],
+    "type": "normalized-percent",
+    "xDirection": "right",
+    "yDirection": "down"
+  },
+  "provenance": {
+    "exporterVersion": "0.2.1",
+    "licenseNote": "Extracted from the owner's locally installed WoW: Forever client for noncommercial development. Not for public redistribution until the owner records a decision.",
+    "licenseStatus": "unreviewed",
+    "source": "WoW: Forever client 1.60.1.70450 (wow_classic_beta) map artwork exported by ForeverDB.AtlasExporter 0.2.1",
+    "warnings": []
+  },
+  "schemaVersion": 1,
+  "slug": "tirisfal-glades",
+  "source": {
+    "exporter": {
+      "name": "ForeverDB.AtlasExporter",
+      "version": "0.2.1"
+    },
+    "kind": "exporter-zip",
+    "metadataSource": "client-db2",
+    "sourceManifests": {
+      "base": "maps/1420/base/manifest.json",
+      "full-reveal": "maps/1420/full-reveal/manifest.json"
+    }
+  },
+  "system": 0,
+  "typeName": "zone",
+  "uiMapId": 1420,
+  "variants": [
+    {
+      "extent": {
+        "cropping": "cropped to layer extent",
+        "layerHeight": 66,
+        "layerIndex": 0,
+        "layerWidth": 100,
+        "tileHeight": 256,
+        "tileWidth": 256
+      },
+      "images": [
+        {
+          "bytes": 1,
+          "complete": true,
+          "file": "base.webp",
+          "format": "webp",
+          "height": 66,
+          "layerIndex": 0,
+          "role": "overview",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "tilesExpected": 12,
+          "tilesPlaced": 12,
+          "width": 100
+        }
+      ],
+      "isDefault": false,
+      "kind": "base",
+      "mapArtId": 3420,
+      "phaseId": 0,
+      "primary": true,
+      "variant": "base"
+    },
+    {
+      "extent": {
+        "cropping": "cropped to layer extent",
+        "layerHeight": 66,
+        "layerIndex": 0,
+        "layerWidth": 100,
+        "tileHeight": 256,
+        "tileWidth": 256
+      },
+      "images": [
+        {
+          "bytes": 1,
+          "complete": true,
+          "file": "full-reveal.webp",
+          "format": "webp",
+          "height": 66,
+          "layerIndex": 0,
+          "role": "overview",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "tilesExpected": 12,
+          "tilesPlaced": 12,
+          "width": 100
+        }
+      ],
+      "isDefault": true,
+      "kind": "full-reveal",
+      "mapArtId": 3420,
+      "phaseId": 0,
+      "primary": true,
+      "reveal": {
+        "completeness": "complete",
+        "overlayTiles": 22,
+        "skippedOverlays": [],
+        "status": "client-metadata-matches-reviewed-atlas"
+      },
+      "variant": "full-reveal"
+    }
+  ],
+  "version": "v2",
+  "worldMapId": 0,
+  "zoneId": 1420,
+  "zoneName": "Tirisfal Glades"
+}

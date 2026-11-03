@@ -5,9 +5,10 @@ using ForeverDB.Companion.Models;
 namespace ForeverDB.Companion.Services;
 
 /// <summary>
-/// Reads a SavedVariables export and uploads it through the ownership-aware coordinator.
-/// Parsing, map metadata and the local Guildbook always run first and never depend on remote authentication,
-/// so local data collection keeps working when sign-in, the network or the server is unavailable.
+/// Reads a SavedVariables export and uploads ONLY public observations through the ownership-aware coordinator.
+/// Guildbook is parsed and persisted locally through a separate local boundary (<see cref="IAccountGuildbookSync"/>); it is never part
+/// of a public payload and never reaches any RPC. Parsing, map metadata and the local Guildbook always run first and never depend on
+/// remote authentication, so local data collection keeps working when sign-in, the network or the server is unavailable.
 /// </summary>
 public sealed class SyncService
 {
@@ -21,11 +22,13 @@ public sealed class SyncService
     private readonly Action<IEnumerable<ForeverDbMap>>? _mapSink;
     private readonly Action<ForeverDbSnapshot>? _afterSynced;
     private readonly DeviceSyncService? _device;
+    private readonly IAccountGuildbookSync? _guildbook;
     private readonly Dictionary<string, string> _knownFiles =
         new(StringComparer.Ordinal);
 
     public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
+    public event EventHandler<GuildbookSyncCompletedEventArgs>? GuildbookSyncCompleted;
     public event Action<IReadOnlyList<ForeverDbGuild>>? GuildbookChanged;
     public event EventHandler<SyncBlockedEventArgs>? SyncBlocked;
 
@@ -33,12 +36,19 @@ public sealed class SyncService
         InstallationSyncCoordinator coordinator,
         Action<IEnumerable<ForeverDbMap>>? mapSink = null,
         Action<ForeverDbSnapshot>? afterSynced = null,
-        DeviceSyncService? device = null)
+        DeviceSyncService? device = null,
+        IAccountGuildbookSync? guildbook = null)
     {
         _device = device;
+        _guildbook = guildbook;
         _coordinator = coordinator;
         _mapSink = mapSink;
         _afterSynced = afterSynced;
+        if (_guildbook is not null)
+        {
+            // The Guildbook view is fed ONLY by the account-gated local cache, never by the raw parsed snapshot.
+            _guildbook.Changed += guilds => GuildbookChanged?.Invoke(guilds);
+        }
     }
 
     /// <summary>SavedVariables file per installation ID seen so far (for re-syncing after an owner choice).</summary>
@@ -55,8 +65,9 @@ public sealed class SyncService
     /// <summary>
     /// Parses SavedVariables only to learn installation IDs for the Account tab. No upload, no authentication.
     /// </summary>
-    public void DiscoverInstallations(IEnumerable<string> paths)
+    public IReadOnlyList<string> DiscoverInstallations(IEnumerable<string> paths)
     {
+        var discovered = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
             try
@@ -71,6 +82,7 @@ public sealed class SyncService
                     }
 
                     _coordinator.NoteLocalInstallation(snapshot.InstallationId);
+                    discovered.Add(snapshot.InstallationId);
                 }
             }
             catch (Exception)
@@ -78,6 +90,8 @@ public sealed class SyncService
                 // An unreadable file is reported by the normal sync path; discovery stays silent.
             }
         }
+
+        return discovered.ToArray();
     }
 
     public async Task<SyncAttempt?> SyncFileAsync(
@@ -100,15 +114,23 @@ public sealed class SyncService
 
         _mapSink?.Invoke(snapshot.Maps);
 
-        GuildbookChanged?.Invoke(
-            snapshot.Guilds);
+        // Capture provenance and private records never enter a public collector/device payload. Local Guildbook processing is
+        // independent of whether any public request succeeds.
+        _guildbook?.ObserveSnapshot(snapshot);
 
+        // Do NOT serialize ForeverDbSnapshot: its Guildbook members intentionally stay available to the parser and the local store.
+        // The explicit public projection has no Guildbook member at all, and PublicSnapshotGuard re-checks the final JSON at the
+        // transport boundary (RpcClient / DeviceRpcClient), so even a future private property cannot reach the wire.
         var json = JsonSerializer.Serialize(
             new
             {
-                p_snapshot = snapshot
+                p_snapshot = PublicObservationSnapshot.From(snapshot)
             },
             SnapshotJson);
+
+        // Local persistence is completed BEFORE any network call: a Supabase outage, a sign-in problem or a failed upload can never
+        // prevent (or undo) retaining an authenticated local Guildbook snapshot.
+        await SyncGuildbookAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
         // Zero-touch: an installation owned by this computer's registered device (or about to be) never takes the anonymous path.
         // Only the explicit Sync now uploads; the watcher and startup sync send nothing for it.
@@ -133,9 +155,7 @@ public sealed class SyncService
                     new SyncCompletedEventArgs(
                         DateTimeOffset.Now,
                         snapshot.Sources.Count,
-                        snapshot.Guilds.Sum(
-                            guild =>
-                                guild.Members.Count),
+                        0,
                         trigger));
                 _afterSynced?.Invoke(snapshot);
                 break;
@@ -161,6 +181,30 @@ public sealed class SyncService
         return attempt;
     }
 
+    private async Task<AccountGuildbookSyncResult?> SyncGuildbookAsync(
+        ForeverDbSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        if (_guildbook is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var result = await _guildbook.SyncAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            GuildbookSyncCompleted?.Invoke(this, new GuildbookSyncCompletedEventArgs(snapshot.InstallationId, result));
+            return result;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Account identity cancellation is an expected stale-work result.
+            var result = new AccountGuildbookSyncResult(false, false, true);
+            GuildbookSyncCompleted?.Invoke(this, new GuildbookSyncCompletedEventArgs(snapshot.InstallationId, result));
+            return result;
+        }
+    }
+
     private async Task<SyncAttempt?> SyncRegisteredDeviceAsync(
         DeviceSyncService device,
         ForeverDbSnapshot snapshot,
@@ -180,7 +224,7 @@ public sealed class SyncService
                 new SyncCompletedEventArgs(
                     DateTimeOffset.Now,
                     snapshot.Sources.Count,
-                    snapshot.Guilds.Sum(guild => guild.Members.Count),
+                    0,
                     trigger));
             _afterSynced?.Invoke(snapshot);
             _coordinator.NoteDeviceUploadAccepted(snapshot.InstallationId);
@@ -213,6 +257,10 @@ public sealed record SyncCompletedEventArgs(
     int SourceCount,
     int GuildMemberCount,
     SyncTrigger Trigger);
+
+public sealed record GuildbookSyncCompletedEventArgs(
+    string InstallationId,
+    AccountGuildbookSyncResult Result);
 
 public sealed record SyncBlockedEventArgs(
     string InstallationId,
