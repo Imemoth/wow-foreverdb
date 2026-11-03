@@ -479,6 +479,28 @@ describe("historical backfill", () => {
     expect(h.payloads[0]!.run.dryRun).toBe(false);
   });
 
+  it("refuses to run when the V2 schema is not proven (a pre-V2 apply would ignore dryRun and WRITE): no fetch, no apply", async () => {
+    const h = harness(routes(), {}, true);
+    const preflight = async () => { throw new Error("function pub_admin.news_revision_batch does not exist"); };
+    const [report] = await collectNews(h.options(us, { mode: "backfill", backfill: { ...window, dryRun: true }, preflight }));
+    expect(report).toMatchObject({ status: "failed", errorCategory: "schema_not_ready", error: "database_schema_not_ready" });
+    expect(h.payloads).toHaveLength(0);
+    expect(h.requests).toHaveLength(0);
+  });
+
+  it("runs a backfill when the preflight passes, and never calls the preflight for normal or revision runs", async () => {
+    let calls = 0;
+    const preflight = async () => { calls += 1; };
+    const ok = harness(routes(), {}, true);
+    const [report] = await collectNews(ok.options(us, { mode: "backfill", backfill: { ...window, dryRun: true }, preflight }));
+    expect(report?.status).toBe("succeeded");
+    expect(calls).toBe(1);
+    const normal = harness([(url) => (isFeed(url) ? json200(feed({ id: 1, topic: 7, post: 1, created: "2026-11-03T11:00:00Z" })) : undefined)]);
+    await collectNews(normal.options(us, { mode: "normal", preflight }));
+    await collectNews(normal.options(us, { mode: "revision", preflight }));
+    expect(calls).toBe(1);
+  });
+
   it("rejects an invalid window and skips Official News", async () => {
     const h = harness(routes(), {}, true);
     const [bad] = await collectNews(h.options(us, { mode: "backfill", backfill: { since: window.until, until: window.since, dryRun: true } }));

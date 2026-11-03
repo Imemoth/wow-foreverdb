@@ -503,6 +503,12 @@ export interface CollectorOptions {
   apply: (payload: ApplySyncPayload) => Promise<ApplyResult>;
   /** Reads due topics + persisted identities (pub_admin.news_revision_batch). Optional: absent => no persisted context. */
   loadContext?: (sourceKey: string) => Promise<RevisionContext>;
+  /**
+   * Backfill only. Must resolve only if the V2 database schema is present (the V2 `news_revision_batch` RPC answers). A
+   * pre-V2 (or rolled-back) `news_apply_sync` ignores `dryRun`, so a "preview" would silently WRITE. When this rejects the run
+   * is refused before any fetch and without calling `apply` (not even for audit).
+   */
+  preflight?: (sourceKey: string) => Promise<void>;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
   mode?: CollectorMode;
@@ -689,9 +695,18 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
   let context: RevisionContext = { verifiedStaff: [], dueTopics: [], knownOrigins: [] };
   let topicFetches = 0;
   let deferredTopics = 0;
+  let skipApply = false;
   const deadline = startedAtDate.getTime() + limits.budgetMs;
 
   try {
+    if (mode === "backfill" && options.preflight) {
+      try {
+        await options.preflight(source.sourceKey);
+      } catch {
+        skipApply = true;
+        throw new SourceError("database_schema_not_ready", "schema_not_ready");
+      }
+    }
     if (options.loadContext && mode !== "backfill") {
       try {
         context = await options.loadContext(source.sourceKey);
@@ -880,6 +895,8 @@ async function collectBluepost(source: BluepostSource, options: CollectorOptions
     error: failure?.error ?? error, errorCategory: failure?.category ?? errorCategory, httpStatus, dryRun: mode === "backfill" ? dryRun : undefined,
     rejectReasons, topicChecks: topicChecks.length, report: result.report,
   });
+
+  if (skipApply) return report({});
 
   // A failed fetch with nothing to persist is still audited (so monitoring can see the failure), best effort.
   try {

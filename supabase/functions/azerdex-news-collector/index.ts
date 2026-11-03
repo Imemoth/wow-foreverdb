@@ -98,6 +98,8 @@ Deno.serve(async (request) => {
     backfill,
     apply: applySync,
     loadContext,
+    // A backfill preview must never run against a database without the V2 schema (see collector.ts `preflight`).
+    preflight: async (sourceKey) => { await loadContext(sourceKey); },
   });
   const failed = reports.filter((report) => report.status === "failed");
   return json({ ok: failed.length === 0, mode, reports }, failed.length ? 207 : 200);
