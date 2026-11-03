@@ -1,5 +1,7 @@
 # Zone atlas & observation maps (P2-Z1)
 
+> **Post-release factual update (2026-11-03):** this document contains historical P2-Z1 planning language below; its old “OFF in Production / NOT APPLIED anywhere” statements describe the **authoring-stage snapshot**, not verified current live configuration. The PR #78 head `cef6baf` is an ancestor of `release` `1980042` (no missing commits), and Vercel Production currently has `AZERDEX_ZONE_MAPS=1`, `NEXT_PUBLIC_AZERDEX_ASSET_BASE_URL=https://azerdex-assets.pages.dev`, and `AZERDEX_ZONE_HERO_SOURCE=cdn`. The live public-read database function `web_api.zone_map_points(bigint,text,integer)` and index **have not yet been independently checked** (Supabase read-only connector unavailable); do not infer an applied migration from passing CI or from rendered artwork. Production source `/about/data#maps` now states Blizzard attribution, fan-site use/removal caveat, and provisional calibration. No real-data landmark calibration has been documented. Tracking: [#156](https://github.com/Imemoth/wow-foreverdb/issues/156). This statement changes no Production configuration or copyright permission.
+
 One reusable, Cloudflare-backed map engine serving two experiences, behind a gate that is **off by default**:
 
 | Surface | What it shows |
