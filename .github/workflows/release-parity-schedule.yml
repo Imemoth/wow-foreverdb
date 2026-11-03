@@ -1,0 +1,26 @@
+name: Dispatch trusted release parity (weekly)
+
+# GitHub schedules execute only on the default branch, main. This workflow
+# holds NO Vercel credentials: it requests the release-only workflow through
+# workflow_dispatch, which respects the restricted release-parity environment.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch parity on release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Trigger trusted release ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-parity.yml --repo "$GITHUB_REPOSITORY" --ref release
