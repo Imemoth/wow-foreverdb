@@ -21,7 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-release-ref:
+    name: Verify trusted release ref
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail closed outside release
+        run: test "$GITHUB_REF" = "refs/heads/release"
+
   publish:
+    needs: [verify-release-ref]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Protected environment: required reviewers; holds ONLY the two worker secrets.

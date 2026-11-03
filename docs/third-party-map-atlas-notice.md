@@ -23,10 +23,19 @@ identical tile references** versus our existing MIT-attributed
 into ForeverDB; this independent source is used as compatibility evidence
 for the newer build only. Other client builds require their own comparison.
 
-The game map **artwork** is the property of Blizzard Entertainment. No Blizzard
-image data (BLP or PNG) is embedded in or redistributed by ForeverDB. Artwork
-is loaded from the user's local WoW installation or the matching Blizzard CDN
-through the existing Companion resolver.
+The game map **artwork** is the property of Blizzard Entertainment. The
+**Windows Companion** does not embed or redistribute Blizzard BLP/PNG images:
+it resolves artwork from the user's own WoW installation or Blizzard CDN.
+
+**AzerDex web is separate from the Companion**: its optional zone-atlas
+feature uses game-client-exported map renditions served through AzerDex's
+asset CDN. As of 2026-11-03, Vercel Production is configured with
+`AZERDEX_ZONE_MAPS=1`. This is a factual configuration observation,
+**not an independent rights clearance** or proof that a particular page
+successfully loaded. The MIT licence above applies to numeric overlay data,
+not to Blizzard image copyright. See `docs/web/maps-and-assets.md` and
+`docs/third-party-blizzard-content-notice.md`; do not treat an attribution
+statement as a licence or a legal opinion.
 
 ## Original MIT license notice
 

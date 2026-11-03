@@ -1,5 +1,10 @@
 version: 2
 
+# Branch strategy: main is the default integration branch for both Dependabot
+# version and SECURITY update PRs. Changes reach release only via reviewed
+# release-candidate/hotfix PRs. Do not add target-branch: release: security
+# updates always target the repository default branch (main).
+#
 # Keep routine maintenance reviewable. Dependabot security updates are not
 # restricted by the version-update allow rules or the PR limits below.
 # Major upgrades require a dedicated compatibility/test plan rather than

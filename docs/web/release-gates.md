@@ -1,6 +1,6 @@
 # ForeverDB Web — CI structure and release gates
 
-**Enforcement status (2026-10-11): `main` ACTIVE / `release` PENDING.** GitHub API confirmed repository ruleset [#24853899](https://github.com/Imemoth/wow-foreverdb/rules/24853899) applies to the default branch, with all six status checks pinned to GitHub Actions integration ID `15368`, no bypass actors, required PR, deletion and force-push restrictions. A deliberately failing PR has **not** been used to prove merge denial. The new `release` branch exists but its protection and Vercel branch tracking still require owner setup. A repository JSON file cannot change live repository settings by itself.
+**Enforcement status (2026-11-03): `main` and `release` ACTIVE.** The live GitHub ruleset [#24853899](https://github.com/Imemoth/wow-foreverdb/rules/24853899) explicitly targets `~DEFAULT_BRANCH` (`main`) and `refs/heads/release`, with **ten required GitHub Actions checks** pinned to integration ID `15368`, no bypass actors, required PR, review thread resolution, deletion and force-push restrictions. The versioned `.github/rulesets/main-release-gates.json` is a documented **snapshot/template**, not an applied configuration: this PR brings it in line with the live ruleset. The classic branch protection API was inaccessible through the integration (403), and deliberate failing-check merge denial has not been tested. Recent Vercel production deployment records come from `release`, but the authoritative Vercel Branch Tracking and GitHub environment branch restrictions still need owner-level inspection before changing the production release process.
 
 ## 1. Jobs in `.github/workflows/web-ci.yml`
 
@@ -15,7 +15,7 @@
 
 Design points:
 
-- **No `paths:` filter.** A path-filtered workflow does not report on unrelated PRs, and a required check that never reports blocks the PR forever (or is silently waived). Every PR now reports every check. The workflow also runs on pushes to `main` so the merged result is tested.
+- **No `paths:` filter.** A path-filtered workflow does not report on unrelated PRs, and a required check that never reports blocks the PR forever (or is silently waived). Every PR now reports every check. With the branch governance PR it also runs on pushes to both `main` and `release` so the merged result is tested on both protected branches.
 - **Check names are a contract.** Renaming a job silently orphans the ruleset entry. Previously the single job was called `web`; if a ruleset still lists `web`, replace it with the names above.
 - `concurrency` cancels superseded runs of the same ref; the gate treats a cancelled upstream job as a failure.
 - Other workflows are intentionally **not** required: `Companion health checks` (Windows, path-filtered to Companion files) and `ForeverDB API security regressions` (`pg-roles-quotas`, path-filtered to `database/**`) only run when relevant, so requiring them would block unrelated PRs. `collector-smoke` runs on every PR and is required.
@@ -23,17 +23,16 @@ Design points:
 
 ## 2. Required settings and verification
 
-- [x] **`main` protected:** ruleset `24853899` Active, targets default branch; six required GitHub Actions checks use `integration_id: 15368`; enforced PR, no force push, no deletion; empty bypass list (GitHub API, 2026-10-11).
-- [ ] **`release` protected:** same active ruleset also targets exact branch `release` (`refs/heads/release`). Branch reports `protected: true`. The versioned `.github/rulesets/main-release-gates.json` now describes both branches, but is **not** automatically applied.
-- [ ] **Failing-check merge denial verified:** use a safe throwaway PR that deliberately fails an existing required test, confirm the merge is blocked, then close it. Do not weaken rules to conduct the test.
-- [ ] **Vercel Production Branch = `release` verified:** details in [vercel-environments §6](vercel-environments.md#6-production-promotion-control).
+- [x] **`main` protected:** live ruleset #24853899 active and includes `~DEFAULT_BRANCH` (currently `main`).
+- [x] **`release` protected:** live ruleset explicitly includes `refs/heads/release`; the branch reports `protected: true`.
+- [x] **Ten required check contexts** under integration ID `15368`: `Web release gate`, `Web code quality`, `Web E2E (Playwright)`, `publisher-and-pipeline`, `codeql`, `collector-smoke`, `Account web auth (real GoTrue)`, `Account ownership SQL + real GoTrue`, `Companion account auth (Windows)`, `Account end-to-end (GoTrue + PostgREST)`. GitHub Actions runs for every PR without required-workflow path filters.
+- [x] **PR and history protection:** no bypass actors; pull request required; review threads resolved; strict up-to-date checks; no deletion or non-fast-forward push. Current `required_approving_review_count=0` (single-owner repository).
+- [ ] **Classic branch protection verified independently:** the GitHub integration returned 403; an administrator should confirm any additional overlapping classic rules.
+- [ ] **Failing-check merge denial verified:** test with a safe throwaway PR containing an intentionally failing required check, then close it; do not weaken rules to test.
+- [ ] **Vercel Production Branch Tracking UI confirmed:** recent production deployment records have `githubCommitRef=release`, but the authoritative branch-tracking setting still requires an owner screenshot/inspection.
+- [ ] **`release-parity` / `publication` environment branch restrictions verified:** both should allow `release` only; `publication` should retain an owner approval gate.
 
-The owner should **edit the existing ruleset** rather than create a second overlapping ruleset. In Target branches, keep Default branch and add `release` using Include by pattern. Preserve:
-
-- Pull request required; review threads resolved; dismiss stale reviews; `required_approving_review_count=0` while the repository has one owner.
-- Deletion and force-push restrictions; no bypass actors.
-- Required checks: `Web release gate`, `Web code quality`, `Web E2E (Playwright)`, `publisher-and-pipeline`, `codeql`, `collector-smoke`, each with expected source **GitHub Actions** (app ID `15368`).
-- Require the branch to be up to date (`strict_required_status_checks_policy=true`). GitHub Actions workflows run for all PRs, including PRs to `release`.
+**Do not recreate or overwrite ruleset #24853899** from an obsolete six-check example. If any change is approved, update that existing ruleset in GitHub Settings and keep the ten exact context names/source integration stable. The versioned JSON records the observed state; GitHub never applies it automatically.
 
 No automatic main-to-release promotion is configured. Release promotion requires a separate, reviewed PR to the protected branch.
 
