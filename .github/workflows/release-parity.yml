@@ -7,7 +7,7 @@ name: Release parity gate (trusted)
 # TRUST MODEL (docs/web/release-parity.md)
 #   * Never runs on pull_request / pull_request_target: a pull request (including a fork) can change the code that would run next to the
 #     Vercel token. The offline policy + evaluator tests (web/tests/unit/release-parity.test.ts) run in the normal PR CI WITHOUT any secret.
-#   * Runs only from the protected `release` branch, on demand, or on a schedule (default branch), inside the `release-parity` GitHub
+#   * Runs only from the protected `release` branch, on release push or manual dispatch (weekly runs are dispatched by main), inside the `release-parity` GitHub
 #     environment. Put VERCEL_TOKEN (READ-ONLY scope: project environment variables + deployments), VERCEL_PROJECT_ID and VERCEL_TEAM_ID
 #     in that ENVIRONMENT's secrets, not in repository secrets, and restrict the environment to the `release` branch.
 #   * Read-only: GET requests to api.vercel.com (and the staged deployment for --probe). Variable values are never printed except the
@@ -25,8 +25,6 @@ on:
         default: ""
   push:
     branches: [release]
-  schedule:
-    - cron: "17 5 * * 1"
 
 permissions:
   contents: read
@@ -36,7 +34,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-release-ref:
+    name: Verify trusted release ref
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail closed outside release
+        run: test "$GITHUB_REF" = "refs/heads/release"
+
   parity:
+    needs: [verify-release-ref]
     name: Release parity (live Vercel configuration)
     runs-on: ubuntu-latest
     timeout-minutes: 10
