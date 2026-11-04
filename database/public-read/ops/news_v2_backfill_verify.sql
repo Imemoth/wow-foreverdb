@@ -38,9 +38,12 @@ select 'reply_by_unverified_identity' as violation, n.id, n.source_key, n.source
   from pub.news_entries n
  where n.source_post_number > 1 and n.author_user_id is not null
    and not exists (select 1 from pub.news_verified_staff st where st.source_key = n.source_key and st.user_id = n.author_user_id);
--- 3c. More than one card per region/topic (cannot happen by construction; asserted on the real data).
+-- 3c. More than one card per region/topic (cannot happen by construction; asserted on the real data). Official News articles have
+--     NO thread key (NULL) and are one card each: they must not be grouped together as a "thread", so NULL keys are excluded.
 select 'duplicate_cards_for_thread' as violation, c.thread_key, count(*)
-  from web_api.news_cards(null, '', null, false, 50, 0) c group by c.thread_key having count(*) > 1;
+  from web_api.news_cards(null, '', null, false, 50, 0) c
+ where c.thread_key is not null
+ group by c.thread_key having count(*) > 1;
 -- 3d. A suppressed row that lost its marker, or one touched by V2 provenance columns.
 select 'suppressed_row_modified' as violation, n.id, n.source_key, n.source_entry_id
   from pub.news_entries n where n.suppression_reason like 'bluepost_reply_dedup_v1:%'
