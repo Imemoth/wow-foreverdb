@@ -89,9 +89,12 @@ select name as check_name, expected, actual, case when ok then 'PASS' else 'FAIL
 
 commit;
 
-\echo '== PART 2: what the CURRENT V1 website reads (executed as foreverdb_web_reader) =='
+\echo '== PART 2: what the CURRENT V1 website reads (executed through the owner role) =='
 begin read only;
-set local role foreverdb_web_reader;
+-- Production's `postgres` may SET ROLE to the schema owner but NOT to foreverdb_web_reader (found when this script ran in
+-- production), so the functional reads run through the owner role. The functions are SECURITY DEFINER, so their output is
+-- identical to what the website role gets; the web reader's EXECUTE grants are asserted in Part 1 (checks 4-6).
+set local role foreverdb_pub_owner;
 select name as check_name, expected, actual, case when ok then 'PASS' else 'FAIL' end as result from (
     select 1 ord, 'news_list(null,'''',50,0) total equals the pre-migration card count (or more: new posts may have arrived)' name, ':pre_cards or more' expected,
            (select coalesce(max(total_count), 0)::text from web_api.news_list(null, '', 50, 0)) actual,
