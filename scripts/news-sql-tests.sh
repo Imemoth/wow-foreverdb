@@ -42,8 +42,8 @@ for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepo
   out=$($SU -f "database/public-read/tests/$t.sql" 2>&1) || { echo "FAIL: $t"; echo "$out" | tail -8; exit 1; }
   echo "PASS: $t"
 done
-# 0012 rollback path: re-applying 0011 restores the strict due test (a topic due 6 s after the tick is skipped again = the defect);
-# re-applying 0012 restores the tolerance. Both are checked through the real RPC.
+# 0012 rollback path: ops/news_v2_0012_rollback.sql restores ONLY news_revision_batch to its exact 0011 definition (a topic due 6 s after
+# the tick is skipped again = the defect) and refuses on drift; re-applying 0012 restores the tolerance. All checked through the real RPC.
 due_in_6s() { $SU -tA <<'SQL' | tail -1
 begin;
 insert into pub.news_sources (source_key, source_type, region, endpoint_url) values ('probe-us', 'bluepost', 'us', 'https://example.com/p');
@@ -53,12 +53,32 @@ select jsonb_array_length(pub_admin.news_revision_batch('probe-us', 25) -> 'dueT
 rollback;
 SQL
 }
+body_md5() { $SU -tA -c "select md5(prosrc) from pg_proc where oid = 'pub_admin.news_revision_batch(text,integer)'::regprocedure"; }
+others_fp() { $SU -tA -c "select md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc || coalesce(p.proacl::text, '')), ';' order by p.oid::regprocedure::text)) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('pub','pub_admin','web_api') and p.oid <> 'pub_admin.news_revision_batch(text,integer)'::regprocedure"; }
 [ "$(due_in_6s)" = "1" ] || { echo "FAIL: 0012 tolerance not active"; exit 1; }
-$A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0011 (0012 rollback)"; exit 1; }
-[ "$(due_in_6s)" = "0" ] || { echo "FAIL: re-applying 0011 must restore the strict due test"; exit 1; }
+[ "$(body_md5)" = "149f9bd8a0f5191163108026ccbdbd84" ] || { echo "FAIL: 0012 body fingerprint"; exit 1; }
+OTHERS_BEFORE=$(others_fp)
+$A -f database/public-read/ops/news_v2_0012_rollback.sql >/dev/null 2>&1 || { echo "FAIL: 0012 rollback script"; $A -f database/public-read/ops/news_v2_0012_rollback.sql 2>&1 | tail -3; exit 1; }
+[ "$(due_in_6s)" = "0" ] || { echo "FAIL: the 0012 rollback must restore the strict due test"; exit 1; }
+[ "$(body_md5)" = "56dca40c9936352bd768db0993ed82a4" ] || { echo "FAIL: rollback did not restore the exact 0011 body"; exit 1; }
+[ "$(others_fp)" = "$OTHERS_BEFORE" ] || { echo "FAIL: the narrow rollback changed another function"; exit 1; }
+$A -f database/public-read/ops/news_v2_0012_rollback.sql >/dev/null 2>&1 && { echo "FAIL: a second rollback must be refused"; exit 1; }
 $A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0012"; exit 1; }
 [ "$(due_in_6s)" = "1" ] || { echo "FAIL: re-applying 0012 must restore the tolerance"; exit 1; }
-echo "PASS: 0012 rollback (re-apply 0011) restores the strict due test; re-applying 0012 restores the tolerance"
+# Drift: a hand-edited function is neither the 0011 nor the 0012 definition. Both 0012 and its rollback must REFUSE to overwrite it.
+$A >/dev/null <<'SQL'
+begin; set local role foreverdb_pub_owner;
+create or replace function pub_admin.news_revision_batch(p_source_key text, p_limit integer default 25) returns jsonb language plpgsql stable security definer set search_path = '' as $f$ begin return '{"drift": true}'::jsonb; end; $f$;
+commit;
+SQL
+$A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 && { echo "FAIL: 0012 must refuse to overwrite a drifted function"; exit 1; }
+$A -f database/public-read/ops/news_v2_0012_rollback.sql >/dev/null 2>&1 && { echo "FAIL: the rollback must refuse a drifted function"; exit 1; }
+$SU -tA -c "select prosrc like '%drift%' from pg_proc where oid = 'pub_admin.news_revision_batch(text,integer)'::regprocedure" | grep -qx t || { echo "FAIL: a refused script changed the drifted function"; exit 1; }
+# Test-database recovery only: 0011 restores its definition, then 0012 applies again.
+$A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0011 (test recovery)"; exit 1; }
+$A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0012 after recovery"; exit 1; }
+[ "$(due_in_6s)" = "1" ] && [ "$(body_md5)" = "149f9bd8a0f5191163108026ccbdbd84" ] || { echo "FAIL: final state must be the 0012 definition"; exit 1; }
+echo "PASS: 0012 narrow rollback restores the exact 0011 body/ACL and no other function; both scripts refuse a drifted function; 0012 re-applies"
 # Operator monitoring (cron/net stubs stand in for the platform extensions).
 # On Supabase this script is run by the platform `postgres` admin; the throwaway cluster's equivalent is its superuser.
 $SU -tc "select has_function_privilege('postgres', 'pub_admin.news_health_snapshot()', 'execute')" | grep -q "t" || { echo "FAIL: platform admin cannot run the health snapshot"; exit 1; }

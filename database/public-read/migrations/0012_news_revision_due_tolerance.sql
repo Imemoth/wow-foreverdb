@@ -11,11 +11,23 @@
 -- the shortest interval (6 h), so a topic is never pulled forward by a whole cycle. Stored next_check_at values, intervals and the
 -- tier rules are unchanged; overdue topics (the 42 waiting today) are simply picked up by the next tick after this migration.
 --
--- Function-only, idempotent (CREATE OR REPLACE with the identical signature and result shape). Rollback: re-apply 0011 (restores
--- the strict `next_check_at <= now()` body; 0011 is idempotent). Order matters: after ANY re-application of 0011, re-apply 0012.
+-- Function-only, idempotent (CREATE OR REPLACE with the identical signature and result shape). Rollback: ops/news_v2_0012_rollback.sql
+-- (restores ONLY this function: exact 0011 body, owner and ACL; refuses on drift). Do NOT roll back by re-applying 0011: that replaces
+-- every function of 0011 again. Order matters: re-applying 0011 resets this function, so re-apply 0012 afterwards.
 
 begin;
 set local role foreverdb_pub_owner;
+
+-- Fail closed on drift: only the 0011 definition (fingerprint of the function body, identical to production on 2026-11-04) or this
+-- migration's own definition (idempotent re-run) may be replaced. Anything else means someone changed the function by hand.
+do $pre$
+begin
+    if not exists (select 1 from pg_proc where oid = 'pub_admin.news_revision_batch(text,integer)'::regprocedure
+                    and md5(prosrc) in ('56dca40c9936352bd768db0993ed82a4', '149f9bd8a0f5191163108026ccbdbd84')) then
+        raise exception 'migration 0012 precondition failed: pub_admin.news_revision_batch is neither the 0011 nor the 0012 definition (drift); refusing to overwrite it';
+    end if;
+end
+$pre$;
 
 create or replace function pub_admin.news_revision_batch(p_source_key text, p_limit integer default 25)
 returns jsonb
@@ -69,7 +81,8 @@ begin
             from pg_proc where oid = 'pub_admin.news_revision_batch(text,integer)'::regprocedure)
        or not has_function_privilege('azerdex_news_ingest', 'pub_admin.news_revision_batch(text,integer)', 'execute')
        or has_function_privilege('foreverdb_web_reader', 'pub_admin.news_revision_batch(text,integer)', 'execute')
-       or has_function_privilege('anon', 'pub_admin.news_revision_batch(text,integer)', 'execute') then
+       or has_function_privilege('anon', 'pub_admin.news_revision_batch(text,integer)', 'execute')
+       or not exists (select 1 from pg_proc where oid = 'pub_admin.news_revision_batch(text,integer)'::regprocedure and md5(prosrc) = '149f9bd8a0f5191163108026ccbdbd84') then
         raise exception 'migration 0012 self-check failed: news_revision_batch definition or ACL is wrong';
     end if;
 end
