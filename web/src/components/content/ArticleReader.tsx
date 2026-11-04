@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CategoryBadge } from "@/components/library/CategoryBadge";
+import { ArticleHero } from "@/components/content/ArticleHero";
 import { JsonLd } from "@/components/JsonLd";
 import { Markdown } from "@/components/Markdown";
 import { data } from "@/lib/data";
+import { articleCoverImages } from "@/lib/content/article-media";
 import { articlePath, getArticle, visibleArticles, type Article, type Section } from "@/lib/content/loader";
 import { extractGuideToc } from "@/lib/content/toc";
 import { fmtDate } from "@/lib/format";
@@ -37,6 +39,15 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
   const readNext = [...relArticles, ...next.filter((n) => !relArticles.some((r) => r.slug === n.slug))].slice(0, 4);
   const toc = extractGuideToc(a.body);
   const label = SECTION_LABEL[section];
+  // An article with cover art gets the illustrated hero instead of the plain header; everything below is shared.
+  const cover = articleCoverImages(a);
+
+  const sampleNote = (
+    <div role="note" className="rounded-lg border border-conf-low/40 bg-conf-low/5 p-3 text-sm text-[#f5d2b4]">
+      <strong>Editorial sample.</strong> This article demonstrates the publishing system and has not been through final editorial
+      review. Figures it mentions refer to the synthetic preview dataset.
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -46,8 +57,10 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
         { name: a.title },
       ]} />
 
-      <article className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10">
-        <header className="min-w-0 max-w-3xl space-y-3 lg:col-start-1 lg:row-start-1">
+      {cover && <ArticleHero article={a} cover={cover.hero} label={label} />}
+
+      <article className={`${cover ? "mt-8" : "mt-6"} lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10`}>
+        {!cover && <header className="min-w-0 max-w-3xl space-y-3 lg:col-start-1 lg:row-start-1">
           <CategoryBadge category={a.category} />
           <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-gold-300 sm:text-4xl">{a.title}</h1>
           <p className="text-lg text-mist">{a.description}</p>
@@ -56,16 +69,11 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
             {a.updatedAt && <> · updated <time dateTime={a.updatedAt}>{fmtDate(a.updatedAt)}</time></>}
             · {a.readingMinutes} min read
           </p>
-          {a.sample && (
-            <div role="note" className="rounded-lg border border-conf-low/40 bg-conf-low/5 p-3 text-sm text-[#f5d2b4]">
-              <strong>Editorial sample.</strong> This article demonstrates the publishing system and has not been through final editorial
-              review. Figures it mentions refer to the synthetic preview dataset.
-            </div>
-          )}
-        </header>
+          {a.sample && sampleNote}
+        </header>}
 
         {toc.length >= 2 && (
-          <nav aria-label={`${label} sections`} className="mt-6 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:mt-0 lg:sticky lg:top-6">
+          <nav aria-label={`${label} sections`} className={`mt-6 lg:col-start-2 lg:row-start-1 ${cover ? "" : "lg:row-span-2"} lg:mt-0 lg:sticky lg:top-6`}>
             <details className="panel p-4" open>
               <summary className="cursor-pointer text-sm font-semibold text-parchment marker:content-none [&::-webkit-details-marker]:hidden">
                 <span className="inline-flex items-center gap-1.5">
@@ -88,7 +96,8 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
           </nav>
         )}
 
-        <div className="mt-6 min-w-0 max-w-3xl space-y-6 lg:col-start-1 lg:row-start-2 lg:mt-0">
+        <div className={`mt-6 min-w-0 max-w-3xl space-y-6 lg:col-start-1 ${cover ? "lg:row-start-1" : "lg:row-start-2"} lg:mt-0`}>
+          {cover && a.sample && sampleNote}
           <div className="rule-ornament" />
           <Markdown source={a.body} />
 
@@ -113,7 +122,7 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
           )}
           <JsonLd nonce={nonce} data={{
             "@context": "https://schema.org",
-            "@type": section === "news" ? "NewsArticle" : "Article",
+            "@type": section === "news" ? "NewsArticle" : section === "blog" ? "BlogPosting" : "Article",
             headline: a.title,
             description: a.description,
             datePublished: a.publishedAt,
@@ -121,6 +130,9 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
             author: { "@type": "Organization", name: a.author },
             publisher: { "@type": "Organization", name: "AzerDex" },
             mainEntityOfPage: new URL(articlePath(a), baseUrl).toString(),
+            articleSection: a.category,
+            inLanguage: "en",
+            ...(cover ? { image: [new URL(cover.social.src, baseUrl).toString(), new URL(cover.hero.src, baseUrl).toString()] } : {}),
             keywords: a.tags.join(", "),
           }} />
         </div>

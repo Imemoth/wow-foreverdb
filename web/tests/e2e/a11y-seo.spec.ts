@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./fixtures";
 
 const PAGES = ["/", "/database", "/database?q=copper", "/item/2770", "/creature/1554", "/object/-184513", "/fishing/1420",
-  "/zone/1420", "/zones", "/about/privacy", "/news", "/news/introducing-foreverdb-web", "/blog", "/blog/building-a-safe-public-database",
+  "/zone/1420", "/zones", "/about/privacy", "/news", "/news/introducing-foreverdb-web", "/blog", "/blog/building-a-safe-public-database", "/blog/wow-forever-beginners-guide-2026", "/blog/wow-forever-new-race-class-combinations",
   "/guides", "/guides/classes", "/guides/classes/priest", "/guides/classes/priest/shadow", "/guides/races", "/guides/races/human", "/guides/races/windshaper-skyborne", "/guides/reading-observed-drop-rates", "/about/data", "/download", "/addon-companion", "/item/987654321"];
 
 for (const path of PAGES) {
@@ -36,7 +36,7 @@ test("SEO: canonical, description, breadcrumbs JSON-LD, preview noindex", async 
 
 // Public links: every internal link reachable from the key public pages resolves, and the production navigation keeps pointing at
 // /addon-companion (the Download entry stays out of the header, mobile menu and footer; the /download page itself still exists).
-const LINK_SOURCES = ["/", "/addon-companion", "/download", "/about/privacy", "/about/data", "/guides", "/guides/classes", "/guides/races", "/database", "/zones", "/news"];
+const LINK_SOURCES = ["/", "/addon-companion", "/download", "/about/privacy", "/about/data", "/guides", "/guides/classes", "/guides/races", "/database", "/zones", "/news", "/blog"];
 
 test("public links: every internal link from the key pages resolves", async ({ page }) => {
   const targets = new Set<string>();
