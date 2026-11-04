@@ -7,8 +7,10 @@ import { promisify } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
 
 /**
- * The owner-approved, time-limited exception for GHSA-g3hv-75wg-m249 (docs/web/dependency-audit-exceptions.md). Real `npm audit --json`
- * output of the `release` lockfile (edf4377) drives the positive case; every negative case mutates it and must FAIL CLOSED.
+ * The audit policy (docs/web/dependency-audit-exceptions.md). The policy LIBRARY is exercised with the historical, owner-approved exception
+ * for GHSA-g3hv-75wg-m249 (fixture: exception-g3hv-75wg-m249-2026-11-02.json) and the real `npm audit --json` output of the `release`
+ * lockfile (edf4377): every positive case passes, every negative case mutates it and must FAIL CLOSED. The SHIPPED record is tested
+ * separately: since the scoped minimatch override it ships NO exception.
  */
 const run = promisify(execFile);
 const ROOT = join(process.cwd(), "..");
@@ -17,6 +19,10 @@ const json = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const FULL = json(join(FIX, "web-full-release-edf4377.json"));
 const PROD = json(join(FIX, "web-prod-release-edf4377.json"));
 const SHIPPED = json(join(ROOT, ".github", "audit-exceptions.json"));
+const HISTORIC_PATH = join(FIX, "exception-g3hv-75wg-m249-2026-11-02.json");
+const HISTORIC = json(HISTORIC_PATH);
+const FULL_NOW = json(join(FIX, "web-full-release-8d033a4-scoped-override.json"));
+const PROD_NOW = json(join(FIX, "web-prod-release-8d033a4-scoped-override.json"));
 const PKG = json(join(process.cwd(), "package.json"));
 const GHSA = "GHSA-g3hv-75wg-m249";
 
@@ -30,14 +36,21 @@ const clone = <T,>(x: T): T => structuredClone(x);
 const T0 = Date.parse("2026-11-02T12:00:00Z");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
-const ev = (over: Any = {}) => P.evaluateAudit({ project: "web", audit: clone(FULL), prodAudit: clone(PROD), packageJson: clone(PKG), exceptions: clone(SHIPPED), now: T0, ...over });
+const ev = (over: Any = {}) => P.evaluateAudit({ project: "web", audit: clone(FULL), prodAudit: clone(PROD), packageJson: clone(PKG), exceptions: clone(HISTORIC), now: T0, ...over });
 const advisory = (id: string, name: string, severity: string, range = "<9.9.9") => ({ source: 9_000_000 + id.length, name, dependency: name, title: "synthetic", url: `https://github.com/advisories/${id}`, severity, cwe: [], cvss: { score: 0, vectorString: null }, range });
 const vuln = (name: string, severity: string, via: Any[], extra: Any = {}) => ({ name, severity, isDirect: false, via, effects: [], range: "*", nodes: [`node_modules/${name}`], fixAvailable: false, ...extra });
 
 describe("shipped exception record", () => {
-  it("is exactly one exception: GHSA-g3hv-75wg-m249, web, moderate, expiring 2026-12-15", () => {
-    expect(SHIPPED.exceptions).toHaveLength(1);
-    const e = SHIPPED.exceptions[0];
+  it("ships NO exception: the minimatch advisory is fixed in the dependency graph, not excused", () => {
+    expect(SHIPPED.exceptions).toEqual([]);
+    expect(FULL_NOW.metadata.vulnerabilities.total).toBe(0);
+    expect(PROD_NOW.metadata.vulnerabilities.total).toBe(0);
+    const r = P.evaluateAudit({ project: "web", audit: clone(FULL_NOW), prodAudit: clone(PROD_NOW), packageJson: clone(PKG), exceptions: clone(SHIPPED), now: T0 });
+    expect(r).toMatchObject({ ok: true, blocked: [], problems: [] });
+  });
+  it("the historical exception record is still a valid, well-formed record (policy library coverage)", () => {
+    expect(HISTORIC.exceptions).toHaveLength(1);
+    const e = HISTORIC.exceptions[0];
     expect(e).toMatchObject({ project: "web", id: GHSA, package: "minimatch", range: "<11.0.1", severity: "moderate", expires: "2026-12-15", approvedOn: "2026-11-02" });
     expect(P.validateException(e)).toEqual([]);
     expect(e.approvedBy).toMatch(/owner/i);
@@ -48,13 +61,22 @@ describe("shipped exception record", () => {
     expect(new Date(P.failClosedFrom("2026-12-15")).toISOString()).toBe("2026-12-16T00:00:00.000Z");
   });
   it("lists exactly the verified toolchain: the vulnerable packages of the real audit, the real minimatch paths, the real direct roots", () => {
-    const e = SHIPPED.exceptions[0];
+    const e = HISTORIC.exceptions[0];
     expect([...e.allowedPackages].sort()).toEqual(Object.keys(FULL.vulnerabilities).sort());
     expect([...e.nodes].sort()).toEqual([...FULL.vulnerabilities.minimatch.nodes].sort());
     expect([...e.directRoots].sort()).toEqual(Object.entries(FULL.vulnerabilities).filter(([, v]) => (v as Any).isDirect).map(([k]) => k).sort());
   });
-  it("introduces no dependency override and keeps both audit steps' thresholds in the workflow", () => {
-    expect(PKG.overrides).toBeUndefined();
+  it("the ONLY dependency override is the scoped minimatch pin for @typescript-eslint/typescript-estree, and it resolves to the patched line", () => {
+    expect(PKG.overrides).toEqual({ "@typescript-eslint/typescript-estree": { minimatch: "^11.0.4" } });
+    const lock = json(join(process.cwd(), "package-lock.json"));
+    const nested = lock.packages["node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"];
+    expect(nested.version).toMatch(/^11\.(0\.[4-9]|0\.\d{2,}|[1-9])/); // >= 11.0.4 (fix is >= 11.0.1)
+    // Every other copy stays on its owner's declared line (3.1.x for the ESLint plugins); a GLOBAL override would have changed these.
+    expect(lock.packages["node_modules/minimatch"].version).toMatch(/^3\.1\./);
+    const copies = Object.keys(lock.packages).filter((k) => k.endsWith("/node_modules/minimatch") || k === "node_modules/minimatch");
+    expect(copies.sort()).toEqual(["node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch", "node_modules/minimatch"]);
+  });
+  it("keeps both audit steps' thresholds in the workflow and no force/ignore flags", () => {
     const wf = readFileSync(join(ROOT, ".github", "workflows", "web-ci.yml"), "utf8");
     expect(wf).toContain("run: npm audit --omit=dev --audit-level=high"); // production audit: unchanged and mandatory
     expect(wf).toMatch(/audit-gate\.mjs[\s\S]*--exceptions \.\.\/\.github\/audit-exceptions\.json/);
@@ -115,7 +137,7 @@ describe("negative: hard expiry (fails closed from 2026-12-16 00:00 UTC)", () =>
   });
   it("malformed expiry dates make the entry invalid and fail the gate", () => {
     for (const expires of ["2026-02-31", "15/12/2026", "", "2026-12-15T00:00:00Z", undefined]) {
-      const exceptions = clone(SHIPPED);
+      const exceptions = clone(HISTORIC);
       exceptions.exceptions[0].expires = expires;
       const r = ev({ exceptions });
       expect(r.ok, String(expires)).toBe(false);
@@ -123,7 +145,7 @@ describe("negative: hard expiry (fails closed from 2026-12-16 00:00 UTC)", () =>
     }
   });
   it("evaluation requires an explicit clock", () => {
-    expect(() => P.evaluateAudit({ project: "web", audit: FULL, prodAudit: PROD, packageJson: PKG, exceptions: SHIPPED })).toThrow(/now/);
+    expect(() => P.evaluateAudit({ project: "web", audit: FULL, prodAudit: PROD, packageJson: PKG, exceptions: HISTORIC })).toThrow(/now/);
   });
 });
 
@@ -153,7 +175,7 @@ describe("negative: every other advisory still fails", () => {
   });
   it("a high or critical exception cannot even be written", () => {
     for (const severity of ["high", "critical", "low"]) {
-      const exceptions = clone(SHIPPED);
+      const exceptions = clone(HISTORIC);
       exceptions.exceptions[0].severity = severity;
       expect(ev({ exceptions }).ok).toBe(false);
     }
@@ -248,14 +270,14 @@ describe("negative: malformed input fails closed", () => {
     for (const exceptions of [undefined, {}, { exceptions: "x" }, []]) expect(ev({ exceptions }).ok).toBe(false);
   });
   it.each(["approvedBy", "approvedOn", "rationale", "removalCriteria", "allowedPackages", "nodes", "directRoots", "affectedPaths"])("an exception without %s (the recorded acceptance / verified graph) is invalid", (k) => {
-    const exceptions = clone(SHIPPED);
+    const exceptions = clone(HISTORIC);
     delete exceptions.exceptions[0][k];
     const r = ev({ exceptions });
     expect(r.ok).toBe(false);
     expect(r.exceptions[0].state).toBe("invalid");
   });
   it("a malformed advisory id is invalid", () => {
-    const exceptions = clone(SHIPPED);
+    const exceptions = clone(HISTORIC);
     exceptions.exceptions[0].id = "minimatch";
     expect(ev({ exceptions }).ok).toBe(false);
   });
@@ -269,18 +291,27 @@ describe("audit-gate CLI", () => {
       audit: join(FIX, "web-full-release-edf4377.json"),
       "prod-audit": join(FIX, "web-prod-release-edf4377.json"),
       package: join(process.cwd(), "package.json"),
-      exceptions: join(ROOT, ".github", "audit-exceptions.json"),
+      exceptions: HISTORIC_PATH,
       ...over,
     };
     const argv = [join(process.cwd(), "scripts", "audit-gate.mjs"), "--project", "web", ...Object.entries(a).flatMap(([k, v]) => [`--${k}`, v])];
     try { const r = await run(process.execPath, argv); return { code: 0, out: r.stdout + r.stderr }; }
     catch (e) { const x = e as { code: number; stdout: string; stderr: string }; return { code: x.code, out: x.stdout + x.stderr }; }
   };
-  it("exits 0 for the real audit with the shipped exception and states the hard expiry", async () => {
+  it("exits 0 for the real audit with the historical exception and states the hard expiry", async () => {
     const r = await gate();
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/AUDIT GATE OK/);
     expect(r.out).toMatch(/fails closed from 2026-12-16T00:00:00.000Z/);
+  });
+  it("exits 0 for the CURRENT audit (scoped override) with the shipped, empty exception file", async () => {
+    const r = await gate({
+      audit: join(FIX, "web-full-release-8d033a4-scoped-override.json"),
+      "prod-audit": join(FIX, "web-prod-release-8d033a4-scoped-override.json"),
+      exceptions: join(ROOT, ".github", "audit-exceptions.json"),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/AUDIT GATE OK/);
   });
   it("exits 1 and names every blocked finding when there is no exception", async () => {
     const r = await gate({ exceptions: put("none.json", { exceptions: [] }) });
@@ -289,7 +320,7 @@ describe("audit-gate CLI", () => {
     expect(r.out).toMatch(/AUDIT GATE FAILED: 17 blocked/);
   });
   it("exits 1 for an expired entry (real clock is past 2020)", async () => {
-    const e = clone(SHIPPED);
+    const e = clone(HISTORIC);
     e.exceptions[0].expires = "2020-01-01";
     const r = await gate({ exceptions: put("expired.json", e) });
     expect(r.code).toBe(1);
