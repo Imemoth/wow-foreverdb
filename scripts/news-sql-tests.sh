@@ -24,19 +24,41 @@ $SU -c "alter schema extensions owner to sbadmin" \
     -c "grant usage on all sequences in schema cron, net to sbadmin" >/dev/null
 A="env PGPASSWORD=$ADMIN_PW psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
 $A -tc "select 'admin is superuser: ' || rolsuper from pg_roles where rolname = current_user" | grep -q "false" || { echo "FAIL: admin must not be superuser"; exit 1; }
-for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2; do
+for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2 0012_news_revision_due_tolerance; do
   $A -f "database/public-read/migrations/$m.sql" >/dev/null 2>&1 || { echo "FAIL: migration $m"; $A -f "database/public-read/migrations/$m.sql" 2>&1 | tail -5; exit 1; }
 done
-echo "PASS: migrations 0001, 0002(news), 0008-0011 applied as a non-superuser admin"
+echo "PASS: migrations 0001, 0002(news), 0008-0012 applied as a non-superuser admin"
 # 0011 must be re-runnable (idempotent) and must not disturb the V1 migrations when re-applied after 0010.
 $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: 0011 is not idempotent"; exit 1; }
 echo "PASS: 0011 is idempotent"
+# 0012 (revision due-time tolerance) replaces ONE function of 0011: re-applying 0011 above restored the strict body, so apply 0012 again
+# (the real deployment order) and prove it is idempotent as well.
+$A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: 0012 did not re-apply"; exit 1; }
+$A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: 0012 is not idempotent"; exit 1; }
+echo "PASS: 0012 is idempotent"
 # Assertion scripts need catalog/owner visibility, so they run as the throwaway cluster's superuser; the migrations above
 # (where privilege mistakes matter) ran as the hosted-like non-superuser admin.
-for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior; do
+for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior news_v2_revision_schedule; do
   out=$($SU -f "database/public-read/tests/$t.sql" 2>&1) || { echo "FAIL: $t"; echo "$out" | tail -8; exit 1; }
   echo "PASS: $t"
 done
+# 0012 rollback path: re-applying 0011 restores the strict due test (a topic due 6 s after the tick is skipped again = the defect);
+# re-applying 0012 restores the tolerance. Both are checked through the real RPC.
+due_in_6s() { $SU -tA <<'SQL' | tail -1
+begin;
+insert into pub.news_sources (source_key, source_type, region, endpoint_url) values ('probe-us', 'bluepost', 'us', 'https://example.com/p');
+insert into pub.news_tracked_topics (source_key, topic_id, thread_origin, last_official_at, next_check_at, official_post_ids)
+values ('probe-us', 'topic:9', 'official', now(), now() + interval '6 seconds', array[9]);
+select jsonb_array_length(pub_admin.news_revision_batch('probe-us', 25) -> 'dueTopics');
+rollback;
+SQL
+}
+[ "$(due_in_6s)" = "1" ] || { echo "FAIL: 0012 tolerance not active"; exit 1; }
+$A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0011 (0012 rollback)"; exit 1; }
+[ "$(due_in_6s)" = "0" ] || { echo "FAIL: re-applying 0011 must restore the strict due test"; exit 1; }
+$A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0012"; exit 1; }
+[ "$(due_in_6s)" = "1" ] || { echo "FAIL: re-applying 0012 must restore the tolerance"; exit 1; }
+echo "PASS: 0012 rollback (re-apply 0011) restores the strict due test; re-applying 0012 restores the tolerance"
 # Operator monitoring (cron/net stubs stand in for the platform extensions).
 # On Supabase this script is run by the platform `postgres` admin; the throwaway cluster's equivalent is its superuser.
 $SU -tc "select has_function_privilege('postgres', 'pub_admin.news_health_snapshot()', 'execute')" | grep -q "t" || { echo "FAIL: platform admin cannot run the health snapshot"; exit 1; }
