@@ -141,6 +141,20 @@ function toNewsEntry(r: Row): NewsEntry {
     category: r.category as NewsCategory,
     importance: Number(r.importance ?? 0),
     featured: Boolean(r.featured),
+    ...v2Context(r),
+  };
+}
+
+const KINDS = ["article", "announcement", "official_update", "staff_reply"] as const;
+
+/** News V2 thread context (columns of web_api.news_cards). Missing columns => single-post semantics. */
+function v2Context(r: Row): Partial<NewsEntry> {
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
+  const origin = r.thread_origin === "official" || r.thread_origin === "community" ? r.thread_origin : null;
+  const kind = (KINDS as readonly string[]).includes(String(r.entry_kind)) ? r.entry_kind as NewsEntry["entryKind"] : null;
+  return {
+    officialUpdatedAt: iso(r.official_updated_at), threadPublishedAt: iso(r.thread_published_at),
+    updateCount: r.update_count == null ? 1 : Number(r.update_count), threadOrigin: origin, entryKind: kind,
   };
 }
 
@@ -158,6 +172,16 @@ function fromNewsJson(value: unknown): NewsEntry | null {
     modifiedAt: r.modifiedAt ? new Date(r.modifiedAt as string).toISOString() : null,
     ingestedAt: new Date(r.ingestedAt as string).toISOString(), excerpt: String(r.excerpt ?? ""),
     category: r.category as NewsCategory, importance: Number(r.importance ?? 0), featured: Boolean(r.featured),
+    officialUpdatedAt: r.officialUpdatedAt ? new Date(r.officialUpdatedAt as string).toISOString() : null,
+    threadPublishedAt: r.threadPublishedAt ? new Date(r.threadPublishedAt as string).toISOString() : null,
+    updateCount: r.updateCount == null ? 1 : Number(r.updateCount),
+    threadOrigin: r.threadOrigin === "official" || r.threadOrigin === "community" ? r.threadOrigin : null,
+    entryKind: (KINDS as readonly string[]).includes(String(r.entryKind)) ? r.entryKind as NewsEntry["entryKind"] : null,
+    updates: Array.isArray(r.updates) ? (r.updates as Array<Record<string, unknown>>).map((u) => ({
+      slug: String(u.slug), postNumber: u.postNumber == null ? null : Number(u.postNumber), canonicalUrl: String(u.canonicalUrl),
+      publishedAt: new Date(u.publishedAt as string).toISOString(), officialUpdatedAt: new Date(u.officialUpdatedAt as string).toISOString(),
+      author: (u.author as string) ?? null, entryKind: (KINDS as readonly string[]).includes(String(u.entryKind)) ? u.entryKind as NewsEntry["entryKind"] & string : "official_update",
+    })) : [],
   };
 }
 
@@ -327,12 +351,12 @@ export class PostgresAdapter implements PublicDataAdapter {
   }
 
   async newsList(q: NewsQuery): Promise<NewsPage> {
-    const rows = await this.q("select * from web_api.news_list($1, $2, $3, $4)", [q.category, q.query, q.pageSize, (q.page - 1) * q.pageSize]);
+    const rows = await this.q("select * from web_api.news_cards($1, $2, $3, false, $4, $5)", [q.category, q.query, q.region ?? null, q.pageSize, (q.page - 1) * q.pageSize]);
     return { rows: rows.map(toNewsEntry), total: rows.length ? Number(rows[0]!.total_count) : 0 };
   }
 
   async newsFeatured(limit: number): Promise<NewsEntry[]> {
-    const rows = await this.q("select * from web_api.news_featured($1)", [limit]);
+    const rows = await this.q("select * from web_api.news_cards(null, '', null, true, $1, 0)", [Math.min(Math.max(limit, 1), 12)]);
     return rows.map(toNewsEntry);
   }
 

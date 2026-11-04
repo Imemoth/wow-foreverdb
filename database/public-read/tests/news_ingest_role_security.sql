@@ -17,8 +17,12 @@ begin
         raise exception 'Dedicated News ingestion role is not a constrained LOGIN role';
     end if;
     if not has_schema_privilege('azerdex_news_ingest', 'pub_admin', 'usage')
-       or not has_function_privilege('azerdex_news_ingest', 'pub_admin.news_apply_sync(jsonb)', 'execute') then
+       or not has_function_privilege('azerdex_news_ingest', 'pub_admin.news_apply_sync(jsonb)', 'execute')
+       or not has_function_privilege('azerdex_news_ingest', 'pub_admin.news_revision_batch(text,integer)', 'execute') then
         raise exception 'Dedicated News ingestion role lacks the required RPC boundary';
+    end if;
+    if has_function_privilege('azerdex_news_ingest', 'pub_admin.news_health_snapshot()', 'execute') then
+        raise exception 'Dedicated News ingestion role can execute the operator health snapshot';
     end if;
     if has_schema_privilege('azerdex_news_ingest', 'pub', 'usage')
        or has_schema_privilege('azerdex_news_ingest', 'web_api', 'usage') then

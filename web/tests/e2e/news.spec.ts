@@ -14,7 +14,7 @@ async function assertNoOverflow(page: import("@playwright/test").Page) {
 }
 
 test.describe("News landing page", () => {
-  test("renders the current NewsArchive with categories, opener-only fixtures and RSS", async ({ page }) => {
+  test("renders the NewsArchive with categories, verified-only fixtures and RSS", async ({ page }) => {
     await page.goto("/news");
     await expect(page.getByRole("heading", { level: 1, name: "News" })).toBeVisible();
     await expect(page.getByRole("search").filter({ has: page.getByRole("button", { name: "Search news" }) })).toBeVisible();
@@ -25,7 +25,23 @@ test.describe("News landing page", () => {
     await expect(page.getByText("US Bluepost opener — Forever Beta", { exact: true })).toHaveCount(1);
     await expect(page.getByText("Player reply must not appear", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Blizzard staff reply must not appear", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Spoofed staff display name must not appear", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("User-created topic opener", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "RSS feed" }).first()).toHaveAttribute("href", "/news/rss.xml");
+  });
+
+  test("a verified official reply updates its thread's single card; a staff reply in a player topic is labelled, never the player's opener", async ({ page }) => {
+    await page.goto("/news?category=bluepost&region=us");
+    // one card per thread: the opener title appears once even though the thread has an opener and a verified official update
+    await expect(page.getByText("US Bluepost opener — Forever Beta", { exact: true })).toHaveCount(1);
+    const card = page.locator("article.news-card").filter({ hasText: "US Bluepost opener — Forever Beta" });
+    await expect(card.getByText("OFFICIAL UPDATE")).toBeVisible();
+    await expect(card).toContainText("Updated");
+    await expect(card).toContainText("first posted");
+    await expect(card.getByRole("link", { name: "Read the official post ↗" })).toHaveAttribute("href", /\/forever-beta\/9001\/4$/);
+    const staffReply = page.locator("article.news-card").filter({ hasText: "Blizzard reply to user topic" });
+    await expect(staffReply.getByText("STAFF REPLY")).toBeVisible();
+    await expect(page.getByText("User-created topic opener", { exact: true })).toHaveCount(0);
   });
 
   test("search by title text finds the matching dispatch only", async ({ page }) => {
@@ -42,7 +58,7 @@ test.describe("News landing page", () => {
     await page.goto("/news?category=bluepost");
     await expect(page).toHaveURL(/category=bluepost/);
     await expect(page.getByRole("navigation", { name: "Bluepost regions" })).toBeVisible();
-    await expect(page.getByText("14 published entries")).toBeVisible();
+    await expect(page.getByText("15 published entries")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "News pages" })).toBeVisible();
     await expect(page.getByText("Player reply must not appear", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Blizzard staff reply must not appear", { exact: true })).toHaveCount(0);
@@ -91,8 +107,25 @@ test.describe("News landing page", () => {
     const rss = await request.get("/news/rss.xml");
     const xml = await rss.text();
     expect(xml.match(/US Bluepost opener — Forever Beta/g)?.length).toBe(1);
+    expect(xml).toContain("US Bluepost opener — Forever Beta (Blizzard update)");
     expect(xml).not.toContain("Player reply must not appear");
     expect(xml).not.toContain("Blizzard staff reply must not appear");
+    expect(xml).not.toContain("Spoofed staff display name must not appear");
+    expect(xml).not.toContain("User-created topic opener");
+  });
+
+  test("the detail page of an official update shows thread context and links each verified post", async ({ page }) => {
+    await page.goto("/news/entry/us-bluepost-official-update-forever-beta");
+    await expect(page.getByRole("heading", { level: 1, name: "US Bluepost opener — Forever Beta" })).toBeVisible();
+    await expect(page.getByText("OFFICIAL UPDATE · US")).toBeVisible();
+    await expect(page.getByText(/first posted/i)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Official updates in this thread" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Original post/ })).toHaveAttribute("href", /\/9001\/1$/);
+    await expect(page.getByRole("link", { name: /Post #4/ })).toHaveAttribute("href", /\/9001\/4$/);
+    for (const hidden of ["player-reply-must-not-appear", "staff-reply-must-not-appear", "spoofed-staff-name-reply", "user-created-topic-opener"]) {
+      const response = await page.goto(`/news/entry/${hidden}`);
+      expect(response?.status()).toBe(404);
+    }
   });
 
   for (const width of VIEWPORTS) {
