@@ -68,4 +68,22 @@ $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1
 echo "PASS: existing verified openers are seeded into revision tracking"
 
 echo "PASS: rollback restores V1 functions without touching rows; re-applying 0011 restores the verified reply"
+# Operator backfill verification script (read-only): on healthy data none of its invariant queries may return a row. Regression:
+# Official News cards have NO thread key; several of them used to be reported as "duplicate_cards_for_thread" (NULL grouped together).
+$SU >/dev/null <<'SQL'
+insert into pub.news_sources (source_key, source_type, region, endpoint_url) values ('vf-news', 'official_news', 'us', 'https://example.com/vf')
+  on conflict do nothing;
+insert into pub.news_entries (source_key, source_entry_id, slug, canonical_url, title, region, published_at, category, relevance, status, content_hash)
+select 'vf-news', 'article:' || g, 'vf-article-' || g, 'https://example.com/vf/' || g, 'World of Warcraft: Forever verification article ' || g, 'us',
+       now() - (g || ' days')::interval, 'official_news', 'relevant', 'published', encode(sha256(convert_to('vf' || g, 'UTF8')), 'hex')
+  from generate_series(1, 3) g
+on conflict do nothing;
+SQL
+[ "$($SU -tAc "select count(*) from web_api.news_cards(null,'',null,false,50,0) where thread_key is null")" -ge 2 ] || { echo "FAIL: verify-script fixture needs >= 2 cards without a thread key"; exit 1; }
+verify_out=$($SU -X -A -t -F '|' -f database/public-read/ops/news_v2_backfill_verify.sql 2>&1) || { echo "FAIL: news_v2_backfill_verify.sql did not run"; echo "$verify_out" | tail -5; exit 1; }
+if echo "$verify_out" | grep -E '^(visible_reply_without_provenance|reply_by_unverified_identity|duplicate_cards_for_thread|suppressed_row_modified|published_at_changed)\|'; then
+  echo "FAIL: backfill verification reported violations on healthy data (see above)"; exit 1
+fi
+echo "PASS: backfill verification script reports no violations (Official News cards without a thread key are not duplicates)"
+
 echo "NEWS SQL CHECKS PASSED"
