@@ -24,10 +24,10 @@ $SU -c "alter schema extensions owner to sbadmin" \
     -c "grant usage on all sequences in schema cron, net to sbadmin" >/dev/null
 A="env PGPASSWORD=$ADMIN_PW psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
 $A -tc "select 'admin is superuser: ' || rolsuper from pg_roles where rolname = current_user" | grep -q "false" || { echo "FAIL: admin must not be superuser"; exit 1; }
-for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2 0012_news_revision_due_tolerance; do
+for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2 0012_news_revision_due_tolerance 0013_news_global_story_grouping; do
   $A -f "database/public-read/migrations/$m.sql" >/dev/null 2>&1 || { echo "FAIL: migration $m"; $A -f "database/public-read/migrations/$m.sql" 2>&1 | tail -5; exit 1; }
 done
-echo "PASS: migrations 0001, 0002(news), 0008-0012 applied as a non-superuser admin"
+echo "PASS: migrations 0001, 0002(news), 0008-0013 applied as a non-superuser admin (incl. 0012 revision tolerance and 0013 story grouping)"
 # 0011 must be re-runnable (idempotent) and must not disturb the V1 migrations when re-applied after 0010.
 $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: 0011 is not idempotent"; exit 1; }
 echo "PASS: 0011 is idempotent"
@@ -38,7 +38,7 @@ $A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev
 echo "PASS: 0012 is idempotent"
 # Assertion scripts need catalog/owner visibility, so they run as the throwaway cluster's superuser; the migrations above
 # (where privilege mistakes matter) ran as the hosted-like non-superuser admin.
-for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior news_v2_revision_schedule; do
+for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior news_v2_revision_schedule news_v2_story_grouping; do
   out=$($SU -f "database/public-read/tests/$t.sql" 2>&1) || { echo "FAIL: $t"; echo "$out" | tail -8; exit 1; }
   echo "PASS: $t"
 done
@@ -79,6 +79,28 @@ $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1
 $A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0012 after recovery"; exit 1; }
 [ "$(due_in_6s)" = "1" ] && [ "$(body_md5)" = "149f9bd8a0f5191163108026ccbdbd84" ] || { echo "FAIL: final state must be the 0012 definition"; exit 1; }
 echo "PASS: 0012 narrow rollback restores the exact 0011 body/ACL and no other function; both scripts refuse a drifted function; 0012 re-applies"
+# 0013 rollback: only the story objects go; source rows are fingerprint-identical; the V2 readers keep working; refuses while overrides exist.
+$SU >/dev/null <<'SQL'
+insert into pub.news_sources (source_key, source_type, region, endpoint_url) values ('rb13-us', 'bluepost', 'us', 'https://example.com/r'), ('rb13-eu', 'bluepost', 'eu', 'https://example.com/r2') on conflict do nothing;
+insert into pub.news_entries (source_key, source_entry_id, source_topic_id, source_post_number, thread_key, slug, canonical_url, title, author, region, published_at, excerpt, category, relevance, status, content_hash)
+select 'rb13-' || r, 'post:' || t, 'topic:' || t, 1, r || ':topic:' || t, 'rb13-' || r || '-' || t, 'https://' || r || '.forums.blizzard.com/en/wow/t/x/' || t || '/1', 'Rollback thirteen story fixture', 'Blizzard Entertainment', r,
+       now() - interval '1 day', 'World of Warcraft Forever rollback fixture excerpt that is long enough to be evidence for the matcher.', 'bluepost', 'relevant', 'published', encode(sha256(convert_to('rb13' || r, 'UTF8')), 'hex')
+from (values ('us', 8101), ('eu', 8102)) v(r, t);
+select pub_admin.news_link_stories(true);
+SQL
+[ "$($SU -tAc "select count(*) from pub.news_story_members where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: 0013 rollback fixture was not linked"; exit 1; }
+SRC_FP=$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")
+$SU -c "insert into pub.news_story_overrides values ('eu:topic:8102', 'us:topic:8101', 'deny', 'rollback guard fixture override', 'owner')" >/dev/null
+$A -f database/public-read/ops/news_v2_0013_rollback.sql >/dev/null 2>&1 && { echo "FAIL: 0013 rollback must refuse while overrides exist"; exit 1; }
+$SU -c "delete from pub.news_story_overrides" >/dev/null
+$A -f database/public-read/ops/news_v2_0013_rollback.sql >/dev/null 2>&1 || { echo "FAIL: 0013 rollback script"; $A -f database/public-read/ops/news_v2_0013_rollback.sql 2>&1 | tail -3; exit 1; }
+[ "$($SU -tAc "select to_regclass('pub.news_story_members') is null and to_regprocedure('web_api.news_stories(text,text,text,boolean,integer,integer)') is null and to_regprocedure('pub_admin.news_link_stories(boolean)') is null")" = t ] || { echo "FAIL: 0013 objects still present after rollback"; exit 1; }
+[ "$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")" = "$SRC_FP" ] || { echo "FAIL: 0013 rollback changed source rows"; exit 1; }
+[ "$($SU -tAc "select count(*) from web_api.news_cards(null,'',null,false,50,0) where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: V2 readers must keep working (two thread cards) after the 0013 rollback"; exit 1; }
+$A -f database/public-read/migrations/0013_news_global_story_grouping.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0013 after rollback"; exit 1; }
+[ "$($SU -tAc "select count(*) from web_api.news_stories(null,'',null,false,50,0) where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: after re-apply and no links every thread is its own story"; exit 1; }
+$SU -c "delete from pub.news_story_members; delete from pub.news_post_versions where news_entry_id in (select id from pub.news_entries where source_key like 'rb13-%'); delete from pub.news_entries where source_key like 'rb13-%'; delete from pub.news_sources where source_key like 'rb13-%'" >/dev/null
+echo "PASS: 0013 rollback removes only the story objects (source rows identical, V2 readers intact, refuses while overrides exist); 0013 re-applies"
 # Operator monitoring (cron/net stubs stand in for the platform extensions).
 # On Supabase this script is run by the platform `postgres` admin; the throwaway cluster's equivalent is its superuser.
 $SU -tc "select has_function_privilege('postgres', 'pub_admin.news_health_snapshot()', 'execute')" | grep -q "t" || { echo "FAIL: platform admin cannot run the health snapshot"; exit 1; }

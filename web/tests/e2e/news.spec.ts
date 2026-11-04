@@ -58,7 +58,7 @@ test.describe("News landing page", () => {
     await page.goto("/news?category=bluepost");
     await expect(page).toHaveURL(/category=bluepost/);
     await expect(page.getByRole("navigation", { name: "Bluepost regions" })).toBeVisible();
-    await expect(page.getByText("15 published entries")).toBeVisible();
+    await expect(page.getByText("20 published entries")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "News pages" })).toBeVisible();
     await expect(page.getByText("Player reply must not appear", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Blizzard staff reply must not appear", { exact: true })).toHaveCount(0);

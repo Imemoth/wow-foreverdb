@@ -16,7 +16,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return {
     title: entry.title,
     description: entry.excerpt,
-    alternates: { canonical: "/news/entry/" + entry.slug },
+    // A global story has ONE canonical URL (the canonical regional thread's opener); every regional entry URL stays valid and points to it.
+    alternates: { canonical: "/news/entry/" + (entry.story?.canonicalSlug ?? entry.slug) },
     openGraph: { type: "article", title: entry.title, description: entry.excerpt, publishedTime: entry.publishedAt, modifiedTime: entry.modifiedAt ?? entry.publishedAt },
   };
 }

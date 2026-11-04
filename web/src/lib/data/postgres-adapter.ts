@@ -10,6 +10,7 @@ import {
   type PublicDataAdapter,
   type RecentRow,
   type NewsEntry,
+  type NewsStory,
   type NewsPage,
   type NewsQuery,
   type NewsSourceType,
@@ -155,6 +156,33 @@ function v2Context(r: Row): Partial<NewsEntry> {
   return {
     officialUpdatedAt: iso(r.official_updated_at), threadPublishedAt: iso(r.thread_published_at),
     updateCount: r.update_count == null ? 1 : Number(r.update_count), threadOrigin: origin, entryKind: kind,
+    ...(r.story_key !== undefined ? { storyKey: (r.story_key as string) ?? null } : {}),
+    ...(Array.isArray(r.regions) ? { regions: (r.regions as string[]).filter((x): x is NewsRegion => x === "us" || x === "eu" || x === "global") } : {}),
+    ...(r.member_count != null ? { memberCount: Number(r.member_count) } : {}),
+    ...(typeof r.canonical_slug === "string" ? { canonicalSlug: r.canonical_slug } : {}),
+  };
+}
+
+const iso = (v: unknown) => new Date(v as string).toISOString();
+const isRegion = (x: unknown): x is NewsRegion => x === "us" || x === "eu" || x === "global";
+
+function fromStoryJson(value: unknown): NewsStory | null {
+  if (!value || typeof value !== "object") return null;
+  const s = value as Record<string, unknown>;
+  const members = Array.isArray(s.members) ? (s.members as Array<Record<string, unknown>>) : [];
+  return {
+    storyKey: String(s.storyKey), canonicalSlug: String(s.canonicalSlug),
+    regions: (Array.isArray(s.regions) ? s.regions : []).filter(isRegion),
+    members: members.map((m) => ({
+      region: m.region as NewsRegion, threadKey: String(m.threadKey), topicId: (m.topicId as string) ?? null, title: String(m.title),
+      sourceUrl: String(m.sourceUrl), openerSlug: String(m.openerSlug), author: (m.author as string) ?? null,
+      firstPublishedAt: iso(m.firstPublishedAt), lastOfficialAt: iso(m.lastOfficialAt), updateCount: Number(m.updateCount ?? 1),
+      updates: (Array.isArray(m.updates) ? (m.updates as Array<Record<string, unknown>>) : []).map((u) => ({
+        slug: String(u.slug), postNumber: u.postNumber == null ? null : Number(u.postNumber), canonicalUrl: String(u.canonicalUrl),
+        publishedAt: iso(u.publishedAt), officialUpdatedAt: iso(u.officialUpdatedAt), author: (u.author as string) ?? null,
+        entryKind: (KINDS as readonly string[]).includes(String(u.entryKind)) ? u.entryKind as NewsEntry["entryKind"] & string : "official_update",
+      })),
+    })),
   };
 }
 
@@ -182,6 +210,7 @@ function fromNewsJson(value: unknown): NewsEntry | null {
       publishedAt: new Date(u.publishedAt as string).toISOString(), officialUpdatedAt: new Date(u.officialUpdatedAt as string).toISOString(),
       author: (u.author as string) ?? null, entryKind: (KINDS as readonly string[]).includes(String(u.entryKind)) ? u.entryKind as NewsEntry["entryKind"] & string : "official_update",
     })) : [],
+    ...(r.story !== undefined ? { story: fromStoryJson(r.story) } : {}),
   };
 }
 
@@ -243,6 +272,20 @@ export class PostgresAdapter implements PublicDataAdapter {
     this.pool.on("error", () => {
       /* idle client errors are logged by the caller path; never crash the process */
     });
+  }
+
+  /** Like q(), but returns null (silently) when the function does not exist yet: the website may deploy before migration 0013. */
+  private async qOptional(sql: string, params: unknown[]): Promise<Row[] | null> {
+    try {
+      return (await this.pool.query(sql, params)).rows as Row[];
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === "42883") return null; // undefined_function
+      if (code === "22023") throw new InvalidQueryError((e as Error).message);
+      const op = /web_api\.([a-z_]{1,40})/.exec(sql)?.[1] ?? null;
+      console.error(JSON.stringify({ at: new Date().toISOString(), event: "public_db_error", op, ...describeDbError(e), target: this.target }));
+      throw new Error("public_data_unavailable");
+    }
   }
 
   private async q(sql: string, params: unknown[]): Promise<Row[]> {
@@ -351,17 +394,22 @@ export class PostgresAdapter implements PublicDataAdapter {
   }
 
   async newsList(q: NewsQuery): Promise<NewsPage> {
-    const rows = await this.q("select * from web_api.news_cards($1, $2, $3, false, $4, $5)", [q.category, q.query, q.region ?? null, q.pageSize, (q.page - 1) * q.pageSize]);
+    const args = [q.category, q.query, q.region ?? null, q.pageSize, (q.page - 1) * q.pageSize];
+    const rows = (await this.qOptional("select * from web_api.news_stories($1, $2, $3, false, $4, $5)", args))
+      ?? await this.q("select * from web_api.news_cards($1, $2, $3, false, $4, $5)", args);
     return { rows: rows.map(toNewsEntry), total: rows.length ? Number(rows[0]!.total_count) : 0 };
   }
 
   async newsFeatured(limit: number): Promise<NewsEntry[]> {
-    const rows = await this.q("select * from web_api.news_cards(null, '', null, true, $1, 0)", [Math.min(Math.max(limit, 1), 12)]);
+    const n = [Math.min(Math.max(limit, 1), 12)];
+    const rows = (await this.qOptional("select * from web_api.news_stories(null, '', null, true, $1, 0)", n))
+      ?? await this.q("select * from web_api.news_cards(null, '', null, true, $1, 0)", n);
     return rows.map(toNewsEntry);
   }
 
   async newsEntry(slug: string): Promise<NewsEntry | null> {
-    const [row] = await this.q("select web_api.news_entry($1) as d", [slug]);
+    const [row] = (await this.qOptional("select web_api.news_story_entry($1) as d", [slug]))
+      ?? await this.q("select web_api.news_entry($1) as d", [slug]);
     return fromNewsJson(row?.d);
   }
 
