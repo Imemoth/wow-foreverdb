@@ -85,6 +85,7 @@ render() { # render <out> <run_id> <suppressed_md5> <suppressed_count> <values-f
 # ---- production-shaped pre-G5 state
 UNCH="post:30741364,post:30675695,post:30673599,post:30671248,post:30658235,post:30650104,post:30638185,post:30622338"
 $NODE apply "$PAYLOAD" "$W/seed.sql" "$UNCH" -
+sed -i 's/"mode":"backfill"/"mode":"normal"/' "$W/seed.sql"   # production has no backfill run yet; the seed must not add one
 SU -f "$W/seed.sql" >/dev/null                       # 8 verified US openers that G5 must report as unchanged (+ their tracked topics)
 grep -E '^insert into pub.news_(entries|post_versions) overriding system value select' "$ROLLBACK" >"$W/backup.sql"
 [ "$(wc -l <"$W/backup.sql")" = 22 ] || fail "the rollback script must embed 22 backup statements"
@@ -98,14 +99,14 @@ select 'blizzard-bluepost-eu', 'post:' || (6391797 + g), 'topic:631316', 2 + g, 
        '2026-10-22 12:00:00+00', 'bluepost_reply_dedup_v1:test'
   from generate_series(1, 5) g;
 -- decoy sync runs that the rollback must never delete (another source's backfill, an older US backfill, a cron run)
-insert into pub.news_sync_runs (source_key, started_at, status, mode) values
-  ('blizzard-bluepost-eu', now() - interval '2 hours', 'succeeded', 'backfill'),
-  ('blizzard-bluepost-us', now() - interval '3 hours', 'succeeded', 'backfill'),
-  ('blizzard-bluepost-us', now() - interval '1 hour', 'succeeded', 'normal');
+insert into pub.news_sync_runs (source_key, started_at, status, mode, error) values
+  ('blizzard-bluepost-eu', now() - interval '2 hours', 'succeeded', 'backfill', 'g5-test-decoy'),
+  ('blizzard-bluepost-us', now() - interval '3 hours', 'succeeded', 'backfill', 'g5-test-decoy'),
+  ('blizzard-bluepost-us', now() - interval '1 hour', 'succeeded', 'normal', 'g5-test-decoy');
 SQL
-EU_DECOY=$(SU -c "select id from pub.news_sync_runs where source_key='blizzard-bluepost-eu' and mode='backfill'")
-NORMAL_RUN=$(SU -c "select id from pub.news_sync_runs where mode='normal'")
-DECOYS=$(SU -c "select count(*) from pub.news_sync_runs where mode='backfill'")
+EU_DECOY=$(SU -c "select id from pub.news_sync_runs where error='g5-test-decoy' and source_key='blizzard-bluepost-eu' and mode='backfill'")
+NORMAL_RUN=$(SU -c "select id from pub.news_sync_runs where error='g5-test-decoy' and mode='normal'")
+DECOYS=$(SU -c "select count(*) from pub.news_sync_runs where mode='backfill'")   # 2 decoy backfill runs exist before G5
 auxfp() { SU -F ' ' -c "select 'sources=' || left(md5(coalesce((select string_agg(s::text, ';' order by source_key) from pub.news_sources s), '')), 8),
   'tracked=' || left(md5(coalesce((select string_agg(t::text, ';' order by source_key, topic_id) from pub.news_tracked_topics t), '')), 8),
   'staff=' || left(md5(coalesce((select string_agg(v::text, ';' order by source_key, user_id) from pub.news_verified_staff v), '')), 8)"; }
@@ -129,6 +130,11 @@ post_values >"$W/post_values.txt"
 [ "$(wc -l <"$W/post_values.txt")" -ge 30 ] || fail "post-state values too short"
 SU -c "select (select count(*) from pub.news_entries where source_topic_id='topic:2360696'), (select count(*) from web_api.news_cards(null,'',null,false,50,0) where thread_key='us:topic:2360696'), (select count(*) from pub.news_card_entries where id in (32989,40722,40866,40894,41424))" | grep -qx '4|1|0' || fail "post-G5 shape: 4 rows, one card, legacy rows invisible"
 pass "post-G5: topic 2360696 has 4 rows and ONE card; the five legacy rows stay invisible"
+VERIFY=database/public-read/ops/news_v2_g5_verify.sql
+VOUT=$(AD -F '|' -f "$VERIFY") || fail "post-apply verification script did not run"
+echo "$VOUT" | sed 's/^/    /'
+[ "$(echo "$VOUT" | grep -c '|PASS$')" = 11 ] && ! echo "$VOUT" | grep -q '|FAIL$' || fail "post-apply verification script reported FAIL/missing checks"
+pass "ops/news_v2_g5_verify.sql: all 11 post-apply checks PASS on the production-shaped database"
 psql -X -q -d postgres -c "drop database if exists ${DB}_post" -c "create database ${DB}_post template $DB owner sbadmin" >/dev/null  # template for negative cases
 
 # ---- T2: corrected rollback, as the hosted-like admin
