@@ -9,9 +9,10 @@ parsed by `web/scripts/audit-gate.mjs` (rules in `web/scripts/lib/audit-policy.m
 
 | | |
 | --- | --- |
-| Advisory | [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249): `minimatch` potential denial of service via globparts amplification (CWE-405), vulnerable `<11.0.1`, severity **moderate** |
+| Advisory | [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249): `minimatch` potential denial of service via globparts amplification (CWE-405), vulnerable `>=7.0.0 <11.0.1` (GitHub narrowed it from `<11.0.1` on 2026-11-04), severity **moderate** |
 | Project | `web/` only (`publisher/` has no exception) |
 | Owner risk acceptance | Repository owner, recorded **2026-11-02**. Approved approach: a narrowly scoped exception expiring 2026-12-15. Not approval to disable or bypass any security check. |
+| Amendment 2026-11-04 | **Narrowing only, pending the owner's confirmation in the pull request:** range string updated to the advisory's new range; the six `minimatch@3.1.5` paths and the direct root `eslint` dropped (no longer vulnerable); expiry, severity and scope are **not** extended and no new risk is accepted |
 | Hard expiry | Last valid day **2026-12-15 (UTC)**. The gate **fails closed from 2026-12-16 00:00 UTC**; there is no flag to set the clock and no automatic renewal |
 | Owner of the removal | The repository owner; re-check upstream before the deadline |
 
@@ -29,24 +30,19 @@ parsed by `web/scripts/audit-gate.mjs` (rules in `web/scripts/lib/audit-policy.m
 - **Impact:** a crafted glob can exhaust CPU/memory in the process that evaluates it. Here the globs are repository-authored configuration and repository file paths. The realistic worst case is a malicious pull request slowing its own CI run, which a pull request author can already do by running arbitrary code there.
 - **Not covered:** any other advisory, any other severity, any other package, any new path. All of those still fail.
 
-### Affected dependency paths (the verified graph)
+### Affected dependency paths (the verified graph, 2026-11-04)
 
-`minimatch@3.1.5`, six deduplicated paths (`node_modules/minimatch`) and `minimatch@10.2.6` (`node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch`):
+Exactly one installed copy: `minimatch@10.2.6` at `node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch`:
 
 ```
-eslint > @eslint/config-array > minimatch@3.1.5
-eslint > @eslint/eslintrc > minimatch@3.1.5
-eslint-config-next > eslint-plugin-import > minimatch@3.1.5
-eslint-config-next > eslint-plugin-jsx-a11y > minimatch@3.1.5
-eslint-config-next > eslint-plugin-react > minimatch@3.1.5
 eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree > minimatch@10.2.6
 ```
 
-The 16 packages npm reports as affected (the advisory's package and everything that inherits it) are listed in `allowedPackages`; direct dependencies are `eslint` and `eslint-config-next`, both `devDependencies`.
+The 8 packages npm reports as affected (the advisory's package and everything that inherits it) are listed in `allowedPackages`; the only directly-declared one is `eslint-config-next`, a `devDependency`. Fixture: `web/tests/fixtures/audit/web-{full,prod}-release-8d033a4.json`.
 
 ### Removal criteria
 
-Remove the entry (and this section) as soon as the audit no longer reports the advisory for `web/`; the gate fails an **obsolete** entry on its own, so a fix cannot be forgotten. That needs releases of `@eslint/config-array`, `@eslint/eslintrc`, `@typescript-eslint/typescript-estree` and `eslint-plugin-react` / `-import` / `-jsx-a11y` (or an `eslint-config-next` that drops them) that accept `minimatch >= 11.0.1`. If still unresolved on 2026-12-15, the owner must either renew it in a reviewed change (new `expires`, new recorded decision) or let it expire, at which point `Dependency audit (web)` and the `Web release gate` go red.
+Remove the entry (and this section) as soon as the audit no longer reports the advisory for `web/`; the gate fails an **obsolete** entry on its own, so a fix cannot be forgotten. That needs a release of `@typescript-eslint/typescript-estree` (via `typescript-eslint` / `eslint-config-next`) that accepts `minimatch >= 11.0.1`. If still unresolved on 2026-12-15, the owner must either renew it in a reviewed change (new `expires`, new recorded decision) or let it expire, at which point `Dependency audit (web)` and the `Web release gate` go red.
 
 ## What the gate enforces
 

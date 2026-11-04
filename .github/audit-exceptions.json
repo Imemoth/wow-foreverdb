@@ -5,44 +5,34 @@
       "project": "web",
       "id": "GHSA-g3hv-75wg-m249",
       "package": "minimatch",
-      "range": "<11.0.1",
+      "range": ">=7.0.0 <11.0.1",
       "severity": "moderate",
       "expires": "2026-12-15",
       "approvedBy": "Repository owner (Imemoth)",
       "approvedOn": "2026-11-02",
-      "rationale": "minimatch <11.0.1 can be driven into a denial of service by a crafted glob (CWE-405). It is reachable only through the ESLint toolchain, a devDependency that is never bundled: the production audit reports 0 vulnerabilities, and the glob patterns are repository-authored configuration and file paths. No compatible fix exists: the latest release of every consumer pins minimatch ^3.1.x or ^10.x, no published version of any of them accepts minimatch >= 11, and minimatch 11 no longer exports the callable default that eslint-plugin-react, eslint-plugin-import and eslint-plugin-jsx-a11y call (a global override crashes those rules at lint time, verified).",
-      "removalCriteria": "Remove this entry as soon as the audit no longer reports GHSA-g3hv-75wg-m249 for web/ (the gate fails an obsolete entry on its own). That needs releases of @eslint/config-array, @eslint/eslintrc, @typescript-eslint/typescript-estree and eslint-plugin-react / -import / -jsx-a11y (or eslint-config-next dropping them) that accept minimatch >= 11.0.1. Re-check upstream before 2026-12-15; the exception is not renewed automatically and the gate fails closed from 2026-12-16 00:00 UTC.",
-      "directRoots": ["eslint", "eslint-config-next"],
+      "rationale": "minimatch >=7.0.0 <11.0.1 can be driven into a denial of service by a crafted glob (CWE-405). The only vulnerable copy is minimatch@10.2.6 under @typescript-eslint/typescript-estree, reachable only through the typescript-eslint toolchain used by eslint-config-next (a devDependency that is never bundled): the production audit reports 0 vulnerabilities, and the glob patterns are repository-authored configuration (allowDefaultProject) and file paths. No compatible fix exists upstream: the latest typescript-estree (8.72.1) and its canary pin minimatch ^10.2.2 and npm audit fix proposes a breaking downgrade of eslint-config-next. The only patched line is minimatch >=11.0.1.",
+      "removalCriteria": "Remove this entry as soon as the audit no longer reports GHSA-g3hv-75wg-m249 for web/ (the gate fails an obsolete entry on its own). That needs a release of @typescript-eslint/typescript-estree (via typescript-eslint / eslint-config-next) that accepts minimatch >= 11.0.1. Re-check upstream before 2026-12-15; the exception is not renewed automatically and the gate fails closed from 2026-12-16 00:00 UTC.",
+      "directRoots": [
+        "eslint-config-next"
+      ],
       "nodes": [
-        "node_modules/minimatch",
         "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"
       ],
       "affectedPaths": [
-        "eslint > @eslint/config-array > minimatch@3.1.5",
-        "eslint > @eslint/eslintrc > minimatch@3.1.5",
-        "eslint-config-next > eslint-plugin-import > minimatch@3.1.5",
-        "eslint-config-next > eslint-plugin-jsx-a11y > minimatch@3.1.5",
-        "eslint-config-next > eslint-plugin-react > minimatch@3.1.5",
         "eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree > minimatch@10.2.6"
       ],
       "allowedPackages": [
         "minimatch",
-        "eslint",
         "eslint-config-next",
-        "@eslint-community/eslint-utils",
-        "@eslint/config-array",
-        "@eslint/eslintrc",
-        "@next/eslint-plugin-next",
         "@typescript-eslint/eslint-plugin",
         "@typescript-eslint/parser",
         "@typescript-eslint/type-utils",
         "@typescript-eslint/typescript-estree",
         "@typescript-eslint/utils",
-        "eslint-plugin-import",
-        "eslint-plugin-jsx-a11y",
-        "eslint-plugin-react",
         "typescript-eslint"
-      ]
+      ],
+      "amendedOn": "2026-11-04",
+      "amendment": "NARROWING ONLY (pending the owner's confirmation in the pull request; no new risk accepted): GitHub narrowed the advisory's vulnerable range from <11.0.1 to >=7.0.0 <11.0.1. The six minimatch@3.1.5 paths and the direct root eslint are no longer vulnerable; only minimatch@10.2.6 under @typescript-eslint/typescript-estree remains. Expiry, severity and scope are not extended."
     }
   ]
 }

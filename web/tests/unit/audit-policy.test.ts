@@ -8,14 +8,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * The owner-approved, time-limited exception for GHSA-g3hv-75wg-m249 (docs/web/dependency-audit-exceptions.md). Real `npm audit --json`
- * output of the `release` lockfile (edf4377) drives the positive case; every negative case mutates it and must FAIL CLOSED.
+ * output of the `release` lockfile (8d033a4) drives the positive case; every negative case mutates it and must FAIL CLOSED.
  */
 const run = promisify(execFile);
 const ROOT = join(process.cwd(), "..");
 const FIX = join(process.cwd(), "tests", "fixtures", "audit");
 const json = (p: string) => JSON.parse(readFileSync(p, "utf8"));
-const FULL = json(join(FIX, "web-full-release-edf4377.json"));
-const PROD = json(join(FIX, "web-prod-release-edf4377.json"));
+const FULL = json(join(FIX, "web-full-release-8d033a4.json"));
+const PROD = json(join(FIX, "web-prod-release-8d033a4.json"));
 const SHIPPED = json(join(ROOT, ".github", "audit-exceptions.json"));
 const PKG = json(join(process.cwd(), "package.json"));
 const GHSA = "GHSA-g3hv-75wg-m249";
@@ -35,10 +35,10 @@ const advisory = (id: string, name: string, severity: string, range = "<9.9.9") 
 const vuln = (name: string, severity: string, via: Any[], extra: Any = {}) => ({ name, severity, isDirect: false, via, effects: [], range: "*", nodes: [`node_modules/${name}`], fixAvailable: false, ...extra });
 
 describe("shipped exception record", () => {
-  it("is exactly one exception: GHSA-g3hv-75wg-m249, web, moderate, expiring 2026-12-15", () => {
+  it("is exactly one exception: GHSA-g3hv-75wg-m249, web, moderate, expiring 2026-12-15 (amended 2026-11-04: scope narrowed only)", () => {
     expect(SHIPPED.exceptions).toHaveLength(1);
     const e = SHIPPED.exceptions[0];
-    expect(e).toMatchObject({ project: "web", id: GHSA, package: "minimatch", range: "<11.0.1", severity: "moderate", expires: "2026-12-15", approvedOn: "2026-11-02" });
+    expect(e).toMatchObject({ project: "web", id: GHSA, package: "minimatch", range: ">=7.0.0 <11.0.1", severity: "moderate", expires: "2026-12-15", approvedOn: "2026-11-02", amendedOn: "2026-11-04" });
     expect(P.validateException(e)).toEqual([]);
     expect(e.approvedBy).toMatch(/owner/i);
     expect(e.removalCriteria).toMatch(/2026-12-16 00:00 UTC/);
@@ -65,13 +65,13 @@ describe("shipped exception record", () => {
 });
 
 describe("positive: the exception applies to exactly what was approved", () => {
-  it("passes the real audit of the release lockfile and excepts the advisory and the 16 dependent packages", () => {
+  it("passes the real audit of the release lockfile and excepts the advisory and the 8 dependent packages", () => {
     const r = ev();
     expect(r.problems).toEqual([]);
     expect(r.blocked).toEqual([]);
     expect(r.ok).toBe(true);
     expect(r.excepted.filter((x: Any) => x.kind === "advisory")).toHaveLength(1);
-    expect(r.excepted.filter((x: Any) => x.kind === "package")).toHaveLength(16);
+    expect(r.excepted.filter((x: Any) => x.kind === "package")).toHaveLength(8);
     expect(r.exceptions[0]).toMatchObject({ id: GHSA, state: "active", failClosedFrom: "2026-12-16T00:00:00.000Z" });
   });
   it("still applies in the last millisecond of 2026-12-15 UTC", () => {
@@ -87,7 +87,7 @@ describe("positive: the exception applies to exactly what was approved", () => {
   it("is scoped to its project: the same finding in another project is NOT excepted", () => {
     const r = ev({ project: "publisher" });
     expect(r.ok).toBe(false);
-    expect(r.blocked.length).toBe(17);
+    expect(r.blocked.length).toBe(9);
   });
   it("a clean project with no exceptions passes", () => {
     const clean = { auditReportVersion: 2, vulnerabilities: {}, metadata: { vulnerabilities: { total: 0 } } };
@@ -102,7 +102,7 @@ describe("negative: hard expiry (fails closed from 2026-12-16 00:00 UTC)", () =>
     expect(r.exceptions[0]).toMatchObject({ id: GHSA, state: "expired" });
     expect(r.problems.join()).toMatch(/EXPIRED/);
     expect(r.excepted).toEqual([]);
-    expect(r.blocked.length).toBe(17);
+    expect(r.blocked.length).toBe(9);
   });
   it("any later time fails too", () => {
     for (const t of ["2026-12-16T00:00:00.001Z", "2027-01-01T00:00:00Z", "2030-06-01T00:00:00Z"]) expect(ev({ now: Date.parse(t) }).ok).toBe(false);
@@ -210,10 +210,10 @@ describe("negative: fails closed when the exception no longer matches the verifi
   });
   it("dev-only: a toolchain root declared in dependencies (or missing from devDependencies) -> mismatch", () => {
     const moved = clone(PKG);
-    moved.dependencies = { ...moved.dependencies, eslint: moved.devDependencies.eslint };
+    moved.dependencies = { ...moved.dependencies, "eslint-config-next": moved.devDependencies["eslint-config-next"] };
     expect(ev({ packageJson: moved }).exceptions[0].state).toBe("mismatch");
     const gone = clone(PKG);
-    delete gone.devDependencies.eslint;
+    delete gone.devDependencies["eslint-config-next"];
     expect(ev({ packageJson: gone }).exceptions[0].state).toBe("mismatch");
   });
   it("dev-only: the advisory, or a listed package, in the PRODUCTION audit -> mismatch", () => {
@@ -223,7 +223,7 @@ describe("negative: fails closed when the exception no longer matches the verifi
     expect(a.ok).toBe(false);
     expect(a.problems.join()).toMatch(/PRODUCTION audit/);
     const withPackage = clone(PROD);
-    withPackage.vulnerabilities.eslint = vuln("eslint", "moderate", ["minimatch"]);
+    withPackage.vulnerabilities["eslint-config-next"] = vuln("eslint-config-next", "moderate", ["minimatch"]);
     expect(ev({ prodAudit: withPackage }).exceptions[0].state).toBe("mismatch");
   });
 });
@@ -266,8 +266,8 @@ describe("audit-gate CLI", () => {
   const put = (name: string, v: unknown) => { const f = join(dir, name); writeFileSync(f, typeof v === "string" ? v : JSON.stringify(v)); return f; };
   const gate = async (over: Record<string, string> = {}) => {
     const a = {
-      audit: join(FIX, "web-full-release-edf4377.json"),
-      "prod-audit": join(FIX, "web-prod-release-edf4377.json"),
+      audit: join(FIX, "web-full-release-8d033a4.json"),
+      "prod-audit": join(FIX, "web-prod-release-8d033a4.json"),
       package: join(process.cwd(), "package.json"),
       exceptions: join(ROOT, ".github", "audit-exceptions.json"),
       ...over,
@@ -285,8 +285,8 @@ describe("audit-gate CLI", () => {
   it("exits 1 and names every blocked finding when there is no exception", async () => {
     const r = await gate({ exceptions: put("none.json", { exceptions: [] }) });
     expect(r.code).toBe(1);
-    expect(r.out).toMatch(/BLOCKED moderate GHSA-g3hv-75wg-m249 \(minimatch <11.0.1\)/);
-    expect(r.out).toMatch(/AUDIT GATE FAILED: 17 blocked/);
+    expect(r.out).toMatch(/BLOCKED moderate GHSA-g3hv-75wg-m249 \(minimatch >=7.0.0 <11.0.1\)/);
+    expect(r.out).toMatch(/AUDIT GATE FAILED: 9 blocked/);
   });
   it("exits 1 for an expired entry (real clock is past 2020)", async () => {
     const e = clone(SHIPPED);
