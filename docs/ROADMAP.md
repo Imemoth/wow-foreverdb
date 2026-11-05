@@ -1,5 +1,15 @@
 # ForeverDB Roadmap
 
+## Quest Tracker V1 — WoW: Forever launch follow-up (2026-11-05)
+
+- [x] Addon `0.6.0-alpha` local-first quest accept/turn-in/reward preview and observed quest-item tooltip integration on a separate PR.
+- [x] Preserve schema-9 export, Companion ingest and local-only Guildbook policy.
+- [ ] Simulated Lua collector/quest smoke CI green on PR HEAD.
+- [ ] **Live WoW: Forever build 16001** accept, loot, turn-in with choice rewards, abandon, reload and character-switch evidence.
+- [ ] Separate design for uploading a **privacy-reviewed quest model**, Companion presentation and AzerDex public quest search; do not silently expose local questJournal.
+
+See [Quest Tracker V1 acceptance](quest-tracker/v1-acceptance.md).
+
 ForeverDB is developed in small, testable milestones. The roadmap is intentionally
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
