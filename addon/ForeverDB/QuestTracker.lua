@@ -6,6 +6,9 @@ local _, FDB = ...
 local frame
 local pendingOffer
 local pendingTurnIn
+local refreshPending = false
+local lastRefresh = -math.huge
+local observedCharacter
 local MAX_QUESTS_PER_CHARACTER = 500
 local MAX_OBJECTIVES = 16
 local MAX_REWARDS = 24
@@ -41,9 +44,9 @@ end
 
 local function call(fn, ...)
     if type(fn) ~= "function" then return nil end
-    local ok, a, b, c, d, e, f = pcall(fn, ...)
+    local ok, a, b, c, d, e, f, g, h = pcall(fn, ...)
     if not ok then return nil end
-    return a, b, c, d, e, f
+    return a, b, c, d, e, f, g, h
 end
 
 local function timestamp()
@@ -99,7 +102,7 @@ local function prune(journal)
     for key, record in pairs(journal.entries) do
         count = count + 1
         if record.status ~= "active" then
-            local at = record.completedAt or record.abandonedAt or record.acceptedAt or 0
+            local at = record.completedAt or record.removedAt or record.abandonedAt or record.acceptedAt or 0
             if at < oldestAt then
                 oldestKey, oldestAt = key, at
             end
@@ -118,57 +121,74 @@ local function ensureQuest(id)
     if not record then
         record = { questId = id, status = "unknown" }
         journal.entries[key] = record
-        prune(journal)
     end
     journal.lastQuestId = id
     return record, journal
 end
 
-local function getTitle(id)
-    if C_QuestLog and type(C_QuestLog.GetTitleForQuestID) == "function" then
-        local title = safeString(call(C_QuestLog.GetTitleForQuestID, id), 180)
-        if title then return title end
+local function logIndex(id)
+    local index = C_QuestLog and call(C_QuestLog.GetLogIndexForQuestID, id)
+    return safeId(index) or safeId(call(GetQuestLogIndexByID, id))
+end
+
+local function logInfo(index)
+    if not index then return nil end
+    local info = C_QuestLog and call(C_QuestLog.GetInfo, index)
+    if type(info) == "table" and safeId(info.questID) and not info.isHeader then
+        return info
     end
-    if type(GetQuestLogIndexByID) == "function"
-        and type(GetQuestLogTitle) == "function" then
-        local index = safeId(call(GetQuestLogIndexByID, id))
-        if index then
-            local title = safeString(call(GetQuestLogTitle, index), 180)
-            if title then return title end
-        end
+    local title, level, _, header, _, _, _, id = call(GetQuestLogTitle, index)
+    if not header and safeId(id) then
+        return {questID=id, title=title, level=level}
     end
-    return nil
+end
+
+local function updateMetadata(record)
+    local index = logIndex(record.questId)
+    local info = logInfo(index)
+    if info and info.questID == record.questId then
+        record.title = safeString(info.title, 180) or record.title
+        record.level = safeAmount(info.level) or record.level
+    end
+    local title = C_QuestLog and call(C_QuestLog.GetTitleForQuestID, record.questId)
+    record.title = record.title or safeString(title, 180)
 end
 
 local function updateObjectives(record)
-    if not record or not C_QuestLog
-        or type(C_QuestLog.GetQuestObjectives) ~= "function" then
-        return
-    end
-    local objectives = call(C_QuestLog.GetQuestObjectives, record.questId)
-    if type(objectives) ~= "table" then return end
-    local result = {}
-    local required = {}
-    for i = 1, math.min(#objectives, MAX_OBJECTIVES) do
-        local objective = objectives[i]
-        if type(objective) == "table" then
-            local text = safeString(objective.text, 220)
-            local kind = safeString(objective.type, 40)
-            local objectId = safeId(objective.objectID)
-            if text then
-                result[#result + 1] = {
-                    text = text,
-                    kind = kind,
-                    finished = objective.finished == true,
-                }
-            end
-            if kind == "item" and objectId then
-                required[tostring(objectId)] = true
+    if not record then return end
+    local objectives = C_QuestLog and call(C_QuestLog.GetQuestObjectives, record.questId)
+    local result, required = {}, {}
+    if type(objectives) == "table" then
+        for i = 1, math.min(#objectives, MAX_OBJECTIVES) do
+            local objective = objectives[i]
+            if type(objective) == "table" then
+                local text = safeString(objective.text, 220)
+                local kind = safeString(objective.type, 40)
+                local objectId = safeId(objective.objectID)
+                if text then
+                    result[#result + 1] = {
+                        text=text, kind=kind, finished=objective.finished and true or false,
+                        numFulfilled=safeAmount(objective.numFulfilled),
+                        numRequired=safeAmount(objective.numRequired),
+                    }
+                end
+                if kind == "item" and objectId then required[tostring(objectId)] = true end
             end
         end
+    else
+        local index = logIndex(record.questId)
+        local count = index and safeAmount(call(GetNumQuestLeaderBoards, index))
+        if not count or type(GetQuestLogLeaderBoard) ~= "function" then return end
+        for i = 1, math.min(count, MAX_OBJECTIVES) do
+            local text, kind, finished = call(GetQuestLogLeaderBoard, i, index)
+            text = safeString(text, 220)
+            if text then
+                result[#result+1] = {text=text, kind=safeString(kind,40), finished=finished and true or false}
+            end
+        end
+        -- Legacy text never establishes an item ID.
     end
     record.objectives = result
-    -- Replace only after obtaining a real objective list; no guessed item IDs.
     record.requiredItemIds = required
 end
 
@@ -215,7 +235,9 @@ function FDB:QuestDetail()
     pendingOffer = {
         id = id,
         at = elapsed(),
+        character = characterGuid(),
         title = safeString(call(GetTitleText), 180),
+        description = safeString(call(GetQuestText), 8000),
         objectiveText = safeString(call(GetObjectiveText), 500),
         giver = captureGiver(),
     }
@@ -223,26 +245,43 @@ end
 
 function FDB:QuestAccepted(arg1, arg2)
     -- Forever/Retail: questID. Legacy Classic: questLogIndex, questID.
-    local id = safeId(arg2) or safeId(arg1)
+    local id = safeId(arg2)
+    if not id then
+        -- A one-argument legacy event carries a log index, not a quest ID.
+        if type(GetQuestLogTitle) == "function" and not (C_QuestLog and type(C_QuestLog.GetInfo) == "function") then
+            local info = logInfo(safeId(arg1))
+            id = info and safeId(info.questID)
+        else
+            id = safeId(arg1)
+        end
+    end
     if not id then return end
     local record = ensureQuest(id)
     if not record then return end
     if record.status ~= "active" then
+        -- Reset observation fields for a new lifecycle (including repeatables).
+        record.accept = nil
+        record.objectives = nil
+        record.requiredItemIds = nil
+        record.description = nil
+        record.objectiveText = nil
         record.acceptedAt = timestamp()
         record.completedAt = nil
         record.abandonedAt = nil
+        record.removedAt = nil
         record.turnIn = nil
         record.rewards = nil
         record.status = "active"
     end
     local offer = pendingOffer
-    if offer and offer.id == id and elapsed() - offer.at < 180 then
+    if offer and offer.id == id and offer.character == characterGuid() and elapsed() - offer.at < 180 then
         record.accept = offer.giver
         record.title = offer.title or record.title
+        record.description = offer.description
         record.objectiveText = offer.objectiveText or record.objectiveText
         pendingOffer = nil
     end
-    record.title = record.title or getTitle(id)
+    updateMetadata(record)
     updateObjectives(record)
     markChanged()
 end
@@ -253,6 +292,7 @@ function FDB:QuestCompleteDialog()
     pendingTurnIn = {
         id = id,
         at = elapsed(),
+        character = characterGuid(),
         giver = captureGiver(),
         rewards = rewardPreview(),
     }
@@ -263,8 +303,9 @@ function FDB:QuestTurnedIn(questId, xpReward, moneyReward)
     if not id then return end
     local record = ensureQuest(id)
     if not record then return end
+    if record.status == "completed" then return end
     local preview = pendingTurnIn
-    if preview and preview.id == id and elapsed() - preview.at < 180 then
+    if preview and preview.id == id and preview.character == characterGuid() and elapsed() - preview.at < 180 then
         record.turnIn = preview.giver
         record.rewards = preview.rewards
         pendingTurnIn = nil
@@ -276,10 +317,11 @@ function FDB:QuestTurnedIn(questId, xpReward, moneyReward)
     record.rewards = record.rewards or {}
     record.rewards.grantedXP = safeAmount(xpReward)
     record.rewards.grantedMoney = safeAmount(moneyReward)
-    record.title = record.title or getTitle(id)
+    updateMetadata(record)
     record.completedAt = timestamp()
     record.abandonedAt = nil
     record.status = "completed"
+    prune(ensureCharacter())
     markChanged()
 end
 
@@ -290,7 +332,9 @@ function FDB:QuestRemoved(id)
     if not record or record.status ~= "active" then return end
     -- Removal is not proof of turn-in; completion is only QUEST_TURNED_IN.
     record.status = "removed"
-    record.abandonedAt = timestamp()
+    record.removedAt = timestamp()
+    -- QUEST_REMOVED alone does not distinguish abandonment from turn-in ordering.
+    prune(journal)
     markChanged()
 end
 
@@ -308,7 +352,7 @@ function FDB:IdentifyQuestLoot(itemId, directFlag, directQuestId)
     local id = safeId(itemId)
     local linkedId = safeId(directQuestId)
     if linkedId then return true, linkedId end
-    if directFlag == true then return true, nil end
+    if directFlag then return true, nil end
     if not id then return false, nil end
     local journal = ensureCharacter()
     if not journal then return false, nil end
@@ -329,7 +373,27 @@ function FDB:PrintTrackedQuest(argument)
         print("ForeverDB: quest history unavailable until player login")
         return
     end
-    local id = safeId(tonumber(argument)) or journal.lastQuestId
+    argument = (argument or ""):match("^%s*(.-)%s*$"):lower()
+    if argument == "status" then
+        local total, active, completed, removed = 0, 0, 0, 0
+        for _, record in pairs(journal.entries) do
+            total = total + 1
+            if record.status == "active" then active=active+1
+            elseif record.status == "completed" then completed=completed+1
+            elseif record.status == "removed" then removed=removed+1 end
+        end
+        print("ForeverDB: local quest tracker", "total=" .. total, "active=" .. active,
+            "completed=" .. completed, "removed=" .. removed, "export=OFF")
+        for event, supported in pairs(self.QuestTrackerEvents or {}) do
+            print("ForeverDB: quest event", event, supported and "registered" or "UNAVAILABLE")
+        end
+        return
+    end
+    if argument ~= "" and not safeId(tonumber(argument)) then
+        print("ForeverDB: usage: /fdb quest [id|status]")
+        return
+    end
+    local id = argument ~= "" and safeId(tonumber(argument)) or journal.lastQuestId
     local record = id and journal.entries[tostring(id)] or nil
     if not record then
         print("ForeverDB: no local quest record; /fdb quest <questID>")
@@ -347,6 +411,7 @@ function FDB:PrintTrackedQuest(argument)
     end
     printPlace("accepted at", record.accept)
     printPlace("turned in at", record.turnIn)
+    if record.description then print("ForeverDB: description", record.description) end
     for _, objective in ipairs(record.objectives or {}) do
         print("ForeverDB: objective", objective.text)
     end
@@ -359,14 +424,74 @@ function FDB:PrintTrackedQuest(argument)
     print("ForeverDB: actual XP/money", rewards.grantedXP or "?", rewards.grantedMoney or "?")
 end
 
+-- Discover already-active quests after reload. This is a log observation, never
+-- an acceptance or a historical completion. Retry at world entry if login APIs fail.
+function FDB:ObserveActiveQuestLog()
+    local guid = characterGuid()
+    if not guid or observedCharacter == guid then return end
+    local count = C_QuestLog and safeAmount(call(C_QuestLog.GetNumQuestLogEntries))
+    count = count or safeAmount(call(GetNumQuestLogEntries))
+    if not count then return end
+    local journal = ensureCharacter()
+    if not journal then return end
+    local active = {}
+    for index = 1, math.min(count, 500) do
+        local info = logInfo(index)
+        if info then
+            local id = safeId(info.questID)
+            local record = ensureQuest(id)
+            if record then
+                active[tostring(id)] = true
+                -- A new active lifecycle found after reload has unknown acceptance.
+                if record.status ~= "active" then
+                    journal.entries[tostring(id)] = {questId=id, status="active"}
+                    record = journal.entries[tostring(id)]
+                end
+                record.title = safeString(info.title,180) or record.title
+                record.level = safeAmount(info.level) or record.level
+                record.logObservedAt = timestamp()
+                updateObjectives(record)
+            end
+        end
+    end
+    -- Do not trust persisted objective-item links until this login verifies them.
+    for key, record in pairs(journal.entries) do
+        if record.status == "active" and not active[key] then
+            record.requiredItemIds = nil
+            record.status = "unknown"
+        end
+    end
+    observedCharacter = guid
+    markChanged()
+end
+
+local function queueObjectiveRefresh()
+    if refreshPending then return end
+    if C_Timer and type(C_Timer.After) == "function" then
+        refreshPending = true
+        local ok = pcall(C_Timer.After, 0.5, function()
+            refreshPending = false
+            FDB:RefreshTrackedQuestObjectives()
+        end)
+        if ok then return end
+        refreshPending = false
+    end
+    if elapsed() - lastRefresh >= 1 then
+        lastRefresh = elapsed()
+        FDB:RefreshTrackedQuestObjectives()
+    end
+end
+
 function FDB:InitializeQuestTracker()
     if frame then return end
     frame = CreateFrame("Frame")
+    self.QuestTrackerEvents = {}
     for _, event in ipairs({
-        "QUEST_DETAIL", "QUEST_ACCEPTED", "QUEST_COMPLETE",
+        "QUEST_DETAIL", "QUEST_ACCEPTED", "QUEST_COMPLETE", "QUEST_FINISHED",
         "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
+        "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD",
     }) do
-        frame:RegisterEvent(event)
+        self.QuestTrackerEvents[event] = pcall(frame.RegisterEvent, frame, event)
     end
     frame:SetScript("OnEvent", function(_, event, ...)
         if event == "QUEST_DETAIL" then
@@ -380,7 +505,11 @@ function FDB:InitializeQuestTracker()
         elseif event == "QUEST_REMOVED" then
             FDB:QuestRemoved(...)
         elseif event == "QUEST_LOG_UPDATE" then
-            FDB:RefreshTrackedQuestObjectives()
+            queueObjectiveRefresh()
+        elseif event == "QUEST_FINISHED" then
+            pendingOffer, pendingTurnIn = nil, nil
+        elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+            FDB:ObserveActiveQuestLog()
         end
     end)
 end

@@ -1,6 +1,6 @@
 -- Run from repository root: lua5.4 tests/quest_tracker_smoke.lua
 -- Simulated API observations only; real WoW: Forever client acceptance is required.
-local passed = 0
+local passed, failed = 0, 0
 local function equal(a, b, message)
     assert(a == b, (message or "value mismatch") .. ": " .. tostring(a) .. " != " .. tostring(b))
 end
@@ -27,6 +27,8 @@ local function setup(opts)
         guid = "Creature-0-0-0-0-7000-00000001",
         tooltipHooks = {},
     }
+    C_Timer, GetQuestLogTitle, GetQuestLogIndexByID = nil, nil, nil
+    GetNumQuestLogEntries, GetNumQuestLeaderBoards, GetQuestLogLeaderBoard = nil, nil, nil
     issecretvalue = nil
     GetServerTime = function() return state.now end
     GetTime = function() return state.at end
@@ -63,6 +65,11 @@ local function setup(opts)
             }
         end
     }
+    GetQuestText = function() return "The plague is spreading." end
+    if opts.noQuestAPI then
+        GetQuestID, GetNumQuestRewards, GetNumQuestChoices = nil, nil, nil
+        GetQuestItemInfo, GetQuestItemLink, GetRewardXP, GetRewardMoney, C_QuestLog = nil, nil, nil, nil, nil
+    end
     CreateFrame = function()
         local f = { events = {} }
         function f:RegisterEvent(ev) self.events[ev] = true end
@@ -99,7 +106,7 @@ end
 
 local function test(name, run)
     local ok, err = pcall(run)
-    if not ok then error(name .. ": " .. tostring(err)) end
+    if not ok then failed = failed + 1; print("FAIL: " .. name .. ": " .. tostring(err)); return end
     passed = passed + 1
     print("PASS (simulated): " .. name)
 end
@@ -260,4 +267,136 @@ test("mob tooltip prioritizes and explicitly labels observed quest items", funct
     equal(sources[1].questDrops, 1)
 end)
 
+test("description, level and objective counters are actual client metadata", function()
+    local FDB, s = setup()
+    C_QuestLog.GetLogIndexForQuestID = function() return 2 end
+    C_QuestLog.GetInfo = function() return {questID=367, title=s.title, level=7} end
+    C_QuestLog.GetQuestObjectives = function() return {{text="Blood: 2/5", type="item", objectID=123,
+        numFulfilled=2, numRequired=5, finished=false}} end
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
+    local q = FDB.DB.questJournal[s.player].entries["367"]
+    equal(q.description, "The plague is spreading.")
+    equal(q.level, 7)
+    equal(q.objectives[1].numFulfilled, 2)
+    equal(q.objectives[1].numRequired, 5)
+end)
+
+test("legacy log index resolves to canonical ID and captures objectives", function()
+    local FDB, s = setup({noQuestAPI=true})
+    GetQuestLogTitle = function(index)
+        if index == 2 then return "Legacy Quest", 9, nil, false, nil, 0, nil, 427 end
+    end
+    GetQuestLogIndexByID = function(id) if id == 427 then return 2 end end
+    GetNumQuestLeaderBoards = function(index) equal(index, 2); return 1 end
+    GetQuestLogLeaderBoard = function(i, index)
+        equal(i, 1); equal(index, 2); return "Warriors slain: 1/10", "monster", nil
+    end
+    s:emit("QUEST_ACCEPTED", 2)
+    local entries = FDB.DB.questJournal[s.player].entries
+    truthy(entries["427"], "legacy index must not become quest ID 2")
+    falsy(entries["2"])
+    equal(entries["427"].title, "Legacy Quest")
+    equal(entries["427"].level, 9)
+    equal(entries["427"].objectives[1].text, "Warriors slain: 1/10")
+end)
+
+test("no npc never borrows target and closed dialog cannot leak into acceptance", function()
+    local FDB, s = setup()
+    local units = UnitGUID
+    UnitGUID = function(unit) if unit == "npc" then return nil end; return units(unit) end
+    UnitName = function(unit) if unit == "target" then return "Unrelated target" end end
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
+    local q = FDB.DB.questJournal[s.player].entries["367"]
+    falsy(q.accept.sourceId); falsy(q.accept.name)
+    equal(q.accept.location.mapId, 85)
+    s.questId = 404
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_FINISHED"); s:emit("QUEST_ACCEPTED", 404)
+    falsy(FDB.DB.questJournal[s.player].entries["404"].accept)
+end)
+
+test("duplicate turn-in preserves location, rewards and timestamp", function()
+    local FDB, s = setup()
+    s:emit("QUEST_COMPLETE"); s:emit("QUEST_TURNED_IN", 367, 1000, 150)
+    local q = FDB.DB.questJournal[s.player].entries["367"]
+    s.now = s.now + 30
+    s:emit("QUEST_TURNED_IN", 367)
+    equal(q.turnIn.sourceId, 99)
+    equal(q.completedAt, 1783530000)
+    equal(q.rewards.grantedXP, 1000)
+    equal(q.rewards.grantedMoney, 150)
+end)
+
+test("repeatable reacceptance cannot retain a previous giver or item association", function()
+    local FDB, s = setup()
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
+    s:emit("QUEST_REMOVED", 367)
+    C_QuestLog.GetQuestObjectives = function() return nil end
+    s:emit("QUEST_ACCEPTED", 367)
+    local q = FDB.DB.questJournal[s.player].entries["367"]
+    falsy(q.accept); falsy(q.requiredItemIds)
+    falsy(FDB:IdentifyQuestLoot(123, false, nil))
+end)
+
+test("existing active log after login is observed without inventing acceptance", function()
+    local FDB, s = setup()
+    C_QuestLog.GetNumQuestLogEntries = function() return 2 end
+    C_QuestLog.GetInfo = function(index)
+        if index == 1 then return {isHeader=true} end
+        return {questID=367, title=s.title, level=7}
+    end
+    s:emit("PLAYER_LOGIN")
+    local q = FDB.DB.questJournal[s.player].entries["367"]
+    equal(q.status, "active"); falsy(q.acceptedAt); falsy(q.accept)
+    truthy(FDB:IdentifyQuestLoot(123, false, nil))
+end)
+
+test("objective updates coalesce repeated events", function()
+    local FDB, s = setup()
+    s:emit("QUEST_ACCEPTED", 367)
+    local calls, callbacks = 0, {}
+    C_QuestLog.GetQuestObjectives = function() calls=calls+1; return {} end
+    C_Timer = {After=function(_, cb) callbacks[#callbacks+1]=cb end}
+    for i=1,25 do s:emit("QUEST_LOG_UPDATE") end
+    equal(#callbacks, 1)
+    equal(calls, 0)
+    callbacks[1]()
+    equal(calls, 1)
+end)
+
+test("quest status and invalid requested IDs do not fall back to last record", function()
+    local FDB, s = setup()
+    s:emit("QUEST_ACCEPTED", 367)
+    local savedPrint, lines = print, {}
+    print = function(...) local parts={}; for i=1,select("#", ...) do parts[i]=tostring(select(i,...)) end
+        lines[#lines+1]=table.concat(parts," ") end
+    local ok, err = pcall(function()
+        FDB:PrintTrackedQuest("status")
+        contains(table.concat(lines,"\n"), "active=1")
+        lines={}; FDB:PrintTrackedQuest("999")
+        contains(table.concat(lines,"\n"), "no local quest record")
+        lines={}; FDB:PrintTrackedQuest("bad-id")
+        contains(table.concat(lines,"\n"), "usage:")
+    end)
+    print=savedPrint; assert(ok, err)
+end)
+
+test("unsupported events fail soft and are reported", function()
+    local FDB, s = setup()
+    -- Re-load a fresh tracker with a client that rejects an event name.
+    local create = CreateFrame
+    CreateFrame = function()
+        local f = create(); local register=f.RegisterEvent
+        f.RegisterEvent=function(self, event)
+            if event == "QUEST_TURNED_IN" then error("unknown event") end
+            register(self,event)
+        end
+        return f
+    end
+    assert(loadfile("addon/ForeverDB/QuestTracker.lua"))("ForeverDB", FDB)
+    FDB:InitializeQuestTracker()
+    s:emit("QUEST_ACCEPTED", 367)
+    equal(FDB.DB.questJournal[s.player].entries["367"].status,"active")
+end)
+
+assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
 print(passed .. " quest tracker simulated smoke checks passed; live Forever client gate PENDING")
