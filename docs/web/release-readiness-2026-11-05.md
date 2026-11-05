@@ -1,5 +1,10 @@
 # Production-readiness assessment: promoting `release` (cd5d352) to azerdex.com
 
+> **Historical document.** Written before G2 and before promotion. Since then the owner applied G2 (18:44 UTC) and promoted
+> `dpl_J8R8dVe7TonQSADZ86qwWVZ68ZEU` to azerdex.com; G4 was re-audited and is complete. Statements below such as "G2 not applied" or
+> "staged, not promoted" describe the state at the time of writing. Current state and the G5/G6 checkpoints:
+> `g4-g5-g6-execution-log-2026-11-05.md`.
+
 Date: 2026-11-05 (evidence gathered 05:20-07:30 UTC; **revised at ~07:30 UTC** after the owner's decision to complete G2 before granting G4, and after a corrected read of the story overrides, section 4a). Scope: **assessment only.** Nothing in production was changed to produce it:
 no promotion, redeploy, migration, data write or setting change. Production was read through catalog and `SELECT` queries on
 `azerdex-public-read`, Vercel read APIs, public GETs of azerdex.com and GETs of the staged deployment.
