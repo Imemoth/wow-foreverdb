@@ -4,7 +4,7 @@ Branch: `feat/quest-tracker-v1-local-capture`. Addon: `0.6.0-alpha`. Export: **s
 
 ## Scope
 
-- `QUEST_DETAIL` + `QUEST_ACCEPTED`: quest ID, title, objective/description text when available, timestamp, the real `npc` unit identifier/name, and **player's quantized approximate map position** while accepting (not an asserted precise NPC position). No inference from an unrelated target.
+- `QUEST_DETAIL` + `QUEST_ACCEPTED`: quest ID, title, full quest description and objective/goal text when available, timestamp, the real `npc` unit identifier/name, and **player's quantized approximate map position** while accepting (not an asserted precise NPC position). No inference from an unrelated target.
 - `QUEST_LOG_UPDATE`: text and verified item `objectID` in currently active quest objectives (`C_QuestLog.GetQuestObjectives` if available).
 - `QUEST_COMPLETE` + `QUEST_TURNED_IN`: quest turn-in NPC/location, **offered** guaranteed and optional-choice items, offered XP/money, and **actual awarded** XP/money when supplied by the completion event. The chosen reward item **cannot be inferred** from this preview; it remains unknown.
 - `QUEST_REMOVED`: record removal/abandonment as **removed**, not completed. Only `QUEST_TURNED_IN` marks an actual completion.
