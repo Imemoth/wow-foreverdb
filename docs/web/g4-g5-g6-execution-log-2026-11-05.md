@@ -104,7 +104,7 @@ Paste the JSON back (it holds no credential). Then this session re-runs the "bef
 
 **If the owner approves the write (G5-D), exact sequence:** (1) re-run dry-run and compare with this evidence; (2) set `AZERDEX_NEWS_BACKFILL_ENABLED=true` on the Edge Function; (3) invoke the same window with `dryRun:false` inside a `try/finally`; (4) `finally`: unset the variable; (5) confirm it is gone; (6) run `news_v2_backfill_verify.sql`, all invariants zero rows; (7) check US card; (8) compare unrelated entries/RSS; (9) repeat the call only if the flag is re-enabled for that purpose, expecting `inserted 0, updated 0`. No window expansion; no suppressed rows touched; no `news_link_stories`.
 
-## 5. G6 — health-check scheduling: **READY, awaiting owner GO**
+## 5. G6 — health-check scheduling: **prepared here, APPLIED and verified in §7**
 
 Preparation checks (19:25–19:35):
 
