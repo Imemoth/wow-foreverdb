@@ -1,6 +1,6 @@
 # News Collector V2 — G4 / G5 / G6 execution log (2026-11-05)
 
-Status (updated 20:20 UTC): **G4 COMPLETE (accepted by owner). G5 dry-run GO / production write NO-GO (hold; awaiting operator dry-run output). G6 COMPLETE (owner-approved, applied and verified, §7).**
+Status (final, 20:45 UTC): **G4 COMPLETE (accepted). G5 SKIPPED – ACCEPTED HISTORICAL GAP (owner decision, §9). G6 COMPLETE (§7).** Nothing in production was changed except the single owner-approved G6 cron job.
 This log supersedes the stale parts of `release-readiness-2026-11-05.md` (written before G2 and before promotion).
 No production write was made while producing it: every database call below was a read-only `SELECT`; every web call was a `GET`.
 
@@ -145,7 +145,7 @@ It returned zero rows at 19:30. Add `and j.jobname = 'azerdex-news-health'` to f
 | Gate | State | Evidence | Remaining blocker | Next action |
 | --- | --- | --- | --- | --- |
 | G4 | **Complete** | §1: routes, News contract, RSS parity, articles, indexing, headers, desktop/mobile, 0 runtime errors, aliases, rollback candidate | none | close; optionally revoke share-link bypass entries |
-| G5 | **Awaiting operator dry-run, then owner GO** (recommend hold on write) | §2 preflight + prediction; zero-row invariants; counters | collector secret (operator); off-machine backup evidence; owner approval; value is one row | operator runs §3 dry-run; decide GO/skip after reading it |
+| G5 | **SKIPPED – ACCEPTED HISTORICAL GAP** (not failed, not complete) | §2 preflight and read-only comparison: exactly one missing in-window entry, `post:30732723`; zero-row invariants; counters unchanged (§9) | none | none; backfill code retained for future maintenance |
 | G6 | **Complete** | §7: job 7 applied 20:01:26, first scheduled run 20:15:00 `succeeded`, jobs 3–6 unchanged, no new grants, 3 sources `ok` | none | monitor with the failed-run query; external alerting needs a separate design |
 
 Owner decisions recorded 2026-11-05: **G4 accepted/closed; G5 dry-run GO, production write NO-GO** (do not set `AZERDEX_NEWS_BACKFILL_ENABLED`, do not run `dryRun:false`, no window change; revisit only with independently verified off-machine backup evidence); **G6 approved**.
@@ -173,9 +173,34 @@ Rollback was not needed. If ever required: `database/ops/0018_unschedule_news_he
 
 The job is an operational signal only: a critical state makes a run `failed` in `cron.job_run_details`. No email/Discord/webhook alerting exists. Inspect with the failed-run query in §5.
 
-## 8. G5 remaining operator actions (hold)
+## 8. G5 operator actions (superseded by the §9 decision; kept for reference only)
 
 1. Run the §3 dry-run block (`dryRun:true`, unchanged window) from the protected terminal and paste the JSON (no secrets in it).
 2. This session then compares counters to the §2 baseline, writes the per-entry action report here, and keeps G5 on hold.
 3. Optionally confirm the flag is absent: `supabase secrets list --project-ref chcoypkjzxfznsqmmbrq` must not show `AZERDEX_NEWS_BACKFILL_ENABLED=true`.
 4. A production write requires a new explicit owner approval plus independently verified off-machine backup evidence.
+
+## 9. G5 decision — SKIPPED, ACCEPTED HISTORICAL GAP (owner, 2026-11-05)
+
+Decision: the historical backfill is **permanently waived for the current release**. The one missing historical entry, `post:30732723` (US Dev Notes thread 2360696, staff reply #9, created 2026-11-03 03:20:33 UTC), is an accepted historical coverage gap, not a functional production defect. Not executed and not authorised: the production backfill, `AZERDEX_NEWS_BACKFILL_ENABLED=true`, `dryRun:false`, any modification of existing News data, any window change. The backfill implementation (Edge Function `mode:"backfill"`, `news_v2_backfill_verify.sql`, §7 of `news-collector-v2.md`) is retained unchanged for future maintenance. Normal ingestion, revision tracking and the G6 monitor are unchanged.
+
+State shown as **SKIPPED – ACCEPTED HISTORICAL GAP**, not FAILED and not COMPLETE.
+
+Provenance of the evidence, stated precisely:
+
+- **No production dry-run response was delivered to this session**, and this session never invoked the Edge Function (it holds no collector secret and did not use the Vault or `net.http_post` to obtain one). The "exactly one missing entry" finding therefore rests on this session's **read-only comparison** (2026-11-05 19:30 UTC) of the live public Blizzard topic JSON for US 2360696 and EU 631316 against `pub.news_entries`, not on dry-run output. If the owner or operator ran the dry-run separately, that output is held outside this repository; its per-entry action report is not reproduced here.
+- Comparison result: US had opener `post:30185131` and `post:30756539` (#10); `post:30732723` (#9, in window) absent; #7/#8 (26–27 Oct) absent and outside the window. EU was complete (opener `post:6391795`, #7–#10 incl. `post:6471288`).
+- Consequence on the site: the US card keeps its 4 Nov official-update timestamp; the thread simply lacks one earlier update entry.
+
+Counter reconciliation (read-only, 2026-11-05 20:43:59 UTC) against the §2 baseline (19:26:18): `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story overrides 4, members 0 = unchanged; `post:30732723` rows 0. No News data changed during G4–G6 audit work, including by the normal cron runs in that interval. Cron: 5 active jobs (3–6 plus job 7), job 7 has 2 succeeded runs, 0 failed runs in 3 h.
+
+## 10. Final audit summary
+
+| Gate | State | Evidence | Remaining blocker | Next action |
+| --- | --- | --- | --- | --- |
+| G4 | **Complete** (owner accepted) | §1 | none | none |
+| G5 | **Skipped – accepted historical gap** | §2, §9 | none | none; re-open only by a new owner decision plus verified off-machine backup evidence |
+| G6 | **Complete** | §7 | none | operators watch failed `azerdex-news-health` runs (§5 query); external alerting is out of scope |
+
+Known limitations carried forward: the owner's four-schema dump is not a full Supabase disaster-recovery backup (free plan; off-machine copy unconfirmed); `cron.job_run_details` is an operational signal, not a notification channel; `/news?page=500+` shows the "feed unavailable" panel by design (`p_offset <= 5000`). Not touched: story grouping (4 overrides, 0 members, no `news_link_stories`), G7, the Guildbook boundary, the website deployment, unrelated services. PR #167 remains Draft and unmerged pending normal review.
+
