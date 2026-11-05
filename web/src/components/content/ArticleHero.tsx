@@ -11,6 +11,8 @@ import { fmtDate } from "@/lib/format";
  * Phones (< 640px): the art sits on top as its own band (a purpose-cropped portrait file) and fades into the page
  * background; the title block follows it, so no headline is ever laid over the subject. 640px and up: the art fills the
  * hero and the left-anchored headline sits in the artwork's quiet half under a left-to-right and bottom scrim.
+ * Heights use only arbitrary min-[Npx] variants on purpose: Tailwind emits those before named ones (sm:, lg:), so mixing the two
+ * lets a smaller named breakpoint override a larger arbitrary one.
  * The artwork is capped at 1600px wide and anchored right (the hero background fills the rest and the left scrim starts fully opaque), so
  * on very wide screens a 16:9 image is not scaled past the point where a short hero band would crop the subject.
  * The image is the page's LCP element: eager, high fetch priority, explicit dimensions.
@@ -18,7 +20,7 @@ import { fmtDate } from "@/lib/format";
 export function ArticleHero({ article, cover, label }: { article: Article; cover: ArticleCoverImages["hero"]; label: string }) {
   return (
     <div className="relative left-1/2 mt-6 w-screen -ml-[50vw]">
-      <header aria-labelledby="article-title" className="relative isolate overflow-hidden bg-ink-950 sm:flex sm:min-h-[480px] sm:items-end lg:min-h-[560px] min-[1600px]:min-h-[640px]">
+      <header aria-labelledby="article-title" className="relative isolate overflow-hidden bg-ink-950 sm:flex sm:items-end min-[640px]:min-h-[480px] min-[1024px]:min-h-[560px] min-[1600px]:min-h-[640px]">
         <div className="relative h-[300px] sm:absolute sm:inset-y-0 sm:right-0 sm:h-auto sm:w-full sm:max-w-[1600px]">
           <picture>
             <source media="(max-width: 639px)" srcSet={cover.mobileSrc} />

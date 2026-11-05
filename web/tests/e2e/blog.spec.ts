@@ -126,9 +126,13 @@ test.describe("WoW: Forever launch posts", () => {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`/blog/${slug}`);
         await assertNoOverflow(page);
+        // The cover spans the viewport up to 1600px, then stays 1600px wide and anchored to the right edge (the hero background fills the
+        // rest): a full-width 16:9 image in a ~600px band would crop the subject's head on very wide screens.
         const box = await page.locator("header img").first().boundingBox();
-        expect(box!.width).toBeGreaterThan(width - 2);
+        expect(Math.abs(box!.width - Math.min(width, 1600))).toBeLessThanOrEqual(2);
+        expect(Math.abs(box!.x + box!.width - width)).toBeLessThanOrEqual(2);
         expect(box!.height).toBeGreaterThan(280);
+        if (width >= 1600) expect(box!.height).toBeGreaterThanOrEqual(640);
       });
     }
   }
