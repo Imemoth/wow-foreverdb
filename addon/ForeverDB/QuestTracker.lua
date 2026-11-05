@@ -266,6 +266,13 @@ function FDB:QuestCompleteDialog()
         giver = captureGiver(),
         rewards = rewardPreview(),
     }
+    -- The offer exists before choosing a turn-in reward. Make it inspectable,
+    -- but do NOT mark a quest completed or pretend a choice was granted.
+    local record = ensureQuest(id)
+    if record then
+        record.rewards = pendingTurnIn.rewards
+        markChanged()
+    end
 end
 
 function FDB:QuestTurnedIn(questId, xpReward, moneyReward)
