@@ -34,8 +34,12 @@ select name as check_name, expected, actual, case when ok then 'PASS' else 'FAIL
               and not exists (select 1 from pub.news_verified_staff st where st.source_key = n.source_key and st.user_id = n.author_user_id)),
            (select count(*) from pub.news_entries n where n.source_key = 'blizzard-bluepost-us' and n.source_post_number > 1 and n.author_user_id is not null
               and not exists (select 1 from pub.news_verified_staff st where st.source_key = n.source_key and st.user_id = n.author_user_id)) = 0
-    union all select 8, 'exactly two new G5b backfill runs, both succeeded', '2',
-           (select count(*)::text from pub.news_sync_runs where mode = 'backfill' and source_key = 'blizzard-bluepost-us' and status = 'succeeded' and started_at > now() - interval '2 hours'),
-           (select count(*) from pub.news_sync_runs where mode = 'backfill' and source_key = 'blizzard-bluepost-us' and status = 'succeeded' and started_at > now() - interval '2 hours') = 2
+    union all select 8, 'each of the two approved windows has a succeeded backfill run, and no G5b run is running or partial (failed / retried attempts are allowed)', '2 windows, 0 open',
+           (select count(distinct r.diagnostics ->> 'since')::text || ' windows, ' || count(*) filter (where r.status in ('running', 'partial'))::text || ' open' from pub.news_sync_runs r
+             where r.mode = 'backfill' and r.source_key = 'blizzard-bluepost-us' and r.status in ('succeeded', 'running', 'partial')
+               and (r.diagnostics ->> 'since', r.diagnostics ->> 'until') in (('2026-10-26T19:00:00Z', '2026-10-27T18:00:00Z'), ('2026-11-03T03:00:00Z', '2026-11-03T04:00:00Z'))),
+           (select count(distinct r.diagnostics ->> 'since') filter (where r.status = 'succeeded') = 2 and count(*) filter (where r.status in ('running', 'partial')) = 0 from pub.news_sync_runs r
+             where r.mode = 'backfill' and r.source_key = 'blizzard-bluepost-us'
+               and (r.diagnostics ->> 'since', r.diagnostics ->> 'until') in (('2026-10-26T19:00:00Z', '2026-10-27T18:00:00Z'), ('2026-11-03T03:00:00Z', '2026-11-03T04:00:00Z')))
 ) q order by ord;
 rollback;
