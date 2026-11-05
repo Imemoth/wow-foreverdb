@@ -87,4 +87,20 @@ test.describe("News global story grouping", () => {
     expect(xml).toContain("<category>eu</category><category>us</category>");
     expect(guids.filter((g) => /beta-celebration/.test(g))).toHaveLength(2); // different wording -> two items, never silently merged
   });
+
+  test("owner-reviewed decisions: Development Notes and Podcast Episodes 5/6 are ONE card each (both regions), Beta Celebration stays two regional cards", async ({ page }) => {
+    // 23 cards, 20 per page: the Development Notes (September) sit on page 2, the rest on page 1.
+    // The card shows the newest verified post's title; for the Development Notes that is the EU wording (14 minutes later).
+    const oneBothRegions = async (name: string | RegExp) => {
+      const links = page.getByRole("link", typeof name === "string" ? { name, exact: true } : { name });
+      await expect(links).toHaveCount(1);
+      await expect(page.locator("article", { has: links }).getByTestId("news-regions")).toHaveText(/Regions: EU · US/);
+    };
+    await page.goto("/news?category=bluepost");
+    await oneBothRegions("The WoW: Forever Podcast: Episode 5 - End of Beta Special");
+    await oneBothRegions("The WoW: Forever Podcast: Episode 6 - All About Tech");
+    await expect(page.getByRole("link", { name: "Beta Celebration Underway", exact: true })).toHaveCount(2);
+    await page.goto("/news?category=bluepost&page=2");
+    await oneBothRegions(/WoW Forever Beta Development Notes/);
+  });
 });

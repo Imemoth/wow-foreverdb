@@ -52,7 +52,18 @@ A group of threads joined by passing pairs must be a **clique** (every pair pass
 | WoW: Forever—What’s New and What Feels Familiar | US 2400000 + EU 639257 |
 | Explore WoW: Forever with a Gamepad | US 2400119 + EU 639280 |
 
-**3 review pairs, stay separate** until a human confirms: *Podcast Episode 5* (US 2389565 / EU 637043) and *Podcast Episode 6* (US 2395799 / EU 638462) have an **empty excerpt** (no content evidence); *Beta Celebration* (US 2389633 / EU 637055) differs in wording (similarity 0.885). **0 ambiguous.** Not even a candidate (titles differ by date wording, so a false negative by design): the *WoW Forever Beta Development Notes* threads (US 2360696 "Updated November 2" vs EU 631316 "Updated 3 November"); the US thread is not yet ingested (G5 pending). A reviewed `allow` override would merge it (tested).
+**Owner decisions of 2026-11-04 (4 pairs, evidence in `docs/web/evidence/news-story-decisions-2026-11-04.json`, code mirror `web/src/lib/news/reviewed-story-decisions.ts`).** These are decisions, **not** a production write: the override rows, the link write and the deployment each need their own approval.
+
+| Decision | EU thread | US thread | Basis |
+|---|---|---|---|
+| **ALLOW** WoW Forever Beta Development Notes | `eu:topic:631316` (post:6391795) | `us:topic:2360696` (post:30185131) | same author, byte-identical 420-char opener, 14.2 min apart; titles differ only by date wording ("Updated 3 November" / "Updated November 2"). The US opener was ingested by the normal collector on 2026-11-04 19:40 UTC. |
+| **ALLOW** Podcast Episode 5 - End of Beta Special | `eu:topic:637043` (post:6446965) | `us:topic:2389565` (post:30577452) | identical title and author, 47 s apart, empty excerpts; equivalence verified against the live sources |
+| **ALLOW** Podcast Episode 6 - All About Tech | `eu:topic:638462` (post:6462927) | `us:topic:2395799` (post:30671248) | identical title and author, 28 s apart, empty excerpts; equivalence verified against the live sources |
+| **DENY** Beta Celebration is Underway | `eu:topic:637055` (post:6447060) | `us:topic:2389633` (post:30578134) | region-specific event times; excerpts differ (similarity 0.885); both regional cards are preserved |
+
+`database/public-read/ops/news_v2_story_overrides_review.sql` (NOT applied) inserts exactly these four rows, fail-closed on the reviewed post ids / authors / excerpt relations and on an existing override, and never writes a link; `ops/news_v2_story_overrides_rollback.sql` deletes only those rows. Gate order: **0013 approved → story overrides approved → `news_link_stories(true)` approved → website deployment approved.**
+
+**Production inventory recomputed 2026-11-05 (read-only matcher run on the live openers, 59 = US 31 + EU 28):** automatic rule only → 16 stories (36 threads), 3 review pairs (Podcast 5, Podcast 6, Beta Celebration), 0 ambiguous, **39 Blue Post cards**. With the four owner decisions → **19 stories (42 threads), 0 ambiguous, 36 Blue Post cards**; Beta Celebration stays two regional cards. (The earlier snapshot had 55 openers / 13 stories; the normal collector has ingested four more openers since, including the US Development Notes thread.) The inventory is recomputed once more immediately before the rollout proposal.
 
 **Before/after (Blue Post cards):** 55 → **38** (US view 29 → 26, EU view 26 → 25); the 49 Official News cards are unaffected, so the all-categories total drops by 17.
 

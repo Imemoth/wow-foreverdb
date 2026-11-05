@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NewsEntrySource } from "@/lib/news/cards";
 import { isGlobalStory, newsRegionLabel } from "@/lib/news/presentation";
 import { buildStoryCards, matchStories, normalizeStoryText, storyDetail } from "@/lib/news/stories";
+import { REVIEWED_STORY_DECISIONS, REVIEWED_STORY_OVERRIDES } from "@/lib/news/reviewed-story-decisions";
 
 const NOW = new Date("2026-11-04T12:00:00.000Z");
 const LONG = "Official Blizzard announcement text for World of Warcraft Forever that is long enough to count as evidence. ";
@@ -294,5 +295,58 @@ describe("sitemap: one canonical URL per story", () => {
     vi.doMock("@/lib/data", () => ({ data: () => ({ sitemap: async () => [], newsList: async () => ({ rows, total: rows.length }) }) }));
     const urls = (await (await import("@/app/sitemap")).default()).map((x) => x.url).filter((u) => u.includes("/news/entry/"));
     expect(urls.sort()).toEqual([`${SITE}/news/entry/eu-2001-1`, `${SITE}/news/entry/us-1002-1`]);
+  });
+});
+
+describe("owner-reviewed decisions (2026-11-04) on the production-shaped openers", () => {
+  const DN = "Kaivax running notes for the WoW Forever beta: what changed, what is being investigated and what comes next, kept up to date in this thread.";
+  const BC = "Join the Forever beta celebration to unlock rewards for everyone at the following ";
+  const k = { author: "Kaivax" };
+  const prod = (): NewsEntrySource[] => [
+    opener("us", 2360696, "WoW Forever Beta Development Notes – Updated November 2", "2026-09-24T22:23:24.849Z", { ...k, excerpt: DN }),
+    opener("eu", 631316, "WoW Forever Beta Development Notes – Updated 3 November", "2026-09-24T22:37:36.828Z", { ...k, excerpt: DN }),
+    opener("us", 2389565, "The WoW: Forever Podcast: Episode 5 - End of Beta Special", "2026-10-22T16:21:16.245Z", { ...k, excerpt: "" }),
+    opener("eu", 637043, "The WoW: Forever Podcast: Episode 5 - End of Beta Special", "2026-10-22T16:22:03.465Z", { ...k, excerpt: "" }),
+    opener("us", 2395799, "The WoW: Forever Podcast: Episode 6 - All About Tech", "2026-10-29T16:17:57.194Z", { ...k, excerpt: "" }),
+    opener("eu", 638462, "The WoW: Forever Podcast: Episode 6 - All About Tech", "2026-10-29T16:18:25.305Z", { ...k, excerpt: "" }),
+    opener("us", 2389633, "The WoW Forever Beta Celebration is Underway", "2026-10-22T17:00:00.000Z", { ...k, excerpt: BC + "US time zones." }),
+    opener("eu", 637055, "The WoW Forever Beta Celebration is Underway", "2026-10-22T17:00:00.000Z", { ...k, excerpt: BC + "EU time zones." }),
+  ];
+
+  it("the decisions are well formed: eu before us, three ALLOW and one DENY, exact source topic ids", () => {
+    expect(REVIEWED_STORY_DECISIONS.map((d) => [d.threadA, d.threadB, d.decision])).toEqual([
+      ["eu:topic:631316", "us:topic:2360696", "allow"], ["eu:topic:637043", "us:topic:2389565", "allow"],
+      ["eu:topic:638462", "us:topic:2395799", "allow"], ["eu:topic:637055", "us:topic:2389633", "deny"],
+    ]);
+    for (const d of REVIEWED_STORY_DECISIONS) expect(d.threadA < d.threadB && d.reason.length >= 10).toBe(true);
+  });
+
+  it("without decisions nothing merges: 8 regional cards (the Dev Notes pair is not even a candidate, the others await review)", () => {
+    const plan = matchStories(prod(), [], NOW);
+    expect(plan.links.size).toBe(0);
+    expect(buildStoryCards(prod(), plan.links, {}).length).toBe(8);
+  });
+
+  it("with the decisions: Development Notes + Podcast 5 + Podcast 6 become 3 stories, Beta Celebration stays as 2 regional cards -> 5 cards", () => {
+    const plan = matchStories(prod(), REVIEWED_STORY_OVERRIDES, NOW);
+    expect(plan.stories.map((x) => [...x.members].sort())).toEqual(expect.arrayContaining([
+      ["eu:topic:631316", "us:topic:2360696"], ["eu:topic:637043", "us:topic:2389565"], ["eu:topic:638462", "us:topic:2395799"]]));
+    expect(plan.stories.length).toBe(3);
+    expect(plan.links.has("us:topic:2389633") || plan.links.has("eu:topic:637055")).toBe(false);
+    expect(plan.ambiguous).toEqual([]);
+    const cards = buildStoryCards(prod(), plan.links, {});
+    expect(cards.length).toBe(5);
+    expect(cards.filter((c) => c.title.includes("Beta Celebration")).length).toBe(2);
+    // the canonical thread of a story is its EARLIEST opener (the US Development Notes opener is 14 minutes earlier)
+    const dn = plan.stories.find((x) => x.members.includes("us:topic:2360696"))!;
+    expect(dn.storyKey).toBe("story:us:topic:2360696");
+  });
+
+  it("the DENY is a hard stop: it also holds if the automatic rule would otherwise merge the pair", () => {
+    const e = prod();
+    e.find((x) => x.threadKey === "eu:topic:637055")!.excerpt = BC + "US time zones.";
+    expect(matchStories(e, [], NOW).links.size).toBeGreaterThan(0);
+    const plan = matchStories(e, REVIEWED_STORY_OVERRIDES, NOW);
+    expect(plan.links.has("us:topic:2389633")).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { type NewsEntrySource } from "@/lib/news/cards";
-import { buildStoryCards, matchStories, storyDetail } from "@/lib/news/stories";
+import { buildStoryCards, matchStories, storyDetail, type StoryOverride } from "@/lib/news/stories";
 import "server-only";
 import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
@@ -168,6 +168,50 @@ const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
     ingestedAt: "2026-10-22T10:10:00.000Z", excerpt: "Two European Forever realms will be merged next week; character names are protected during the merge.",
     category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
   },
+  // ---- Owner-reviewed decisions (2026-11-04), mirrored with fixture topic ids: ALLOW Development Notes (titles differ only by date wording),
+  // ALLOW Podcast Episode 5 and 6 (no excerpt, equivalence proven against the live sources), DENY Beta Celebration (region-specific times).
+  {
+    id: 9108, slug: "us-reviewed-9108", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9108", sourceTopicId: "topic:9108",
+    sourcePostNumber: 1, threadKey: "us:topic:9108", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9108/1",
+    title: "WoW Forever Beta Development Notes – Updated November 2", author: "Kaivax", region: "us", publishedAt: "2026-09-24T22:23:24.849Z", modifiedAt: null,
+    ingestedAt: "2026-09-24T22:23:24.849Z", excerpt: "Kaivax's running notes on the WoW Forever beta: what changed, what is being investigated and what is coming next, kept up to date in this thread.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9109, slug: "eu-reviewed-9109", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9109", sourceTopicId: "topic:9109",
+    sourcePostNumber: 1, threadKey: "eu:topic:9109", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9109/1",
+    title: "WoW Forever Beta Development Notes – Updated 3 November", author: "Kaivax", region: "eu", publishedAt: "2026-09-24T22:37:36.828Z", modifiedAt: null,
+    ingestedAt: "2026-09-24T22:37:36.828Z", excerpt: "Kaivax's running notes on the WoW Forever beta: what changed, what is being investigated and what is coming next, kept up to date in this thread.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9110, slug: "us-reviewed-9110", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9110", sourceTopicId: "topic:9110",
+    sourcePostNumber: 1, threadKey: "us:topic:9110", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9110/1",
+    title: "The WoW: Forever Podcast: Episode 5 - End of Beta Special", author: "Kaivax", region: "us", publishedAt: "2026-10-22T16:21:16.245Z", modifiedAt: null,
+    ingestedAt: "2026-10-22T16:21:16.245Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9111, slug: "eu-reviewed-9111", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9111", sourceTopicId: "topic:9111",
+    sourcePostNumber: 1, threadKey: "eu:topic:9111", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9111/1",
+    title: "The WoW: Forever Podcast: Episode 5 - End of Beta Special", author: "Kaivax", region: "eu", publishedAt: "2026-10-22T16:22:03.465Z", modifiedAt: null,
+    ingestedAt: "2026-10-22T16:22:03.465Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9112, slug: "us-reviewed-9112", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9112", sourceTopicId: "topic:9112",
+    sourcePostNumber: 1, threadKey: "us:topic:9112", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9112/1",
+    title: "The WoW: Forever Podcast: Episode 6 - All About Tech", author: "Kaivax", region: "us", publishedAt: "2026-10-29T16:17:57.194Z", modifiedAt: null,
+    ingestedAt: "2026-10-29T16:17:57.194Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9113, slug: "eu-reviewed-9113", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9113", sourceTopicId: "topic:9113",
+    sourcePostNumber: 1, threadKey: "eu:topic:9113", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9113/1",
+    title: "The WoW: Forever Podcast: Episode 6 - All About Tech", author: "Kaivax", region: "eu", publishedAt: "2026-10-29T16:18:25.305Z", modifiedAt: null,
+    ingestedAt: "2026-10-29T16:18:25.305Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
   {
     id: 9015, slug: "official-news-fixture", sourceType: "official_news", sourceKey: "blizzard-news-us",
     sourceEntryId: "article:9015", sourceTopicId: null, sourcePostNumber: null, threadKey: null,
@@ -232,6 +276,14 @@ const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
     author: "Kaivax", region: "eu", publishedAt: "2026-10-25T00:00:00.000Z", modifiedAt: null,
     ingestedAt: "2026-10-25T00:01:00.000Z", excerpt: "A player whose display name is Kaivax.", category: "bluepost", importance: 100, featured: true,
   },
+];
+
+/** Reviewed story decisions for the synthetic fixtures (same shape as pub.news_story_overrides; production decisions: reviewed-story-decisions.ts). */
+export const NEWS_FIXTURE_OVERRIDES: StoryOverride[] = [
+  { threadA: "eu:topic:9109", threadB: "us:topic:9108", decision: "allow" },
+  { threadA: "eu:topic:9111", threadB: "us:topic:9110", decision: "allow" },
+  { threadA: "eu:topic:9113", threadB: "us:topic:9112", decision: "allow" },
+  { threadA: "eu:topic:9105", threadB: "us:topic:9104", decision: "deny" },
 ];
 
 export class FixtureAdapter implements PublicDataAdapter {
@@ -409,18 +461,18 @@ export class FixtureAdapter implements PublicDataAdapter {
   }
 
   async newsList(query: NewsQuery): Promise<NewsPage> {
-    const rows = buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES).links, { category: query.category, query: query.query, region: query.region });
+    const rows = buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, { category: query.category, query: query.query, region: query.region });
     const start = (query.page - 1) * query.pageSize;
     const pageRows = rows.slice(start, start + query.pageSize);
     return { rows: pageRows, total: pageRows.length ? rows.length : 0 };
   }
 
   async newsFeatured(limit: number): Promise<NewsEntry[]> {
-    return buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES).links, { featuredFirst: true }).slice(0, Math.min(Math.max(limit, 1), 12));
+    return buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, { featuredFirst: true }).slice(0, Math.min(Math.max(limit, 1), 12));
   }
 
   async newsEntry(slug: string): Promise<NewsEntry | null> {
-    return storyDetail(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES).links, slug);
+    return storyDetail(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, slug);
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {
