@@ -41,6 +41,7 @@ local function setup(opts)
     GetQuestID = (not opts.noQuestAPI) and function() return state.questId end
     GetTitleText = function() return state.title end
     GetObjectiveText = function() return state.objectiveText end
+    GetQuestText = function() return "The Apothecary Society requests blood samples." end
     GetNumQuestRewards = (not opts.noQuestAPI) and function() return 1 end
     GetNumQuestChoices = (not opts.noQuestAPI) and function() return 2 end
     GetQuestItemInfo = (not opts.noQuestAPI) and function(kind, index)
@@ -118,6 +119,7 @@ test("quest accept captures dialog giver, approximate position and real item obj
     equal(q.accept.location.x, 31.5)
     equal(q.accept.location.mapId, 85)
     equal(q.objectiveText, "Collect Darkhound Blood.")
+    equal(q.description, "The Apothecary Society requests blood samples.")
     equal(#q.objectives, 2)
     truthy(q.requiredItemIds["123"])
     falsy(q.requiredItemIds["7000"], "a monster kill is not an item ID")
@@ -155,6 +157,20 @@ test("turn-in captures actual giver, offered choices separately from granted XP/
     truthy(FDB:IdentifyQuestLoot(123, true, nil), "WoW explicit quest flag is evidence")
     state:emit("QUEST_REMOVED", 367)
     equal(q.status, "completed", "remove after turn-in must not be abandonment")
+end)
+
+test("repeatable quest accept discards stale NPC and former reward evidence", function()
+    local FDB, state = setup()
+    state:emit("QUEST_DETAIL")
+    state:emit("QUEST_ACCEPTED", 4, 367)
+    state:emit("QUEST_TURNED_IN", 367, 1000, 200)
+    local q = FDB.DB.questJournal[state.player].entries["367"]
+    truthy(q.accept)
+    truthy(q.rewards)
+    state:emit("QUEST_ACCEPTED", 4, 367)
+    equal(q.status, "active")
+    falsy(q.accept, "old giver cannot leak into a repeated acceptance")
+    falsy(q.rewards, "old reward cannot leak into a repeated acceptance")
 end)
 
 test("quest removal records not-completed and a different character is isolated", function()
