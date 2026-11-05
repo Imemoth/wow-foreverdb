@@ -32,6 +32,9 @@ jobs:
       - name: Run quest API smoke tests
         run: lua5.4 tests/quest_api_smoke.lua
 
+      - name: Run quest tracker smoke tests
+        run: lua5.4 tests/quest_tracker_smoke.lua
+
       - name: Compile addon Lua
         shell: bash
         run: |
@@ -43,3 +46,4 @@ jobs:
           luac5.4 -p tests/session_tracker_smoke.lua
           luac5.4 -p tests/session_ui_smoke.lua
           luac5.4 -p tests/quest_api_smoke.lua
+          luac5.4 -p tests/quest_tracker_smoke.lua
