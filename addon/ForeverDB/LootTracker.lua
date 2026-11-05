@@ -274,9 +274,18 @@ local function collectItems()
                 observed.name = itemName
             end
 
-            if isQuestItem then
+            local questFlag = isQuestItem == true
+            local trackedId
+            if FDB.IdentifyQuestLoot then
+                questFlag, trackedId = FDB:IdentifyQuestLoot(
+                    itemId, questFlag, questId
+                )
+            end
+            if questFlag then
                 observed.isQuestItem = true
-                if questId and questId > 0 then
+                if trackedId and trackedId > 0 then
+                    observed.questId = trackedId
+                elseif type(questId) == "number" and questId > 0 then
                     observed.questId = questId
                 end
             end
