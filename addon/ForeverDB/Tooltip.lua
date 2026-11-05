@@ -43,6 +43,24 @@ local function sortedItems(bucket)
     return result
 end
 
+local function questLabel(item)
+    if (item.questDrops or 0) <= 0 then return "" end
+    local ids = {}
+    for id in pairs(item.questIds or {}) do ids[#ids+1] = tostring(id) end
+    table.sort(ids)
+    local labels = {}
+    local guid = type(UnitGUID) == "function" and UnitGUID("player")
+    local journal = FDB.DB and FDB.DB.questJournal and FDB.DB.questJournal[guid]
+    for i=1,math.min(#ids,3) do
+        local id=ids[i]
+        local record=journal and journal.entries and journal.entries[id]
+        labels[#labels+1] = record and record.title and (record.title .. " (#" .. id .. ")") or ("#" .. id)
+    end
+    local suffix = #labels > 0 and (" - " .. table.concat(labels, ", ")) or ""
+    if #ids > 3 then suffix=suffix .. " +" .. tostring(#ids-3) end
+    return " [Quest item]" .. suffix
+end
+
 local function addBucket(tooltip, title, bucket)
     if not bucket or (bucket.observations or 0) <= 0 then return end
 
@@ -54,9 +72,7 @@ local function addBucket(tooltip, title, bucket)
     for i = 1, limit do
         local item = items[i]
         local label = item.name or ("Item #" .. tostring(item.itemId))
-        if item.questDrops > 0 then
-            label = label .. " [Quest item]"
-        end
+        label = label .. questLabel(item)
 
         tooltip:AddDoubleLine(
             label,
@@ -116,6 +132,7 @@ function FDB:BuildItemSourceIndex()
                             drops = drops,
                             quantity = item.quantity or 0,
                             questDrops = item.questDrops or 0,
+                            questIds = item.questIds or {},
                             rate = drops / observations,
                             score = wilsonLowerBound(drops, observations),
                         }
@@ -240,7 +257,7 @@ function FDB:PrintItemSources(itemId, limit)
         print(
             i .. ".",
             sourceDisplayName(source)
-                .. ((source.questDrops or 0) > 0 and " [Quest item]" or ""),
+                .. questLabel(source),
             string.format("%.1f%%", source.rate * 100),
             "n=" .. tostring(source.observations),
             "drops=" .. tostring(source.drops)
@@ -288,7 +305,7 @@ local function enrichItemTooltip(tooltip, data)
     for i = 1, limit do
         local source = sources[i]
         tooltip:AddDoubleLine(
-            sourceDisplayName(source),
+            sourceDisplayName(source) .. questLabel(source),
             string.format("%.1f%%  n=%d", source.rate * 100, source.observations)
         )
     end

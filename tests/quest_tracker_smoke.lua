@@ -398,5 +398,93 @@ test("unsupported events fail soft and are reported", function()
     equal(FDB.DB.questJournal[s.player].entries["367"].status,"active")
 end)
 
+test("source index, mob and item tooltips retain verified quest associations", function()
+    local FDB, s = setup()
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
+    FDB.DB.sources["creature:7000:7"] = {
+        sourceType="creature", sourceId=7000, sourceLevel=7, name="Wolf",
+        buckets={mob={observations=40, items={
+            ["123"]={itemId=123,name="Blood",drops=17,quantity=19,questDrops=17,questIds={["367"]=true}}
+        }}}
+    }
+    TooltipDataProcessor = {AddTooltipPostCall=function(kind, cb) s.tooltipHooks[kind]=cb end}
+    Enum = {TooltipDataType={Unit=1,Item=2}}
+    FDB.SourceKey=function(_,kind,id,level) return kind .. ":" .. id .. ":" .. level end
+    assert(loadfile("addon/ForeverDB/Tooltip.lua"))("ForeverDB",FDB)
+    FDB:InitializeTooltip()
+    equal(FDB:GetItemSources(123)[1].questIds["367"],true)
+    local lines={}
+    local tooltip={AddLine=function(_,a) lines[#lines+1]=a end,
+        AddDoubleLine=function(_,a,b) lines[#lines+1]=a .. " " .. b end}
+    s.tooltipHooks[1](tooltip,{guid=s.guid,level=7})
+    local output=table.concat(lines,"\n")
+    contains(output,"42.5%")
+    contains(output,"367")
+    contains(output,"A New Plague")
+    lines={}; s.tooltipHooks[2](tooltip,{id=123})
+    contains(table.concat(lines,"\n"),"[Quest item]")
+    contains(table.concat(lines,"\n"),"367")
+end)
+
+test("real database, loot windows and exporter preserve schema 9 without journal privacy leaks", function()
+    local FDB, s = setup()
+    strsplit=function(separator,value) return value:match("^(%w+)%-([^%-]*)%-([^%-]*)%-([^%-]*)%-([^%-]*)%-([^%-]*)") end
+    ForeverDB_Saved = {schemaVersion=9,installationId="existing-installation",sources={},maps={},guilds={}}
+    assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB",FDB)
+    assert(loadfile("addon/ForeverDB/Exporter.lua"))("ForeverDB",FDB)
+    FDB:InitializeDatabase()
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
+    local journal=FDB.DB.questJournal
+    local slots={
+        {id=201,name="Explicit quest link",flag=false,quest=404,quantity=2},
+        {id=202,name="Flag only",flag=1,quantity=1},
+        {id=203,name="Blood ordinary lookalike",flag=false,quantity=3},
+    }
+    GetNumLootItems=function() return #slots end
+    GetLootSourceInfo=function() return s.guid,1 end
+    GetLootSlotLink=function(i) return "item:" .. slots[i].id end
+    GetLootSlotInfo=function(i) local a=slots[i]; return nil,a.name,a.quantity,nil,nil,nil,a.flag,a.quest end
+    GetZoneText=function() return "Tirisfal Glades" end
+    GetSubZoneText=function() return "Brill" end
+    C_Map={GetBestMapForUnit=function() return 85 end}
+    FDB.GetSourceNameFromGuid=function() return "Wolf" end
+    FDB.GetPendingGatheringKind=function() end
+    FDB.GetPendingGathering=function() end
+    FDB.ConsumePendingGatheringKind=function() end
+    assert(loadfile("addon/ForeverDB/LootTracker.lua"))("ForeverDB",FDB)
+    FDB:InitializeLootTracker()
+    s:emit("LOOT_READY"); s:emit("LOOT_READY")
+    local source=FDB.DB.sources["creature:7000:7"]
+    local b=source.buckets.mob
+    equal(b.observations,1); equal(b.items["201"].drops,1); equal(b.items["201"].quantity,2)
+    equal(b.items["201"].questDrops,1); truthy(b.items["201"].questIds["404"])
+    equal(b.items["202"].questDrops,1); falsy(next(b.items["202"].questIds))
+    equal(b.items["203"].questDrops,0)
+    equal(source.sourceLevel,7)
+    local _,location=next(b.locations); equal(location.mapId,85)
+    s:emit("LOOT_CLOSED"); s:emit("LOOT_READY"); equal(b.observations,2)
+    FDB:PrepareForSave()
+    local export=ForeverDB_Export
+    contains(export,"H|9|0.6.0-alpha|existing-installation|")
+    contains(export,"I|creature|7000|7|mob|201|Explicit quest link|2|4|2|404")
+    falsy(export:find("questJournal",1,true)); falsy(export:find("Player-",1,true))
+    falsy(export:find("The plague is spreading",1,true))
+    falsy(export:match("\nQ|")); falsy(export:match("\nR|"))
+    FDB:InitializeDatabase()
+    equal(FDB.DB.installationId,"existing-installation"); equal(FDB.DB.questJournal,journal)
+    equal(FDB.DB.sources["creature:7000:7"].buckets.mob.items["201"].questDrops,2)
+    ForeverDB_Saved,ForeverDB_Export=nil,nil
+end)
+
+test("auto turn-in stays unknown for giver and item grants, removal-before-turn-in is allowed", function()
+    local FDB,s=setup()
+    s:emit("QUEST_ACCEPTED",367); s:emit("QUEST_REMOVED",367)
+    s:emit("QUEST_TURNED_IN",367,0,0)
+    local q=FDB.DB.questJournal[s.player].entries["367"]
+    equal(q.status,"completed"); falsy(q.turnIn)
+    equal(q.rewards.grantedXP,0); equal(q.rewards.grantedMoney,0)
+    falsy(q.rewards.guaranteed); falsy(q.rewards.selectedItemId); falsy(q.rewards.grantedItems)
+end)
+
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
 print(passed .. " quest tracker simulated smoke checks passed; live Forever client gate PENDING")
