@@ -91,7 +91,7 @@ export const SLUG_COVER_ART: Record<string, ArticleCoverArt> = {
     mobileSrc: "/content-images/blog/wow-forever-new-race-class-combinations-mobile.webp",
     cardSrc: "/content-images/blog/wow-forever-new-race-class-combinations-card.webp",
     socialSrc: "/content-images/blog/wow-forever-new-race-class-combinations-social.webp",
-    heroPosition: "object-[50%_15%] sm:object-[50%_40%]",
+    heroPosition: "object-[50%_15%] sm:object-[50%_5%]",
   },
 };
 
