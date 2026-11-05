@@ -25,10 +25,14 @@ local function sortedItems(bucket)
             drops = item.drops or 0,
             rate = ((item.drops or 0) / observations) * 100,
             questDrops = item.questDrops or 0,
+            questIds = item.questIds or {},
         }
     end
 
     table.sort(result, function(a, b)
+        if (a.questDrops > 0) ~= (b.questDrops > 0) then
+            return a.questDrops > 0
+        end
         if a.rate == b.rate then
             return (a.name or tostring(a.itemId)) <
                 (b.name or tostring(b.itemId))
@@ -51,7 +55,7 @@ local function addBucket(tooltip, title, bucket)
         local item = items[i]
         local label = item.name or ("Item #" .. tostring(item.itemId))
         if item.questDrops > 0 then
-            label = label .. " [Quest]"
+            label = label .. " [Quest item]"
         end
 
         tooltip:AddDoubleLine(
@@ -111,6 +115,7 @@ function FDB:BuildItemSourceIndex()
                             observations = observations,
                             drops = drops,
                             quantity = item.quantity or 0,
+                            questDrops = item.questDrops or 0,
                             rate = drops / observations,
                             score = wilsonLowerBound(drops, observations),
                         }
@@ -234,7 +239,8 @@ function FDB:PrintItemSources(itemId, limit)
         local source = sources[i]
         print(
             i .. ".",
-            sourceDisplayName(source),
+            sourceDisplayName(source)
+                .. ((source.questDrops or 0) > 0 and " [Quest item]" or ""),
             string.format("%.1f%%", source.rate * 100),
             "n=" .. tostring(source.observations),
             "drops=" .. tostring(source.drops)
