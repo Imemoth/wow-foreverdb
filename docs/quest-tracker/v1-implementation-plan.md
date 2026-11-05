@@ -31,4 +31,6 @@ Stale dialog attribution; duplicate completion wiping provenance; old-client ind
 - Tasks 1–2 complete: lifecycle/API and tooltip regressions tested RED→GREEN; real Database/Exporter path proves schema-9 journal exclusion and installation preservation.
 - Independent read-only review found two Important reload issues (unverified persisted objective IDs and initially empty log suppressing discovery). Both reproduced as failing tests and fixed; journal links now need current-session objective evidence, and coalesced quest updates retry log reconciliation. No minor findings.
 - Review declined live API/event/reward/Companion behavior: retained as manual acceptance gates rather than simulated compatibility claims.
-- Task 3: pipeline/follow-up contract and exact live commands documented; Lua 5.1 and 5.4 suites pass (164 checks per runtime), Guildbook policy suite 6/6 and migration-tree guard pass. GitHub CI pending push.
+- Task 3: pipeline/follow-up contract and exact live commands documented; Lua 5.1 and 5.4 suites pass (166 checks per runtime), Guildbook policy suite 6/6 and migration-tree guard pass. GitHub CI pending push.
+
+- Concurrent remote commits through 75d8899 were merged without overwriting them; offer previews and independent addon-version guard retained. Integration regression also protects confirmed XP/money from duplicate reward previews.

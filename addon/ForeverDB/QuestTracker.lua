@@ -301,7 +301,7 @@ function FDB:QuestCompleteDialog()
     -- The offer exists before choosing a turn-in reward. Make it inspectable,
     -- but do NOT mark a quest completed or pretend a choice was granted.
     local record = ensureQuest(id)
-    if record then
+    if record and record.status ~= "completed" then
         record.rewards = pendingTurnIn.rewards
         markChanged()
     end

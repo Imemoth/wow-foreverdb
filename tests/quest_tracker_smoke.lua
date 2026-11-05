@@ -340,6 +340,7 @@ test("duplicate turn-in preserves location, rewards and timestamp", function()
     local FDB, s = setup()
     s:emit("QUEST_COMPLETE"); s:emit("QUEST_TURNED_IN", 367, 1000, 150)
     local q = FDB.DB.questJournal[s.player].entries["367"]
+    s:emit("QUEST_COMPLETE") -- a repeated reward preview must preserve confirmed grants
     s.now = s.now + 30
     s:emit("QUEST_TURNED_IN", 367)
     equal(q.turnIn.sourceId, 99)
@@ -534,6 +535,25 @@ test("empty login log retries at world entry and later quest updates", function(
     truthy(q,"later populated log must be discovered")
     equal(q.status,"active"); falsy(q.acceptedAt)
     truthy(FDB:IdentifyQuestLoot(123,false,nil))
+end)
+
+test("several quests in one session preserve distinct verified NPC and object offers", function()
+    local FDB,s=setup()
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED",367)
+    s.questId,s.title=404,"An Object Quest"
+    local units=UnitGUID
+    UnitGUID=function(unit) if unit=="npc" then return "GameObject-0-0-0-0-8000-01" end; return units(unit) end
+    local parse=FDB.ParseSourceGuid
+    FDB.ParseSourceGuid=function(self,guid)
+        if guid and guid:match("^GameObject") then return "gameobject",8000 end
+        return parse(self,guid)
+    end
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED",404)
+    local entries=FDB.DB.questJournal[s.player].entries
+    equal(entries["367"].accept.sourceId,99)
+    equal(entries["404"].accept.sourceType,"gameobject")
+    equal(entries["404"].accept.sourceId,8000)
+    equal(entries["404"].title,"An Object Quest")
 end)
 
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
