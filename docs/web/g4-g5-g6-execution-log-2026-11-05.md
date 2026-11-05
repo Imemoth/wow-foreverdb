@@ -188,8 +188,19 @@ State shown as **SKIPPED – ACCEPTED HISTORICAL GAP**, not FAILED and not COMPL
 
 Provenance of the evidence, stated precisely:
 
-- **No production dry-run response was delivered to this session**, and this session never invoked the Edge Function (it holds no collector secret and did not use the Vault or `net.http_post` to obtain one). The "exactly one missing entry" finding therefore rests on this session's **read-only comparison** (2026-11-05 19:30 UTC) of the live public Blizzard topic JSON for US 2360696 and EU 631316 against `pub.news_entries`, not on dry-run output. If the owner or operator ran the dry-run separately, that output is held outside this repository; its per-entry action report is not reproduced here.
+- **Operator dry-run output received after the decision above** (pasted into the session at ~20:45 UTC; `dryRun:true`, window 2026-10-30T00:00:00Z .. 2026-11-03T23:59:59.999Z, no credential in the response). This session never invoked the Edge Function itself and held no collector secret. The output **confirms** the earlier read-only comparison (2026-11-05 19:30 UTC) of the live Blizzard topic JSON against `pub.news_entries`; the prediction and the dry-run agree exactly.
 - Comparison result: US had opener `post:30185131` and `post:30756539` (#10); `post:30732723` (#9, in window) absent; #7/#8 (26–27 Oct) absent and outside the window. EU was complete (opener `post:6391795`, #7–#10 incl. `post:6471288`).
+Dry-run per-entry report (both sources `status: succeeded`, `dryRun: true`, `topicChecks: 3`):
+
+| Source | fetched / accepted / rejected | inserted / updated / skipped | Per-entry actions | Reject reasons |
+| --- | --- | --- | --- | --- |
+| `blizzard-bluepost-us` | 40 / 4 / 36 | 1 / 0 / 3 | `unchanged` `post:30743268` (#1), `unchanged` `post:30741364` (#1), **`insert` `post:30732723` (#9, published)**, `unchanged` `post:30185131` (#1 opener) | `topic_group_not_allowlisted` 34, `irrelevant` 2 |
+| `blizzard-bluepost-eu` | 13 / 4 / 9 | 0 / 0 / 4 | `unchanged` `post:6472787`, `unchanged` `post:6472597`, `unchanged` `post:6471288` (#9), `unchanged` `post:6391795` (opener) | `topic_group_not_allowlisted` 7, `irrelevant` 2 |
+
+Totals: **1 insert, 0 updates, 7 unchanged**. No `update`, no `skip_suppressed`, no `skip_unverified_reply`, no `skip_feed_over_topic` actions appear. Matches the stated expectation for G5-C ("more than one insert or any update means stop") — it did not trip. Differences from the historical rehearsal (US 2 inserts, EU 1 insert + 1 update) are explained by production having advanced through ordinary revision runs. Read: all other in-window threads (`post:30743268`, `post:30741364`, `post:6472787`, `post:6472597`) are already collected and unchanged; the Midnight replies stay rejected as `irrelevant`.
+
+Zero-write proof (read-only, 2026-11-05 20:45:41 UTC, after the dry-run) against the §2 baseline: `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story members 0; `max(modified_at)` 2026-11-05 15:42:52 unchanged; `post:30732723` rows 0; `news_sync_runs` rows with `mode = 'backfill'`: 0. The preview caused no write of any kind.
+
 - Consequence on the site: the US card keeps its 4 Nov official-update timestamp; the thread simply lacks one earlier update entry.
 
 Counter reconciliation (read-only, 2026-11-05 20:43:59 UTC) against the §2 baseline (19:26:18): `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story overrides 4, members 0 = unchanged; `post:30732723` rows 0. No News data changed during G4–G6 audit work, including by the normal cron runs in that interval. Cron: 5 active jobs (3–6 plus job 7), job 7 has 2 succeeded runs, 0 failed runs in 3 h.
