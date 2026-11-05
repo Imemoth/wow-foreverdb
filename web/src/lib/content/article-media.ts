@@ -85,13 +85,13 @@ export const SLUG_COVER_ART: Record<string, ArticleCoverArt> = {
     mobileSrc: "/content-images/blog/wow-forever-beginners-guide-2026-mobile.webp",
     cardSrc: "/content-images/blog/wow-forever-beginners-guide-2026-card.webp",
     socialSrc: "/content-images/blog/wow-forever-beginners-guide-2026-social.webp",
-    heroPosition: "object-[50%_100%] sm:object-[50%_80%]",
+    heroPosition: "object-[50%_45%]",
   },
   "wow-forever-new-race-class-combinations": {
     mobileSrc: "/content-images/blog/wow-forever-new-race-class-combinations-mobile.webp",
     cardSrc: "/content-images/blog/wow-forever-new-race-class-combinations-card.webp",
     socialSrc: "/content-images/blog/wow-forever-new-race-class-combinations-social.webp",
-    heroPosition: "object-[50%_45%] sm:object-[50%_50%]",
+    heroPosition: "object-[50%_15%] sm:object-[50%_40%]",
   },
 };
 

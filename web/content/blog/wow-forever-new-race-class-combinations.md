@@ -5,7 +5,7 @@ slug: wow-forever-new-race-class-combinations
 category: "Character Creation"
 tags: [wow-forever, races, classes, skyborne, character-creation]
 author: "AzerDex Editorial"
-publishedAt: 2026-11-04
+publishedAt: 2026-11-05
 status: published
 sample: false
 featured: false
@@ -63,7 +63,7 @@ The High Order pursue their arcane heritage. If your image of a Skyborne hero in
 
 Windshapers follow an elemental path. If you want your Skyborne to engage with the wind and spirits through a playable Shaman, choose the Horde. See [Windshaper Skyborne racial abilities and classes](/guides/races/windshaper-skyborne).
 
-**Access requirement:** Blizzard states that Skyborne access requires the purchase of the **Skyborne Heroic Pack or a higher digital upgrade**, and lists the Zephras Isle starting experience among the Heroic Pack's benefits. Check the official store details before buying an upgrade.
+**Access requirement:** Blizzard states that access to the Skyborne race and its Zephras Isle starting experience requires the **Skyborne Heroic Pack or a higher digital upgrade**. Blizzard has not said whether characters of other races can visit the island, so this article makes no claims about travelling there. Check the official store details before buying an upgrade.
 
 ## How much should racial abilities influence your pick?
 
@@ -103,7 +103,7 @@ There is no single universally correct first character. You are choosing how you
 
 ### Are Skyborne available with the base subscription alone?
 
-Blizzard states that Skyborne access requires the purchase of the **Heroic Pack or a higher digital upgrade**. Check the current purchase terms on the official Forever page.
+Blizzard states that access to the Skyborne race and its starting experience requires the **Heroic Pack or a higher digital upgrade**. Check the current purchase terms on the official Forever page.
 
 ## Plan your character in AzerDex
 
@@ -113,4 +113,4 @@ If you are new to the game, also read our [WoW: Forever Beginner's Guide](/blog/
 
 ---
 
-**Sources and editorial verification (4 November 2026):** [Blizzard: Create the Hero You Want to Be](https://news.blizzard.com/en-us/article/24304075/create-the-hero-you-want-to-be-in-world-of-warcraft-forever) (the six new combinations); [Blizzard: Meet the Skyborne](https://worldofwarcraft.blizzard.com/en-gb/news/24302071) (Zephras Isle levels 1-12, classes by faction); [Blizzard: New Player's Starter Guide](https://worldofwarcraft.blizzard.com/news/24315280) (Heroic Pack requirement); [Blizzard: Pre-Purchase Forever Upgrades](https://news.blizzard.com/en-us/article/24301508/pre-purchase-world-of-warcraft-forever-upgrades-and-begin-your-next-journey-in-azeroth) (Heroic Pack contents); [Blizzard: World of Warcraft: Forever What's Next Panel Recap](https://worldofwarcraft.blizzard.com/en-us/news/24303862); [Blizzard: official product page](https://worldofwarcraft.blizzard.com/en-us/forever/). Class availability is sourced from Blizzard and matches AzerDex's [Race Guides](/guides/races); numerical racial details have not been verified against the live release client.
+**Sources and editorial verification (5 November 2026):** [Blizzard: Create the Hero You Want to Be](https://news.blizzard.com/en-us/article/24304075/create-the-hero-you-want-to-be-in-world-of-warcraft-forever) (the six new combinations); [Blizzard: Meet the Skyborne](https://worldofwarcraft.blizzard.com/en-gb/news/24302071) (Zephras Isle levels 1-12, classes by faction); [Blizzard: New Player's Starter Guide](https://worldofwarcraft.blizzard.com/news/24315280) (published 28 October; "Skyborne access requires the purchase of the Heroic Pack or higher digital upgrades"); [Blizzard: Return to Azeroth in World of Warcraft: Forever](https://worldofwarcraft.blizzard.com/en-us/news/24315643) (published 29 October; "access to the Skyborne race and starting experience requires the Skyborne Heroic Pack or higher"); [Blizzard: Purchase Forever Upgrades](https://news.blizzard.com/en-us/article/24301508/pre-purchase-world-of-warcraft-forever-upgrades-and-begin-your-next-journey-in-azeroth) (Heroic Pack contents, including "Access to the new Skyborne race and their Zephras Isle starting experience"); [Blizzard: World of Warcraft: Forever What's Next Panel Recap](https://worldofwarcraft.blizzard.com/en-us/news/24303862); [Blizzard: official product page](https://worldofwarcraft.blizzard.com/en-us/forever/). Class availability is sourced from Blizzard and matches AzerDex's [Race Guides](/guides/races); numerical racial details have not been verified against the live release client.

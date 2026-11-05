@@ -134,6 +134,21 @@ describe("launch articles: links and wording", () => {
     expect(body).not.toMatch(/\b\d+(\.\d+)?\s?%/); // no racial percentages: AzerDex has not verified them in the release client
     expect(body).not.toMatch(/official(ly)? (endorsed|partner)/i);
   });
+  it.each(SLUGS)("%s: states the Heroic Pack requirement in Blizzard's terms and makes no claim about visiting Zephras Isle", (slug) => {
+    const body = articles[slug].body;
+    // Blizzard (Starter Guide 28 Oct; Return to Azeroth 29 Oct): access to the Skyborne race and starting experience requires the Heroic Pack or higher.
+    expect(body).toMatch(/access to the Skyborne race and (its Zephras Isle )?starting experience requires the \*\*(Skyborne )?Heroic Pack or a higher digital upgrade\*\*/);
+    // Blizzard says nothing about other characters visiting the island, so neither do we.
+    expect(body).toMatch(/Blizzard has not said whether characters of other races can visit the island/);
+    expect(body).not.toMatch(/\b(anyone|any character|non-Skyborne)\b[^.]{0,60}\b(can|may|could)\b[^.]{0,40}\b(visit|travel|reach|enter|quest)\b/i);
+    expect(body).not.toMatch(/\b(boat|zeppelin|skycutter|portal)\b[^.]{0,60}Zephras/i);
+  });
+  it("both launch posts carry the same, current publication date and a dated verification line", () => {
+    for (const s of SLUGS) {
+      expect(articles[s].publishedAt.slice(0, 10)).toBe("2026-11-05");
+      expect(articles[s].body).toContain("**Sources and editorial verification (5 November 2026):**");
+    }
+  });
   it("the Beginner's Guide carries the fan-project non-affiliation line", () => {
     expect(articles[SLUGS[0]].body).toContain("AzerDex is an independent fan project, not an official Blizzard publication.");
   });
