@@ -486,5 +486,33 @@ test("auto turn-in stays unknown for giver and item grants, removal-before-turn-
     falsy(q.rewards.guaranteed); falsy(q.rewards.selectedItemId); falsy(q.rewards.grantedItems)
 end)
 
+test("persisted objective links require a current-session observation even before login", function()
+    local FDB,s=setup()
+    FDB.DB.questJournal={[s.player]={entries={["367"]={questId=367,status="active",requiredItemIds={["123"]=true}}}}}
+    C_QuestLog.GetQuestObjectives=function() return nil end
+    falsy(FDB:IdentifyQuestLoot(123,false,nil),"saved links are not current-session evidence")
+    C_QuestLog.GetNumQuestLogEntries=function() return 1 end
+    C_QuestLog.GetInfo=function() return {questID=367,title="A New Plague"} end
+    s:emit("PLAYER_LOGIN")
+    falsy(FDB:IdentifyQuestLoot(123,false,nil),"failed API refresh must not verify saved links")
+    C_QuestLog.GetQuestObjectives=function() return {{text="Blood",type="item",objectID=123}} end
+    s:emit("QUEST_LOG_UPDATE")
+    truthy(FDB:IdentifyQuestLoot(123,false,nil),"fresh numeric objective is valid evidence")
+end)
+
+test("empty login log retries at world entry and later quest updates", function()
+    local FDB,s=setup()
+    local count=0
+    C_QuestLog.GetNumQuestLogEntries=function() return count end
+    C_QuestLog.GetInfo=function() return {questID=367,title="A New Plague",level=7} end
+    s:emit("PLAYER_LOGIN"); s:emit("PLAYER_ENTERING_WORLD")
+    falsy(FDB.DB.questJournal[s.player].entries["367"])
+    count=1; s:emit("QUEST_LOG_UPDATE")
+    local q=FDB.DB.questJournal[s.player].entries["367"]
+    truthy(q,"later populated log must be discovered")
+    equal(q.status,"active"); falsy(q.acceptedAt)
+    truthy(FDB:IdentifyQuestLoot(123,false,nil))
+end)
+
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
 print(passed .. " quest tracker simulated smoke checks passed; live Forever client gate PENDING")

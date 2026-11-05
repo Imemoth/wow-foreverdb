@@ -8,7 +8,7 @@ local pendingOffer
 local pendingTurnIn
 local refreshPending = false
 local lastRefresh = -math.huge
-local observedCharacter
+local verifiedObjectives = setmetatable({}, {__mode = "k"})
 local MAX_QUESTS_PER_CHARACTER = 500
 local MAX_OBJECTIVES = 16
 local MAX_REWARDS = 24
@@ -190,6 +190,7 @@ local function updateObjectives(record)
     end
     record.objectives = result
     record.requiredItemIds = required
+    verifiedObjectives[record] = true
 end
 
 local function rewardItems(rewardType, numFn)
@@ -359,7 +360,7 @@ function FDB:IdentifyQuestLoot(itemId, directFlag, directQuestId)
     -- Only positive objectID evidence from an ACTIVE item objective counts.
     -- Never infer an item ID from translated objective text or an NPC name.
     for _, record in pairs(journal.entries) do
-        if record.status == "active" and record.requiredItemIds
+        if record.status == "active" and verifiedObjectives[record] and record.requiredItemIds
             and record.requiredItemIds[tostring(id)] then
             return true, record.questId
         end
@@ -428,10 +429,10 @@ end
 -- an acceptance or a historical completion. Retry at world entry if login APIs fail.
 function FDB:ObserveActiveQuestLog()
     local guid = characterGuid()
-    if not guid or observedCharacter == guid then return end
+    if not guid then return false end
     local count = C_QuestLog and safeAmount(call(C_QuestLog.GetNumQuestLogEntries))
     count = count or safeAmount(call(GetNumQuestLogEntries))
-    if not count then return end
+    if not count then return false end
     local journal = ensureCharacter()
     if not journal then return end
     local active = {}
@@ -458,11 +459,11 @@ function FDB:ObserveActiveQuestLog()
     for key, record in pairs(journal.entries) do
         if record.status == "active" and not active[key] then
             record.requiredItemIds = nil
-            record.status = "unknown"
+            verifiedObjectives[record] = nil
         end
     end
-    observedCharacter = guid
     markChanged()
+    return true
 end
 
 local function queueObjectiveRefresh()
@@ -471,14 +472,14 @@ local function queueObjectiveRefresh()
         refreshPending = true
         local ok = pcall(C_Timer.After, 0.5, function()
             refreshPending = false
-            FDB:RefreshTrackedQuestObjectives()
+            if not FDB:ObserveActiveQuestLog() then FDB:RefreshTrackedQuestObjectives() end
         end)
         if ok then return end
         refreshPending = false
     end
     if elapsed() - lastRefresh >= 1 then
         lastRefresh = elapsed()
-        FDB:RefreshTrackedQuestObjectives()
+        if not FDB:ObserveActiveQuestLog() then FDB:RefreshTrackedQuestObjectives() end
     end
 end
 
