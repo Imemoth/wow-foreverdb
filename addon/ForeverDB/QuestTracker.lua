@@ -217,6 +217,7 @@ function FDB:QuestDetail()
         at = elapsed(),
         title = safeString(call(GetTitleText), 180),
         objectiveText = safeString(call(GetObjectiveText), 500),
+        description = safeString(call(GetQuestText), 1800),
         giver = captureGiver(),
     }
 end
@@ -233,6 +234,14 @@ function FDB:QuestAccepted(arg1, arg2)
         record.abandonedAt = nil
         record.turnIn = nil
         record.rewards = nil
+        -- A repeatable quest may have a different giver/objectives this time.
+        -- Never reuse evidence from a prior completion.
+        record.accept = nil
+        record.objectiveText = nil
+        record.description = nil
+        record.objectives = nil
+        record.requiredItemIds = nil
+        record.title = nil
         record.status = "active"
     end
     local offer = pendingOffer
@@ -240,6 +249,7 @@ function FDB:QuestAccepted(arg1, arg2)
         record.accept = offer.giver
         record.title = offer.title or record.title
         record.objectiveText = offer.objectiveText or record.objectiveText
+        record.description = offer.description or record.description
         pendingOffer = nil
     end
     record.title = record.title or getTitle(id)
@@ -347,6 +357,12 @@ function FDB:PrintTrackedQuest(argument)
     end
     printPlace("accepted at", record.accept)
     printPlace("turned in at", record.turnIn)
+    if record.description then
+        print("ForeverDB: description", record.description:sub(1, 300))
+    end
+    if record.objectiveText then
+        print("ForeverDB: goal", record.objectiveText)
+    end
     for _, objective in ipairs(record.objectives or {}) do
         print("ForeverDB: objective", objective.text)
     end
