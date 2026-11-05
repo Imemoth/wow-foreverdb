@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Platform-neutral extraction/packaging library for ForeverDB.AtlasExporter.
+       No WPF/Windows dependency, so the whole pipeline is unit-testable on any OS.
+       The Windows-only CASC access lives in ForeverDB.AtlasExporter. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ForeverDB.AtlasExporter</RootNamespace>
+    <AssemblyName>ForeverDB.AtlasExporter.Core</AssemblyName>
+    <Version>0.1.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="War3Net.Drawing.Blp" Version="6.0.2" />
+  </ItemGroup>
+
+  <!-- Reused unmodified from the Companion: verified overlay composition and the
+       reviewed 84-art reveal atlas (no Blizzard art inside). -->
+  <ItemGroup>
+    <Compile Include="../ForeverDB.Companion/Services/FullRevealMapArt.cs"
+             Link="Reused/FullRevealMapArt.cs" />
+    <EmbeddedResource Include="../ForeverDB.Companion/Resources/FullRevealOverlays-70009.json"
+                      LogicalName="ForeverDB.Companion.FullRevealOverlays.json" />
+  </ItemGroup>
+
+</Project>

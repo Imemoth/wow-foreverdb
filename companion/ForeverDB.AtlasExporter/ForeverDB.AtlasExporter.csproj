@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ForeverDB.AtlasExporter</AssemblyName>
+    <RootNamespace>ForeverDB.AtlasExporter.Cli</RootNamespace>
+    <Version>0.1.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForeverDB.AtlasExporter.Core/ForeverDB.AtlasExporter.Core.csproj" />
+    <!-- Supplies the native CascLib.dll (replaced by the pinned upstream build in CI,
+         exactly like the Companion: scripts/build-current-casclib.ps1). -->
+    <PackageReference Include="CascLib.NET" Version="1.50.0.206-alpha.3" />
+  </ItemGroup>
+
+  <!-- Reuse the Companion's proven P/Invoke CASC reader (FileDataID + name + online-exact-build). -->
+  <ItemGroup>
+    <Compile Include="../ForeverDB.Companion/Services/NativeCascMapReader.cs"
+             Link="Reused/NativeCascMapReader.cs" />
+  </ItemGroup>
+
+</Project>

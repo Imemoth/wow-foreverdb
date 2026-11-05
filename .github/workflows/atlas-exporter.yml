@@ -1,0 +1,101 @@
+name: Atlas Exporter (Windows)
+
+# Builds, tests and smoke-verifies ForeverDB.AtlasExporter.exe, then publishes the
+# ready-to-run win-x64 ZIP as a workflow artifact. Nothing here deploys or publishes
+# anything outside this repository's Actions artifacts.
+
+on:
+  push:
+    paths:
+      - 'companion/ForeverDB.AtlasExporter/**'
+      - 'companion/ForeverDB.AtlasExporter.Core/**'
+      - 'tests/atlas-exporter/**'
+      - 'scripts/atlas-exporter-smoke.ps1'
+      - 'scripts/build-current-casclib.ps1'
+      - 'docs/atlas-exporter/**'
+      - '.github/workflows/atlas-exporter.yml'
+  pull_request:
+    paths:
+      - 'companion/ForeverDB.AtlasExporter/**'
+      - 'companion/ForeverDB.AtlasExporter.Core/**'
+      - 'tests/atlas-exporter/**'
+      - 'scripts/atlas-exporter-smoke.ps1'
+      - '.github/workflows/atlas-exporter.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore exporter (win-x64)
+        run: dotnet restore companion/ForeverDB.AtlasExporter/ForeverDB.AtlasExporter.csproj -r win-x64
+
+      - name: Build current CascLib native
+        shell: pwsh
+        run: ./scripts/build-current-casclib.ps1
+
+      - name: Automated tests (synthetic fixtures)
+        run: dotnet run --project tests/atlas-exporter/Atlas.Exporter.Tests.csproj -c Release
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish companion/ForeverDB.AtlasExporter/ForeverDB.AtlasExporter.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          --no-restore
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o artifacts/exe
+
+      - name: Build synthetic client fixture
+        run: dotnet run --project tests/atlas-exporter/Atlas.Exporter.Tests.csproj -c Release -- --make-fixture artifacts/fixture
+
+      - name: Smoke-test the published executable
+        shell: pwsh
+        run: ./scripts/atlas-exporter-smoke.ps1 -Exe artifacts/exe/ForeverDB.AtlasExporter.exe -Fixture artifacts/fixture -Work artifacts/smoke
+
+      - name: Assemble download
+        shell: pwsh
+        run: |
+          $dist = "artifacts/dist/ForeverDB-AtlasExporter"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Copy-Item artifacts/exe/ForeverDB.AtlasExporter.exe $dist
+          Copy-Item companion/ForeverDB.AtlasExporter/README-OWNER.txt $dist
+          $hash = (Get-FileHash "$dist/ForeverDB.AtlasExporter.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ForeverDB.AtlasExporter.exe" | Set-Content "$dist/SHA256.txt"
+          Compress-Archive -Path $dist -DestinationPath artifacts/ForeverDB-AtlasExporter-win-x64.zip
+          Get-Item artifacts/ForeverDB-AtlasExporter-win-x64.zip | Format-List Name, Length
+          "exe sha256: $hash" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Upload ready-to-run ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForeverDB-AtlasExporter-win-x64
+          path: artifacts/ForeverDB-AtlasExporter-win-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-exporter-smoke-evidence
+          path: |
+            artifacts/smoke/**/diagnostics/*
+            artifacts/smoke/**/atlas/*
+            artifacts/smoke/*.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -9,6 +9,13 @@ version contract and release checklist are documented in
 - Addon: **0.5.0-alpha**
 - Export schema: **9**
 - Companion: **0.9.0-alpha**
+- Atlas Exporter (standalone Windows tool, separate from the Companion): **0.1.0**
+
+# Atlas Exporter
+
+## 0.1.0 — 2026-10-20 (initial, unverified against a real client)
+
+New standalone `ForeverDB.AtlasExporter.exe` that exports every drawable map of the locally installed WoW: Forever client (not only maps the player has visited) into a validated, resumable ZIP with WebP images, per-map manifests, hierarchy, diagnostics and an offline gallery. It reuses the Companion's CASC reader and reveal compositor unchanged and does not modify any Companion file. See [docs/atlas-exporter/README.md](docs/atlas-exporter/README.md). Automated tests use synthetic fixtures only; the first owner run is the real-client verification.
 
 # Companion
 
