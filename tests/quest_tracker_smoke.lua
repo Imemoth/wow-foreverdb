@@ -141,6 +141,13 @@ test("turn-in captures actual giver, offered choices separately from granted XP/
     state.giverId, state.giverName = 501, "Apothecary"
     state.location.x, state.location.y = 42.0, 30.5
     state:emit("QUEST_COMPLETE")
+    -- Inspect offered item rewards while the reward dialog is still open.
+    local beforeTurnIn = FDB.DB.questJournal[state.player].entries["367"]
+    equal(beforeTurnIn.status, "active")
+    equal(beforeTurnIn.rewards.guaranteed[1].itemId, 901)
+    equal(#beforeTurnIn.rewards.choices, 2)
+    falsy(beforeTurnIn.rewards.grantedXP)
+    falsy(beforeTurnIn.turnIn, "offer preview is not a completed turn-in")
     state:emit("QUEST_TURNED_IN", 367, 1700, 275)
     local q = FDB.DB.questJournal[state.player].entries["367"]
     equal(q.status, "completed")
