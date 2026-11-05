@@ -146,4 +146,36 @@ It returned zero rows at 19:30. Add `and j.jobname = 'azerdex-news-health'` to f
 | --- | --- | --- | --- | --- |
 | G4 | **Complete** | §1: routes, News contract, RSS parity, articles, indexing, headers, desktop/mobile, 0 runtime errors, aliases, rollback candidate | none | close; optionally revoke share-link bypass entries |
 | G5 | **Awaiting operator dry-run, then owner GO** (recommend hold on write) | §2 preflight + prediction; zero-row invariants; counters | collector secret (operator); off-machine backup evidence; owner approval; value is one row | operator runs §3 dry-run; decide GO/skip after reading it |
-| G6 | **Ready — Awaiting GO** | §5: functions match, assert OK, 4 jobs, no existing job, permissions, rollback SQL | separate owner approval | owner approves → apply `0018_schedule_news_health_check.sql` and verify |
+| G6 | **Complete** | §7: job 7 applied 20:01:26, first scheduled run 20:15:00 `succeeded`, jobs 3–6 unchanged, no new grants, 3 sources `ok` | none | monitor with the failed-run query; external alerting needs a separate design |
+
+Owner decisions recorded 2026-11-05: **G4 accepted/closed; G5 dry-run GO, production write NO-GO** (do not set `AZERDEX_NEWS_BACKFILL_ENABLED`, do not run `dryRun:false`, no window change; revisit only with independently verified off-machine backup evidence); **G6 approved**.
+
+## 7. G6 execution evidence (production, project `chcoypkjzxfznsqmmbrq`, owner approval 2026-11-05)
+
+Pre-apply re-confirmation (20:00:55 UTC): project `azerdex-public-read`, `ACTIVE_HEALTHY`, PostgreSQL 17; SQL file sha256 `a1db4a2a…4857` (schedule) and `62873f2f…1664` (unschedule) match §5; function md5s `c4715b22…dd3e` / `f3c71a14…aaea` and ACLs `{postgres=X/postgres}` unchanged; none of 7 application roles can execute either function; `azerdex-news-health` absent (4 jobs total); health `overall: ok`.
+
+Pre-apply job fingerprints (id / schedule / md5 of command): 3 `*/10` `3b40ce6a…`, 4 `*/30` `9404cb9e…`, 5 `0 */6` `bde19667…`, 6 `*/15` `c5213c82…`, all active, user `postgres`.
+
+Applied at 20:01:26 UTC: the two statements of `database/ops/0018_schedule_news_health_check.sql`, verbatim, via the Supabase SQL interface as `postgres` (`cron.schedule` returned job id 7).
+
+Post-apply verification:
+
+| Check | Result |
+| --- | --- |
+| Active `azerdex-news-health` jobs | exactly 1 (id 7), `*/15 * * * *`, command `select private.azerdex_news_assert_healthy()`, user `postgres`, md5 `41ef2dfe…` |
+| First scheduled execution | `cron.job_run_details` jobid 7: **succeeded**, start 20:15:00.085, end 20:15:00.284 UTC |
+| Jobs 3–6 | schedule, active flag and command md5 identical to the pre-apply fingerprints (rechecked 20:17) |
+| Privileges | function ACLs unchanged; no application role has execute on either function or `USAGE` on schema `private` or `cron`; `private` ACL `{postgres=UC/postgres}`; `cron` ACL unchanged (`supabase_admin`, `postgres`). No grant was issued |
+| Health (20:17) | `overall: ok`; `blizzard-bluepost-eu`, `blizzard-bluepost-us`, `blizzard-news-us` = `healthy_no_new_content` / `ok`, 0 consecutive failures |
+| Failed cron runs, last 2 h | 0 |
+
+Rollback was not needed. If ever required: `database/ops/0018_unschedule_news_health_check.sql` removes only job 7.
+
+The job is an operational signal only: a critical state makes a run `failed` in `cron.job_run_details`. No email/Discord/webhook alerting exists. Inspect with the failed-run query in §5.
+
+## 8. G5 remaining operator actions (hold)
+
+1. Run the §3 dry-run block (`dryRun:true`, unchanged window) from the protected terminal and paste the JSON (no secrets in it).
+2. This session then compares counters to the §2 baseline, writes the per-entry action report here, and keeps G5 on hold.
+3. Optionally confirm the flag is absent: `supabase secrets list --project-ref chcoypkjzxfznsqmmbrq` must not show `AZERDEX_NEWS_BACKFILL_ENABLED=true`.
+4. A production write requires a new explicit owner approval plus independently verified off-machine backup evidence.
