@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Article, Section } from "@/lib/content/loader";
 import { articlePath } from "@/lib/content/loader";
 import { CategoryBadge } from "@/components/library/CategoryBadge";
-import { CATEGORY_MEDALLION } from "@/lib/content/article-media";
+import { articleCoverImages, CATEGORY_MEDALLION } from "@/lib/content/article-media";
 import { fmtDate } from "@/lib/format";
 
 /**
@@ -13,19 +13,36 @@ import { fmtDate } from "@/lib/format";
  * section-agnostic (works off any free-form category string), so reusing it is not a Guides
  * rewrite, just reuse.
  *
- * Always compact and text-only - the one News article with content-specific art
+ * Compact. An article with frontmatter `cover` art shows its own 4:3 card thumbnail (article-media.ts's
+ * SLUG_COVER_ART) at the top of the card, so every illustrated card has the same height contribution and the grid
+ * rows stay even. Articles without a cover stay text-only. The one News article with content-specific art
  * (lib/content/article-media.ts's SLUG_FEATURED_IMAGE) is pulled out of the grid and rendered via
  * ArticleSpotlight.tsx instead, so a tall illustrated cell never stretches its plain neighbors to
  * match its height (CSS grid rows stretch by default).
  */
 export function ArticleCard({ article, section }: { article: Article; section: Section }) {
   const medallion = CATEGORY_MEDALLION[article.category];
+  const cover = articleCoverImages(article);
   return (
     <li className="panel group relative flex h-full flex-col p-5">
       {article.featured && (
         <span className="absolute -top-2.5 left-4 rounded-full border border-gold-300/60 bg-ink-900 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-gold-300">
           Featured
         </span>
+      )}
+      {cover && (
+        <Link href={articlePath(article)} tabIndex={-1} className="-mx-5 -mt-5 mb-4 block overflow-hidden rounded-t-[inherit]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static repository asset */}
+          <img
+            src={cover.card.src}
+            alt={cover.card.alt}
+            width={cover.card.width}
+            height={cover.card.height}
+            loading="lazy"
+            decoding="async"
+            className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+        </Link>
       )}
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5">

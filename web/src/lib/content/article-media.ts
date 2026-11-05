@@ -1,4 +1,4 @@
-import type { Section } from "./loader";
+import type { Article, Section } from "./loader";
 
 export interface CardImage {
   src: string;
@@ -53,3 +53,72 @@ export const CATEGORY_MEDALLION: Record<string, string> = {
   Engineering: "/library/medallions/cartography.webp",
   Editorial: "/library/medallions/inkwell.webp",
 };
+
+/**
+ * Responsive variants of an article's frontmatter `cover` (the 1920x1080 hero master). They are listed per slug,
+ * not derived from the file name, so a typo fails a unit test (tests/unit/article-cover.test.ts checks that every
+ * file exists with the documented dimensions) instead of silently shipping a broken <img>.
+ *
+ *  - `mobileSrc`: 810x1080 portrait crop around the focal subject, served below 640px.
+ *  - `cardSrc`: 800x600 (4:3) thumbnail for hub cards.
+ *  - `socialSrc`: 1200x630 crop for og:image / twitter:image.
+ *  - `heroPosition`: object-position classes (phone first, then `sm:`) that keep the subject in frame when the
+ *    hero is cropped to a short band. Literal class strings, because Tailwind's JIT needs static source text.
+ *
+ * Each image depicts that one article's subject: never reuse an entry for another article (same rule as
+ * SLUG_FEATURED_IMAGE above). Source and rebuild steps: docs/azerdex-blog-articles-art/provenance.md.
+ */
+export interface ArticleCoverArt {
+  mobileSrc: string;
+  cardSrc: string;
+  socialSrc: string;
+  heroPosition: string;
+}
+
+export const COVER_MASTER_SIZE = { width: 1920, height: 1080 } as const;
+export const COVER_MOBILE_SIZE = { width: 810, height: 1080 } as const;
+export const COVER_CARD_SIZE = { width: 800, height: 600 } as const;
+export const COVER_SOCIAL_SIZE = { width: 1200, height: 630 } as const;
+
+export const SLUG_COVER_ART: Record<string, ArticleCoverArt> = {
+  "wow-forever-beginners-guide-2026": {
+    mobileSrc: "/content-images/blog/wow-forever-beginners-guide-2026-mobile.webp",
+    cardSrc: "/content-images/blog/wow-forever-beginners-guide-2026-card.webp",
+    socialSrc: "/content-images/blog/wow-forever-beginners-guide-2026-social.webp",
+    heroPosition: "object-[50%_45%]",
+  },
+  "wow-forever-new-race-class-combinations": {
+    mobileSrc: "/content-images/blog/wow-forever-new-race-class-combinations-mobile.webp",
+    cardSrc: "/content-images/blog/wow-forever-new-race-class-combinations-card.webp",
+    socialSrc: "/content-images/blog/wow-forever-new-race-class-combinations-social.webp",
+    heroPosition: "object-[50%_15%] sm:object-[50%_5%]",
+  },
+};
+
+export interface ArticleCoverImages {
+  hero: { src: string; mobileSrc: string; alt: string; attribution: string; width: number; height: number; position: string };
+  card: { src: string; alt: string; width: number; height: number };
+  social: { src: string; width: number; height: number };
+}
+
+/**
+ * Everything the reader, hub cards and metadata need to show an article's cover, or null when the article has none.
+ * An article with a `cover` but no SLUG_COVER_ART entry still gets a hero from `cover.src` alone (the master is used
+ * for the mobile, card and social slots too) rather than silently dropping its art.
+ */
+export function articleCoverImages(a: Pick<Article, "slug" | "cover">): ArticleCoverImages | null {
+  if (!a.cover) return null;
+  const art = SLUG_COVER_ART[a.slug];
+  return {
+    hero: {
+      src: a.cover.src,
+      mobileSrc: art?.mobileSrc ?? a.cover.src,
+      alt: a.cover.alt,
+      attribution: a.cover.attribution,
+      ...COVER_MASTER_SIZE,
+      position: art?.heroPosition ?? "object-center",
+    },
+    card: { src: art?.cardSrc ?? a.cover.src, alt: a.cover.alt, ...(art ? COVER_CARD_SIZE : COVER_MASTER_SIZE) },
+    social: { src: art?.socialSrc ?? a.cover.src, ...(art ? COVER_SOCIAL_SIZE : COVER_MASTER_SIZE) },
+  };
+}
