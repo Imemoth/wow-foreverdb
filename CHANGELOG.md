@@ -167,7 +167,7 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 
 ## 0.6.0-alpha — 2026-11-05 (Quest Tracker V1: local-only capture)
 
-- Records quest acceptance with quest ID, title, objective summary, the actual quest dialog NPC and player map location when exposed by the live client.
+- Records quest acceptance with quest ID, title, description, objective summary, the actual quest dialog NPC and player map location when exposed by the live client.
 - Tracks active quest objective text and unambiguously identified required item IDs; captures quest turn-in NPC/location and the offered fixed/choice item rewards plus any XP/money amounts surfaced by quest APIs. Rewards are explicitly an offer preview, **not proof of which choice was selected**.
 - On creature loot, links a quest item from GetLootSlotInfo or a verified active item objective to the same existing source/item record. The mob tooltip prioritizes observed quest items and labels them **[Quest item]**. Loot/item export line I and schema 9 remain unchanged.
 - Quest journal is per-character and local SavedVariables only; no Companion, ingestion, public database, Guildbook cloud, or remote API changes. Commands: `/fdb quest` (last locally seen quest) and `/fdb quest <questID>`.
