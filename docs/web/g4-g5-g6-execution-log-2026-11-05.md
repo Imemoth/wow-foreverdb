@@ -1,6 +1,6 @@
 # News Collector V2 — G4 / G5 / G6 execution log (2026-11-05)
 
-Status: **G4 COMPLETE. G5 awaiting an operator-run dry-run (credential gate), then owner GO. G6 ready, awaiting owner GO.**
+Status (updated 20:20 UTC): **G4 COMPLETE (accepted by owner). G5 dry-run GO / production write NO-GO (hold; awaiting operator dry-run output). G6 COMPLETE (owner-approved, applied and verified, §7).**
 This log supersedes the stale parts of `release-readiness-2026-11-05.md` (written before G2 and before promotion).
 No production write was made while producing it: every database call below was a read-only `SELECT`; every web call was a `GET`.
 
