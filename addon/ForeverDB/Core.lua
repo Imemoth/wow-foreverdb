@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.5.0-alpha"
+FDB.VERSION = "0.6.0-alpha"
 FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
@@ -101,6 +101,9 @@ local function registerSlashCommands()
         elseif command == "questapi"
             or command == "quests" then
             FDB:RunQuestApiProbe()
+        elseif command == "quest"
+            or command:match("^quest%s+") then
+            FDB:PrintTrackedQuest(rawCommand:match("^%S+%s*(.-)$"))
         elseif command == "recipe"
             or command == "guildrecipe"
             or command == "gr" then
@@ -121,7 +124,7 @@ local function registerSlashCommands()
             local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
             FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
@@ -144,6 +147,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:InitializeSessionUI()
         FDB:InitializeGuildApiProbe()
         FDB:InitializeQuestApiProbe()
+        FDB:InitializeQuestTracker()
         FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()
         FDB:InitializeSkinningTracker()
