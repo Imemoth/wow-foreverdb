@@ -556,5 +556,24 @@ test("several quests in one session preserve distinct verified NPC and object of
     equal(entries["404"].title,"An Object Quest")
 end)
 
+test("reward link evidence cannot invent an unavailable item quantity", function()
+    local FDB,s=setup()
+    GetQuestItemInfo=nil
+    s:emit("QUEST_COMPLETE"); s:emit("QUEST_TURNED_IN",367)
+    local rewards=FDB.DB.questJournal[s.player].entries["367"].rewards
+    equal(rewards.guaranteed[1].itemId,901)
+    falsy(rewards.guaranteed[1].quantity,"a link proves ID, not quantity")
+end)
+
+test("unidentified new dialogs discard older pending giver evidence", function()
+    local FDB,s=setup()
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_COMPLETE")
+    GetQuestID=function() return nil end
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_COMPLETE")
+    s:emit("QUEST_ACCEPTED",367); s:emit("QUEST_TURNED_IN",367)
+    local q=FDB.DB.questJournal[s.player].entries["367"]
+    falsy(q.accept); falsy(q.turnIn)
+end)
+
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
 print(passed .. " quest tracker simulated smoke checks passed; live Forever client gate PENDING")

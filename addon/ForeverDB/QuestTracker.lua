@@ -210,7 +210,7 @@ local function rewardItems(rewardType, numFn)
             result[#result + 1] = {
                 itemId = itemId,
                 name = name,
-                quantity = safeAmount(quantity) or 1,
+                quantity = safeAmount(quantity),
             }
         end
     end
@@ -231,6 +231,7 @@ local function markChanged()
 end
 
 function FDB:QuestDetail()
+    pendingOffer = nil
     local id = questFromDialog()
     if not id then return end
     pendingOffer = {
@@ -289,6 +290,7 @@ function FDB:QuestAccepted(arg1, arg2)
 end
 
 function FDB:QuestCompleteDialog()
+    pendingTurnIn = nil
     local id = questFromDialog()
     if not id then return end
     pendingTurnIn = {
