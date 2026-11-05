@@ -5,11 +5,15 @@ on:
   push:
     branches:
       - main
+      - release
   workflow_dispatch:
 
 jobs:
   collector-smoke:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lua: ["5.1", "5.4"]
 
     steps:
       - name: Checkout
@@ -18,32 +22,32 @@ jobs:
       - name: Install Lua
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4
+          sudo apt-get install -y lua${{ matrix.lua }}
 
       - name: Run collector smoke tests
-        run: lua5.4 tests/collector_smoke.lua
+        run: lua${{ matrix.lua }} tests/collector_smoke.lua
 
       - name: Run session tracker smoke tests
-        run: lua5.4 tests/session_tracker_smoke.lua
+        run: lua${{ matrix.lua }} tests/session_tracker_smoke.lua
 
       - name: Run session UI smoke tests
-        run: lua5.4 tests/session_ui_smoke.lua
+        run: lua${{ matrix.lua }} tests/session_ui_smoke.lua
 
       - name: Run quest API smoke tests
-        run: lua5.4 tests/quest_api_smoke.lua
+        run: lua${{ matrix.lua }} tests/quest_api_smoke.lua
 
       - name: Run quest tracker smoke tests
-        run: lua5.4 tests/quest_tracker_smoke.lua
+        run: lua${{ matrix.lua }} tests/quest_tracker_smoke.lua
 
       - name: Compile addon Lua
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r -d '' file; do
-            luac5.4 -p "$file"
+            luac${{ matrix.lua }} -p "$file"
           done < <(find addon/ForeverDB -maxdepth 1 -type f -name '*.lua' -print0 | sort -z)
-          luac5.4 -p tests/collector_smoke.lua
-          luac5.4 -p tests/session_tracker_smoke.lua
-          luac5.4 -p tests/session_ui_smoke.lua
-          luac5.4 -p tests/quest_api_smoke.lua
-          luac5.4 -p tests/quest_tracker_smoke.lua
+          luac${{ matrix.lua }} -p tests/collector_smoke.lua
+          luac${{ matrix.lua }} -p tests/session_tracker_smoke.lua
+          luac${{ matrix.lua }} -p tests/session_ui_smoke.lua
+          luac${{ matrix.lua }} -p tests/quest_api_smoke.lua
+          luac${{ matrix.lua }} -p tests/quest_tracker_smoke.lua
