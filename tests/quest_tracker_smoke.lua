@@ -38,22 +38,22 @@ local function setup(opts)
     end
     UnitName = function(unit) return unit == "npc" and state.giverName or "Cursed Wolf" end
     UnitLevel = function() return 7 end
-    GetQuestID = opts.noQuestAPI and nil or function() return state.questId end
+    GetQuestID = (not opts.noQuestAPI) and function() return state.questId end
     GetTitleText = function() return state.title end
     GetObjectiveText = function() return state.objectiveText end
-    GetNumQuestRewards = opts.noQuestAPI and nil or function() return 1 end
-    GetNumQuestChoices = opts.noQuestAPI and nil or function() return 2 end
-    GetQuestItemInfo = opts.noQuestAPI and nil or function(kind, index)
+    GetNumQuestRewards = (not opts.noQuestAPI) and function() return 1 end
+    GetNumQuestChoices = (not opts.noQuestAPI) and function() return 2 end
+    GetQuestItemInfo = (not opts.noQuestAPI) and function(kind, index)
         if kind == "reward" then return "Robe of Testing", nil, 1, nil, nil, 901 end
         if index == 1 then return "Sword of Testing", nil, 1, nil, nil, 902 end
         return "Shield of Testing", nil, 1, nil, nil, 903
     end
-    GetQuestItemLink = opts.noQuestAPI and nil or function(kind, index)
+    GetQuestItemLink = (not opts.noQuestAPI) and function(kind, index)
         return "item:" .. tostring(kind == "reward" and 901 or 901 + index)
     end
-    GetRewardXP = opts.noQuestAPI and nil or function() return 1000 end
-    GetRewardMoney = opts.noQuestAPI and nil or function() return 150 end
-    C_QuestLog = opts.noQuestAPI and nil or {
+    GetRewardXP = (not opts.noQuestAPI) and function() return 1000 end
+    GetRewardMoney = (not opts.noQuestAPI) and function() return 150 end
+    C_QuestLog = (not opts.noQuestAPI) and {
         GetTitleForQuestID = function(id) return id == 367 and "A New Plague" or nil end,
         GetQuestObjectives = function(id)
             if id ~= 367 then return nil end
