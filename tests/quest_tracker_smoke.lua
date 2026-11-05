@@ -40,22 +40,23 @@ local function setup(opts)
     end
     UnitName = function(unit) return unit == "npc" and state.giverName or "Cursed Wolf" end
     UnitLevel = function() return 7 end
-    GetQuestID = opts.noQuestAPI and nil or function() return state.questId end
+    GetQuestID = (not opts.noQuestAPI) and function() return state.questId end
     GetTitleText = function() return state.title end
     GetObjectiveText = function() return state.objectiveText end
-    GetNumQuestRewards = opts.noQuestAPI and nil or function() return 1 end
-    GetNumQuestChoices = opts.noQuestAPI and nil or function() return 2 end
-    GetQuestItemInfo = opts.noQuestAPI and nil or function(kind, index)
+    GetQuestText = function() return "The Apothecary Society requests blood samples." end
+    GetNumQuestRewards = (not opts.noQuestAPI) and function() return 1 end
+    GetNumQuestChoices = (not opts.noQuestAPI) and function() return 2 end
+    GetQuestItemInfo = (not opts.noQuestAPI) and function(kind, index)
         if kind == "reward" then return "Robe of Testing", nil, 1, nil, nil, 901 end
         if index == 1 then return "Sword of Testing", nil, 1, nil, nil, 902 end
         return "Shield of Testing", nil, 1, nil, nil, 903
     end
-    GetQuestItemLink = opts.noQuestAPI and nil or function(kind, index)
+    GetQuestItemLink = (not opts.noQuestAPI) and function(kind, index)
         return "item:" .. tostring(kind == "reward" and 901 or 901 + index)
     end
-    GetRewardXP = opts.noQuestAPI and nil or function() return 1000 end
-    GetRewardMoney = opts.noQuestAPI and nil or function() return 150 end
-    C_QuestLog = opts.noQuestAPI and nil or {
+    GetRewardXP = (not opts.noQuestAPI) and function() return 1000 end
+    GetRewardMoney = (not opts.noQuestAPI) and function() return 150 end
+    C_QuestLog = (not opts.noQuestAPI) and {
         GetTitleForQuestID = function(id) return id == 367 and "A New Plague" or nil end,
         GetQuestObjectives = function(id)
             if id ~= 367 then return nil end
@@ -65,7 +66,6 @@ local function setup(opts)
             }
         end
     }
-    GetQuestText = function() return "The plague is spreading." end
     if opts.noQuestAPI then
         GetQuestID, GetNumQuestRewards, GetNumQuestChoices = nil, nil, nil
         GetQuestItemInfo, GetQuestItemLink, GetRewardXP, GetRewardMoney, C_QuestLog = nil, nil, nil, nil, nil
@@ -125,6 +125,7 @@ test("quest accept captures dialog giver, approximate position and real item obj
     equal(q.accept.location.x, 31.5)
     equal(q.accept.location.mapId, 85)
     equal(q.objectiveText, "Collect Darkhound Blood.")
+    equal(q.description, "The Apothecary Society requests blood samples.")
     equal(#q.objectives, 2)
     truthy(q.requiredItemIds["123"])
     falsy(q.requiredItemIds["7000"], "a monster kill is not an item ID")
@@ -146,6 +147,13 @@ test("turn-in captures actual giver, offered choices separately from granted XP/
     state.giverId, state.giverName = 501, "Apothecary"
     state.location.x, state.location.y = 42.0, 30.5
     state:emit("QUEST_COMPLETE")
+    -- Inspect offered item rewards while the reward dialog is still open.
+    local beforeTurnIn = FDB.DB.questJournal[state.player].entries["367"]
+    equal(beforeTurnIn.status, "active")
+    equal(beforeTurnIn.rewards.guaranteed[1].itemId, 901)
+    equal(#beforeTurnIn.rewards.choices, 2)
+    falsy(beforeTurnIn.rewards.grantedXP)
+    falsy(beforeTurnIn.turnIn, "offer preview is not a completed turn-in")
     state:emit("QUEST_TURNED_IN", 367, 1700, 275)
     local q = FDB.DB.questJournal[state.player].entries["367"]
     equal(q.status, "completed")
@@ -162,6 +170,20 @@ test("turn-in captures actual giver, offered choices separately from granted XP/
     truthy(FDB:IdentifyQuestLoot(123, true, nil), "WoW explicit quest flag is evidence")
     state:emit("QUEST_REMOVED", 367)
     equal(q.status, "completed", "remove after turn-in must not be abandonment")
+end)
+
+test("repeatable quest accept discards stale NPC and former reward evidence", function()
+    local FDB, state = setup()
+    state:emit("QUEST_DETAIL")
+    state:emit("QUEST_ACCEPTED", 4, 367)
+    state:emit("QUEST_TURNED_IN", 367, 1000, 200)
+    local q = FDB.DB.questJournal[state.player].entries["367"]
+    truthy(q.accept)
+    truthy(q.rewards)
+    state:emit("QUEST_ACCEPTED", 4, 367)
+    equal(q.status, "active")
+    falsy(q.accept, "old giver cannot leak into a repeated acceptance")
+    falsy(q.rewards, "old reward cannot leak into a repeated acceptance")
 end)
 
 test("quest removal records not-completed and a different character is isolated", function()
@@ -275,7 +297,7 @@ test("description, level and objective counters are actual client metadata", fun
         numFulfilled=2, numRequired=5, finished=false}} end
     s:emit("QUEST_DETAIL"); s:emit("QUEST_ACCEPTED", 367)
     local q = FDB.DB.questJournal[s.player].entries["367"]
-    equal(q.description, "The plague is spreading.")
+    equal(q.description, "The Apothecary Society requests blood samples.")
     equal(q.level, 7)
     equal(q.objectives[1].numFulfilled, 2)
     equal(q.objectives[1].numRequired, 5)

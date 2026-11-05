@@ -272,6 +272,7 @@ function FDB:QuestAccepted(arg1, arg2)
         record.removedAt = nil
         record.turnIn = nil
         record.rewards = nil
+        record.title = nil
         record.status = "active"
     end
     local offer = pendingOffer
@@ -297,6 +298,13 @@ function FDB:QuestCompleteDialog()
         giver = captureGiver(),
         rewards = rewardPreview(),
     }
+    -- The offer exists before choosing a turn-in reward. Make it inspectable,
+    -- but do NOT mark a quest completed or pretend a choice was granted.
+    local record = ensureQuest(id)
+    if record then
+        record.rewards = pendingTurnIn.rewards
+        markChanged()
+    end
 end
 
 function FDB:QuestTurnedIn(questId, xpReward, moneyReward)
@@ -412,7 +420,12 @@ function FDB:PrintTrackedQuest(argument)
     end
     printPlace("accepted at", record.accept)
     printPlace("turned in at", record.turnIn)
-    if record.description then print("ForeverDB: description", record.description) end
+    if record.description then
+        print("ForeverDB: description", record.description:sub(1, 300))
+    end
+    if record.objectiveText then
+        print("ForeverDB: goal", record.objectiveText)
+    end
     for _, objective in ipairs(record.objectives or {}) do
         print("ForeverDB: objective", objective.text)
     end
