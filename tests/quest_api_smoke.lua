@@ -204,7 +204,7 @@ end)
 test("Core initializes quest probe and routes /fdb questapi plus /fdb quests alias", function()
     resetQuestGlobals()
 
-    local state = { frames = {}, probeInit = 0, probeRuns = 0 }
+    local state = { frames = {}, probeInit = 0, probeRuns = 0, trackerInit = 0 }
     local FDB = {}
 
     CreateFrame = function()
@@ -233,12 +233,17 @@ test("Core initializes quest probe and routes /fdb questapi plus /fdb quests ali
     FDB.RunQuestApiProbe = function()
         state.probeRuns = state.probeRuns + 1
     end
+    FDB.InitializeQuestTracker = function()
+        state.trackerInit = state.trackerInit + 1
+    end
+    FDB.PrintTrackedQuest = function() end
 
     assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
     truthy(FDB.EventFrame and FDB.EventFrame.handler, "Core event frame should be wired")
 
     FDB.EventFrame.handler(FDB.EventFrame, "ADDON_LOADED", "ForeverDB")
     equal(state.probeInit, 1)
+    equal(state.trackerInit, 1)
     truthy(type(SlashCmdList.FOREVERDB) == "function", "/fdb slash command should be registered")
 
     SlashCmdList.FOREVERDB("questapi")
