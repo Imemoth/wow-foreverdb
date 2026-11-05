@@ -274,7 +274,7 @@ local function collectItems()
                 observed.name = itemName
             end
 
-            local questFlag = isQuestItem == true
+            local questFlag = isQuestItem and true or false
             local trackedId
             if FDB.IdentifyQuestLoot then
                 questFlag, trackedId = FDB:IdentifyQuestLoot(
