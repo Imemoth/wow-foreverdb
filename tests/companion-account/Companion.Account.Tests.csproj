@@ -39,6 +39,7 @@
     <Compile Include="../../companion/ForeverDB.Companion/Models/PublicObservationSnapshot.cs" Link="Linked/PublicObservationSnapshot.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/AccountGuildbookSync.cs" Link="Linked/AccountGuildbookSync.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/GuildbookStartupCoordinator.cs" Link="Linked/GuildbookStartupCoordinator.cs" />
+    <Compile Include="../../companion/ForeverDB.Companion/Services/GuildbookLocalRefreshService.cs" Link="Linked/GuildbookLocalRefreshService.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/LocalGuildbookStore.cs" Link="Linked/LocalGuildbookStore.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SyncHealthState.cs" Link="Linked/SyncHealthState.cs" />
     <Compile Include="../../companion/ForeverDB.Companion/Services/SettingsService.cs" Link="Linked/SettingsService.cs" />

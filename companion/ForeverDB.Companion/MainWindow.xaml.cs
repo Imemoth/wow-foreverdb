@@ -23,6 +23,7 @@ public partial class MainWindow : Window
 
     private SyncService? _syncService;
     private AccountGuildbookSync? _guildbookSync;
+    private GuildbookLocalRefreshService? _guildbookLocalRefresh;
     private SearchService? _searchService;
     private AccountRuntime? _account;
     private string _accountRuntimeKey = "";
@@ -77,6 +78,7 @@ public partial class MainWindow : Window
         _watcher = null;
         _guildbookSync?.Dispose();
         _guildbookSync = null;
+        _guildbookLocalRefresh = null;
         _syncService = null;
         _searchService = null;
 
@@ -172,6 +174,7 @@ public partial class MainWindow : Window
                 account.Sessions,
                 new LocalGuildbookStore()),
             accountSessions: account.Sessions);
+        _guildbookLocalRefresh = new GuildbookLocalRefreshService(_guildbookSync);
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -371,6 +374,40 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             RecordSyncError(ex.Message);
+        }
+    }
+
+    private async void RefreshGuildbook_Click(object sender, RoutedEventArgs e)
+    {
+        if (_guildbookSync is null || !_guildbookSync.IsAvailable || _guildbookLocalRefresh is null)
+            return;
+
+        if (!_settings.WowRootConfirmed)
+        {
+            RecordSyncError("Select and confirm the WoW: Forever installation in Settings before refreshing Guildbook data.");
+            return;
+        }
+
+        WowSavedVariablesWatcher? temporaryWatcher = null;
+        try
+        {
+            var watcher = _watcher ?? (temporaryWatcher = new WowSavedVariablesWatcher(
+                _settings.WowRoot,
+                (_, _) => Task.CompletedTask));
+            var files = watcher.FindExistingFiles();
+            var result = await _guildbookLocalRefresh.RefreshAsync(files);
+            if (result.FilesRead == 0)
+                RecordSyncError("No ForeverDB SavedVariables export was found. In WoW run /fdb guildbook refresh, then /reload, and refresh again.");
+            else
+                RefreshGuildbookUi();
+        }
+        catch (Exception ex)
+        {
+            RecordSyncError(ex.Message);
+        }
+        finally
+        {
+            temporaryWatcher?.Dispose();
         }
     }
 

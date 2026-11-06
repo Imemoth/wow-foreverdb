@@ -75,6 +75,24 @@ public sealed class CompanionSettingsUiContractTests
         Assert.DoesNotContain("SyncTrigger", method, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Guildbook_refresh_button_uses_only_the_local_cache_refresh_path()
+    {
+        var root = RepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.xaml"));
+        var main = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.xaml.cs"));
+        var button = xaml.IndexOf("Click=\"RefreshGuildbook_Click\"", StringComparison.Ordinal);
+        Assert.True(button >= 0);
+        var start = main.IndexOf("private async void RefreshGuildbook_Click(", StringComparison.Ordinal);
+        var next = main.IndexOf("private ", start + 1, StringComparison.Ordinal);
+        Assert.True(start >= 0 && next > start);
+        var handler = main[start..next];
+        Assert.Contains("_guildbookLocalRefresh.RefreshAsync", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncNow_Click", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncFileAsync", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncTrigger", handler, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("AccountSignIn_Click")]
     [InlineData("AccountSignOut_Click")]

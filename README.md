@@ -57,6 +57,7 @@ update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\Path\T
 - `/fdb export`
 - `/fdb item <itemID or item link>`
 - `/fdb guild` — short alias for the non-persistent Guildbook capability probe
+- `/fdb guildbook refresh` — explicitly capture the current guild roster/professions locally; wait for capture, then `/reload` or log out/exit to commit WoW SavedVariables before using Guildbook **Refresh data** in Companion
 - `/fdb recipe <profession>` — recipe probe for the current character
 - `/fdb recipe <member> <profession>` — targeted guild-member recipe/crafter probe
 - `/fdb gr ...` — short alias for `/fdb recipe ...`

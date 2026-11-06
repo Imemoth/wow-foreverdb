@@ -31,6 +31,41 @@ public sealed class GuildbookAccountScopeTests
     }
 
     [Fact]
+    public async Task Local_refresh_parses_roster_and_professions_into_account_cache_without_any_network_request()
+    {
+        using var rig = new Rig();
+        var account = rig.SeedRegistered("capture@example.test", "password-capture").User;
+        await rig.Sessions.InitializeAsync();
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+        var cacheRoot = Path.Combine(rig.Directory, "guildbook");
+        var store = new LocalGuildbookStore(cacheRoot, TestEnv.Protector());
+        using var privateSync = new AccountGuildbookSync(rig.Sessions, store);
+        var capturedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
+        var path = Path.Combine(rig.Directory, "ForeverDB-inst-1.lua");
+        File.WriteAllText(path,
+            $"ForeverDB_Export = \"H|9|0.7.1-alpha|inst-1|{capturedAt}|capture-live|{capturedAt}|GuildLeader\\nG|guild-key|Local Guild|Realm|{capturedAt}\\nC|guild-key|Member-1|Azer|Mage|MAGE|60|Officer|1|1|Stormwind|0\\nP|guild-key|Member-1|164|Blacksmithing|225|300|guild|0\\nS|creature|1|1|Wolf\"");
+        var service = new GuildbookLocalRefreshService(privateSync);
+        var requestsBefore = rig.Server.Requests.Count;
+        var ingestBefore = rig.Server.IngestCount;
+
+        var result = await service.RefreshAsync(new[] { path });
+
+        Assert.Equal(requestsBefore, rig.Server.Requests.Count);
+        Assert.Equal(ingestBefore, rig.Server.IngestCount);
+        Assert.Equal(new[] { "inst-1" }, result.AcceptedInstallationIds);
+        var guild = Assert.Single(privateSync.CachedGuilds);
+        Assert.Equal("Local Guild", guild.Name);
+        var member = Assert.Single(guild.Members);
+        Assert.Equal("Azer", member.Name);
+        var profession = Assert.Single(member.Professions);
+        Assert.Equal("Blacksmithing", profession.Name);
+        Assert.Equal(225, profession.Skill);
+        var encryptedFiles = Directory.EnumerateFiles(cacheRoot, "*.dat", SearchOption.AllDirectories).ToArray();
+        Assert.NotEmpty(encryptedFiles);
+        Assert.Equal("Local Guild", Assert.Single(store.Load(account.Id, "inst-1").Snapshot!.Guilds).Name);
+    }
+
+    [Fact]
     public void Schema_9_parser_reads_optional_fresh_capture_metadata_without_breaking_old_headers()
     {
         var parser = new ForeverDbExportParser();

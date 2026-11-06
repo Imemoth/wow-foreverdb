@@ -478,7 +478,7 @@
                             <Button Grid.Column="8"
                                     Width="120"
                                     Height="38"
-                                    Click="SyncNow_Click"
+                                    Click="RefreshGuildbook_Click"
                                     Content="Refresh data" />
                         </Grid>
                     </Border>
