@@ -17,6 +17,7 @@ void Check(bool condition, string name)
 var settings = new CompanionSettings
 {
     WowRoot = @"C:\Games\World of Warcraft\_classic_",
+    WowRootConfirmed = true,
     SupabaseUrl = "https://example.supabase.co",
     SupabaseKey = "sb_publishable_test-secret",
     AutoSync = true
@@ -30,6 +31,30 @@ Check(health.ConfigurationReady, "valid configuration is ready");
 Check(health.SupabaseReady, "Supabase configuration is ready");
 Check(!health.WatcherReady, "watcher is not ready before start");
 Check(!health.AuthReady, "auth is pending before successful sync");
+
+var unconfirmed = new CompanionSettings
+{
+    WowRoot = @"C:\Games\World of Warcraft\_forever_",
+    SupabaseUrl = "https://example.supabase.co",
+    SupabaseKey = "sb_publishable_test-secret",
+    AutoSync = true,
+    WowRootConfirmed = false
+};
+health.Configure(unconfirmed);
+Check(!health.ConfigurationReady, "a detected path cannot start sync before the user confirms it");
+
+var beta = new CompanionSettings
+{
+    WowRoot = @"C:\Games\World of Warcraft\_classic_beta_",
+    SupabaseUrl = "https://example.supabase.co",
+    SupabaseKey = "sb_publishable_test-secret",
+    AutoSync = true,
+    WowRootConfirmed = true
+};
+health.Configure(beta);
+Check(!health.ConfigurationReady, "legacy beta is not a valid Forever data source");
+
+health.Configure(settings);
 
 health.SetWatcherReady(true);
 Check(health.WatcherReady, "watcher readiness can be reported");

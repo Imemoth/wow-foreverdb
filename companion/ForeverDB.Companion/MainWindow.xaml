@@ -809,6 +809,18 @@
                                             Height="38"
                                             Click="AccountSignOut_Click"
                                             Content="Sign out of this computer" />
+                                    <Button x:Name="AccountSwitchButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountSwitchAccount_Click"
+                                            Content="Switch account" />
+                                    <Button x:Name="AccountReturnAnonymousButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountReturnAnonymous_Click"
+                                            Content="Return to preserved anonymous identity" />
                                     <TextBlock Foreground="{StaticResource MutedTextBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
@@ -1021,10 +1033,17 @@
                                       Margin="0,8,0,18"
                                       Content="Start minimized when launched with Windows" />
 
-                            <Button Width="140"
-                                    HorizontalAlignment="Left"
-                                    Click="SaveSettings_Click"
-                                    Content="Save settings" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button Width="140"
+                                        HorizontalAlignment="Left"
+                                        Click="SaveSettings_Click"
+                                        Content="Save settings" />
+                                <Button Margin="8,0,0,0"
+                                        Padding="14,6"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="CancelSettings_Click"
+                                        Content="Cancel" />
+                            </StackPanel>
 
                             <TextBlock x:Name="SettingsSaveStatusText"
                                        Margin="0,10,0,0"
@@ -1048,8 +1067,25 @@
 
                             <TextBlock Text="WoW Forever root"
                                        Foreground="{StaticResource MutedTextBrush}" />
-                            <TextBox x:Name="WowRootBox"
-                                     Margin="0,6,0,16" />
+                            <ComboBox x:Name="WowInstallationSelector"
+                                      Margin="0,6,0,8"
+                                      DisplayMemberPath="RootPath"
+                                      SelectionChanged="WowInstallationSelector_SelectionChanged"
+                                      ToolTip="Detected WoW client installations" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Margin="8,0,0,0"
+                                        Padding="12,5"
+                                        Click="BrowseWowRoot_Click"
+                                        Content="Browse…" />
+                                <TextBox x:Name="WowRootBox"
+                                         VerticalContentAlignment="Center"
+                                         ToolTip="The selected WoW client folder" />
+                            </DockPanel>
+                            <TextBlock x:Name="WowRootStatusText"
+                                       Margin="0,0,0,16"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       TextWrapping="Wrap" />
 
                             <TextBlock Text="Supabase project URL"
                                        Foreground="{StaticResource MutedTextBrush}" />

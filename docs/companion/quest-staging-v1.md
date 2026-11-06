@@ -1,6 +1,6 @@
 # Companion — Quest data pipeline, fresh staging baseline (C0)
 
-Status: **planning and acceptance only**. No Companion code, remote schema, production database, Vercel deployment, or addon export change is authorized by this document.
+Status: **C0a/C0b Companion implementation is in Draft PR #176; C0c remains staging acceptance only.** No remote schema, production database, Vercel deployment, or addon export change is authorized by this document.
 
 ## Starting point
 
@@ -13,6 +13,8 @@ Status: **planning and acceptance only**. No Companion code, remote schema, prod
 - Legacy Companion PRs #81 (AutoSync), #82 (WoW installation picker) and #83 (account switching) are closed, unmerged and out of date. Do not cherry-pick them into this scope without a fresh review.
 
 ## Phase C0 — staging-only acceptance of EXISTING Schema 9 sync
+
+The C0a Forever installation picker and C0b account/ownership safety work are implemented in the Companion source for review. This does not accept a real Windows client, staging upload, replay/read-back, or release behavior. Continue to treat every C0c step below as pending until the owner records evidence.
 
 **Goal:** Prove a real, non-empty `0.7.1-alpha` addon export can traverse **manual Sync Now** -> Companion parser -> privacy allowlist -> ownership-checked transport -> **isolated staging/test** ingest -> read-back without duplication.
 

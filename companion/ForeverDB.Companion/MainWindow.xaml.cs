@@ -1,9 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using FolderBrowserDialog = System.Windows.Forms.FolderBrowserDialog;
 using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Controls;
 using ForeverDB.Companion.Models;
@@ -23,6 +28,8 @@ public partial class MainWindow : Window
     private string _accountRuntimeKey = "";
     private WowSavedVariablesWatcher? _watcher;
     private readonly SyncHealthState _syncHealth = new();
+    private IReadOnlyList<WowInstallation> _wowInstallations = Array.Empty<WowInstallation>();
+    private bool _populatingSettings;
 
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
@@ -55,13 +62,14 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        _wowInstallations = WowInstallationLocator.Discover();
         _settings = SettingsService.Load();
         PopulateSettings();
 
         await RebuildServicesAsync();
     }
 
-    private async Task RebuildServicesAsync()
+    private async Task RebuildServicesAsync(bool syncExistingFiles = true)
     {
         _searchRequests.Advance();
         _detailRequests.Advance();
@@ -85,7 +93,9 @@ public partial class MainWindow : Window
         if (!_syncHealth.ConfigurationReady)
         {
             var message =
-                string.IsNullOrWhiteSpace(_settings.WowRoot)
+                !_settings.WowRootConfirmed
+                    ? "Confirm the WoW installation in Settings before synchronization."
+                    : string.IsNullOrWhiteSpace(_settings.WowRoot)
                     ? "WoW Forever path is not configured."
                     : "Supabase connection is not configured.";
 
@@ -148,7 +158,8 @@ public partial class MainWindow : Window
             // Local-only Guildbook boundary: it has no RPC and no token method, and persists encrypted data on this computer only.
             _guildbookSync = new AccountGuildbookSync(
                 account.Sessions,
-                new LocalGuildbookStore()));
+                new LocalGuildbookStore()),
+            accountSessions: account.Sessions);
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -250,7 +261,8 @@ public partial class MainWindow : Window
 
         _ = RunDeviceBackgroundAsync(account);
 
-        if (_settings.AutoSync &&
+        if (syncExistingFiles &&
+            _settings.AutoSync &&
             _watcher is not null)
         {
             foreach (var file in _watcher.FindExistingFiles())
@@ -306,6 +318,12 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        if (!_settings.WowRootConfirmed)
+        {
+            RecordSyncError("Confirm the WoW installation in Settings before synchronization.");
+            return;
+        }
+
         if (_syncService is null)
         {
             return;
@@ -1495,21 +1513,48 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        _settings.WowRoot = WowRootBox.Text.Trim();
-        _settings.SupabaseUrl = SupabaseUrlBox.Text.Trim();
-        _settings.SupabaseKey = SupabaseKeyBox.Text.Trim();
-        _settings.AutoSync = AutoSyncCheck.IsChecked == true;
-        _settings.LaunchWithWindows =
-            LaunchWithWindowsCheck.IsChecked == true;
-        _settings.StartMinimized =
-            StartMinimizedCheck.IsChecked == true;
+        var root = WowInstallationLocator.Validate(WowRootBox.Text);
+        WowRootStatusText.Text = root.StatusMessage;
+        if (root.Flavor == WowClientFlavor.ClassicBeta)
+        {
+            root = root with
+            {
+                IsValid = false,
+                ErrorMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source.",
+                StatusMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source."
+            };
+            WowRootStatusText.Text = root.StatusMessage;
+        }
+        WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource(
+            root.IsValid ? "SuccessBrush" : "ErrorBrush");
+        WowRootStatusText.Visibility = Visibility.Visible;
+        if (!root.IsValid)
+        {
+            return;
+        }
 
-        SettingsService.Save(_settings);
+        var sameConfirmedRoot = _settings.WowRootConfirmed &&
+            string.Equals(root.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase);
+
+        var settings = new CompanionSettings
+        {
+            WowRoot = root.RootPath,
+            WowRootConfirmed = true,
+            SupabaseUrl = SupabaseUrlBox.Text.Trim(),
+            SupabaseKey = SupabaseKeyBox.Text.Trim(),
+            AutoSync = AutoSyncCheck.IsChecked == true,
+            LaunchWithWindows =
+                LaunchWithWindowsCheck.IsChecked == true,
+            StartMinimized = StartMinimizedCheck.IsChecked == true
+        };
+
+        SettingsService.Save(settings);
+        _settings = settings;
         StartupService.SetEnabled(
             _settings.LaunchWithWindows,
             _settings.StartMinimized);
 
-        await RebuildServicesAsync();
+        await RebuildServicesAsync(syncExistingFiles: sameConfirmedRoot);
 
         SettingsSaveStatusText.Text = "Settings saved.";
         SettingsSaveStatusText.Foreground =
@@ -1518,9 +1563,78 @@ public partial class MainWindow : Window
             Visibility.Visible;
     }
 
+    private void CancelSettings_Click(object sender, RoutedEventArgs e)
+    {
+        PopulateSettings();
+        SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+    }
+
+    private void BrowseWowRoot_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Select the World of Warcraft client folder",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false,
+            InitialDirectory = Directory.Exists(WowRootBox.Text.Trim())
+                ? WowRootBox.Text.Trim()
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+        };
+
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        WowRootBox.Text = dialog.SelectedPath;
+        RefreshWowRootStatus();
+    }
+
+    private void WowInstallationSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_populatingSettings || WowInstallationSelector.SelectedItem is not WowInstallation selected)
+        {
+            return;
+        }
+
+        WowRootBox.Text = selected.RootPath;
+        RefreshWowRootStatus();
+    }
+
+    private void RefreshWowRootStatus()
+    {
+        if (WowRootStatusText is null)
+        {
+            return;
+        }
+
+        var validation = WowInstallationLocator.Validate(WowRootBox.Text);
+        if (validation.Flavor == WowClientFlavor.ClassicBeta)
+        {
+            validation = validation with
+            {
+                IsValid = false,
+                ErrorMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source.",
+                StatusMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source."
+            };
+        }
+
+        var changedPath = !string.Equals(validation.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase);
+        WowRootStatusText.Text = (!_settings.WowRootConfirmed || changedPath) && validation.IsValid
+            ? $"Detected client; save settings to confirm. {validation.StatusMessage} No sync starts before confirmation."
+            : validation.StatusMessage;
+        WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource(
+            validation.IsValid ? "SuccessBrush" : "ErrorBrush");
+        WowRootStatusText.Visibility = Visibility.Visible;
+    }
+
     private void PopulateSettings()
     {
+        _populatingSettings = true;
         WowRootBox.Text = _settings.WowRoot;
+        WowInstallationSelector.ItemsSource = _wowInstallations;
+        WowInstallationSelector.SelectedItem = _wowInstallations.FirstOrDefault(
+            candidate => string.Equals(candidate.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase));
         SupabaseUrlBox.Text = _settings.SupabaseUrl;
         SupabaseKeyBox.Text = _settings.SupabaseKey;
         AutoSyncCheck.IsChecked = _settings.AutoSync;
@@ -1528,6 +1642,8 @@ public partial class MainWindow : Window
             _settings.LaunchWithWindows;
         StartMinimizedCheck.IsChecked =
             _settings.StartMinimized;
+        _populatingSettings = false;
+        RefreshWowRootStatus();
     }
 
     private void RecordSyncError(string? message)

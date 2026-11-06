@@ -291,6 +291,14 @@ public partial class MainWindow
             registered || reauth
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+        AccountSwitchButton.Visibility =
+            registered || reauth
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        AccountReturnAnonymousButton.Visibility =
+            status.HasLegacyOwner && status.LegacyFault == SessionFault.None && (registered || reauth)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
 
         AccountLostPanel.Visibility =
             lost
@@ -343,6 +351,8 @@ public partial class MainWindow
         var buttonsEnabled = !_accountBusy;
         AccountSignInButton.IsEnabled = buttonsEnabled;
         AccountSignOutButton.IsEnabled = buttonsEnabled;
+        AccountSwitchButton.IsEnabled = buttonsEnabled;
+        AccountReturnAnonymousButton.IsEnabled = buttonsEnabled;
     }
 
     private InstallationRow BuildInstallationRow(
@@ -659,9 +669,97 @@ public partial class MainWindow
 
         try
         {
+            _syncService?.CancelRegisteredDeviceUploads();
             var outcome = await account.Sessions.SignOutRegisteredAsync();
             ShowAccountMessage(
                 AccountMessages.Describe(outcome));
+        }
+        finally
+        {
+            SetAccountBusy(false);
+        }
+    }
+
+    private async void AccountSwitchAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var account = _account;
+        if (account is null || _accountBusy)
+        {
+            return;
+        }
+
+        SetAccountBusy(true);
+        try
+        {
+            _syncService?.CancelRegisteredDeviceUploads();
+            var outcome = await account.Sessions.SignOutRegisteredAsync();
+            if (outcome is SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending)
+            {
+                _signInRequested = true;
+                AccountEmailBox.Clear();
+                AccountPasswordBox.Clear();
+                ShowAccountMessage(outcome == SignOutOutcome.LocalOnlyRevocationPending
+                    ? "Signed out locally. Server revocation is pending and will be retried; you can now sign in to another account."
+                    : "Signed out. Sign in with the other account when ready.");
+            }
+            else
+            {
+                ShowAccountMessage(AccountMessages.Describe(outcome));
+            }
+        }
+        finally
+        {
+            SetAccountBusy(false);
+        }
+
+        if (_signInRequested)
+        {
+            AccountEmailBox.Focus();
+        }
+    }
+
+    private async void AccountReturnAnonymous_Click(object sender, RoutedEventArgs e)
+    {
+        var account = _account;
+        if (account is null || _accountBusy)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(
+                this,
+                "Sign out of this account and restore this computer's preserved anonymous identity? Its credentials and installation history will be kept.",
+                "Return to anonymous mode",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        SetAccountBusy(true);
+        try
+        {
+            _syncService?.CancelRegisteredDeviceUploads();
+            var signedOut = await account.Sessions.SignOutRegisteredAsync();
+            if (signedOut is not (SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending))
+            {
+                ShowAccountMessage(AccountMessages.Describe(signedOut));
+                return;
+            }
+
+            var restored = await account.Sessions.RestoreLegacyAnonymousAsync();
+            ShowAccountMessage(restored == StartAnonymousOutcome.RestoredLegacyIdentity
+                ? signedOut == SignOutOutcome.LocalOnlyRevocationPending
+                    ? "Restored the preserved anonymous identity. Server revocation of the previous account session remains pending."
+                    : "Restored the preserved anonymous identity."
+                : AccountMessages.Describe(restored));
+
+            if (restored == StartAnonymousOutcome.RestoredLegacyIdentity)
+            {
+                _signInRequested = false;
+                await ResyncAfterIdentityChangeAsync();
+            }
         }
         finally
         {

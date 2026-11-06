@@ -60,6 +60,10 @@ public enum StartAnonymousOutcome
     AlreadySignedIn,
     /// <summary>Replacing a lost or unreadable identity needs explicit confirmation.</summary>
     ConfirmationRequired,
+    /// <summary>Return-to-anonymous found no preserved credential and did not create one.</summary>
+    NoPreservedIdentity,
+    /// <summary>The preserved credential was unreadable or rejected; it was left untouched and not replaced.</summary>
+    PreservedIdentityUnavailable,
     Unavailable,
     RateLimited,
     Refused,
@@ -645,6 +649,75 @@ public sealed class AccountSessionManager
                 _verifiedUserId = null;
                         Recompute();
                 return StartAnonymousOutcome.Created;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return StartAnonymousOutcome.StorageFailure;
+            }
+        }
+    }
+
+    /// <summary>Restores only the preserved anonymous credential. Unlike StartAnonymousAsync, this method never signs up.</summary>
+    public async Task<StartAnonymousOutcome> RestoreLegacyAnonymousAsync(CancellationToken ct = default)
+    {
+        if (!_allowAnonymousCreation) return StartAnonymousOutcome.FeatureDisabled;
+
+        SessionLease lease;
+        try
+        {
+            lease = await _gate.AcquireAsync(_lockTimeout, ct).ConfigureAwait(false);
+        }
+        catch (SessionLockTimeoutException)
+        {
+            return StartAnonymousOutcome.LockTimeout;
+        }
+
+        using (lease)
+        {
+            HealStorage();
+            var primary = Overlay(SlotRole.Primary, _vault.Primary.Read());
+            if (primary.Status == SlotReadStatus.IoError)
+            {
+                return StartAnonymousOutcome.StorageFailure;
+            }
+
+            if (primary.Status == SlotReadStatus.Ok)
+            {
+                return primary.ProvisionalKind == SessionKind.Registered
+                    ? StartAnonymousOutcome.AlreadySignedIn
+                    : primary.Marker?.Rejected == true
+                        ? StartAnonymousOutcome.PreservedIdentityUnavailable
+                        : StartAnonymousOutcome.AlreadyAnonymous;
+            }
+
+            if (primary.Status == SlotReadStatus.Unreadable)
+            {
+                return StartAnonymousOutcome.PreservedIdentityUnavailable;
+            }
+
+            var legacy = Overlay(SlotRole.LegacyOwner, _vault.LegacyOwner.Read());
+            if (legacy.Status == SlotReadStatus.Missing)
+            {
+                return StartAnonymousOutcome.NoPreservedIdentity;
+            }
+
+            if (legacy.Status != SlotReadStatus.Ok ||
+                legacy.ProvisionalKind != SessionKind.Anonymous ||
+                legacy.Marker?.Rejected == true)
+            {
+                return legacy.Status == SlotReadStatus.IoError
+                    ? StartAnonymousOutcome.StorageFailure
+                    : StartAnonymousOutcome.PreservedIdentityUnavailable;
+            }
+
+            try
+            {
+                _vault.Primary.Write(legacy.Session!, legacy.Marker ?? SlotMarker.For(SessionKind.Anonymous));
+                _vault.LegacyOwner.Delete();
+                _unpersisted.Clear();
+                _verifiedUserId = null;
+                Recompute();
+                return StartAnonymousOutcome.RestoredLegacyIdentity;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

@@ -165,6 +165,50 @@ public sealed class OwnershipRouter
         return decision;
     }
 
+    /// <summary>
+    /// Fresh server-only proof that the currently selected, verified registered account owns an installation.
+    /// Unlike normal routing, this never accepts a remembered owner choice or anonymous fallback; it is used before
+    /// the independent registered-device credential is allowed to upload.
+    /// </summary>
+    public async Task<RouteDecision> ResolveAuthoritativeRegisteredOwnerAsync(string installationId, CancellationToken ct)
+    {
+        var generation = _manager.Generation;
+        var status = _manager.Status;
+        if (!_manager.AccountsEnabled || status.State != SessionState.Registered || !status.PrimaryCredentialPresent)
+        {
+            return Block(status.State == SessionState.ReauthRequired
+                ? InstallationOwnership.ReauthRequired
+                : InstallationOwnership.NoCredential,
+                status.State == SessionState.ReauthRequired ? BlockReason.ReauthRequired : BlockReason.NoCredential,
+                generation);
+        }
+
+        var token = await _manager.GetAccessTokenAsync(SlotRole.Primary, ct).ConfigureAwait(false);
+        if (!token.Ok || token.Kind != SessionKind.Registered || token.Generation != generation || _manager.Generation != generation)
+        {
+            return Block(InstallationOwnership.ReauthRequired, BlockReason.ReauthRequired, generation);
+        }
+
+        var link = await _rpc.LinkStatusAsync(token.AccessToken, installationId, ct).ConfigureAwait(false);
+        if (_manager.Generation != generation)
+        {
+            return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
+        }
+
+        if (!link.Ok)
+        {
+            return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
+        }
+
+        return link.Value switch
+        {
+            LinkState.Owned => new RouteDecision(InstallationOwnership.OwnedByRegisteredAccount, BlockReason.None,
+                SlotRole.Primary, SessionKind.Registered, token.UserId, generation),
+            LinkState.Unknown => Block(InstallationOwnership.OwnerSelectionRequired, BlockReason.OwnerSelectionRequired, generation),
+            _ => Block(InstallationOwnership.Conflict, BlockReason.OwnershipConflict, generation)
+        };
+    }
+
     // Production behaviour (Account System V1 off): exactly the 0.8.x protocol with the anonymous primary
     // credential. No ownership RPC exists there and none is called.
     private async Task<RouteDecision> ResolveLegacyBehaviourAsync(long generation, CancellationToken ct)

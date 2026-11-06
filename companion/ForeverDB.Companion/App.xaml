@@ -14,6 +14,7 @@
         <SolidColorBrush x:Key="AccentHoverBrush" Color="#E3B653" />
         <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E2719" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#53C793" />
+        <SolidColorBrush x:Key="ErrorBrush" Color="#FF7C83" />
         <SolidColorBrush x:Key="SelectionBrush" Color="#31405A" />
 
         <Style TargetType="Window">

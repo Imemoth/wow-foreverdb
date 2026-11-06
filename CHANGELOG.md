@@ -28,6 +28,14 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Unchanged: addon version, export schema, SavedVariables parsing, Search, Guildbook, map rendering, the production anonymous sync protocol.
 - Known limitation: the website step that redeems a link code is PR E; until then a displayed code cannot be redeemed.
 
+### C0a/C0b draft work — 2026-11-06 (PR #176, not a release)
+
+- Added bounded WoW Forever installation discovery, folder selection, validation, explicit path confirmation, and beta-client upload protection.
+- Added explicit account switching and restoration of the preserved anonymous identity.
+- Guarded registered-device manual uploads with fresh current-account ownership and session-generation checks; switching or signing out cancels in-flight work.
+- Companion stays **0.9.0-alpha**. Registered-device AutoSync stays disabled; Guildbook remains local-only; Schema 9 remains unchanged.
+- Real Windows acceptance is pending. C0c staging upload/read-back and C0d registered-device AutoSync remain future work.
+
 ## 0.8.2-alpha — 2026-09-27
 
 - Increased Guildbook roster row/header spacing for ultrawide and high-resolution displays.

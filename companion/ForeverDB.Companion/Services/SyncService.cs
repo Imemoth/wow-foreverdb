@@ -22,9 +22,12 @@ public sealed class SyncService
     private readonly Action<IEnumerable<ForeverDbMap>>? _mapSink;
     private readonly Action<ForeverDbSnapshot>? _afterSynced;
     private readonly DeviceSyncService? _device;
+    private readonly AccountSessionManager? _accountSessions;
     private readonly IAccountGuildbookSync? _guildbook;
     private readonly Dictionary<string, string> _knownFiles =
         new(StringComparer.Ordinal);
+    private readonly object _deviceUploadLock = new();
+    private readonly HashSet<CancellationTokenSource> _activeDeviceUploads = new();
 
     public event Action? Authenticated;
     public event EventHandler<SyncCompletedEventArgs>? SyncCompleted;
@@ -37,9 +40,11 @@ public sealed class SyncService
         Action<IEnumerable<ForeverDbMap>>? mapSink = null,
         Action<ForeverDbSnapshot>? afterSynced = null,
         DeviceSyncService? device = null,
-        IAccountGuildbookSync? guildbook = null)
+        IAccountGuildbookSync? guildbook = null,
+        AccountSessionManager? accountSessions = null)
     {
         _device = device;
+        _accountSessions = accountSessions;
         _guildbook = guildbook;
         _coordinator = coordinator;
         _mapSink = mapSink;
@@ -59,6 +64,21 @@ public sealed class SyncService
             return _knownFiles.TryGetValue(installationId, out var path)
                 ? path
                 : null;
+        }
+    }
+
+    /// <summary>Stops device upload work as soon as the user begins an explicit sign-out/account switch.</summary>
+    public void CancelRegisteredDeviceUploads()
+    {
+        CancellationTokenSource[] active;
+        lock (_deviceUploadLock)
+        {
+            active = _activeDeviceUploads.ToArray();
+        }
+
+        foreach (var scope in active)
+        {
+            try { scope.Cancel(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -212,9 +232,93 @@ public sealed class SyncService
         SyncTrigger trigger,
         CancellationToken cancellationToken)
     {
-        var result = trigger == SyncTrigger.Manual
-            ? await device.SyncNowAsync(json, cancellationToken)
-            : await device.SyncAutomaticAsync(json, cancellationToken);
+        if (trigger != SyncTrigger.Manual)
+        {
+            return SyncAttempt.Blocked(BlockReason.DeviceAutoSyncOff, InstallationOwnership.Unchecked);
+        }
+
+        var sessions = _accountSessions;
+        if (sessions is null)
+        {
+            return SyncAttempt.Blocked(BlockReason.NoCredential, InstallationOwnership.Unchecked);
+        }
+
+        var generation = sessions.Generation;
+        using var identityScope = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_deviceUploadLock)
+        {
+            _activeDeviceUploads.Add(identityScope);
+        }
+        void CancelOnIdentityChange(long _) => identityScope.Cancel();
+        sessions.IdentityChanged += CancelOnIdentityChange;
+
+        DeviceSyncResult result;
+        try
+        {
+            var status = sessions.Status;
+            if (status.State != SessionState.Registered || !status.AccountsEnabled)
+            {
+                return SyncAttempt.Blocked(
+                    status.State == SessionState.ReauthRequired ? BlockReason.ReauthRequired : BlockReason.NoCredential,
+                    InstallationOwnership.Unchecked);
+            }
+
+            var accountToken = await sessions.GetAccessTokenAsync(SlotRole.Primary, identityScope.Token).ConfigureAwait(false);
+            if (sessions.Generation != generation || identityScope.IsCancellationRequested)
+            {
+                return new SyncAttempt(SyncOutcome.StaleDiscarded, BlockReason.None, InstallationOwnership.Unchecked, null, null);
+            }
+
+            if (!accountToken.Ok || accountToken.Kind != SessionKind.Registered || accountToken.Generation != generation)
+            {
+                return SyncAttempt.Blocked(BlockReason.ReauthRequired, InstallationOwnership.Unchecked);
+            }
+
+            status = sessions.Status;
+
+            var ownership = await _coordinator.Router.ResolveAuthoritativeRegisteredOwnerAsync(
+                snapshot.InstallationId,
+                identityScope.Token).ConfigureAwait(false);
+            if (sessions.Generation != generation || identityScope.IsCancellationRequested)
+            {
+                return new SyncAttempt(SyncOutcome.StaleDiscarded, BlockReason.None, ownership.Ownership, null, null);
+            }
+
+            if (!DeviceUploadAuthorization.IsAuthorized(
+                    snapshot.InstallationId,
+                    status,
+                    accountToken,
+                    ownership,
+                    generation))
+            {
+                var reason = ownership.Ownership switch
+                {
+                    InstallationOwnership.OwnedByDifferentAccount => BlockReason.OwnedByDifferentAccount,
+                    InstallationOwnership.Unavailable => BlockReason.OwnershipUnavailable,
+                    InstallationOwnership.ReauthRequired => BlockReason.ReauthRequired,
+                    _ => ownership.Block == BlockReason.None ? BlockReason.OwnerMismatch : ownership.Block
+                };
+                return SyncAttempt.Blocked(reason, ownership.Ownership);
+            }
+
+            result = await device.SyncNowAsync(json, identityScope.Token).ConfigureAwait(false);
+            if (sessions.Generation != generation || identityScope.IsCancellationRequested)
+            {
+                return new SyncAttempt(SyncOutcome.StaleDiscarded, BlockReason.None, ownership.Ownership, null, null);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && identityScope.IsCancellationRequested)
+        {
+            return new SyncAttempt(SyncOutcome.StaleDiscarded, BlockReason.None, InstallationOwnership.Unchecked, null, null);
+        }
+        finally
+        {
+            sessions.IdentityChanged -= CancelOnIdentityChange;
+            lock (_deviceUploadLock)
+            {
+                _activeDeviceUploads.Remove(identityScope);
+            }
+        }
 
         if (result.Outcome == DeviceSyncOutcome.Synced)
         {
