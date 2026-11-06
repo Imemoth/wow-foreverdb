@@ -598,5 +598,20 @@ test("missing dialog ID with mismatched title never attaches old NPC", function(
     falsy(FDB.DB.questJournal[s.player].entries["367"].accept)
 end)
 
+test("opt-in quest trace shows NPC and map provenance without player identity", function()
+    local FDB,s=setup()
+    local oldPrint,output=print,{}
+    print=function(...) local a={};for i=1,select("#",...) do a[#a+1]=tostring(select(i,...)) end
+        output[#output+1]=table.concat(a," ") end
+    local ok,err=pcall(function()
+        FDB:QuestDebug();s:emit("QUEST_DETAIL");s:emit("QUEST_ACCEPTED",367);FDB:QuestDebug()
+    end)
+    print=oldPrint;assert(ok,err)
+    local lines=table.concat(output,"\n")
+    contains(lines,"Creature-0-0-0-0-99-00000001")
+    contains(lines,"Tirisfal Glades")
+    falsy(lines:find(s.player,1,true))
+end)
+
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")
 print(passed .. " quest tracker simulated smoke checks passed; live Forever client gate PENDING")
