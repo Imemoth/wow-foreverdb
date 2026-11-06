@@ -85,3 +85,16 @@ Discord can only deliver interactions to a public HTTPS URL, so the staging Work
 | X6 | Staging mistaken for production, or staging hostname leaking information | Staging messages carry an `[staging]` footer; names are neutral (`workers.dev` hostnames are public certificate records); `/healthz` returns only `{"ok":true}`; no account id, zone id, database id or hostname is committed | `routing-config.test.ts`, `worker-endpoint.test.ts` |
 
 Optional hardening for the owner to decide after staging: a Cloudflare WAF or rate-limiting rule on the interactions hostname. It is not required for correctness, because every unauthenticated request already fails cheaply at the signature check.
+
+## Shared guild: staging and production separation
+
+Both environments live in the owner's existing AzerDex server (guild `1561649407584370809`). Separation does not rely on the server boundary:
+
+| # | Threat | Mitigation | Test |
+| --- | --- | --- | --- |
+| G1 | Staging posts into the production channel (mistyped channel id, copied secret) | Different Discord applications and tokens; the staging bot has a channel overwrite for `#ops-testing` only, so a post to `#ops-alerts` gets 403 and the outbox row ends DEAD (reported on the fallback route); staging messages carry an `[staging]` footer | `outbox.test.ts` (403 is permanent: DEAD, no retry storm); runbook acceptance 11b |
+| G2 | An interaction signed by one environment's application is accepted by the other environment's Worker | Each Worker verifies the Ed25519 public key and the application id of its own application only | `interactions.test.ts` (wrong key, wrong application) |
+| G3 | Commands used in the wrong channel or by unintended staff | Commands hidden by default; allowed only for the operators and only in the environment's channel (Integrations settings); the Worker enforces guild and operator allowlists per environment | `interactions.test.ts` (authorization); `discord-topology.test.ts` |
+| G4 | Ops channels exposed to the community when the server opens to the public | `OPERATIONS` is a private category (`@everyone` denied View Channel); the owner re-checks with "View Server As Role" at opening and verifies Onboarding's default channels (checklist Gate D) | documentation gate; owner check |
+| G5 | Bot invite grants more than needed, or disturbs the community configuration | Invite with `permissions=0`; per-channel overwrite for View Channel, Send Messages and Embed Links only; not a public bot; no privileged intents; no existing channel, role, onboarding or permission is modified | `discord-topology.test.ts` (documentation checks) |
+| G6 | Guild allowlist drift | The guild id is a reviewable plain var in `wrangler.toml` for both environments; a missing allowlist is a startup error | `discord-topology.test.ts`, `config.test.ts` |

@@ -3,6 +3,11 @@
 # created by the owner per docs/ops-bot/staging-runbook.md and docs/ops-bot/production-release-checklist.md.
 # SECRETS are never written to this file: wrangler secret put DISCORD_BOT_TOKEN --env <env>, etc.
 #
+# DISCORD: both environments use the owner's EXISTING AzerDex server (guild id below; a guild id is a public identifier, not a secret, so it is
+#   a plain var and the allowlist is reviewable). Staging and production are separated by everything else: their own Discord application, bot
+#   token, public key, application id, alert channel (#ops-testing vs #ops-alerts), operator ids, Worker, D1 database and heartbeat check.
+#   Those per-environment values are secrets (wrangler secret put ... --env <env>) and are NOT in this file.
+#
 # ROUTING (verified against Cloudflare's Workers documentation, 2026-11-06):
 #   * `workers_dev` defaults to TRUE when a configuration has no `route`/`routes`, and to false otherwise. Every scope below therefore
 #     states `workers_dev` and `preview_urls` explicitly instead of relying on a default.
@@ -30,6 +35,7 @@ crons = ["*/5 * * * *"]
 [env.staging.vars]
 BOT_ENV = "staging"
 HEALTH_PROVIDER = "mock"
+DISCORD_GUILD_IDS = "1561649407584370809"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "azerdex-ops-bot-staging"
@@ -48,6 +54,7 @@ custom_domain = true
 [env.production.vars]
 BOT_ENV = "production"
 HEALTH_PROVIDER = "http"
+DISCORD_GUILD_IDS = "1561649407584370809"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "azerdex-ops-bot"

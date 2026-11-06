@@ -13,6 +13,7 @@ const toml = parseToml(read("ops-bot/wrangler.toml"));
 const env = toml.env as { staging: TomlTable; production: TomlTable };
 const staging = env.staging;
 const production = env.production;
+const GUILD_ID = "1561649407584370809";                               // the owner's existing AzerDex Discord server (confirmed)
 const WORKERS_DEV_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;       // <= 63 chars, alphanumeric and dashes, no leading/trailing dash
 
 describe("wrangler.toml: nothing is exposed by default", () => {
@@ -46,7 +47,7 @@ describe("staging routing: public HTTPS endpoint on workers.dev (Discord must re
     const d1 = (staging.d1_databases as TomlTable[])[0]!;
     expect(d1.database_name).toBe("azerdex-ops-bot-staging");
     expect(d1.database_id).toBe("REPLACE_WITH_STAGING_D1_ID");
-    expect(staging.vars).toEqual({ BOT_ENV: "staging", HEALTH_PROVIDER: "mock" });
+    expect(staging.vars).toEqual({ BOT_ENV: "staging", HEALTH_PROVIDER: "mock", DISCORD_GUILD_IDS: GUILD_ID });
   });
 });
 
@@ -67,7 +68,7 @@ describe("production routing: documented, NOT activated", () => {
   it("has separate worker name, D1 placeholder, and http (never mock) health provider", () => {
     expect(production.name).toBe("azerdex-ops-bot");
     expect((production.d1_databases as TomlTable[])[0]!.database_id).toBe("REPLACE_WITH_PRODUCTION_D1_ID");
-    expect(production.vars).toEqual({ BOT_ENV: "production", HEALTH_PROVIDER: "http" });
+    expect(production.vars).toEqual({ BOT_ENV: "production", HEALTH_PROVIDER: "http", DISCORD_GUILD_IDS: GUILD_ID });
     expect((production.triggers as TomlTable).crons).toEqual(["*/5 * * * *"]);
   });
   it("no real account id, zone id, database id, hostname or secret is committed in either environment", () => {

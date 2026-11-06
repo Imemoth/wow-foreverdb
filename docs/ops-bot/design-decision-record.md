@@ -21,6 +21,7 @@ Build the **AzerDex Operations Bot V1** as a TypeScript Cloudflare Worker (`ops-
 | State | **Cloudflare D1**: incidents, audit, durable outbox, maintenance, replay and rate-limit tables. Separate from every News/publication table. |
 | Supabase | **Read-only**, through a single typed `HealthProvider` interface returning a strictly validated, versioned report. The bot holds no database credential. |
 | Independent monitoring | **External heartbeat** (Healthchecks.io-compatible) plus a **separate fallback notification route**. |
+| Discord topology | The owner's **existing** AzerDex server (guild `1561649407584370809`, private, not yet public). Staging posts to `#ops-testing` through its own Discord application; production to `#ops-alerts` through a separate one. Separate tokens, Workers, D1 databases and heartbeat checks. Channel-level permission overwrites keep each bot out of the other environment's channel. No new server, and no change to existing channels, roles, onboarding or permissions. |
 | Public endpoint | Staging: `workers.dev` (`workers_dev = true`, no route). Production: a Custom Domain on an owner-controlled zone, documented and **not activated**. Preview URLs off everywhere; no Cloudflare Access on the endpoint (Discord cannot authenticate to it; the signature check is the access control). |
 | Scope | **Read and acknowledge only.** No restart, remediation, backfill, deploy or settings command exists. |
 

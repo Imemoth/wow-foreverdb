@@ -1,18 +1,90 @@
 # Staging runbook: AzerDex Operations Bot
 
-Status: **instructions only. Nothing here has been executed.** Creating staging resources, registering a Discord application, posting real Discord messages and deploying a Worker each need the owner's confirmation first. Staging must use its own Discord server and channel, its own Cloudflare resources and its own heartbeat check; never reuse production ones.
+Status: **instructions only. Nothing here has been executed.** Creating channels, registering a Discord application, changing Discord permissions, creating Cloudflare resources, deploying a Worker and posting real Discord messages each need the owner's separate authorization first. Staging and production use **separate Discord applications, bot tokens, permissions, Cloudflare Workers, D1 databases and heartbeat checks**; never reuse one across environments.
 
-## 0. What the owner supplies
+## 0. Discord topology and owner-side setup
+
+### 0.1 The existing AzerDex Discord server is used (owner-confirmed)
+
+The official AzerDex Discord server already exists: **Guild ID `1561649407584370809`**. It has an established community structure, including a private STAFF ONLY category, and has not yet been opened to the public. Do **not** create or require a new Discord server. Staging and production both use this guild, strictly separated by application, token, channel, operators, Worker, D1 and heartbeat:
+
+| | Staging | Production |
+| --- | --- | --- |
+| Discord guild | `1561649407584370809` | `1561649407584370809` (same server) |
+| Alert and command channel | `#ops-testing` | `#ops-alerts` |
+| Discord application | a separate Discord application, for example "AzerDex Ops (staging)" | a separate Discord application, for example "AzerDex Ops" |
+| Bot token, public key, application id | staging application only | production application only |
+| Cloudflare Worker | `azerdex-ops-bot-staging` | `azerdex-ops-bot` |
+| D1 database | `azerdex-ops-bot-staging` | `azerdex-ops-bot` |
+| Heartbeat check and fallback route | staging check | production check |
+| Operator ids (`OPERATOR_USER_IDS` / `OPERATOR_ROLE_IDS`) | set per environment | set per environment |
+| Commands usable in | `#ops-testing` only | `#ops-alerts` only |
+
+Optional `#ops-logs`: V1 posts **nothing** to a logs channel (there is no such feature), so it needs no bot permission and can stay uncreated until a future, separately approved change uses it.
+
+The guild id is a public identifier, so it is a plain var in `wrangler.toml` for both environments (`DISCORD_GUILD_IDS`); it is not entered as a secret.
+
+### 0.2 Proposed channel layout (proposed and not yet confirmed as created)
+
+The channels are proposed and not yet confirmed as created; update this runbook with the real ids once they exist.
+
+```text
+OPERATIONS  (private category; visible only to explicitly authorized staff/operators)
+  #ops-testing   staging bot only
+  #ops-alerts    production bot only
+  #ops-logs      optional, unused by V1
+```
+
+Rules that keep the environments apart even though they share one server:
+
+- `OPERATIONS` is private: `@everyone` is denied **View Channel**; only the authorized operators (a dedicated `ops-operators` role, or named users) are allowed. It is a **new** category: nothing is moved into or out of STAFF ONLY.
+- Each bot is allowed **View Channel, Send Messages and Embed Links** in **its own channel only**, through a channel-level permission overwrite for the bot. The staging bot is allowed in `#ops-testing` only: it cannot see or post in `#ops-alerts`, and the production bot has no access to `#ops-testing`. A mistyped channel id in staging therefore fails safe (Discord answers 403, the outbox row goes DEAD and the fallback route reports it) instead of posting into the production channel.
+- Neither bot gets Administrator, Manage Messages, Manage Channels, Mention Everyone, or any permission at the server level.
+- Each application's `/azerdex` command is allowed only for the operators and only in its own channel (Server Settings > Integrations > the application > `/azerdex`).
+- The Worker independently enforces: the Ed25519 public key of **its own** application, the application id, the guild allowlist and the operator allowlist. A signature from the other environment's application is rejected.
+
+### 0.3 What stays untouched
+
+Do **not** modify existing channels, roles, onboarding configuration, rules screening, Community settings or community permissions. The only additions are (1) the new private `OPERATIONS` category with its channels, and (2) the bots themselves (Discord may add one managed role per bot; it must carry no permissions and sit below every staff role). Because the server is not yet public, nothing here is visible to the community; **when the server opens**, re-check with "View Server As Role" that `@everyone` and every onboarding/member role cannot see `OPERATIONS`, and that no `OPERATIONS` channel was added to Onboarding's default channels.
+
+### 0.4 What the owner supplies
 
 | Item | Notes |
 | --- | --- |
-| Staging Discord server + private channel `#azerdex-ops-staging` | Not the production server. |
-| Discord application (staging) | Bot user, public key, application id. Bot permissions: View Channel, Send Messages, Embed Links. **No** Administrator, no Manage Messages, no Mention Everyone. |
-| Operator user id(s) or role id | Who may use `/azerdex`. |
+| Authorization to create the `OPERATIONS` category and `#ops-testing` in guild `1561649407584370809` | Production's `#ops-alerts` can wait until production activation. |
+| Staging Discord application | Bot user, public key, application id. Not public, no privileged intents, no Gateway use. |
+| Operator user id(s) or role id | Who may use `/azerdex` in staging. |
 | Cloudflare account + `wrangler` login | Plan limits for Workers, Cron Triggers and D1 to be confirmed. Install `wrangler` per Cloudflare's documentation; it is deliberately not a repository dependency. |
 | Cloudflare `workers.dev` account subdomain | Registered under Workers & Pages (shown as "Your subdomain"; Wrangler offers to register it on the first deploy). **Staging uses `workers.dev` and needs no custom domain or DNS change.** |
 | Healthchecks.io-compatible check (staging) | Period 5 minutes, grace 10 minutes. Its alert integrations (for example email or SMS) must be **independent of Discord**. |
 | Fallback route (optional in staging) | An https endpoint accepting JSON `{ "text": "..." }`. |
+
+### 0.5 Owner-side setup for the first staging test
+
+Everything below is performed by the owner (or by an agent only after the owner separately authorizes that exact step). None of it has been done.
+
+**A. Discord, in guild `1561649407584370809` (enable Developer Mode to copy ids)**
+
+1. Decide the operators: a dedicated `ops-operators` role (a new role is an addition) or named user ids. Copy the operator user ids (and the role id if used).
+2. Create the private `OPERATIONS` category: deny `@everyone` View Channel; allow the operators. Create `#ops-testing` inside it (leave `#ops-alerts` and `#ops-logs` for later). Copy the `#ops-testing` channel id.
+3. In the Discord **Developer Portal** create a new application for staging (not the production one). Under **Bot**: create the bot, turn **Public Bot** off, leave all privileged intents off, copy the token (never paste it into chat, files or GitHub). Under **General Information** copy the **Application ID** and **Public Key**.
+4. Invite the staging bot to the guild only, with **no** permissions: `https://discord.com/oauth2/authorize?client_id=<STAGING_APPLICATION_ID>&scope=bot%20applications.commands&permissions=0&guild_id=1561649407584370809&disable_guild_select=true`.
+5. In `#ops-testing` add a permission overwrite for the staging bot: **View Channel, Send Messages, Embed Links** (nothing else). Confirm the staging bot has no access to any other channel. Make sure its managed role (if one appeared) has no permissions and sits below the staff roles.
+
+**B. Cloudflare and heartbeat**
+
+6. Log in with `wrangler`; make sure the account has a `workers.dev` subdomain.
+7. Create the staging D1 database, put its `database_id` into `[[env.staging.d1_databases]]` via a reviewed change (do not commit anything else from your account), and apply the migration (section 1).
+8. Create the staging heartbeat check (period 5 min, grace 10 min) with alert routes that do not use Discord; optionally a fallback route.
+9. Set the staging secrets with `wrangler secret put ... --env staging` (section 2): `DISCORD_BOT_TOKEN`, `DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID`, `DISCORD_ALERT_CHANNEL_ID` (= the `#ops-testing` id), `OPERATOR_USER_IDS` (and/or `OPERATOR_ROLE_IDS`), `HEARTBEAT_PING_URL`, optionally `FALLBACK_WEBHOOK_URL`. `DISCORD_GUILD_IDS` is already in `wrangler.toml`.
+
+**C. Connect and test**
+
+10. Register the staging commands for the guild (section 3), then in Server Settings > Integrations > the staging application > `/azerdex`: allow only the operators and only `#ops-testing`.
+11. Deploy `wrangler deploy --env staging`, run the four `curl` checks, and set the **Interactions Endpoint URL** (section 4). Discord's signed PING must validate it.
+12. Run the scenarios in section 5, in `#ops-testing` only.
+
+Each of steps 2 to 5, 7 to 9, 10, 11 and 12 requires the owner's separate authorization before it is carried out.
 
 ## 1. Create resources (staging only)
 
@@ -29,20 +101,20 @@ Verify the schema: `npx wrangler d1 execute azerdex-ops-bot-staging --env stagin
 Enter each at the prompt:
 
 ```bash
-for s in DISCORD_BOT_TOKEN DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_ALERT_CHANNEL_ID DISCORD_GUILD_IDS OPERATOR_USER_IDS HEARTBEAT_PING_URL FALLBACK_WEBHOOK_URL; do
+for s in DISCORD_BOT_TOKEN DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_ALERT_CHANNEL_ID OPERATOR_USER_IDS HEARTBEAT_PING_URL FALLBACK_WEBHOOK_URL; do
   npx wrangler secret put "$s" --env staging
 done
 ```
 
-(`OPERATOR_ROLE_IDS` optionally.) Staging uses `HEALTH_PROVIDER=mock` from `wrangler.toml`; no Supabase credential exists in staging.
+(`OPERATOR_ROLE_IDS` optionally.) All of these come from the **staging** Discord application and `#ops-testing`; none may be a production value. `DISCORD_GUILD_IDS` is a plain var in `wrangler.toml` (the existing guild `1561649407584370809`); do not also set it as a secret. Staging uses `HEALTH_PROVIDER=mock` from `wrangler.toml`; no Supabase credential exists in staging.
 
 ## 3. Register commands (guild-scoped, staging)
 
 ```bash
-DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=... DISCORD_GUILD_ID=... npx tsx scripts/register-commands.ts --apply --staging
+DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=<staging application id> DISCORD_GUILD_ID=1561649407584370809 npx tsx scripts/register-commands.ts --apply --staging
 ```
 
-(set the three values from your protected shell, never on a shared command line). In the staging server: Server Settings > Integrations > the bot > `/azerdex`: allow it **only** for the operator role. The Worker enforces authorization independently.
+(set the token from your protected shell, never on a shared command line; the guild id is public). In the server: Server Settings > Integrations > the **staging** application > `/azerdex`: allow it **only** for the operators and only in `#ops-testing`. The Worker enforces authorization independently.
 
 ## 4. Deploy, expose and connect
 
@@ -104,9 +176,10 @@ Scenarios: `healthy`, `source_critical`, `g6_stalled`, `g6_missing`, `g6_inactiv
 | 6 | Set `healthy` | After two cycles: one RECOVERED message referencing the incident |
 | 7 | `g6_stalled`, `g6_missing`, `g6_inactive` | One incident each; recovery on `healthy` |
 | 8 | `reporting_down` for 20 minutes | After 3 polls: a `supabase:reporting` incident delivered; heartbeat shows a `log` entry, not a `/fail` |
-| 9 | Revoke the bot's Send Messages permission for one cycle, then restore it | Outbox retries; a permanent 403 becomes DEAD, the fallback route announces it once, the heartbeat shows `/fail` |
+| 9 | In `#ops-testing` only, revoke the staging bot's Send Messages permission for one cycle, then restore it | Outbox retries; a permanent 403 becomes DEAD, the fallback route announces it once, the heartbeat shows `/fail` |
 | 10 | Remove the cron trigger for 15 minutes (or `wrangler deployments`-pause equivalent) and restore | The heartbeat service alerts on missed pings; after restore the bot opens and later resolves `bot:schedule` |
 | 11 | `/azerdex maintenance start` on the component, trigger `source_critical` | No alert while muted; alert after `end` while still critical |
+| 11b | Environment separation | The staging bot can neither see nor post in `#ops-alerts` or `#ops-logs` (check once `#ops-alerts` exists; a post attempt returns 403 and ends DEAD); the staging application's `/azerdex` is not offered in any other channel; the staging Worker rejects an interaction signed by another application |
 | 11a | Routing and exposure | The four `curl` checks in section 4 return 200 / 401 / 405 / 404; `wrangler deployments list --env staging` shows no preview or version URL in use; no Cloudflare Access application protects the hostname |
 | 12 | Real-runtime checks | Ed25519 verification on the Workers runtime, D1 `changes()` and `RETURNING` behaviour, nonce de-duplication, 429 handling, Discord's 3-second deadline, command permission UI |
 | 13 | Log review | `wrangler tail` output contains no token, URL or clear operator id |
