@@ -82,6 +82,7 @@ local function captureGiver()
     end
     return {
         sourceType = kind,
+        sourceGuid = guid,
         sourceId = safeId(id),
         name = name,
         location = type(location) == "table" and location or nil,
@@ -234,7 +235,8 @@ end
 
 local function traceQuest(event, id, giver, title, outcome)
     if not questDebug then return end
-    questTrace[#questTrace+1] = {event=event, id=id, sourceType=giver and giver.sourceType,
+    questTrace[#questTrace+1] = {event=event, id=id, sourceGuid=giver and giver.sourceGuid,
+        sourceType=giver and giver.sourceType,
         sourceId=giver and giver.sourceId, name=giver and giver.name,
         mapId=giver and giver.location and giver.location.mapId,
         x=giver and giver.location and giver.location.x,
@@ -242,15 +244,19 @@ local function traceQuest(event, id, giver, title, outcome)
         title=title, outcome=outcome}
     if #questTrace > 16 then table.remove(questTrace,1) end
     print("ForeverDB: quest trace",event,"id="..tostring(id or "?"),
+        "guid="..tostring(giver and giver.sourceGuid or "?"),
         "source="..tostring(giver and giver.sourceId or "?"),
-        "map="..tostring(giver and giver.location and giver.location.mapId or "?"),outcome or "")
+        "zone="..tostring(giver and giver.location and giver.location.zoneName or "?"),
+        "map="..tostring(giver and giver.location and giver.location.mapId or "?"),
+        "x="..tostring(giver and giver.location and giver.location.x or "?"),
+        "y="..tostring(giver and giver.location and giver.location.y or "?"),outcome or "")
 end
 
 function FDB:QuestDebug()
     questDebug = not questDebug
     print("ForeverDB: quest debug", questDebug and "ON" or "OFF")
     for _, row in ipairs(questTrace) do
-        print("ForeverDB: quest trace",row.event,row.id or "?",row.sourceType or "?",
+        print("ForeverDB: quest trace",row.event,row.id or "?",row.sourceGuid or "?",row.sourceType or "?",
             row.sourceId or "?",row.name or "?",row.title or "?",row.mapId or "?",
             row.x or "?",row.y or "?",row.outcome or "?")
     end

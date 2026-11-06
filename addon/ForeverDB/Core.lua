@@ -128,7 +128,7 @@ local function registerSlashCommands()
             local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
             FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status|debug], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
