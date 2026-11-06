@@ -9,9 +9,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  collector-smoke:
+  collector_lua:
+    name: collector-smoke (Lua ${{ matrix.lua }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         lua: ["5.1", "5.4"]
 
@@ -55,3 +57,22 @@ jobs:
           luac${{ matrix.lua }} -p tests/quest_api_smoke.lua
           luac${{ matrix.lua }} -p tests/quest_tracker_smoke.lua
           luac${{ matrix.lua }} -p tests/quest_kill_smoke.lua
+
+  # This exact context is required by the protected release ruleset.
+  # A green check is possible only if BOTH Lua matrix jobs succeeded.
+  collector-smoke:
+    name: collector-smoke
+    needs: [collector_lua]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful Lua 5.1 and 5.4 matrix
+        env:
+          COLLECTOR_MATRIX_RESULT: ${{ needs.collector_lua.result }}
+        shell: bash
+        run: |
+          if [[ "$COLLECTOR_MATRIX_RESULT" != "success" ]]; then
+            echo "::error::Collector Lua matrix did not fully pass: $COLLECTOR_MATRIX_RESULT"
+            exit 1
+          fi
+          echo "Collector Lua 5.1 and 5.4 checks passed."
