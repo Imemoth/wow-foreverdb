@@ -52,6 +52,7 @@ export function ephemeral(content: string, extra: object = {}) {
   return { type: 4, data: { content: sanitizeText(content, 1900).replace(/​/g, ""), flags: EPHEMERAL, allowed_mentions: NO_MENTIONS, ...extra } };
 }
 export function ephemeralLines(lines: string[], extra: object = {}) {
-  const body = lines.map((l) => l.replace(/\s+$/g, "")).join("\n").slice(0, 1900);
+  // trimEnd is linear. A trailing-whitespace regex is quadratic on a long whitespace run followed by text (CodeQL js/polynomial-redos).
+  const body = lines.map((l) => l.trimEnd()).join("\n").slice(0, 1900);
   return { type: 4, data: { content: body, flags: EPHEMERAL, allowed_mentions: NO_MENTIONS, ...extra } };
 }

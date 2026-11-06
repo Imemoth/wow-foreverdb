@@ -9,6 +9,7 @@ import worker from "../src/index";
 import { button, command, harness, str } from "./helpers/harness";
 import { IDS, newId } from "./helpers/security-helpers";
 import { newDb } from "./helpers/d1";
+import { findDiscordWebhookUrls } from "./helpers/secret-scan";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
@@ -97,7 +98,7 @@ describe("static guarantees: the bot cannot reach or change anything outside its
     const files = [...walk(join(ROOT, "src")), ...walk(join(ROOT, "migrations")), join(ROOT, "wrangler.toml"), join(ROOT, "package.json")];
     for (const p of files) {
       const s = readFileSync(p, "utf8");
-      expect(s, p).not.toMatch(/https:\/\/discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]{20,}/);
+      expect(findDiscordWebhookUrls(s), p).toEqual([]); // parsed URLs, exact hostname match (see test/helpers/secret-scan.ts)
       expect(s, p).not.toMatch(/\b[MNO][A-Za-z\d_-]{23,25}\.[\w-]{6}\.[\w-]{27,}\b/); // Discord bot token shape
       expect(s, p).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
     }

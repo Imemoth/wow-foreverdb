@@ -9,9 +9,10 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **189 passed, 0 failed** in 10 files |
+| `npm test` | **207 passed, 0 failed** in 11 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
-| Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored, 189 pass |
+| Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
+| Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
 
 | File | Tests | Covers |
 | --- | --- | --- |
@@ -25,6 +26,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `config.test.ts` | 16 | secret absence, invalid values, production guards, safe errors |
 | `scenarios.test.ts` | 8 | staging synthetic scenarios |
 | `security.test.ts` | 19 | log and payload secret hygiene, static guarantees, worker entry, rollback |
+| `regex-safety.test.ts` | 18 | CodeQL findings: linear-time text helpers under adversarial input, parsed-URL credential detector |
 
 ## 2. Required test matrix
 
@@ -65,3 +67,13 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 ## 4. Staging validation
 
 *Not performed.* To be recorded here after the owner provides resources and confirms (see [staging-runbook.md](staging-runbook.md) §5).
+
+## 5. Security gate (CodeQL code scanning) on PR #174
+
+| Step | Result |
+| --- | --- |
+| Original head `7c2b4bd` | `Ops bot (typecheck, tests, audit)` passed; workflow job `codeql` passed; **GitHub's `CodeQL` code-scanning check failed with 2 new high alerts** |
+| Findings | `messages.ts:55` polynomial regular expression (real, latent, not exploitable today); `security.test.ts:100` missing regular-expression anchor (test-only detector, genuinely weak, not a false positive) |
+| Resolution | Linear `trimEnd()`; parsed-URL detector. No suppression, exclusion, dismissal or severity change. Details: [threat-model.md](threat-model.md) "Code-scanning findings and resolutions" |
+| Local verification | `npm run typecheck` pass; `npm test` 207 passed; the 4 regression tests that failed before the fix pass after it |
+| Re-scan on the updated head | Recorded in the PR #174 security-gate report (commit SHA and the complete check matrix); see the PR conversation |
