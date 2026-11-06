@@ -335,29 +335,17 @@ end
 
 --- Frame construction ------------------------------------------------------
 
--- "BackdropTemplate" is only a registered virtual XML template on clients
--- that ship the BackdropTemplateMixin (Legion 7.1+). Passing that literal
--- string to CreateFrame on a client without it errors inside CreateFrame
--- itself, before any code can inspect the returned frame -- so the guard
--- has to happen here, not inside applyBackdrop().
-local function backdropTemplateName()
-    if BackdropTemplateMixin then return "BackdropTemplate" end
-    return nil
-end
-
-local function applyBackdrop(frame)
-    -- Blizzard's BackdropTemplateMixin:SetBackdropBorderColor reads its
-    -- BottomRightCorner field in protected UI code on Forever. Keep these
-    -- three movable panels on plain Frame/Texture APIs; the KPI card helper
-    -- below has a separate backdrop path.
+local function paintPanel(frame, fillColor, edgeColor)
+    -- BackdropTemplateMixin:SetBackdropBorderColor reads BottomRightCorner in
+    -- Blizzard protected code on Forever. Plain textures avoid that path.
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
-    background:SetColorTexture(0.03, 0.03, 0.03, 0.9)
+    background:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
     frame.fallbackBackground = background
     local borders = {}
     for index, edge in ipairs({"TOP", "BOTTOM", "LEFT", "RIGHT"}) do
         local line = frame:CreateTexture(nil, "BORDER")
-        line:SetColorTexture(0.55, 0.45, 0.18, 1)
+        line:SetColorTexture(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4])
         if edge == "TOP" or edge == "BOTTOM" then
             line:SetHeight(1)
             line:SetPoint(edge .. "LEFT", frame, edge .. "LEFT", 0, 0)
@@ -372,38 +360,12 @@ local function applyBackdrop(frame)
     frame.fallbackBorders = borders
 end
 
--- A small flat-color card fill + thin restrained border, used for the KPI
--- band's six cards. "Interface\Buttons\WHITE8x8" is a plain recolorable
--- white texture bundled with the client (safe on any build), used purely
--- as a tintable rectangle for both the fill and the 1px edge.
-local CARD_BACKDROP = {
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Buttons\\WHITE8x8",
-    edgeSize = 1,
-    insets = { left = 0, right = 0, top = 0, bottom = 0 },
-}
+local function applyBackdrop(frame)
+    paintPanel(frame, {0.03, 0.03, 0.03, 0.9}, {0.55, 0.45, 0.18, 1})
+end
 
 local function applyCardBackdrop(frame, fillColor, edgeColor)
-    if frame.SetBackdrop then
-        frame:SetBackdrop(CARD_BACKDROP)
-        if frame.SetBackdropColor then
-            frame:SetBackdropColor(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
-        end
-        if frame.SetBackdropBorderColor then
-            frame:SetBackdropBorderColor(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4])
-        end
-        return
-    end
-
-    -- Guarded fallback for a client without backdrop mixin support: fill
-    -- only, no border -- consistent with applyBackdrop()'s HUD/window
-    -- fallback.
-    local background = frame:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints(frame)
-    if background.SetColorTexture then
-        background:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
-    end
-    frame.fallbackBackground = background
+    paintPanel(frame, fillColor, edgeColor)
 end
 
 -- Prevents a FontString from wrapping to a second line: KPI cards and
@@ -722,7 +684,7 @@ end
 -- label/value are single-line (setSingleLine) so long text clips inside
 -- the card rather than wrapping and resizing the visual grid.
 local function createKPICard(parent, x, y, width, height, labelText)
-    local card = CreateFrame("Frame", nil, parent, backdropTemplateName())
+    local card = CreateFrame("Frame", nil, parent)
     card:SetSize(width, height)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     applyCardBackdrop(card, KPI_CARD_FILL_COLOR, KPI_CARD_EDGE_COLOR)
