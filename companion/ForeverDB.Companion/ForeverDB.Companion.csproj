@@ -11,6 +11,7 @@
     <RootNamespace>ForeverDB.Companion</RootNamespace>
     <Version>0.9.11-alpha</Version>
     <BuildCommit Condition="'$(BuildCommit)' == ''">local</BuildCommit>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <InformationalVersion>$(Version)+$(BuildCommit)</InformationalVersion>
   </PropertyGroup>
 
