@@ -26,7 +26,7 @@ def check(condition: bool, message: str) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# 1. Version consistency (Companion/Installer/UI/docs move together; addon and schema are NOT touched here)
+# 1. Version consistency (Companion/Installer/UI/docs move together; addon mirrors must agree)
 # ---------------------------------------------------------------------------------------------
 csproj = read("companion/ForeverDB.Companion/ForeverDB.Companion.csproj")
 match = re.search(r"<Version>([^<]+)</Version>", csproj)
@@ -55,13 +55,18 @@ check(f"| Companion | **{version}** |" in read("README.md"), "README.md Companio
 check(f"ForeverDB Companion **{version}**" in read("companion/README.md"), "companion/README.md version mismatch")
 check(f"- Version: **{version}**" in read("docs/ROADMAP.md"), "docs/ROADMAP.md Companion version mismatch")
 
-# The addon version and the export schema must not move in this change.
+# The addon may release independently, but every mirrored addon version must
+# remain consistent. Export schema 9 remains an explicit Companion compatibility gate.
 core = read("addon/ForeverDB/Core.lua")
 toc = read("addon/ForeverDB/ForeverDB.toc")
 core_version = re.search(r'FDB\.VERSION\s*=\s*"([^"]+)"', core)
 toc_version = re.search(r"##\s*Version:\s*(\S+)", toc)
 check(core_version is not None and toc_version is not None and core_version.group(1) == toc_version.group(1), "addon Core.lua / TOC versions differ")
-check("| Addon | **0.5.0-alpha** |" in versioning, "addon version in VERSIONING.md changed unexpectedly")
+addon_version = core_version.group(1) if core_version else "?"
+check(f"| Addon | **{addon_version}** |" in versioning, "addon version in VERSIONING.md differs from Core.lua")
+check(f"| Addon | **{addon_version}** |" in read("README.md"), "README.md addon version differs from Core.lua")
+check(f"- Addon: **{addon_version}**" in read("CHANGELOG.md"), "CHANGELOG.md current addon version differs from Core.lua")
+check(re.search(rf"## {re.escape(addon_version)} — ", read("CHANGELOG.md")) is not None, "CHANGELOG.md has no current addon release entry")
 check("| Export schema | **9** |" in versioning, "export schema in VERSIONING.md changed unexpectedly")
 
 # ---------------------------------------------------------------------------------------------
