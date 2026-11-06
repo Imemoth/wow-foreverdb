@@ -1,8 +1,8 @@
 # News Collector V2 — G4 / G5 / G6 execution log (2026-11-05)
 
-Status (final, 20:45 UTC): **G4 COMPLETE (accepted). G5 SKIPPED – ACCEPTED HISTORICAL GAP (owner decision, §9). G6 COMPLETE (§7).** Nothing in production was changed except the single owner-approved G6 cron job.
+Status (final, 2026-11-05 ~21:00 UTC): **G2 COMPLETE (§0). G4 COMPLETE (accepted). G5 SKIPPED – ACCEPTED HISTORICAL GAP (owner decision, §9). G6 COMPLETE (§7).** This session changed production in exactly one way: the owner-approved G6 cron job (§7).
 This log supersedes the stale parts of `release-readiness-2026-11-05.md` (written before G2 and before promotion).
-No production write was made while producing it: every database call below was a read-only `SELECT`; every web call was a `GET`.
+Apart from that one approved `cron.schedule` (§7), every database call recorded here was a read-only `SELECT` and every web call a `GET`. G2 (§0) was applied by the owner, not by this session.
 
 ## 0. Baseline reconciliation (all times UTC, 2026-11-05)
 
@@ -15,6 +15,8 @@ No production write was made while producing it: every database call below was a
 | Backup | none | owner's four-schema dump (see §4); off-machine copy **not confirmed** |
 
 G2 re-verification (19:06–19:26): `private.azerdex_news_health()` md5 `f3c71a141583f45599aed3f03df7aaea`, `private.azerdex_news_assert_healthy()` md5 `c4715b2248888dba17026dff94f77e3d`, both `SECURITY DEFINER`, owner `postgres`, ACL `{postgres=X/postgres}`, `search_path=pg_catalog`. The 33-function fingerprint is `d46109d57106b5ec58bccad81ec8bd0d` (unchanged). Health at 19:06: `overall: ok`, three sources `healthy_no_new_content`, 0 consecutive failures, 0 overdue topics. `select private.azerdex_news_assert_healthy()` at 19:25:36 returned without raising.
+
+G2 source `database/ops/0018_news_health_monitoring.sql` (sha256 `b94f04e04578564e21d4afab9ff4d99aec76342f501a24de327766743cffc79f`); G2 writes no data and only adds the two functions. **G2 rollback** (not needed): `drop function private.azerdex_news_assert_healthy(); drop function private.azerdex_news_health();` (drop the assert function first; it calls the health function). Backup recorded for G2: the owner's verified **four-schema logical dump** with a successful scratch restore (§4). It is not a complete Supabase disaster-recovery backup, and an encrypted off-machine copy remains unverified.
 
 ## 1. G4 — production acceptance audit: **COMPLETE** (19:08–19:30)
 
@@ -72,7 +74,7 @@ So production advanced since the rehearsal: ordinary revision runs already colle
 
 Side observation (outside G5, not caused by G5): EU #7/#8 (26–27 Oct) are live, ingested 2026-11-04 12:00 by a V2 revision run. The "do not resurrect 26–27 Oct replies" rule therefore concerns the backfill window only; the backfill itself never admits replies outside the window (`collector.ts`, `admitTopicDoc` windowed filter).
 
-## 3. G5-B — production dry-run: **not executed by this session**
+## 3. G5-B — production dry-run: **run by the operator, not by this session** (result in §9)
 
 Reason: the dry-run needs `x-azerdex-news-secret`. The sandbox has no such secret and reading it from Vault or calling `net.http_post` ad hoc would bypass the protected operator procedure. The operator runs it (nothing is written; response contains counts, per-entry actions, no secrets):
 
@@ -190,20 +192,18 @@ Provenance of the evidence, stated precisely:
 
 - **Operator dry-run output received after the decision above** (pasted into the session at ~20:45 UTC; `dryRun:true`, window 2026-10-30T00:00:00Z .. 2026-11-03T23:59:59.999Z, no credential in the response). This session never invoked the Edge Function itself and held no collector secret. The output **confirms** the earlier read-only comparison (2026-11-05 19:30 UTC) of the live Blizzard topic JSON against `pub.news_entries`; the prediction and the dry-run agree exactly.
 - Comparison result: US had opener `post:30185131` and `post:30756539` (#10); `post:30732723` (#9, in window) absent; #7/#8 (26–27 Oct) absent and outside the window. EU was complete (opener `post:6391795`, #7–#10 incl. `post:6471288`).
-Dry-run per-entry report (both sources `status: succeeded`, `dryRun: true`, `topicChecks: 3`):
+- Consequence on the site: the US card keeps its 4 Nov official-update timestamp; the thread simply lacks one earlier update entry.
+
+Operator dry-run per-entry report (both sources `status: succeeded`, `dryRun: true`, `topicChecks: 3`):
 
 | Source | fetched / accepted / rejected | inserted / updated / skipped | Per-entry actions | Reject reasons |
 | --- | --- | --- | --- | --- |
 | `blizzard-bluepost-us` | 40 / 4 / 36 | 1 / 0 / 3 | `unchanged` `post:30743268` (#1), `unchanged` `post:30741364` (#1), **`insert` `post:30732723` (#9, published)**, `unchanged` `post:30185131` (#1 opener) | `topic_group_not_allowlisted` 34, `irrelevant` 2 |
 | `blizzard-bluepost-eu` | 13 / 4 / 9 | 0 / 0 / 4 | `unchanged` `post:6472787`, `unchanged` `post:6472597`, `unchanged` `post:6471288` (#9), `unchanged` `post:6391795` (opener) | `topic_group_not_allowlisted` 7, `irrelevant` 2 |
 
-Totals: **1 insert, 0 updates, 7 unchanged**. No `update`, no `skip_suppressed`, no `skip_unverified_reply`, no `skip_feed_over_topic` actions appear. Matches the stated expectation for G5-C ("more than one insert or any update means stop") — it did not trip. Differences from the historical rehearsal (US 2 inserts, EU 1 insert + 1 update) are explained by production having advanced through ordinary revision runs. Read: all other in-window threads (`post:30743268`, `post:30741364`, `post:6472787`, `post:6472597`) are already collected and unchanged; the Midnight replies stay rejected as `irrelevant`.
+Totals: **1 insert, 0 updates, 7 unchanged** (US 3 unchanged, EU 4 unchanged: the Dev Notes openers and EU #9 plus four other in-window threads already collected). No `update`, `skip_suppressed`, `skip_unverified_reply` or `skip_feed_over_topic` action appears, so the G5-C stop condition ("more than one insert or any update") did not trip. The difference from the historical rehearsal (US 2 inserts, EU 1 insert + 1 update) is explained by production having advanced through ordinary revision runs. The Midnight replies stay rejected as `irrelevant`.
 
-Zero-write proof (read-only, 2026-11-05 20:45:41 UTC, after the dry-run) against the §2 baseline: `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story members 0; `max(modified_at)` 2026-11-05 15:42:52 unchanged; `post:30732723` rows 0; `news_sync_runs` rows with `mode = 'backfill'`: 0. The preview caused no write of any kind.
-
-- Consequence on the site: the US card keeps its 4 Nov official-update timestamp; the thread simply lacks one earlier update entry.
-
-Counter reconciliation (read-only, 2026-11-05 20:43:59 UTC) against the §2 baseline (19:26:18): `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story overrides 4, members 0 = unchanged; `post:30732723` rows 0. No News data changed during G4–G6 audit work, including by the normal cron runs in that interval. Cron: 5 active jobs (3–6 plus job 7), job 7 has 2 succeeded runs, 0 failed runs in 3 h.
+Zero-write proof (read-only, 2026-11-05 20:45:41 UTC, after the dry-run) against the §2 baseline (19:26:18): `news_entries` 770 = 770; suppressed 343 = 343; max entry id 96909 = 96909; `news_post_versions` 1006 = 1006 (max id 4769 = 4769); tracked topics 61 = 61; verified staff 7 = 7; story members 0; `max(modified_at)` 2026-11-05 15:42:52 unchanged; `post:30732723` rows 0; `news_sync_runs` rows with `mode = 'backfill'`: 0. The preview caused no write of any kind. An earlier read-only check (20:43:59 UTC) showed the same counters and, additionally, 5 active cron jobs (3–7), job 7 with 2 succeeded runs and 0 failed runs in 3 h.
 
 ## 10. Final audit summary
 
@@ -213,5 +213,4 @@ Counter reconciliation (read-only, 2026-11-05 20:43:59 UTC) against the §2 base
 | G5 | **Skipped – accepted historical gap** | §2, §9 | none | none; re-open only by a new owner decision plus verified off-machine backup evidence |
 | G6 | **Complete** | §7 | none | operators watch failed `azerdex-news-health` runs (§5 query); external alerting is out of scope |
 
-Known limitations carried forward: the owner's four-schema dump is not a full Supabase disaster-recovery backup (free plan; off-machine copy unconfirmed); `cron.job_run_details` is an operational signal, not a notification channel; `/news?page=500+` shows the "feed unavailable" panel by design (`p_offset <= 5000`). Not touched: story grouping (4 overrides, 0 members, no `news_link_stories`), G7, the Guildbook boundary, the website deployment, unrelated services. PR #167 remains Draft and unmerged pending normal review.
-
+Known limitations carried forward: the owner's four-schema dump is not a full Supabase disaster-recovery backup (free plan; off-machine copy unconfirmed); `cron.job_run_details` is an operational signal, not a notification channel; `/news?page=500+` shows the "feed unavailable" panel by design (`p_offset <= 5000`). Not touched: story grouping (4 overrides, 0 members, no `news_link_stories`), G7, the Guildbook boundary, the website deployment, unrelated services. This log and the historical readiness assessment are documentation only (PR #167); merging them changes no code, migration, schedule or deployed behaviour.
