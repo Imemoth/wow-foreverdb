@@ -9,6 +9,8 @@ UnitGUID=function(unit) if unit=="player" then return player elseif unit=="targe
 UnitName=function(unit) if unit=="target" then return "Mindless Zombie" end end
 GetServerTime=function() return 1000 end
 GetTime=function() return 10 end
+UnitIsDead=function() return false end
+CombatLogGetCurrentEventInfo=function() return nil end
 GetLocale=function() return "enUS" end
 GetBuildInfo=function() return "1.60.1" end
 C_QuestLog={GetQuestObjectives=function() return {{text=objective,type="monster",numFulfilled=tonumber(objective:match("(%d+)/")),numRequired=8}} end}
@@ -31,9 +33,15 @@ assert(q.mobObservations["1:1501"].location.mapId==85)
 emit("PLAYER_TARGET_CHANGED")
 assert(q.mobObservations["1:1501"].tooltipMatches==1)
 objective="Mindless Zombie slain: 1/8"
-emit("QUEST_LOG_UPDATE")
+emit("QUEST_LOG_UPDATE"); emit("QUEST_LOG_UPDATE")
 assert(q.progressChanges and q.progressChanges[1]==1)
+q.objectives[1].numFulfilled=0 -- delayed objective refresh/reload baseline
+emit("QUEST_LOG_UPDATE")
+assert(q.progressChanges[1]==1)
 assert(q.mobObservations["1:1501"].observedDeaths==0)
+UnitIsDead=function(unit) return unit=="target" end
+emit("UNIT_HEALTH","target"); emit("UNIT_HEALTH","target")
+assert(q.mobObservations["1:1501"].observedDeaths==1)
 CombatLogGetCurrentEventInfo=function() return 1,"UNIT_DIED",nil,nil,nil,nil,nil,"Creature-0-0-0-0-1501" end
 emit("COMBAT_LOG_EVENT_UNFILTERED"); emit("COMBAT_LOG_EVENT_UNFILTERED")
 assert(q.mobObservations["1:1501"].observedDeaths==1)
@@ -52,3 +60,16 @@ q.status="removed"; title="The Mindless Ones"; target="Creature-0-0-0-0-999"
 emit("PLAYER_TARGET_CHANGED")
 assert(not q.mobObservations["1:999"])
 print("PASS: distinct tooltip mobs, dedupe, progress, no loot dependency, removed quest exclusion")
+
+-- Optional death APIs may be missing on a client build; core observations
+-- and progress events must still register without invoking protected pcall.
+CombatLogGetCurrentEventInfo=nil; UnitIsDead=nil
+local optional={DB={questJournal={}}}
+assert(loadfile("addon/ForeverDB/QuestKillTracker.lua"))("ForeverDB",optional)
+optional:InitializeQuestKillTracker()
+local optionalFrame=frames[#frames]
+assert(optionalFrame.events.PLAYER_TARGET_CHANGED)
+assert(optionalFrame.events.QUEST_LOG_UPDATE)
+assert(not optionalFrame.events.COMBAT_LOG_EVENT_UNFILTERED)
+assert(not optionalFrame.events.UNIT_HEALTH)
+print("PASS: unavailable death APIs keep safe core subscriptions")

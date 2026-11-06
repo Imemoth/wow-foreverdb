@@ -293,7 +293,7 @@ function FDB:QuestDetail()
     if not id and not title then return end
     pendingOffer = {
         id = id,
-        ambiguous = previousOffer ~= nil,
+        ambiguous = previousOffer ~= nil and previousOffer.finishedAt == nil,
         at = elapsed(),
         character = characterGuid(),
         title = title,
@@ -323,6 +323,9 @@ function FDB:QuestAccepted(arg1, arg2)
         -- Reset observation fields for a new lifecycle (including repeatables).
         record.accept = nil
         record.objectives = nil
+        record.mobObservations = nil
+        record.progressChanges = nil
+        record.progressObserved = nil
         record.requiredItemIds = nil
         record.description = nil
         record.objectiveText = nil
@@ -336,12 +339,21 @@ function FDB:QuestAccepted(arg1, arg2)
         record.status = "active"
     end
     local offer = pendingOffer
-    local correlated = offer and not offer.ambiguous and offer.character == characterGuid()
+    -- QUEST_FINISHED may precede QUEST_ACCEPTED on Forever. A closed dialog
+    -- is usable only for the same explicit ID in a very short event window.
+    local closedMatch = not offer or not offer.finishedAt or
+        (offer.id == id and elapsed() - offer.finishedAt >= 0 and elapsed() - offer.finishedAt <= 2)
+    local correlated = offer and closedMatch and not offer.ambiguous and offer.character == characterGuid()
         and elapsed() - offer.at >= 0 and elapsed() - offer.at < 30
         and (offer.id == id or (not offer.id and uniqueDialogTitle(id,offer.title)))
     if correlated then
         record.accept = offer.giver
-        if record.accept then record.accept.provenance = "player_interaction" end
+        if record.accept then
+            record.accept.provenance = "player_interaction"
+            -- Snapshot the player at acceptance; retain dialog NPC identity.
+            local position = call(self.GetCurrentLocation, self)
+            if type(position) == "table" then record.accept.location = position end
+        end
         record.title = offer.title or record.title
         record.description = offer.description
         record.objectiveText = offer.objectiveText or record.objectiveText
@@ -396,6 +408,7 @@ function FDB:QuestTurnedIn(questId, xpReward, moneyReward)
     updateMetadata(record)
     record.completedAt = timestamp()
     record.abandonedAt = nil
+    record.removedAt = nil
     record.status = "completed"
     prune(ensureCharacter())
     markChanged()
@@ -588,7 +601,8 @@ function FDB:InitializeQuestTracker()
         elseif event == "QUEST_LOG_UPDATE" then
             queueObjectiveRefresh()
         elseif event == "QUEST_FINISHED" then
-            pendingOffer, pendingTurnIn = nil, nil
+            if pendingOffer and not pendingOffer.finishedAt then pendingOffer.finishedAt = elapsed() end
+            pendingTurnIn = nil
         elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
             FDB:ObserveActiveQuestLog()
         end

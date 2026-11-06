@@ -346,29 +346,30 @@ local function backdropTemplateName()
 end
 
 local function applyBackdrop(frame)
-    if frame.SetBackdrop then
-        frame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 16,
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        if frame.SetBackdropColor then frame:SetBackdropColor(0.03, 0.03, 0.03, 0.9) end
-        if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0.55, 0.45, 0.18, 1) end
-        return
-    end
-
-    -- Guarded fallback for a client where BackdropTemplate mixins are
-    -- unavailable: a plain dark texture using only base Frame/Texture
-    -- APIs, so the HUD never errors on a limited client.
+    -- Blizzard's BackdropTemplateMixin:SetBackdropBorderColor reads its
+    -- BottomRightCorner field in protected UI code on Forever. Keep these
+    -- three movable panels on plain Frame/Texture APIs; the KPI card helper
+    -- below has a separate backdrop path.
     local background = frame:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(frame)
-    if background.SetColorTexture then
-        background:SetColorTexture(0.03, 0.03, 0.03, 0.9)
-    end
+    background:SetColorTexture(0.03, 0.03, 0.03, 0.9)
     frame.fallbackBackground = background
+    local borders = {}
+    for index, edge in ipairs({"TOP", "BOTTOM", "LEFT", "RIGHT"}) do
+        local line = frame:CreateTexture(nil, "BORDER")
+        line:SetColorTexture(0.55, 0.45, 0.18, 1)
+        if edge == "TOP" or edge == "BOTTOM" then
+            line:SetHeight(1)
+            line:SetPoint(edge .. "LEFT", frame, edge .. "LEFT", 0, 0)
+            line:SetPoint(edge .. "RIGHT", frame, edge .. "RIGHT", 0, 0)
+        else
+            line:SetWidth(1)
+            line:SetPoint("TOP" .. edge, frame, "TOP" .. edge, 0, 0)
+            line:SetPoint("BOTTOM" .. edge, frame, "BOTTOM" .. edge, 0, 0)
+        end
+        borders[index] = line
+    end
+    frame.fallbackBorders = borders
 end
 
 -- A small flat-color card fill + thin restrained border, used for the KPI
@@ -430,7 +431,7 @@ local function createLabelValue(parent, labelTemplate, valueTemplate, x, y)
 end
 
 function FDB:BuildSessionHUDFrame()
-    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent)
     frame:SetSize(HUD_WIDTH, HUD_HEIGHT)
     frame:SetFrameStrata("MEDIUM")
     frame:SetMovable(true)
@@ -644,7 +645,7 @@ function FDB:CancelSessionResetConfirmation()
 end
 
 local function buildResetConfirmFrame(FDB)
-    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent)
     frame:SetSize(CONFIRM_WIDTH, CONFIRM_HEIGHT)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     applyBackdrop(frame)
@@ -798,7 +799,7 @@ local function createGroupPanel(parent, x, y, width, height, headingText, headin
 end
 
 function FDB:BuildSessionDetailWindow()
-    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent)
     frame:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
     frame:SetMovable(true)
     frame:EnableMouse(true)

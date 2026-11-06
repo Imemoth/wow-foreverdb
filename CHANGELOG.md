@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.7.0-alpha**
+- Addon: **0.7.1-alpha**
 - Export schema: **9**
 - Companion: **0.9.0-alpha**
 
@@ -78,7 +78,7 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Made the map header controls wrap responsively instead of clipping the zoom/status area.
 - Replaced raw acquisition keys such as `fishing_pool` with user-facing location labels.
 
-## 0.7.0-alpha — 2026-09-25
+## 0.7.1-alpha — 2026-09-25
 
 - Added multi-zone location browsing: selecting a location row changes the active map.
 - Preserved all zones associated with a detail result.
@@ -164,6 +164,13 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.7.1-alpha — 2026-11-06 (Quest Tracker live stabilization)
+
+- Keep an explicit-ID quest offer briefly through `QUEST_FINISHED` when Forever emits it before `QUEST_ACCEPTED`; take the player's interaction position at acceptance.
+- Render session panel backgrounds and borders with Frame/Texture APIs to avoid the Blizzard backdrop corner taint path.
+- Count a previously tooltip-matched target's observed death from `UNIT_HEALTH`/`UnitIsDead` as well as supported combat-log `UNIT_DIED`, once per GUID. Keep quest progress unattributed and idempotent across repeated updates.
+- Clear semantic removal metadata on confirmed turn-in and reset mob/progress evidence on reacceptance. No export schema or Companion changes.
 
 ## 0.7.0-alpha — 2026-11-06 (Quest Kill Tracker V1.1)
 

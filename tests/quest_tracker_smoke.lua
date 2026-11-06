@@ -86,7 +86,7 @@ local function setup(opts)
     end
     local FDB = {
         DB = { sources = {}, guilds = {}, schemaVersion = 9, updatedAt=1 },
-        VERSION = "0.7.0-alpha", SCHEMA_VERSION = 9,
+        VERSION = "0.7.1-alpha", SCHEMA_VERSION = 9,
         Debug = function() end,
     }
     function FDB:GetCurrentLocation()
@@ -333,7 +333,38 @@ test("no npc never borrows target and closed dialog cannot leak into acceptance"
     equal(q.accept.location.mapId, 85)
     s.questId = 404
     s:emit("QUEST_DETAIL"); s:emit("QUEST_FINISHED"); s:emit("QUEST_ACCEPTED", 404)
-    falsy(FDB.DB.questJournal[s.player].entries["404"].accept)
+    equal(FDB.DB.questJournal[s.player].entries["404"].accept.location.mapId,85)
+    s.questId = 405
+    s:emit("QUEST_DETAIL"); s:emit("QUEST_FINISHED"); s.at=s.at+3
+    s:emit("QUEST_ACCEPTED", 405)
+    falsy(FDB.DB.questJournal[s.player].entries["405"].accept)
+end)
+
+test("remove and turn-in event orders preserve completed semantics", function()
+    for _, removeFirst in ipairs({true,false}) do
+        local FDB,s=setup()
+        s:emit("QUEST_DETAIL");s:emit("QUEST_ACCEPTED",367)
+        s:emit("QUEST_COMPLETE")
+        if removeFirst then s:emit("QUEST_REMOVED",367) end
+        s:emit("QUEST_TURNED_IN",367,170,17)
+        if not removeFirst then s:emit("QUEST_REMOVED",367) end
+        local q=FDB.DB.questJournal[s.player].entries["367"]
+        equal(q.status,"completed");falsy(q.removedAt)
+        equal(q.rewards.grantedXP,170)
+        equal(q.rewards.grantedMoney,17)
+    end
+end)
+
+test("reaccept resets mob and progress evidence", function()
+    local FDB,s=setup()
+    s:emit("QUEST_DETAIL");s:emit("QUEST_ACCEPTED",367)
+    local q=FDB.DB.questJournal[s.player].entries["367"]
+    q.mobObservations={test={observedDeaths=1}}
+    q.progressChanges={[1]=2};q.progressObserved={[1]=2}
+    s:emit("QUEST_REMOVED",367)
+    s:emit("QUEST_DETAIL");s:emit("QUEST_ACCEPTED",367)
+    falsy(q.mobObservations);falsy(q.progressChanges);falsy(q.progressObserved)
+    equal(q.status,"active");falsy(q.removedAt)
 end)
 
 test("duplicate turn-in preserves location, rewards and timestamp", function()
@@ -488,7 +519,7 @@ test("real database, loot windows and exporter preserve schema 9 without journal
     s:emit("LOOT_CLOSED"); s:emit("LOOT_READY"); equal(b.observations,2)
     FDB:PrepareForSave()
     local export=ForeverDB_Export
-    contains(export,"H|9|0.7.0-alpha|existing-installation|")
+    contains(export,"H|9|0.7.1-alpha|existing-installation|")
     contains(export,"I|creature|7000|7|mob|201|Explicit quest link|2|4|2|404")
     falsy(export:find("questJournal",1,true)); falsy(export:find("Player-",1,true))
     falsy(export:find("The plague is spreading",1,true))

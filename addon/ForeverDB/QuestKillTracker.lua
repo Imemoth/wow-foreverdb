@@ -89,9 +89,7 @@ function FDB:ObserveQuestMob(unit)
     seen[guid]={record=record,key=key,at=api(GetTime) or 0,death=false}
     seenCount=seenCount+1
 end
-function FDB:ObserveQuestMobDeath()
-    local _,subevent,_,_,_,_,_,destGuid=api(CombatLogGetCurrentEventInfo)
-    if subevent~="UNIT_DIED" then return end
+local function countDeath(destGuid)
     local item=seen[destGuid]
     if not item or item.death or (api(GetTime) or 0)-item.at>20 then return end
     if item.record.status~="active" then return end
@@ -100,6 +98,17 @@ function FDB:ObserveQuestMobDeath()
     item.death=true
     entry.observedDeaths=entry.observedDeaths+1
     entry.lastDeathAt=api(GetServerTime)
+end
+function FDB:ObserveQuestMobDeath()
+    local _,subevent,_,_,_,_,_,destGuid=api(CombatLogGetCurrentEventInfo)
+    if subevent=="UNIT_DIED" then countDeath(destGuid) end
+end
+function FDB:ObserveQuestTargetDeath(unit)
+    if unit~="target" and unit~="mouseover" then return end
+    -- A dead unit still has its GUID while targeted. Never infer death from
+    -- target loss, loot, combat state, or a quest progress increment.
+    local dead=api(UnitIsDead,unit)
+    if dead==true then countDeath(api(UnitGUID,unit)) end
 end
 function FDB:ObserveQuestProgress()
     local j=journal()
@@ -115,8 +124,14 @@ function FDB:ObserveQuestProgress()
                         and type(objective.numFulfilled)=="number"
                         and nextObjective.numFulfilled>objective.numFulfilled then
                         record.progressChanges=record.progressChanges or {}
-                        record.progressChanges[i]=(record.progressChanges[i] or 0)
-                            +(nextObjective.numFulfilled-objective.numFulfilled)
+                        record.progressObserved=record.progressObserved or {}
+                        local baseline=math.max(objective.numFulfilled,
+                            record.progressObserved[i] or 0)
+                        if nextObjective.numFulfilled>baseline then
+                            record.progressChanges[i]=(record.progressChanges[i] or 0)
+                                +(nextObjective.numFulfilled-baseline)
+                            record.progressObserved[i]=nextObjective.numFulfilled
+                        end
                     end
                 end
             end
@@ -127,6 +142,8 @@ function FDB:PrintQuestMobs(id)
     local j=journal()
     local record=j and j.entries and j.entries[tostring(tonumber(id) or -1)]
     if not record then print("ForeverDB: no local quest record") return end
+    print("ForeverDB: death APIs", "combat="..tostring(type(CombatLogGetCurrentEventInfo)=="function"),
+        "unit="..tostring(type(UnitIsDead)=="function"))
     for key,entry in pairs(record.mobObservations or {}) do
         local loc=entry.location or {}
         print("ForeverDB: quest mob",key,entry.npcName or "?",
@@ -141,13 +158,18 @@ function FDB:InitializeQuestKillTracker()
     if frame then return end
     frame=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT",
-        "COMBAT_LOG_EVENT_UNFILTERED","QUEST_LOG_UPDATE"}) do
-        pcall(frame.RegisterEvent,frame,event)
+        "QUEST_LOG_UPDATE"}) do
+        frame:RegisterEvent(event)
     end
-    frame:SetScript("OnEvent",function(_,event)
+    if type(CombatLogGetCurrentEventInfo)=="function" then
+        frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    end
+    if type(UnitIsDead)=="function" then frame:RegisterEvent("UNIT_HEALTH") end
+    frame:SetScript("OnEvent",function(_,event,...)
         if event=="PLAYER_TARGET_CHANGED" then FDB:ObserveQuestMob("target")
         elseif event=="UPDATE_MOUSEOVER_UNIT" then FDB:ObserveQuestMob("mouseover")
         elseif event=="COMBAT_LOG_EVENT_UNFILTERED" then FDB:ObserveQuestMobDeath()
+        elseif event=="UNIT_HEALTH" then FDB:ObserveQuestTargetDeath(select(1,...))
         elseif event=="QUEST_LOG_UPDATE" then FDB:ObserveQuestProgress() end
     end)
 end

@@ -275,6 +275,18 @@ local function test(name, run)
     consolePrint("PASS (simulated): " .. name)
 end
 
+test("session panels avoid Blizzard backdrop corner methods", function()
+    local FDB=setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB.SessionHUDFrame.fallbackBackground)
+    truthy(FDB.SessionHUDFrame.fallbackBorders)
+    falsy(FDB.SessionHUDFrame.backdrop)
+    FDB:ToggleSessionWindow()
+    truthy(FDB.SessionDetailWindow.fallbackBorders)
+    falsy(FDB.SessionDetailWindow.backdrop)
+end)
+
 test("HUD initializes without optional BackdropTemplate helpers", function()
     local FDB = setup({ hasBackdropMixin = false })
     truthy(FDB:SessionPlayerReady())
