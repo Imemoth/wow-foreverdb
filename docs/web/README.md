@@ -16,6 +16,8 @@
 - [CI structure and release gates](release-gates.md) — check names, aggregate gate, required-check ruleset (enforcement PENDING).
 - [Release parity: beta vs production](release-parity.md) — approved feature switches, variable classification, trusted live gate, staged-production acceptance and rollback.
 - [Dependency audit exceptions](dependency-audit-exceptions.md) — the single owner-approved, time-limited exception (GHSA-g3hv-75wg-m249, expires 2026-12-15), what the gate enforces, removal criteria.
+- [AzerDex Product & Engineering Roadmap V1.0](azerdex-product-roadmap.md) — current proposed product prioritization, work-in-progress rule, milestone acceptance and Idea Inbox; reconciles website vs Addon/Companion streams.
+- [News G6 → Discord alerting design](news-health-discord-alerting-design.md) — discovery-only webhook vs bot decision, health evaluation reliability, secrets, state machine and phased gates.
 - [AzerDex website roadmap](azerdex-roadmap.md) — the authoritative P1–P3 milestone ledger for the public AzerDex website (brand, Database/Zones, Guides, News/Blog, cartography POC, Addon & Companion presentation). `docs/ROADMAP.md` tracks the Addon/Companion/Account System separately.
 - [Class Guides & Talent Calculator (V1)](class-guides-talents.md) — routes, talent data source/version and rule confidence, how to update data and add guides, build-code format, tests.
 - [Race Guides (V1) & versioned racial-ability data](race-guides.md) — routes, baseline + append-only change records, evidence rules, source coverage and unresolved values, how to process a new patch, tests.
