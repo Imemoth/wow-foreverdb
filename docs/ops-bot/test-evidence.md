@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **207 passed, 0 failed** in 11 files |
+| `npm test` | **226 passed, 0 failed** in 13 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -27,6 +27,8 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `scenarios.test.ts` | 8 | staging synthetic scenarios |
 | `security.test.ts` | 19 | log and payload secret hygiene, static guarantees, worker entry, rollback |
 | `regex-safety.test.ts` | 18 | CodeQL findings: linear-time text helpers under adversarial input, parsed-URL credential detector |
+| `routing-config.test.ts` | 12 | `wrangler.toml` routing and environment rules, documentation consistency |
+| `worker-endpoint.test.ts` | 7 | the public endpoint through the real Worker `fetch`: signature, authorization, methods, paths |
 
 ## 2. Required test matrix
 
@@ -77,3 +79,14 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Resolution | Linear `trimEnd()`; parsed-URL detector. No suppression, exclusion, dismissal or severity change. Details: [threat-model.md](threat-model.md) "Code-scanning findings and resolutions" |
 | Local verification | `npm run typecheck` pass; `npm test` 207 passed; the 4 regression tests that failed before the fix pass after it |
 | Re-scan on the updated head | Recorded in the PR #174 security-gate report (commit SHA and the complete check matrix); see the PR conversation |
+
+## 6. Staging readiness gate: routing
+
+| Check | Result |
+| --- | --- |
+| Cloudflare documentation (workers.dev, routes, custom domains, environments, preview URLs) | Verified 2026-11-06; rules summarised in the header of `ops-bot/wrangler.toml` and in the staging runbook section 4 |
+| Defect found | Staging had `workers_dev = false` and no route, so no stable public hostname existed for Discord. The top level also relied on Cloudflare's default (`workers_dev` is true when no route is configured), so a bare `wrangler deploy` would have published an unconfigured Worker |
+| Decision | Staging: `workers_dev = true` (no route, no custom domain, no DNS change). Production: `workers_dev = false` plus a Custom Domain placeholder, not activated. Every scope sets `workers_dev` and `preview_urls` explicitly |
+| `wrangler deploy --dry-run` (Wrangler 4.158.0, scratch copy, no authentication, nothing created) | `--env staging`, `--env production` and the top level all parse and bundle (138 KiB gzipped); bindings listed as expected; a bare deploy is warned about and has no bindings. **Routing semantics cannot be shown by a dry run**, so they are covered by the documentation check and the static tests |
+| Static and integration tests | 19 new tests (12 routing/configuration, 7 endpoint); mutation check: 6 deliberate breakages (staging `workers_dev=false`, top-level `workers_dev` removed, staging preview URLs on, production real-looking hostname, signature bypass, authorization bypass) all failed the suite, source restored |
+| Still NOT verified | A real deployment, the actual `workers.dev` URL, DNS/certificate behaviour, Discord's endpoint validation, and Cloudflare Access absence: all require the staging run (runbook section 5, item 11a) |

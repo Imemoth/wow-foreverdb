@@ -23,6 +23,9 @@
 
 - [ ] Production Discord application, bot and private channel; commands visible only to the operator role.
 - [ ] Production Cloudflare Worker `azerdex-ops-bot`, D1 database `azerdex-ops-bot`, real `database_id` reviewed in `wrangler.toml`.
+- [ ] **Production routing (documented, not activated by the Draft PR).** Production must be served from a **Custom Domain** (`custom_domain = true`) on an **active Cloudflare zone the owner controls**, not from `workers.dev` (Cloudflare recommends routes or custom domains for production; `workers.dev` is intended for personal and hobby use). The owner chooses the hostname, for example `ops.<owner-domain>`. `wrangler.toml` currently holds the placeholder `REPLACE-WITH-PRODUCTION-OPS-HOSTNAME.invalid`, so `wrangler deploy --env production` cannot succeed until a **reviewed PR** replaces it. Preconditions: the hostname has no existing CNAME record (Cloudflare refuses to create a Custom Domain over one); `workers_dev = false` and `preview_urls = false` stay as they are; Cloudflare creates the DNS record and certificate when the domain is attached.
+- [ ] **No Cloudflare Access on the interactions hostname** (Discord cannot authenticate to it). The access control is the Ed25519 signature check plus server-side authorization. Optional extra: a Cloudflare WAF or rate-limiting rule on the hostname, decided by the owner and tested in staging first.
+- [ ] Hostname verified before connecting Discord: `GET /healthz` returns `{"ok":true}`, an unsigned `POST /interactions` returns 401, and `GET /interactions` returns 405.
 - [ ] Production heartbeat check (period 5 min, grace 10 min) with alert integrations independent of Discord; separate fallback route.
 - [ ] Secrets set with `wrangler secret put --env production`: bot token, public key, application id, channel id, guild ids, operator ids, heartbeat URL, fallback URL, reporting URL and secret. `BOT_ENV=production`, `HEALTH_PROVIDER=http` (production refuses `mock`).
 - [ ] D1 backup/export taken before first use of production data (the database starts empty; record that).
@@ -31,7 +34,7 @@
 
 1. `wrangler d1 migrations apply azerdex-ops-bot --env production`; verify the ten tables.
 2. Register commands for the production guild (guild-scoped only).
-3. `wrangler deploy --env production`; set the Interactions Endpoint URL; confirm `/healthz`.
+3. `wrangler deploy --env production` (only after the hostname placeholder was replaced through a reviewed PR); confirm the three hostname checks from Gate D; then set the Interactions Endpoint URL to `https://<production-hostname>/interactions` and let Discord's signed PING validate it.
 4. First two cycles: no alert, heartbeat arriving, `/azerdex status` HEALTHY with real source data.
 5. Controlled live test **only with explicit owner confirmation**: announce a maintenance window, run one synthetic acknowledgement flow, never alter production News, cron or collector settings to create a fault.
 6. Confirm job 7 and jobs 3 to 6 unchanged (schedule and command md5), and no new application-role grant.
