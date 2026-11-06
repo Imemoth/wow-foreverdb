@@ -75,3 +75,16 @@ export function newsKindLabel(entry: Pick<NewsEntry, "category" | "entryKind">, 
   if (entry.entryKind === "staff_reply") return "STAFF REPLY";
   return base;
 }
+
+const REGION_NAMES: Record<string, string> = { us: "US", eu: "EU", global: "Global" };
+
+/** "Regions: EU · US" for a story shared by several regions, "US only" / "EU only" for a single-region Blizzard post, "" otherwise. */
+export function newsRegionLabel(entry: Pick<NewsEntry, "region" | "regions" | "category">): string {
+  const regions = (entry.regions && entry.regions.length ? entry.regions : [entry.region]).filter((r) => r !== "global");
+  if (regions.length > 1) return `Regions: ${regions.map((r) => REGION_NAMES[r] ?? r.toUpperCase()).join(" · ")}`;
+  if (regions.length === 1 && entry.category === "bluepost") return `${REGION_NAMES[regions[0]!] ?? regions[0]!.toUpperCase()} only`;
+  return regions.length === 1 ? (REGION_NAMES[regions[0]!] ?? regions[0]!.toUpperCase()) : "";
+}
+
+export const isGlobalStory = (entry: Pick<NewsEntry, "regions">): boolean => (entry.regions?.filter((r) => r !== "global").length ?? 0) > 1;
+export const regionName = (region: string): string => REGION_NAMES[region] ?? region.toUpperCase();

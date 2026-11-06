@@ -24,10 +24,10 @@ $SU -c "alter schema extensions owner to sbadmin" \
     -c "grant usage on all sequences in schema cron, net to sbadmin" >/dev/null
 A="env PGPASSWORD=$ADMIN_PW psql -X -q -v ON_ERROR_STOP=1 -U sbadmin -d $DB"
 $A -tc "select 'admin is superuser: ' || rolsuper from pg_roles where rolname = current_user" | grep -q "false" || { echo "FAIL: admin must not be superuser"; exit 1; }
-for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2 0012_news_revision_due_tolerance; do
+for m in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0009_news_ingest_search_path 0010_news_bluepost_suppression 0011_news_collector_v2 0012_news_revision_due_tolerance 0013_news_global_story_grouping; do
   $A -f "database/public-read/migrations/$m.sql" >/dev/null 2>&1 || { echo "FAIL: migration $m"; $A -f "database/public-read/migrations/$m.sql" 2>&1 | tail -5; exit 1; }
 done
-echo "PASS: migrations 0001, 0002(news), 0008-0012 applied as a non-superuser admin"
+echo "PASS: migrations 0001, 0002(news), 0008-0013 applied as a non-superuser admin (incl. 0012 revision tolerance and 0013 story grouping)"
 # 0011 must be re-runnable (idempotent) and must not disturb the V1 migrations when re-applied after 0010.
 $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1 || { echo "FAIL: 0011 is not idempotent"; exit 1; }
 echo "PASS: 0011 is idempotent"
@@ -38,7 +38,7 @@ $A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev
 echo "PASS: 0012 is idempotent"
 # Assertion scripts need catalog/owner visibility, so they run as the throwaway cluster's superuser; the migrations above
 # (where privilege mistakes matter) ran as the hosted-like non-superuser admin.
-for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior news_v2_revision_schedule; do
+for t in news_model_security news_model_behavior news_bluepost_dedup news_bluepost_dedup_security news_v2_security news_v2_behavior news_v2_revision_schedule news_v2_story_grouping; do
   out=$($SU -f "database/public-read/tests/$t.sql" 2>&1) || { echo "FAIL: $t"; echo "$out" | tail -8; exit 1; }
   echo "PASS: $t"
 done
@@ -79,6 +79,75 @@ $A -f database/public-read/migrations/0011_news_collector_v2.sql >/dev/null 2>&1
 $A -f database/public-read/migrations/0012_news_revision_due_tolerance.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0012 after recovery"; exit 1; }
 [ "$(due_in_6s)" = "1" ] && [ "$(body_md5)" = "149f9bd8a0f5191163108026ccbdbd84" ] || { echo "FAIL: final state must be the 0012 definition"; exit 1; }
 echo "PASS: 0012 narrow rollback restores the exact 0011 body/ACL and no other function; both scripts refuse a drifted function; 0012 re-applies"
+# 0013 rollback: only the story objects go; source rows are fingerprint-identical; the V2 readers keep working; refuses while overrides exist.
+$SU >/dev/null <<'SQL'
+insert into pub.news_sources (source_key, source_type, region, endpoint_url) values ('rb13-us', 'bluepost', 'us', 'https://example.com/r'), ('rb13-eu', 'bluepost', 'eu', 'https://example.com/r2') on conflict do nothing;
+insert into pub.news_entries (source_key, source_entry_id, source_topic_id, source_post_number, thread_key, slug, canonical_url, title, author, region, published_at, excerpt, category, relevance, status, content_hash)
+select 'rb13-' || r, 'post:' || t, 'topic:' || t, 1, r || ':topic:' || t, 'rb13-' || r || '-' || t, 'https://' || r || '.forums.blizzard.com/en/wow/t/x/' || t || '/1', 'Rollback thirteen story fixture', 'Blizzard Entertainment', r,
+       now() - interval '1 day', 'World of Warcraft Forever rollback fixture excerpt that is long enough to be evidence for the matcher.', 'bluepost', 'relevant', 'published', encode(sha256(convert_to('rb13' || r, 'UTF8')), 'hex')
+from (values ('us', 8101), ('eu', 8102)) v(r, t);
+select pub_admin.news_link_stories(true);
+SQL
+[ "$($SU -tAc "select count(*) from pub.news_story_members where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: 0013 rollback fixture was not linked"; exit 1; }
+SRC_FP=$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")
+$SU -c "insert into pub.news_story_overrides values ('eu:topic:8102', 'us:topic:8101', 'deny', 'rollback guard fixture override', 'owner')" >/dev/null
+$A -f database/public-read/ops/news_v2_0013_rollback.sql >/dev/null 2>&1 && { echo "FAIL: 0013 rollback must refuse while overrides exist"; exit 1; }
+$SU -c "delete from pub.news_story_overrides" >/dev/null
+$A -f database/public-read/ops/news_v2_0013_rollback.sql >/dev/null 2>&1 || { echo "FAIL: 0013 rollback script"; $A -f database/public-read/ops/news_v2_0013_rollback.sql 2>&1 | tail -3; exit 1; }
+[ "$($SU -tAc "select to_regclass('pub.news_story_members') is null and to_regprocedure('web_api.news_stories(text,text,text,boolean,integer,integer)') is null and to_regprocedure('pub_admin.news_link_stories(boolean)') is null")" = t ] || { echo "FAIL: 0013 objects still present after rollback"; exit 1; }
+[ "$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")" = "$SRC_FP" ] || { echo "FAIL: 0013 rollback changed source rows"; exit 1; }
+[ "$($SU -tAc "select count(*) from web_api.news_cards(null,'',null,false,50,0) where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: V2 readers must keep working (two thread cards) after the 0013 rollback"; exit 1; }
+$A -f database/public-read/migrations/0013_news_global_story_grouping.sql >/dev/null 2>&1 || { echo "FAIL: re-apply 0013 after rollback"; exit 1; }
+[ "$($SU -tAc "select count(*) from web_api.news_stories(null,'',null,false,50,0) where thread_key in ('us:topic:8101','eu:topic:8102')")" = 2 ] || { echo "FAIL: after re-apply and no links every thread is its own story"; exit 1; }
+$SU -c "delete from pub.news_story_members; delete from pub.news_post_versions where news_entry_id in (select id from pub.news_entries where source_key like 'rb13-%'); delete from pub.news_entries where source_key like 'rb13-%'; delete from pub.news_sources where source_key like 'rb13-%'" >/dev/null
+echo "PASS: 0013 rollback removes only the story objects (source rows identical, V2 readers intact, refuses while overrides exist); 0013 re-applies"
+# Owner-reviewed story decisions (ops/news_v2_story_overrides_review.sql): production-shaped openers with the REAL source topic/post ids, then the
+# override script, its fail-closed preconditions, the dry-run effect, rollback and re-apply. Runs on the committed test database; cleaned up afterwards.
+$SU >/dev/null <<'SQL'
+insert into pub.news_sources (source_key, source_type, region, endpoint_url) values
+  ('blizzard-bluepost-us', 'bluepost', 'us', 'https://example.com/sd-us'), ('blizzard-bluepost-eu', 'bluepost', 'eu', 'https://example.com/sd-eu') on conflict do nothing;
+create function pg_temp.sd(p_region text, p_topic bigint, p_post text, p_title text, p_pub timestamptz, p_excerpt text) returns void language sql as $f$
+  insert into pub.news_entries (source_key, source_entry_id, source_topic_id, source_post_number, thread_key, slug, canonical_url, title, author, region, published_at, excerpt,
+                                category, relevance, status, content_hash, author_user_id, author_group, thread_origin, observed_via)
+  values ('blizzard-bluepost-' || p_region, p_post, 'topic:' || p_topic, 1, p_region || ':topic:' || p_topic, 'sd-' || p_region || '-' || p_topic,
+          'https://' || p_region || '.forums.blizzard.com/en/wow/t/x/' || p_topic || '/1', p_title, 'Kaivax', p_region, p_pub, p_excerpt, 'bluepost', 'relevant', 'published',
+          md5('sd' || p_region || p_topic) || md5('sd#' || p_region || p_topic), 3390, 'community-manager', 'official', 'topic') $f$;
+select pg_temp.sd('us', 2360696, 'post:30185131', 'WoW Forever Beta Development Notes – Updated November 2', '2026-09-24 22:23:24.849+00', repeat('Beta development notes text. ', 14));
+select pg_temp.sd('eu', 631316,  'post:6391795',  'WoW Forever Beta Development Notes – Updated 3 November', '2026-09-24 22:37:36.828+00', repeat('Beta development notes text. ', 14));
+select pg_temp.sd('us', 2389565, 'post:30577452', 'The WoW: Forever Podcast: Episode 5 - End of Beta Special', '2026-10-22 16:21:16.245+00', '');
+select pg_temp.sd('eu', 637043,  'post:6446965',  'The WoW: Forever Podcast: Episode 5 - End of Beta Special', '2026-10-22 16:22:03.465+00', '');
+select pg_temp.sd('us', 2395799, 'post:30671248', 'The WoW: Forever Podcast: Episode 6 - All About Tech', '2026-10-29 16:17:57.194+00', '');
+select pg_temp.sd('eu', 638462,  'post:6462927',  'The WoW: Forever Podcast: Episode 6 - All About Tech', '2026-10-29 16:18:25.305+00', '');
+select pg_temp.sd('us', 2389633, 'post:30578134', 'The WoW Forever Beta Celebration is Underway', '2026-10-22 17:00:00+00', 'Join the Forever beta celebration to unlock rewards for everyone - US event times: 5 pm Eastern. ');
+select pg_temp.sd('eu', 637055,  'post:6447060',  'The WoW Forever Beta Celebration is Underway', '2026-10-22 17:00:00+00', 'Join the Forever beta celebration to unlock rewards for everyone - EU event times: 22:00 BST.');
+SQL
+OV=database/public-read/ops/news_v2_story_overrides_review.sql; OVRB=database/public-read/ops/news_v2_story_overrides_rollback.sql
+# without the decisions nothing is linked automatically except what the rule proves (nothing here: titles differ / empty excerpts / differing excerpts)
+[ "$($SU -tAc "select (pub_admin.news_link_stories(false) ->> 'newMembers')::int")" = 0 ] || { echo "FAIL: before the decisions no pair of the reviewed set may link automatically"; exit 1; }
+# preconditions fail closed: a changed opener (post id) aborts and writes nothing
+$SU -c "update pub.news_entries set author = 'Someone Else' where thread_key = 'eu:topic:637043'" >/dev/null
+$A -f "$OV" >/dev/null 2>&1 && { echo "FAIL: the override script must refuse when a reviewed opener changed"; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_story_overrides")" = 0 ] || { echo "FAIL: a refused override script wrote rows"; exit 1; }
+$SU -c "update pub.news_entries set author = 'Kaivax' where thread_key = 'eu:topic:637043'" >/dev/null
+SD_FP=$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")
+$A -f "$OV" >/dev/null 2>&1 || { echo "FAIL: override script"; $A -f "$OV" 2>&1 | tail -4; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_story_overrides where decided_by = 'owner (Imemoth)'")" = 4 ] || { echo "FAIL: expected four override rows"; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_story_members")" = 0 ] || { echo "FAIL: the override script must not write any story link"; exit 1; }
+[ "$($SU -tAc "select md5(coalesce((select string_agg(e::text, ';' order by e.id) from pub.news_entries e), '') || coalesce((select string_agg(v::text, ';' order by v.id) from pub.news_post_versions v), ''))")" = "$SD_FP" ] || { echo "FAIL: the override script changed source rows"; exit 1; }
+$A -f "$OV" >/dev/null 2>&1 && { echo "FAIL: a second run must be refused (override exists)"; exit 1; }
+# effect (dry-run, then the link write on the ISOLATED test database): three stories of two threads each; Beta Celebration stays two regional stories
+[ "$($SU -tAc "select (pub_admin.news_link_stories(false) ->> 'newMembers')::int")" = 6 ] || { echo "FAIL: dry-run must propose six members (three stories)"; $SU -tAc "select pub_admin.news_link_stories(false)"; exit 1; }
+$SU -c "select pub_admin.news_link_stories(true)" >/dev/null
+[ "$($SU -tAc "select count(distinct story_key) from pub.news_story_members")" = 3 ] || { echo "FAIL: expected three stories"; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_story_members where thread_key in ('us:topic:2389633','eu:topic:637055')")" = 0 ] || { echo "FAIL: the DENY pair must stay unlinked"; exit 1; }
+[ "$($SU -tAc "select count(*) from web_api.news_stories(null,'',null,false,50,0) where thread_key in ('us:topic:2360696','eu:topic:631316','us:topic:2389565','eu:topic:637043','us:topic:2395799','eu:topic:638462','us:topic:2389633','eu:topic:637055')")" = 5 ] || { echo "FAIL: eight regional threads must read as five cards (3 stories + 2 Beta Celebration)"; exit 1; }
+$SU -c "delete from pub.news_story_members" >/dev/null
+$SU -c "update pub.news_story_overrides set reason = reason || ' (edited)' where thread_a = 'eu:topic:637055'" >/dev/null
+$A -f "$OVRB" >/dev/null 2>&1 || { echo "FAIL: override rollback (a reason edit is not a decision change)"; exit 1; }
+[ "$($SU -tAc "select count(*) from pub.news_story_overrides")" = 0 ] || { echo "FAIL: rollback must remove the four rows"; exit 1; }
+$A -f "$OVRB" >/dev/null 2>&1 && { echo "FAIL: a second override rollback must be refused"; exit 1; }
+$SU -c "delete from pub.news_entries where source_key in ('blizzard-bluepost-us','blizzard-bluepost-eu') and source_entry_id in ('post:30185131','post:6391795','post:30577452','post:6446965','post:30671248','post:6462927','post:30578134','post:6447060'); delete from pub.news_sources where source_key in ('blizzard-bluepost-us','blizzard-bluepost-eu')" >/dev/null 2>&1 || true
+echo "PASS: story overrides (3 ALLOW + 1 DENY, real topic ids): fail-closed preconditions, no link/source write, dry-run proposes 3 stories, DENY stays separate, rollback removes only the four rows"
 # Operator monitoring (cron/net stubs stand in for the platform extensions).
 # On Supabase this script is run by the platform `postgres` admin; the throwaway cluster's equivalent is its superuser.
 $SU -tc "select has_function_privilege('postgres', 'pub_admin.news_health_snapshot()', 'execute')" | grep -q "t" || { echo "FAIL: platform admin cannot run the health snapshot"; exit 1; }
