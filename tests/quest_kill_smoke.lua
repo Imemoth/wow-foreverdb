@@ -1,4 +1,4 @@
-local FDB={DB={questJournal={}}, ParseSourceGuid=function(_,g) return "creature",tonumber(g:match("%-(%d+)$")) end,
+local FDB={DB={questJournal={}}, ParseSourceGuid=function(_,g) return "creature",tonumber(g:match("%-(%d+)%-2$") or g:match("%-(%d+)$")) end,
  GetCurrentLocation=function() return {mapId=85,zoneName="Tirisfal Glades",subZoneName="Deathknell",x=31,y=66} end}
 local player="Player-1-test"
 local target="Creature-0-0-0-0-1501"
@@ -41,6 +41,10 @@ target="Creature-0-0-0-0-1502"; objective="Wretched Zombie slain: 0/8"
 q.objectives[2]={text=objective,kind="monster",numFulfilled=0,numRequired=8}
 emit("PLAYER_TARGET_CHANGED")
 assert(q.mobObservations["2:1502"])
+target="Creature-0-0-0-0-1501-2"; objective="Mindless Zombie slain: 1/8"
+FDB.GetCurrentLocation=function() return {mapId=85,zoneName="Tirisfal Glades",subZoneName="Deathknell",x=32,y=67} end
+emit("PLAYER_TARGET_CHANGED")
+assert(q.mobObservations["1:1501"].locations and q.mobObservations["1:1501"].locations["85:32:67"])
 title="Another quest"
 emit("PLAYER_TARGET_CHANGED")
 assert(not q.mobObservations["1:999"])

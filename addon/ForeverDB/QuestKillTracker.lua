@@ -70,6 +70,21 @@ function FDB:ObserveQuestMob(unit)
     entry.tooltipMatches=entry.tooltipMatches+1
     entry.lastSeenAt=api(GetServerTime)
     entry.location=api(self.GetCurrentLocation,self)
+    if entry.location and entry.location.mapId then
+        entry.locations=entry.locations or {}
+        local loc=entry.location
+        local locKey=tostring(loc.mapId)..":"..tostring(loc.x or "?")..":"..tostring(loc.y or "?")
+        if entry.locations[locKey] then
+            entry.locations[locKey].observations=entry.locations[locKey].observations+1
+        else
+            local count=0
+            for _ in pairs(entry.locations) do count=count+1 end
+            if count<20 then
+                entry.locations[locKey]={mapId=loc.mapId,zoneName=loc.zoneName,
+                    subZoneName=loc.subZoneName,x=loc.x,y=loc.y,observations=1}
+            end
+        end
+    end
     if seenCount>=MAX_SEEN then seen={};seenCount=0 end
     seen[guid]={record=record,key=key,at=api(GetTime) or 0,death=false}
     seenCount=seenCount+1
