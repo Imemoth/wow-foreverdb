@@ -1,0 +1,35 @@
+# AzerDex Operations Bot. THERE IS NO DEFAULT ENVIRONMENT: always pass `--env staging` or `--env production`.
+# Nothing here is deployed by this repository change. IDs below are placeholders; real resources and secrets are created
+# by the owner per docs/ops-bot/staging-runbook.md and docs/ops-bot/production-release-checklist.md.
+# SECRETS are never written to this file: wrangler secret put DISCORD_BOT_TOKEN --env <env>, etc.
+name = "azerdex-ops-bot"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[env.staging]
+name = "azerdex-ops-bot-staging"
+workers_dev = false
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+[env.staging.vars]
+BOT_ENV = "staging"
+HEALTH_PROVIDER = "mock"
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "azerdex-ops-bot-staging"
+database_id = "REPLACE_WITH_STAGING_D1_ID"
+migrations_dir = "migrations"
+
+[env.production]
+name = "azerdex-ops-bot"
+workers_dev = false
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+[env.production.vars]
+BOT_ENV = "production"
+HEALTH_PROVIDER = "http"
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "azerdex-ops-bot"
+database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+migrations_dir = "migrations"
