@@ -38,6 +38,18 @@ The collector distinguishes two dimensions:
 GameObjects are stored with their numeric GameObject ID and observed name, so
 different chest/node types can be distinguished in the database.
 
+## Windows addon updater
+
+From the repository root, run `update-addon.cmd`. It fetches the latest **release** commit and installs the addon into the single detected `*forever*` client under `World of Warcraft`. It never auto-selects `_classic_beta_`; multiple Forever clients require an explicit path. The script does not touch `WTF` or SavedVariables.
+
+For Quest Tracker V1 testing before PR #168 is merged, run:
+
+```cmd
+update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\Path\To\World of Warcraft\_classic_forever_\Interface\AddOns"
+```
+
+`-Ref` also accepts a pinned 40-character commit SHA. The folder name may differ, but the client folder must contain `forever`. Direct PowerShell use: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\update-addon.ps1 -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\...\Interface\AddOns"`. The updater prints the selected ref, SHA, TOC version and destination, and validates Core/TOC versions before replacing files. Check the printed version is `0.6.0-alpha`; in the Forever client run `/reload` and `/fdb quest status`. See [Quest V1 live acceptance](docs/quest-tracker/v1-acceptance.md).
+
 ## In-game commands
 
 - `/fdb status`

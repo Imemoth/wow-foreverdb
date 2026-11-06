@@ -42,7 +42,7 @@ Branch: `feat/quest-tracker-v1-local-capture`. Addon: `0.6.0-alpha`. Export: **s
 
 ## Required in-game acceptance (human operator)
 
-1. Back up `WTF/Account/.../SavedVariables/ForeverDB.lua`; verify addon `0.6.0-alpha` and `/fdb questapi`.
+1. Back up `WTF/Account/.../SavedVariables/ForeverDB.lua`. From the repository run `update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "<actual Forever client>\Interface\AddOns"` (or pin the PR commit SHA). The updater must print `0.6.0-alpha`, the selected commit and the Forever destination; inspect the installed `ForeverDB.toc` for `## Version: 0.6.0-alpha`. Confirm the separate `_classic_beta_` AddOns folder and SavedVariables are unchanged. Launch that Forever client, `/reload`, then verify `/fdb quest status` and `/fdb questapi`. A plain `update-addon.cmd` fetches `release` and cannot install the draft Quest Tracker until merge.
 2. Accept a new quest from an NPC, then check `/fdb quest <ID>` for quest ID, giver ID/name and approximately correct zone/coordinates.
 3. Kill and loot a relevant mob. Verify the item appears as `[Quest item]` at the **top of its mob tooltip**. Inspect `/fdb last` and existing `questDrops/questIds` records. A nonquest item must remain unmarked.
 4. Complete a quest with guaranteed rewards, then one with **choice rewards**. Before confirming the reward dialog, inspect offered guaranteed/choice lists with `/fdb quest <id>`; QUEST_COMPLETE persists an offer preview but must not mark completion or grant items. After turn-in check NPC/zone/coords and event-reported awarded XP/money. Never claim the actual chosen item from a menu alone.
