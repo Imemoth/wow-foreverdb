@@ -63,3 +63,4 @@ try {
         Write-Host 'PASS: release default, feature/pinned refs, failed fetch preservation, beta isolation, SavedVariables, multiple-install selection'
     } finally { $env:USERPROFILE=$priorProfile }
 } finally { Remove-Item $root -Recurse -Force }
+exit 0
