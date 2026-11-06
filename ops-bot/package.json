@@ -1,0 +1,24 @@
+{
+  "name": "azerdex-ops-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AzerDex Operations Bot V1: Discord HTTPS interactions + Cloudflare Cron monitoring, D1 incident state, read-only health provider, independent heartbeat. Read-and-acknowledge only.",
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "commands:print": "tsx scripts/register-commands.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261106.1",
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  }
+}

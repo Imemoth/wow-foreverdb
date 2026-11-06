@@ -1,0 +1,50 @@
+name: AzerDex Ops Bot
+
+# NOT a required check, by design (docs/web/release-gates.md: a path-filtered workflow never reports on unrelated PRs, and a
+# required check that never reports blocks them). It runs whenever the bot or its docs change, and on demand. Adding it to the
+# `release` ruleset would be a separate owner decision.
+on:
+  pull_request:
+    paths:
+      - 'ops-bot/**'
+      - 'docs/ops-bot/**'
+      - '.github/workflows/ops-bot-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-bot-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ops-bot:
+    name: Ops bot (typecheck, tests, audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults: { run: { working-directory: ops-bot } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: ops-bot/package-lock.json }
+      - name: Node.js major matches the pinned version (.node-version = engines of ops-bot)
+        run: |
+          pinned="$(tr -d '[:space:]' < ../.node-version)"
+          actual="$(node -p "process.versions.node.split('.')[0]")"
+          engines="$(node -p "require('./package.json').engines.node")"
+          test "$actual" = "$pinned" && test "$engines" = "${pinned}.x" || { echo "node mismatch: pinned=$pinned actual=$actual engines=$engines"; exit 1; }
+      - name: Install (lockfile only, no lifecycle scripts)
+        run: npm ci --ignore-scripts
+      - name: Production dependency audit (high/critical fail)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit (moderate and above fail; no exceptions exist for this package)
+        run: npm audit --audit-level=moderate
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Unit, contract, integration and security tests (D1 SQL runs on SQLite via node:sqlite)
+        run: npm test
+      - name: No credential-shaped strings, and nothing deployable at the top level of wrangler.toml
+        run: |
+          ! grep -rEn 'discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----' src migrations wrangler.toml scripts
+          ! sed '/^\[env\./,$d' wrangler.toml | grep -E 'd1_databases|crons|database_id'
