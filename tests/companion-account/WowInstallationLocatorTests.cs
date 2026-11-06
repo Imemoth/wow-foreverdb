@@ -30,6 +30,8 @@ public sealed class WowInstallationLocatorTests : IDisposable
         var settings = SettingsService.ApplyDetectedWowRoot(new CompanionSettings(), candidates);
 
         Assert.Equal(WowClientFlavor.ClassicBeta, Assert.Single(candidates).Flavor);
+        Assert.Contains("ineligible Forever source", candidates[0].DisplayName, StringComparison.Ordinal);
+        Assert.False(candidates[0].CanBeForeverSource);
         Assert.Equal("", settings.WowRoot);
     }
 
@@ -45,6 +47,7 @@ public sealed class WowInstallationLocatorTests : IDisposable
 
         Assert.Equal(2, candidates.Count);
         Assert.Contains(candidates, x => x.Flavor == WowClientFlavor.ClassicBeta);
+        Assert.Equal("WoW: Forever — _forever_", Assert.Single(candidates, x => x.Flavor == WowClientFlavor.Forever).DisplayName);
         Assert.Equal(Path.Combine(basePath, "_forever_"), settings.WowRoot);
     }
 

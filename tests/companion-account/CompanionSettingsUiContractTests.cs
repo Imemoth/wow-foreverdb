@@ -60,6 +60,63 @@ public sealed class CompanionSettingsUiContractTests
         Assert.Contains("RestoreLegacyAnonymousAsync()", code, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Identity_refresh_path_is_local_only_and_does_not_call_snapshot_sync()
+    {
+        var accountCode = File.ReadAllText(Path.Combine(RepoRoot(), "companion", "ForeverDB.Companion", "MainWindow.Account.cs"));
+        var start = accountCode.IndexOf("private async Task RefreshLocalStateAfterIdentityChangeAsync()", StringComparison.Ordinal);
+        var end = accountCode.IndexOf("// Session actions", start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        var method = accountCode[start..end];
+
+        Assert.Contains("DiscoverInstallations(files)", method, StringComparison.Ordinal);
+        Assert.Contains("GuildbookStartupCoordinator.RestoreAsync", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncFileAsync", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncTrigger", method, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("AccountSignIn_Click")]
+    [InlineData("AccountSignOut_Click")]
+    [InlineData("AccountSwitchAccount_Click")]
+    [InlineData("AccountReturnAnonymous_Click")]
+    public void Identity_actions_never_invoke_snapshot_sync_directly(string handlerName)
+    {
+        var accountCode = File.ReadAllText(Path.Combine(RepoRoot(), "companion", "ForeverDB.Companion", "MainWindow.Account.cs"));
+        var start = accountCode.IndexOf($"private async void {handlerName}(", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var next = accountCode.IndexOf("private ", start + 1, StringComparison.Ordinal);
+        var handler = accountCode[start..(next < 0 ? accountCode.Length : next)];
+        Assert.DoesNotContain("SyncFileAsync", handler, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Installation_labels_are_readable_and_save_success_is_cleared_on_edit_and_validation_failure()
+    {
+        var root = RepoRoot();
+        var xaml = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.xaml"));
+        var code = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.xaml.cs"));
+
+        Assert.Contains("DisplayMemberPath=\"DisplayName\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SettingsInput_Changed", xaml, StringComparison.Ordinal);
+        Assert.Contains("SettingsSaveStatusText.Visibility = Visibility.Collapsed", code, StringComparison.Ordinal);
+        Assert.Contains("The legacy _classic_beta_ client cannot be used", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Runtime_environment_ui_uses_the_effective_endpoint_and_invalid_staging_blocks_fallback()
+    {
+        var root = RepoRoot();
+        var gate = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion.Account", "AccountFeatureGate.cs"));
+        var main = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.xaml.cs"));
+        var account = File.ReadAllText(Path.Combine(root, "companion", "ForeverDB.Companion", "MainWindow.Account.cs"));
+
+        Assert.Contains("MustBlockProductionFallback", gate, StringComparison.Ordinal);
+        Assert.Contains("Network services are disabled instead of using production.", main, StringComparison.Ordinal);
+        Assert.Contains("DescribeEffectiveEnvironment(account.Gate, account.Endpoint)", account, StringComparison.Ordinal);
+        Assert.DoesNotContain("test project (not production)", account, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

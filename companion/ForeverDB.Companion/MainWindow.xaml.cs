@@ -110,6 +110,18 @@ public partial class MainWindow : Window
             _settings.SupabaseKey,
             "production");
         var gate = AccountFeatureGate.EvaluateFromEnvironment(productionEndpoint);
+        var requestedMode = Environment.GetEnvironmentVariable(AccountFeatureGate.ModeVariable);
+        if (AccountFeatureGate.MustBlockProductionFallback(requestedMode, gate))
+        {
+            _account = null;
+            _accountRuntimeKey = "";
+            MapAssetDiagnosticUploader.Runtime = null;
+            RefreshAccountUi();
+            AccountEnvironmentText.Text = $"{requestedMode!.Trim()} configuration rejected — network services disabled. {gate.Reason}";
+            RecordSyncError("The requested isolated account environment is invalid. Network services are disabled instead of using production.");
+            return;
+        }
+
         var runtimeKey =
             $"{gate.Environment}|{gate.AccountsEnabled}|{gate.CredentialSubdirectory}|{gate.Endpoint?.BaseUrl}|{gate.Endpoint?.PublishableKey}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
 
@@ -202,48 +214,7 @@ public partial class MainWindow : Window
             effective,
             GetSearchTokenAsync);
 
-        if (_settings.AutoSync)
-        {
-            try
-            {
-                _watcher = new WowSavedVariablesWatcher(
-                    _settings.WowRoot,
-                    async (path, cancellationToken) =>
-                    {
-                        if (!_settings.AutoSync ||
-                            _syncService is null)
-                        {
-                            return;
-                        }
-
-                        try
-                        {
-                            await _syncService.SyncFileAsync(
-                                path,
-                                cancellationToken,
-                                force: true,
-                                trigger: SyncTrigger.Auto);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
-                        catch (Exception ex)
-                        {
-                            Dispatcher.Invoke(
-                                () => RecordSyncError(ex.Message));
-                        }
-                    });
-
-                _watcher.Start();
-                _syncHealth.SetWatcherReady(true);
-            }
-            catch (Exception ex)
-            {
-                _watcher?.Dispose();
-                _watcher = null;
-                RecordSyncError(ex.Message);
-            }
-        }
+        StartWatcher();
 
         // Restore the encrypted LOCAL Guildbook before any optional network work. Independent of AutoSync, of sign-in network
         // availability and of the public upload loop; it never parses SavedVariables for upload, obtains a token or calls an endpoint.
@@ -311,6 +282,54 @@ public partial class MainWindow : Window
         {
             // Discovery only feeds the Account tab.
             return Array.Empty<string>();
+        }
+    }
+
+    private void StartWatcher()
+    {
+        if (!_settings.AutoSync || _watcher is not null || _syncService is null)
+        {
+            _syncHealth.SetWatcherReady(false);
+            return;
+        }
+
+        try
+        {
+            _watcher = new WowSavedVariablesWatcher(
+                _settings.WowRoot,
+                async (path, cancellationToken) =>
+                {
+                    if (!_settings.AutoSync || _syncService is null)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        await _syncService.SyncFileAsync(
+                            path,
+                            cancellationToken,
+                            force: true,
+                            trigger: SyncTrigger.Auto);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => RecordSyncError(ex.Message));
+                    }
+                });
+
+            _watcher.Start();
+            _syncHealth.SetWatcherReady(true);
+        }
+        catch (Exception ex)
+        {
+            _watcher?.Dispose();
+            _watcher = null;
+            _syncHealth.SetWatcherReady(false);
+            RecordSyncError(ex.Message);
         }
     }
 
@@ -1513,6 +1532,7 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        SettingsSaveStatusText.Visibility = Visibility.Collapsed;
         var root = WowInstallationLocator.Validate(WowRootBox.Text);
         WowRootStatusText.Text = root.StatusMessage;
         if (root.Flavor == WowClientFlavor.ClassicBeta)
@@ -1530,6 +1550,7 @@ public partial class MainWindow : Window
         WowRootStatusText.Visibility = Visibility.Visible;
         if (!root.IsValid)
         {
+            SettingsSaveStatusText.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -1548,19 +1569,37 @@ public partial class MainWindow : Window
             StartMinimized = StartMinimizedCheck.IsChecked == true
         };
 
-        SettingsService.Save(settings);
-        _settings = settings;
-        StartupService.SetEnabled(
-            _settings.LaunchWithWindows,
-            _settings.StartMinimized);
+        try
+        {
+            SettingsService.Save(settings);
+            _settings = settings;
+            StartupService.SetEnabled(_settings.LaunchWithWindows, _settings.StartMinimized);
+            await RebuildServicesAsync(syncExistingFiles: sameConfirmedRoot);
 
-        await RebuildServicesAsync(syncExistingFiles: sameConfirmedRoot);
+            SettingsSaveStatusText.Text = "Settings saved.";
+            SettingsSaveStatusText.Foreground = (System.Windows.Media.Brush)FindResource("SuccessBrush");
+            SettingsSaveStatusText.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            SettingsSaveStatusText.Text = $"Settings could not be saved: {ex.Message}";
+            SettingsSaveStatusText.Foreground = (System.Windows.Media.Brush)FindResource("ErrorBrush");
+            SettingsSaveStatusText.Visibility = Visibility.Visible;
+        }
+    }
 
-        SettingsSaveStatusText.Text = "Settings saved.";
-        SettingsSaveStatusText.Foreground =
-            (System.Windows.Media.Brush)FindResource("SuccessBrush");
-        SettingsSaveStatusText.Visibility =
-            Visibility.Visible;
+    private void SettingsInput_Changed(object sender, RoutedEventArgs e) =>
+        ClearSettingsSaveStatus();
+
+    private void SettingsInput_Changed(object sender, TextChangedEventArgs e) =>
+        ClearSettingsSaveStatus();
+
+    private void ClearSettingsSaveStatus()
+    {
+        if (SettingsSaveStatusText is not null)
+        {
+            SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void CancelSettings_Click(object sender, RoutedEventArgs e)

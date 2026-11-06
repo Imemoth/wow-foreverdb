@@ -3,7 +3,7 @@ _Date: 2026-11-06. Source: inspected `release` code at `26a7820be6851805c7445359
 
 ## Product decision
 
-The Companion is a Windows .NET 8 WPF client, currently **0.9.0-alpha**. It maintains a locally cached Guildbook, while sending **only explicitly public source/item/map observation data** to the authorized API. Guildbook **must remain LOCAL-ONLY**, with no Guildbook RPC, cloud sync, server storage or public page. Local data refresh from WoW SavedVariables, encrypted DPAPI persistence and verified-account isolation are allowed and should not be confused with online sync. Quest/account session histories are also private and outside the existing public Schema 9 payload.
+The Companion is a Windows .NET 8 WPF client, currently **0.9.1-alpha**. It maintains a locally cached Guildbook, while sending **only explicitly public source/item/map observation data** to the authorized API. Guildbook **must remain LOCAL-ONLY**, with no Guildbook RPC, cloud sync, server storage or public page. Local data refresh from WoW SavedVariables, encrypted DPAPI persistence and verified-account isolation are allowed and should not be confused with online sync. Quest/account session histories are also private and outside the existing public Schema 9 payload.
 
 The accepted addon Quest Tracker is **0.7.1-alpha / Interface 16001 / Schema 9**, merged in #173. It stores rich per-character quest records locally. Those records are **not yet transported** by the Companion. This distinction is intentional and cannot be bypassed by serializing the raw SavedVariables.
 
@@ -61,7 +61,7 @@ The accepted addon Quest Tracker is **0.7.1-alpha / Interface 16001 / Schema 9**
 
 ## Release gates
 
-- Keep Companion 0.9.0-alpha until a reviewed build/versioning decision; do not bump addon (0.7.1-alpha) solely for Companion tests.
+- Companion `0.9.1-alpha` is the review build for C0b safety fixes; addon `0.7.1-alpha` and Schema 9 remain unchanged.
 - Reuse windows `.NET 8` build, account/owner/GoTrue integration, Guildbook local-only guard, map/search regression and installer acceptance.
 - Require real Windows UI and selected Forever client acceptance, with an explicit staging endpoint shown before any upload.
 - Preserve branch protection and prepare each implementation PR on current `release`, never on historical #81/#82/#83 commits.
@@ -74,7 +74,7 @@ The implementation extends the release baseline above; that table remains a reco
 
 | Area | Implemented in #176 | Remaining evidence |
 | --- | --- | --- |
-| Installation discovery | Bounded known-location scan includes `_forever_` and other known flavors; a unique Forever client may prefill Settings. A detected or changed path stays unconfirmed until Save. | W1-W3 on Windows |
+| Installation discovery | Bounded known-location scan includes `_forever_` and other known flavors; a unique Forever client may prefill Settings. A detected or changed path stays unconfirmed until Save. | W1-W3 owner-reported complete on preceding build |
 | Installation validation | Local validation distinguishes a real client from `WTF/Account/.../SavedVariables/ForeverDB.lua`; a client without initialized SavedVariables stays valid. `_classic_beta_` cannot be saved as the Forever data source. | Validate against actual Forever and beta installs on Windows |
 | Account actions | Sign out, Switch account, and Return to preserved anonymous identity are explicit. Pending server revocation remains visible and retryable. | W4 on isolated staging accounts |
 | Device ownership | Manual registered-device upload requires a verified current account and a fresh server ownership result for the target installation. Session generation changes cancel the upload; no fallback credential is tried. | W4/W6 on Windows and C0c staging validation |
@@ -85,4 +85,4 @@ The implementation extends the release baseline above; that table remains a reco
 
 The existing `CompanionSettings.AutoSync` preference is not consent for registered-device automatic upload. C0d must introduce a separate per-installation opt-in, default it to off for every upgrade and new installation, show the selected installation and current owner before consent, and invalidate the opt-in when ownership or account identity changes. Manual Sync Now remains available when that opt-in is off. `DeviceAutoSyncApproved` stays false until a separately reviewed C0d and owner acceptance.
 
-Companion remains **0.9.0-alpha**; addon `0.7.1-alpha`, interface `16001`, and Schema 9 are unchanged. Windows GUI acceptance and C0c nonempty staging upload/read-back are still pending. See [windows-acceptance-checklist.md](windows-acceptance-checklist.md).
+Companion is **0.9.1-alpha**; addon `0.7.1-alpha`, interface `16001`, and Schema 9 are unchanged. W4-W6 Windows owner acceptance and C0c nonempty staging upload/read-back remain pending. See [windows-acceptance-checklist.md](windows-acceptance-checklist.md).

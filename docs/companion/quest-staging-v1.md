@@ -6,7 +6,7 @@ Status: **C0a/C0b Companion implementation is in Draft PR #176; C0c remains stag
 
 - Repository: `Imemoth/wow-foreverdb`. Production integration branch: `release`, **not** `main`.
 - Fresh branch: `feat/companion-quest-staging-v1`, forked from the release merge of the consolidated accepted Quest Tracker #173, commit `26a7820be6851805c7445359583a236c5a5ba389`.
-- The accepted WoW: Forever addon is **0.7.1-alpha**, interface 16001, **Schema 9**. Companion remains **0.9.0-alpha**.
+- The accepted WoW: Forever addon is **0.7.1-alpha**, interface 16001, **Schema 9**. Companion review build is **0.9.1-alpha**.
 - Quest Tracker private journal is `ForeverDB_Saved.questJournal[characterGUID]`; it is local-only and never part of the current `ForeverDB_Export` string.
 - Existing exporter record types: `H|9`, `M`, `A`, `S`, `B`, `L`, `I`. The current item observation includes `questDrops` and a possibly blank quest-ID CSV. **A quest flag with no explicit quest ID is NOT a canonical quest–item link.** There are no `Q`/`R` quest rows in Schema 9.
 - The current Companion parser extracts the `ForeverDB_Export` Lua string, and public transport uses its explicit projection plus `PublicSnapshotGuard`. Guildbook is an independently parsed and local-only concern.

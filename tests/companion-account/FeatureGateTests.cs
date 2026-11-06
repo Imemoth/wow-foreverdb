@@ -76,6 +76,42 @@ public class FeatureGateTests
         Assert.Equal(settings.SupabaseUrl, d.Endpoint!.BaseUrl);
     }
 
+    [Fact]
+    public void Effective_environment_label_uses_the_validated_runtime_endpoint_without_secrets()
+    {
+        var production = AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
+        var staging = AccountFeatureGate.EvaluateWithApprovals(
+            n => Staging().ToDictionary(x => x.Item1, x => x.Item2).GetValueOrDefault(n),
+            new AccountFeatureGate.GateApprovals(PrivatePilot: false, ClaimPilot: false));
+
+        var productionLabel = AccountFeatureGate.DescribeEffectiveEnvironment(production, production.Endpoint!);
+        var stagingLabel = AccountFeatureGate.DescribeEffectiveEnvironment(staging, staging.Endpoint!);
+        var disabledLabel = AccountFeatureGate.DescribeEffectiveEnvironment(
+            AccountFeatureGate.EvaluateForRuntime(n => n == AccountFeatureGate.ModeVariable ? "disabled" : null, TestEnv.ProductionEndpoint),
+            TestEnv.ProductionEndpoint);
+
+        Assert.Contains("Production Account Linking — production backend", productionLabel, StringComparison.Ordinal);
+        Assert.Contains("klxhikdlfwgxurdyexdi.supabase.co", productionLabel, StringComparison.Ordinal);
+        Assert.DoesNotContain("test project (not production)", productionLabel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Staging — isolated staging backend (abcdefghijklmnopqrst.supabase.co)", stagingLabel, StringComparison.Ordinal);
+        Assert.DoesNotContain(Key, stagingLabel, StringComparison.Ordinal);
+        Assert.Equal("Disabled — account services unavailable.", disabledLabel);
+    }
+
+    [Fact]
+    public void Rejected_staging_configuration_blocks_production_fallback()
+    {
+        var staging = AccountFeatureGate.EvaluateForRuntime(
+            n => n == AccountFeatureGate.ModeVariable ? "staging" : null,
+            TestEnv.ProductionEndpoint);
+        var production = AccountFeatureGate.EvaluateForRuntime(_ => null, TestEnv.ProductionEndpoint);
+
+        Assert.False(staging.AccountsEnabled);
+        Assert.True(AccountFeatureGate.MustBlockProductionFallback("staging", staging));
+        Assert.False(AccountFeatureGate.MustBlockProductionFallback("production", production));
+        Assert.False(AccountFeatureGate.MustBlockProductionFallback("disabled", staging));
+    }
+
     [Theory]
     [InlineData("prod")]
     [InlineData("true")]

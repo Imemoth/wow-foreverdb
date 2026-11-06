@@ -21,7 +21,21 @@ public sealed record WowInstallation(
     WowClientFlavor Flavor,
     bool IsInstalled,
     bool SavedVariablesAvailable,
-    string StatusMessage);
+    string StatusMessage)
+{
+    public string DisplayName => Flavor switch
+    {
+        WowClientFlavor.Forever => "WoW: Forever — _forever_",
+        WowClientFlavor.ClassicBeta => "WoW: Classic Beta — ineligible Forever source",
+        WowClientFlavor.Retail => "WoW: Retail — _retail_",
+        WowClientFlavor.Classic => "WoW: Classic — _classic_",
+        WowClientFlavor.ClassicEra => "WoW: Classic Era — _classic_era_",
+        WowClientFlavor.PublicTest => $"WoW: Public Test — {Path.GetFileName(RootPath)}",
+        _ => $"WoW client — {Path.GetFileName(RootPath)}"
+    };
+
+    public bool CanBeForeverSource => IsInstalled && Flavor != WowClientFlavor.ClassicBeta;
+}
 
 public sealed record WowInstallationValidation(
     bool IsValid,
@@ -72,7 +86,9 @@ public static class WowInstallationLocator
                         flavor.Flavor,
                         true,
                         result.SavedVariablesAvailable,
-                        result.StatusMessage);
+                        flavor.Flavor == WowClientFlavor.ClassicBeta
+                            ? "Legacy Classic Beta is listed for diagnostics only and cannot be used as a Forever data source."
+                            : result.StatusMessage);
                 }
             }
         }

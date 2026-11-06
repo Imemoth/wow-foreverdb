@@ -12,8 +12,8 @@ ForeverDB has three version axes that move independently:
 | --- | --- | --- |
 | Addon | **0.7.1-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
 | Export schema | **9** | `FDB.SCHEMA_VERSION` in `addon/ForeverDB/Core.lua` |
-| Companion | **0.9.0-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
-| Installer | **0.9.0-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
+| Companion | **0.9.1-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
+| Installer | **0.9.1-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
 | Forever interface | **16001** | `## Interface` in `addon/ForeverDB/ForeverDB.toc` |
 
 ## Consistency rules
@@ -25,9 +25,9 @@ The Companion version is mirrored in `companion/ForeverDB.Companion/ForeverDB.Co
 `installer/ForeverDB.iss`, the visible WPF strings in `MainWindow.xaml`, `README.md`,
 `companion/README.md`, `CHANGELOG.md` and `docs/ROADMAP.md`.
 `scripts/check-companion-account.py` (run by the `Companion account auth (Windows)` workflow)
-fails when they disagree. Companion `0.9.0-alpha` (Account System V1) changes neither the
-addon version nor the export schema: SavedVariables, the parser and the ingest payload are
-unchanged.
+fails when they disagree. Companion `0.9.1-alpha` is a Companion-only safety patch over
+Account System V1. It changes neither the addon version nor the export schema: SavedVariables,
+the parser and the ingest payload are unchanged.
 
 ### Addon
 

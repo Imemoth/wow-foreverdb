@@ -8,9 +8,17 @@ version contract and release checklist are documented in
 
 - Addon: **0.7.1-alpha**
 - Export schema: **9**
-- Companion: **0.9.0-alpha**
+- Companion: **0.9.1-alpha**
 
 # Companion
+
+## 0.9.1-alpha — 2026-11-06 (C0b account and settings safety, PR #176 draft)
+
+- Identity changes now refresh local installation inventory and restore local encrypted Guildbook data without invoking snapshot ingestion. Stale sync work is cancelled and never retried under a different identity.
+- Account UI reports the validated effective backend and safe hostname; a rejected isolated-mode configuration disables network services rather than falling back to production.
+- Installation selection has friendly client labels, lists legacy Classic Beta as ineligible, and clears stale save-success messages after edits or validation failures.
+- Registered-device AutoSync remains disabled; Guildbook and private quest journals remain local-only; addon `0.7.1-alpha` and Schema 9 are unchanged.
+- W4-W6 Windows owner acceptance remains pending. This is a review build, not a production release.
 
 ## 0.9.0-alpha — 2026-10-12 (Account System V1 authentication, PR D)
 
@@ -27,14 +35,6 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Windows regression suite `tests/companion-account` (real DPAPI and real multi-process tests) and the `Companion account auth (Windows)` workflow.
 - Unchanged: addon version, export schema, SavedVariables parsing, Search, Guildbook, map rendering, the production anonymous sync protocol.
 - Known limitation: the website step that redeems a link code is PR E; until then a displayed code cannot be redeemed.
-
-### C0a/C0b draft work — 2026-11-06 (PR #176, not a release)
-
-- Added bounded WoW Forever installation discovery, folder selection, validation, explicit path confirmation, and beta-client upload protection.
-- Added explicit account switching and restoration of the preserved anonymous identity.
-- Guarded registered-device manual uploads with fresh current-account ownership and session-generation checks; switching or signing out cancels in-flight work.
-- Companion stays **0.9.0-alpha**. Registered-device AutoSync stays disabled; Guildbook remains local-only; Schema 9 remains unchanged.
-- Real Windows acceptance is pending. C0c staging upload/read-back and C0d registered-device AutoSync remain future work.
 
 ## 0.8.2-alpha — 2026-09-27
 

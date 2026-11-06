@@ -8,11 +8,11 @@
 
 **Tech Stack:** .NET 8, WPF, C#, xUnit and existing Companion account/Guildbook test projects.
 
-**Spec:** User-provided `ForeverDB Companion 0.9.0-alpha — Phase C0a/C0b Implementation` pasted text; baseline and integration notes in `docs/companion/current-state-audit-2026-11-06.md` and `docs/companion/quest-staging-v1.md`.
+**Spec:** User-provided C0a/C0b implementation brief and follow-up P0 safety / Windows acceptance brief. The follow-up explicitly sets Companion `0.9.1-alpha`, overriding the prior version constraint; baseline and integration notes are in `docs/companion/current-state-audit-2026-11-06.md` and `docs/companion/quest-staging-v1.md`.
 
 ## Global Constraints
 
-- Keep Companion `0.9.0-alpha`, addon `0.7.1-alpha`, export schema `9`, and WoW Forever Interface `16001`.
+- Companion `0.9.1-alpha` is the reviewed safety-fix build, addon `0.7.1-alpha`, export schema `9`, and WoW Forever Interface `16001`.
 - Never silently choose `_classic_beta_`; prefer valid explicit selection, then detected `_forever_`.
 - Discovery is local only and never initiates an upload.
 - Preserve account credentials, anonymous identity, install IDs, SavedVariables, and existing settings.
