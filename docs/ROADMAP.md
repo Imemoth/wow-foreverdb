@@ -77,7 +77,7 @@ Runbook: [Private project Companion pilot](account-v1/private-project-companion-
 ## Current baseline
 
 ### Addon
-- Version: **0.6.1-alpha** (draft; live quest acceptance pending)
+- Version: **0.7.0-alpha** (draft; live quest acceptance pending)
 - Schema: **9**
 - Forever interface: **16001**
 - Observed pipelines:

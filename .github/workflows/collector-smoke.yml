@@ -39,6 +39,9 @@ jobs:
       - name: Run quest tracker smoke tests
         run: lua${{ matrix.lua }} tests/quest_tracker_smoke.lua
 
+      - name: Run quest kill tracker smoke tests
+        run: lua${{ matrix.lua }} tests/quest_kill_smoke.lua
+
       - name: Compile addon Lua
         shell: bash
         run: |
@@ -51,3 +54,4 @@ jobs:
           luac${{ matrix.lua }} -p tests/session_ui_smoke.lua
           luac${{ matrix.lua }} -p tests/quest_api_smoke.lua
           luac${{ matrix.lua }} -p tests/quest_tracker_smoke.lua
+          luac${{ matrix.lua }} -p tests/quest_kill_smoke.lua

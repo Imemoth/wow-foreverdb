@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.6.1-alpha**
+- Addon: **0.7.0-alpha**
 - Export schema: **9**
 - Companion: **0.9.0-alpha**
 
@@ -164,6 +164,11 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.7.0-alpha — 2026-11-06 (Quest Kill Tracker V1.1)
+
+- Local quest-to-mob observations pair unique active quest/objective tooltip text with an NPC GUID and player map location. Target/mouseover interaction works without a loot drop.
+- Deaths of previously matched unit instances and observed objective counter changes are separate evidence; counter changes are not attributed to a particular mob. `/fdb quest mobs <id>` inspects local observations. No new schema-9 export row or public data path.
 
 ## 0.6.1-alpha — 2026-11-06 (Quest acceptance provenance)
 

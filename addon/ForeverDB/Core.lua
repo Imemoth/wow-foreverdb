@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.6.1-alpha"
+FDB.VERSION = "0.7.0-alpha"
 FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
@@ -101,6 +101,8 @@ local function registerSlashCommands()
         elseif command == "questapi"
             or command == "quests" then
             FDB:RunQuestApiProbe()
+        elseif command:match("^quest%s+mobs%s+") then
+            FDB:PrintQuestMobs(command:match("^quest%s+mobs%s+(%d+)$"))
         elseif command == "quest debug" then
             FDB:QuestDebug()
         elseif command == "quest"
@@ -149,6 +151,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         FDB:InitializeSessionUI()
         FDB:InitializeGuildApiProbe()
         FDB:InitializeQuestApiProbe()
+        FDB:InitializeQuestKillTracker()
         FDB:InitializeQuestTracker()
         FDB:InitializeGuildbookTracker()
         FDB:InitializeGatheringTracker()

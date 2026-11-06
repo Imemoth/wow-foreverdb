@@ -233,6 +233,7 @@ test("Core initializes quest probe and routes /fdb questapi plus /fdb quests ali
     FDB.RunQuestApiProbe = function()
         state.probeRuns = state.probeRuns + 1
     end
+    FDB.InitializeQuestKillTracker = function() end
     FDB.InitializeQuestTracker = function()
         state.trackerInit = state.trackerInit + 1
     end
