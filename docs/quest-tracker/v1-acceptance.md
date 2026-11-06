@@ -1,6 +1,6 @@
 # Quest Tracker V1 — local capture and launch-day acceptance
 
-Branch: `feat/quest-tracker-v1-local-capture`. Addon: `0.6.0-alpha`. Export: **schema 9 unchanged**.
+Branch: `feat/quest-tracker-v1-local-capture`. Addon: `0.6.1-alpha`. Export: **schema 9 unchanged**.
 
 ## Scope
 
@@ -42,7 +42,7 @@ Branch: `feat/quest-tracker-v1-local-capture`. Addon: `0.6.0-alpha`. Export: **s
 
 ## Required in-game acceptance (human operator)
 
-1. Back up `WTF/Account/.../SavedVariables/ForeverDB.lua`. From the repository run `update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "<actual Forever client>\Interface\AddOns"` (or pin the PR commit SHA). The updater must print `0.6.0-alpha`, the selected commit and the Forever destination; inspect the installed `ForeverDB.toc` for `## Version: 0.6.0-alpha`. Confirm the separate `_classic_beta_` AddOns folder and SavedVariables are unchanged. Launch that Forever client, `/reload`, then verify `/fdb quest status` and `/fdb questapi`. A plain `update-addon.cmd` fetches `release` and cannot install the draft Quest Tracker until merge.
+1. Back up `WTF/Account/.../SavedVariables/ForeverDB.lua`. From the repository run `update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "<actual Forever client>\Interface\AddOns"` (or pin the PR commit SHA). The updater must print `0.6.1-alpha`, the selected commit and the Forever destination; inspect the installed `ForeverDB.toc` for `## Version: 0.6.1-alpha`. Confirm the separate `_classic_beta_` AddOns folder and SavedVariables are unchanged. Launch that Forever client, `/reload`, then verify `/fdb quest status` and `/fdb questapi`. A plain `update-addon.cmd` fetches `release` and cannot install the draft Quest Tracker until merge.
 2. Accept a new quest from an NPC, then check `/fdb quest <ID>` for quest ID, giver ID/name and approximately correct zone/coordinates.
 3. Kill and loot a relevant mob. Verify the item appears as `[Quest item]` at the **top of its mob tooltip**. Inspect `/fdb last` and existing `questDrops/questIds` records. A nonquest item must remain unmarked.
 4. Complete a quest with guaranteed rewards, then one with **choice rewards**. Before confirming the reward dialog, inspect offered guaranteed/choice lists with `/fdb quest <id>`; QUEST_COMPLETE persists an offer preview but must not mark completion or grant items. After turn-in check NPC/zone/coords and event-reported awarded XP/money. Never claim the actual chosen item from a menu alone.
@@ -113,3 +113,7 @@ ForeverDB_Saved = {
 In `sources["creature:<mobID>:<level>"].buckets.mob.items["<itemID>"]`, expect `drops` once per observed loot window, summed `quantity`, `questDrops`, and `questIds={["<questID>"]=true}` only where known. Flag-only quest items have an empty questIds table; ordinary lookalike names do not get quest metadata. The source bucket location retains the existing quantized coordinates. Inspect `ForeverDB_Export`: header `H|9`, existing `I` quest counts/IDs, no journal, character GUID, description, `Q` or `R` lines. Preserve an older SavedVariables backup, upgrade, then confirm installation ID, old sources and other collectors still work.
 
 Record each manual case as PASS/FAIL/PENDING with build, event/API output, quest/item IDs, saved-data evidence and timestamp. All live cases remain PENDING for this draft.
+
+## Quest #364 acceptance diagnosis (Pass A, pending live proof)
+
+Install the `feat/quest-tracker-v1-local-capture` ref with `update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "<Forever>\Interface\AddOns"`. Check the printed SHA and `0.6.1-alpha`, then `/reload`. Before speaking to a fresh giver, run `/fdb quest debug` once to enable the temporary trace. Open the quest dialog, accept **The Mindless Ones** (#364), then run `/fdb quest 364` and `/fdb quest debug` to display the buffered events and disable tracing. Expected: `QUEST_DETAIL id=?` is acceptable if `GetQuestID()` is absent, but the trace must show a real dialog NPC ID and the `QUEST_ACCEPTED id=364 ... matched` result. `/fdb quest 364` must print `accepted at <giver name> <NPC ID> Tirisfal Glades <x> <y>`. The coordinates describe the player position at interaction, not the NPC's exact spawn. Capture the trace and `SavedVariables.questJournal[characterGUID].entries["364"].accept` after logout. If the title is absent/mismatched or duplicate, expected result is `unmatched` with no `accept` claim. `/fdb quest debug` again toggles tracing off. Do not use a combat target as a giver.

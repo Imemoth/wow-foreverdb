@@ -3,7 +3,7 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.6.0-alpha"
+FDB.VERSION = "0.6.1-alpha"
 FDB.SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
@@ -101,6 +101,8 @@ local function registerSlashCommands()
         elseif command == "questapi"
             or command == "quests" then
             FDB:RunQuestApiProbe()
+        elseif command == "quest debug" then
+            FDB:QuestDebug()
         elseif command == "quest"
             or command:match("^quest%s+") then
             FDB:PrintTrackedQuest(rawCommand:match("^%S+%s*(.-)$"))

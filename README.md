@@ -6,7 +6,7 @@ Observed loot, gathering, fishing, GameObject and disenchant database for World 
 
 | Component | Version |
 | --- | --- |
-| Addon | **0.6.0-alpha** |
+| Addon | **0.6.1-alpha** |
 | SavedVariables / export schema | **9** |
 | Forever interface target | **16001** |
 | Companion | **0.9.0-alpha** |
@@ -48,7 +48,7 @@ For Quest Tracker V1 testing before PR #168 is merged, run:
 update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\Path\To\World of Warcraft\_classic_forever_\Interface\AddOns"
 ```
 
-`-Ref` also accepts a pinned 40-character commit SHA. The folder name may differ, but the client folder must contain `forever`. Direct PowerShell use: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\update-addon.ps1 -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\...\Interface\AddOns"`. The updater prints the selected ref, SHA, TOC version and destination, and validates Core/TOC versions before replacing files. Check the printed version is `0.6.0-alpha`; in the Forever client run `/reload` and `/fdb quest status`. See [Quest V1 live acceptance](docs/quest-tracker/v1-acceptance.md).
+`-Ref` also accepts a pinned 40-character commit SHA. The folder name may differ, but the client folder must contain `forever`. Direct PowerShell use: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\update-addon.ps1 -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\...\Interface\AddOns"`. The updater prints the selected ref, SHA, TOC version and destination, and validates Core/TOC versions before replacing files. Check the printed version is `0.6.1-alpha`; in the Forever client run `/reload` and `/fdb quest status`. See [Quest V1 live acceptance](docs/quest-tracker/v1-acceptance.md).
 
 ## In-game commands
 

@@ -86,7 +86,7 @@ local function setup(opts)
     end
     local FDB = {
         DB = { sources = {}, guilds = {}, schemaVersion = 9, updatedAt=1 },
-        VERSION = "0.6.0-alpha", SCHEMA_VERSION = 9,
+        VERSION = "0.6.1-alpha", SCHEMA_VERSION = 9,
         Debug = function() end,
     }
     function FDB:GetCurrentLocation()
@@ -488,7 +488,7 @@ test("real database, loot windows and exporter preserve schema 9 without journal
     s:emit("LOOT_CLOSED"); s:emit("LOOT_READY"); equal(b.observations,2)
     FDB:PrepareForSave()
     local export=ForeverDB_Export
-    contains(export,"H|9|0.6.0-alpha|existing-installation|")
+    contains(export,"H|9|0.6.1-alpha|existing-installation|")
     contains(export,"I|creature|7000|7|mob|201|Explicit quest link|2|4|2|404")
     falsy(export:find("questJournal",1,true)); falsy(export:find("Player-",1,true))
     falsy(export:find("The plague is spreading",1,true))
@@ -573,6 +573,29 @@ test("unidentified new dialogs discard older pending giver evidence", function()
     s:emit("QUEST_ACCEPTED",367); s:emit("QUEST_TURNED_IN",367)
     local q=FDB.DB.questJournal[s.player].entries["367"]
     falsy(q.accept); falsy(q.turnIn)
+end)
+
+test("missing dialog ID correlates only matching quest title and keeps interaction location", function()
+    local FDB,s=setup()
+    local dialogId=GetQuestID
+    GetQuestID=function() return nil end
+    s:emit("QUEST_DETAIL")
+    GetQuestID=dialogId
+    s:emit("QUEST_ACCEPTED",367)
+    local q=FDB.DB.questJournal[s.player].entries["367"]
+    equal(q.accept.sourceId,99); equal(q.accept.location.mapId,85)
+    equal(q.accept.location.x,31.5)
+    equal(q.accept.provenance,"player_interaction")
+end)
+
+test("missing dialog ID with mismatched title never attaches old NPC", function()
+    local FDB,s=setup()
+    GetQuestID=function() return nil end
+    s:emit("QUEST_DETAIL")
+    s.title="Different quest"
+    C_QuestLog.GetTitleForQuestID=function() return s.title end
+    s:emit("QUEST_ACCEPTED",367)
+    falsy(FDB.DB.questJournal[s.player].entries["367"].accept)
 end)
 
 assert(failed == 0, tostring(failed) .. " quest tracker checks failed")

@@ -6,7 +6,7 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.6.0-alpha**
+- Addon: **0.6.1-alpha**
 - Export schema: **9**
 - Companion: **0.9.0-alpha**
 
@@ -164,6 +164,11 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.6.1-alpha — 2026-11-06 (Quest acceptance provenance)
+
+- Quest dialog snapshots now survive a missing GetQuestID when the actual accepted quest title is uniquely corroborated by the active log. NPC identity is still read only from the dialog npc unit; location is the observed player interaction position.
+- `/fdb quest debug` enables a bounded, opt-in event trace without raw character GUIDs. Ambiguous, stale and mismatched offers remain unmatched.
 
 ## 0.6.0-alpha — 2026-11-05 (Quest Tracker V1: local-only capture)
 

@@ -6,6 +6,8 @@ local _, FDB = ...
 local frame
 local pendingOffer
 local pendingTurnIn
+local questDebug = false
+local questTrace = {}
 local refreshPending = false
 local lastRefresh = -math.huge
 local verifiedObjectives = setmetatable({}, {__mode = "k"})
@@ -230,19 +232,70 @@ local function markChanged()
     if FDB.DB then FDB.DB.updatedAt = timestamp() end
 end
 
+local function traceQuest(event, id, giver, title, outcome)
+    if not questDebug then return end
+    questTrace[#questTrace+1] = {event=event, id=id, sourceType=giver and giver.sourceType,
+        sourceId=giver and giver.sourceId, name=giver and giver.name,
+        mapId=giver and giver.location and giver.location.mapId,
+        x=giver and giver.location and giver.location.x,
+        y=giver and giver.location and giver.location.y,
+        title=title, outcome=outcome}
+    if #questTrace > 16 then table.remove(questTrace,1) end
+    print("ForeverDB: quest trace",event,"id="..tostring(id or "?"),
+        "source="..tostring(giver and giver.sourceId or "?"),
+        "map="..tostring(giver and giver.location and giver.location.mapId or "?"),outcome or "")
+end
+
+function FDB:QuestDebug()
+    questDebug = not questDebug
+    print("ForeverDB: quest debug", questDebug and "ON" or "OFF")
+    for _, row in ipairs(questTrace) do
+        print("ForeverDB: quest trace",row.event,row.id or "?",row.sourceType or "?",
+            row.sourceId or "?",row.name or "?",row.title or "?",row.mapId or "?",
+            row.x or "?",row.y or "?",row.outcome or "?")
+    end
+end
+
+local function uniqueDialogTitle(id, title)
+    if not title then return false end
+    local found = C_QuestLog and safeString(call(C_QuestLog.GetTitleForQuestID,id),180)
+    if not found then
+        local info = logInfo(logIndex(id))
+        found = info and safeString(info.title,180)
+    end
+    if found ~= title then return false end
+    local journal = ensureCharacter()
+    for _, record in pairs(journal and journal.entries or {}) do
+        if record.questId ~= id and record.status == "active" and record.title == title then return false end
+    end
+    -- If a readable log contains another quest with this title, correlation is ambiguous.
+    local count = C_QuestLog and safeAmount(call(C_QuestLog.GetNumQuestLogEntries))
+    if count and type(C_QuestLog.GetInfo) == "function" then
+        for i=1,math.min(count,500) do
+            local info = call(C_QuestLog.GetInfo,i)
+            if type(info)=="table" and info.questID ~= id and info.title == title then return false end
+        end
+    end
+    return true
+end
+
 function FDB:QuestDetail()
+    local previousOffer = pendingOffer
     pendingOffer = nil
     local id = questFromDialog()
-    if not id then return end
+    local title = safeString(call(GetTitleText),180)
+    if not id and not title then return end
     pendingOffer = {
         id = id,
+        ambiguous = previousOffer ~= nil,
         at = elapsed(),
         character = characterGuid(),
-        title = safeString(call(GetTitleText), 180),
+        title = title,
         description = safeString(call(GetQuestText), 8000),
         objectiveText = safeString(call(GetObjectiveText), 500),
         giver = captureGiver(),
     }
+    traceQuest("QUEST_DETAIL",id,pendingOffer.giver,title,id and "id-present" or "id-missing")
 end
 
 function FDB:QuestAccepted(arg1, arg2)
@@ -277,8 +330,12 @@ function FDB:QuestAccepted(arg1, arg2)
         record.status = "active"
     end
     local offer = pendingOffer
-    if offer and offer.id == id and offer.character == characterGuid() and elapsed() - offer.at < 180 then
+    local correlated = offer and not offer.ambiguous and offer.character == characterGuid()
+        and elapsed() - offer.at >= 0 and elapsed() - offer.at < 30
+        and (offer.id == id or (not offer.id and uniqueDialogTitle(id,offer.title)))
+    if correlated then
         record.accept = offer.giver
+        if record.accept then record.accept.provenance = "player_interaction" end
         record.title = offer.title or record.title
         record.description = offer.description
         record.objectiveText = offer.objectiveText or record.objectiveText
@@ -286,6 +343,8 @@ function FDB:QuestAccepted(arg1, arg2)
     end
     updateMetadata(record)
     updateObjectives(record)
+    traceQuest("QUEST_ACCEPTED",id,record.accept,record.title,correlated and "matched" or "unmatched")
+    pendingOffer = nil
     markChanged()
 end
 
