@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  COMPANION_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 concurrency:
   group: companion-normal-build-${{ github.ref }}
   cancel-in-progress: true
@@ -22,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMPANION_BUILD_COMMIT }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -44,11 +49,11 @@ jobs:
           --no-restore
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:BuildCommit=${{ github.sha }}
-          -o artifacts/ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
+          -p:BuildCommit=${{ env.COMPANION_BUILD_COMMIT }}
+          -o artifacts/ForeverDB-Companion-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
-          path: artifacts/ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
+          name: ForeverDB-Companion-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64
+          path: artifacts/ForeverDB-Companion-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64
