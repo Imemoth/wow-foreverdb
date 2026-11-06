@@ -8,6 +8,7 @@ local calls = { roster = 0, guildRoster = 0 }
 
 GetTime = function() return gameTime end
 GetServerTime = function() return now end
+time = function() return now end
 GetTimePreciseSec = function() return 100.25 end
 UnitGUID = function(unit) return unit == "player" and playerGuid or nil end
 UnitName = function(unit) return unit == "player" and "GuildLeader" or nil end
@@ -29,6 +30,8 @@ GetGuildRosterInfo = function(index)
 end
 GetGuildRosterLastOnline = function() return 0, 0, 0, 12 end
 GetProfessions = function() return 1 end
+GetNumGuildTradeSkill = function() return 0 end
+GetGuildTradeSkillInfo = function() return nil end
 GetProfessionInfo = function(index)
     assert(index == 1)
     return "Blacksmithing", nil, 225, 300, nil, nil, 164
@@ -51,6 +54,7 @@ local FDB = {
     Debug = function() end,
     EnsureInstallationId = function(self) return self.DB.installationId end,
 }
+assert(loadfile("addon/ForeverDB/Database.lua"))("ForeverDB", FDB)
 assert(loadfile("addon/ForeverDB/Exporter.lua"))("ForeverDB", FDB)
 assert(loadfile("addon/ForeverDB/GuildbookTracker.lua"))("ForeverDB", FDB)
 FDB:InitializeGuildbookTracker()
@@ -75,10 +79,10 @@ assert(ForeverDB_Export:find("P|Forever%7CLocal Guild|Player-0-AAAA|164|Blacksmi
 SlashCmdList = {}
 print = function() end
 for _, name in ipairs({
-    "InitializeDatabase", "InitializeSessionTracker", "InitializeSessionUI", "InitializeGuildApiProbe",
+    "InitializeSessionTracker", "InitializeSessionUI", "InitializeGuildApiProbe",
     "InitializeQuestApiProbe", "InitializeQuestKillTracker", "InitializeQuestTracker", "InitializeGatheringTracker",
     "InitializeSkinningTracker", "InitializeFishingPoolTracker", "InitializeDisenchantTracker", "InitializeLootTracker",
-    "InitializeTooltip", "SessionPlayerReady", "InitializeSessionUI",
+    "InitializeTooltip", "SessionPlayerReady", "SessionBeforeLogout",
 }) do FDB[name] = function() end end
 FDB.InitializeGuildbookTracker = function() end
 assert(loadfile("addon/ForeverDB/Core.lua"))("ForeverDB", FDB)
@@ -87,4 +91,9 @@ gameTime = gameTime + 5
 local requestsBeforeCommand = calls.guildRoster
 SlashCmdList.FOREVERDB("guildbook refresh")
 assert(calls.guildRoster == requestsBeforeCommand + 1, "/fdb guildbook refresh did not request the roster")
+FDB.EventFrame.callback(FDB.EventFrame, "PLAYER_LOGOUT")
+local savedGuild = assert(ForeverDB_Saved.guilds["Forever|Local Guild"], "logout did not retain guild in SavedVariables")
+assert(savedGuild.members["Player-0-BBBB"], "logout SavedVariables missed roster members")
+assert(ForeverDB_Export:find("P|Forever%7CLocal Guild|Player-0-AAAA|164|Blacksmithing|225|300|self|0", 1, true),
+    "logout did not rebuild exported profession snapshot")
 print("PASS: explicit guildbook refresh captures legacy guild roster/professions and builds SavedVariables export")
