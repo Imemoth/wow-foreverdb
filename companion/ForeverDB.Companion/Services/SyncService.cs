@@ -136,8 +136,6 @@ public sealed class SyncService
 
         // Capture provenance and private records never enter a public collector/device payload. Local Guildbook processing is
         // independent of whether any public request succeeds.
-        _guildbook?.ObserveSnapshot(snapshot);
-
         // Do NOT serialize ForeverDbSnapshot: its Guildbook members intentionally stay available to the parser and the local store.
         // The explicit public projection has no Guildbook member at all, and PublicSnapshotGuard re-checks the final JSON at the
         // transport boundary (RpcClient / DeviceRpcClient), so even a future private property cannot reach the wire.

@@ -5,6 +5,13 @@ namespace ForeverDB.Companion.Services;
 
 public sealed record AccountGuildbookSyncResult(bool Loaded, bool CaptureAccepted, bool Stale);
 
+public sealed record AccountGuildbookImportResult(
+    bool CaptureAccepted,
+    bool EncryptedCacheLoaded,
+    GuildbookImportRejectionReason? RejectionReason,
+    long IdentityGeneration,
+    ForeverDbSnapshot? CachedSnapshot = null);
+
 public sealed record AccountGuildbookRestoreResult(
     bool Authorized,
     int DiscoveredInstallations,
@@ -16,12 +23,16 @@ public interface IAccountGuildbookSync
 {
     event Action<IReadOnlyList<ForeverDbGuild>>? Changed;
     bool IsAvailable { get; }
-    void ObserveSnapshot(ForeverDbSnapshot snapshot);
     Task<AccountGuildbookRestoreResult> RestoreLocalAsync(
         IEnumerable<string> installationIds,
         string? preferredInstallationId = null,
         CancellationToken cancellationToken = default);
     Task<AccountGuildbookSyncResult> SyncAsync(ForeverDbSnapshot snapshot, CancellationToken cancellationToken = default);
+    Task<AccountGuildbookImportResult> ImportLocalSnapshotAsync(
+        ForeverDbSnapshot snapshot,
+        bool authorizeFirstImport,
+        long? expectedIdentityGeneration = null,
+        CancellationToken cancellationToken = default);
     void Clear();
 }
 
@@ -35,14 +46,10 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
     private readonly AccountSessionManager _sessions;
     private readonly LocalGuildbookStore _store;
     private readonly object _gate = new();
-    private readonly Dictionary<string, CaptureStamp> _lastObserved = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CaptureStamp> _identityFloor = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CaptureStamp> _lastAccepted = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyDictionary<string, ForeverDbGuild>> _cacheByInstallation =
         new(StringComparer.Ordinal);
     private string? _activeInstallationId;
     private CancellationTokenSource _identityCancellation = new();
-    private long _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private bool _disposed;
 
     public AccountGuildbookSync(AccountSessionManager sessions, LocalGuildbookStore store)
@@ -83,12 +90,6 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         }
     }
 
-    public void ObserveSnapshot(ForeverDbSnapshot snapshot)
-    {
-        if (TryGetCapture(snapshot) is not { } capture) return;
-        lock (_gate) _lastObserved[snapshot.InstallationId] = capture;
-    }
-
     /// <summary>
     /// Restores already encrypted local snapshots only. It never parses a
     /// SavedVariables file, obtains a token, or calls a network endpoint.
@@ -122,9 +123,22 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
             if (cancellationToken.IsCancellationRequested)
                 return Task.FromCanceled<AccountGuildbookRestoreResult>(cancellationToken);
 
+            var binding = _store.GetBindingStatus(status.AccountId!, installationId);
+            if (binding is LocalGuildbookBindingStatus.BoundToAnotherAccount or LocalGuildbookBindingStatus.Unreadable)
+            {
+                if (binding == LocalGuildbookBindingStatus.Unreadable)
+                    unreadableIds.Add(installationId);
+                continue;
+            }
+
             var result = _store.Load(status.AccountId!, installationId);
             if (result.Snapshot is { } snapshot)
             {
+                // A cache that predates persistent installation bindings remains attributable through its DPAPI-protected
+                // account/install envelope. Upgrade that already account-scoped cache into a durable installation binding.
+                if (binding == LocalGuildbookBindingStatus.Unbound &&
+                    _store.TryBindToAccount(status.AccountId!, installationId) != LocalGuildbookBindingStatus.CurrentAccount)
+                    continue;
                 loaded[installationId] = ToGuildDictionary(snapshot.Guilds);
                 loadedIds.Add(installationId);
             }
@@ -153,59 +167,136 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         return Task.FromResult(new AccountGuildbookRestoreResult(true, ids.Length, loadedIds, unreadableIds));
     }
 
-    public Task<AccountGuildbookSyncResult> SyncAsync(
+    public async Task<AccountGuildbookSyncResult> SyncAsync(
         ForeverDbSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
-        ObserveSnapshot(snapshot);
-        if (cancellationToken.IsCancellationRequested)
-            return Task.FromCanceled<AccountGuildbookSyncResult>(cancellationToken);
+        var imported = await ImportLocalSnapshotAsync(snapshot, authorizeFirstImport: false, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return new AccountGuildbookSyncResult(
+            imported.EncryptedCacheLoaded,
+            imported.CaptureAccepted,
+            imported.RejectionReason is GuildbookImportRejectionReason.OlderThanLocalSnapshot or GuildbookImportRejectionReason.IdentityChanged);
+    }
 
+    public Task<AccountGuildbookImportResult> ImportLocalSnapshotAsync(
+        ForeverDbSnapshot snapshot,
+        bool authorizeFirstImport,
+        long? expectedIdentityGeneration = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var status = _sessions.Status;
         if (!CanUseLocal(status))
-            return Task.FromResult(new AccountGuildbookSyncResult(false, false, false));
-        var generation = status.Generation;
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.AccountVerificationRequired, status.Generation));
+        if (expectedIdentityGeneration is { } expected && expected != status.Generation)
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.IdentityChanged, status.Generation));
+        if (!IsValidCapture(snapshot))
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.NoGuildbookCapture, status.Generation));
 
-        var candidate = TryGetCapture(snapshot);
-        var accepted = false;
-        var stale = false;
-        if (candidate is { } capture)
+        var binding = _store.GetBindingStatus(status.AccountId!, snapshot.InstallationId);
+        if (binding == LocalGuildbookBindingStatus.BoundToAnotherAccount)
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.BoundToAnotherAccount, status.Generation));
+        if (binding == LocalGuildbookBindingStatus.Unreadable)
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.BindingUnreadable, status.Generation));
+        if (binding == LocalGuildbookBindingStatus.Unbound)
         {
-            if (IsFresh(snapshot.InstallationId, capture))
-            {
-                var saved = _store.Save(status.AccountId!, snapshot.InstallationId, snapshot);
-                accepted = saved.Status == LocalGuildbookSaveStatus.Saved;
-                stale = saved.Status == LocalGuildbookSaveStatus.OlderSnapshot;
-                if (accepted)
-                    lock (_gate) _lastAccepted[snapshot.InstallationId] = capture;
-            }
-            else
-            {
-                stale = true;
-            }
+            if (!authorizeFirstImport)
+                return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                    GuildbookImportRejectionReason.FirstImportAuthorizationDeclined, status.Generation));
+            if (status.Generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+                return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                    GuildbookImportRejectionReason.IdentityChanged, _sessions.Status.Generation));
+            binding = _store.TryBindToAccount(status.AccountId!, snapshot.InstallationId);
+            if (binding == LocalGuildbookBindingStatus.BoundToAnotherAccount)
+                return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                    GuildbookImportRejectionReason.BoundToAnotherAccount, _sessions.Status.Generation));
+            if (binding != LocalGuildbookBindingStatus.CurrentAccount)
+                return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                    GuildbookImportRejectionReason.BindingUnreadable, _sessions.Status.Generation));
+        }
+
+        if (status.Generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.IdentityChanged, _sessions.Status.Generation));
+
+        var existing = _store.Load(status.AccountId!, snapshot.InstallationId);
+        if (existing.Status is LocalGuildbookReadStatus.Unreadable or LocalGuildbookReadStatus.IoError)
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.CacheUnreadable, status.Generation));
+
+        if (existing.Snapshot is { } cached && IsOlderOrReplay(snapshot, cached))
+        {
+            GuildbookImportRejectionReason? rejection = string.Equals(snapshot.GuildbookCaptureId, cached.GuildbookCaptureId, StringComparison.Ordinal)
+                ? null
+                : GuildbookImportRejectionReason.OlderThanLocalSnapshot;
+            PublishCacheIfCurrent(status.Generation, snapshot.InstallationId, cached);
+            return Task.FromResult(new AccountGuildbookImportResult(false, true, rejection, status.Generation, cached));
+        }
+
+        var saved = _store.Save(status.AccountId!, snapshot.InstallationId, snapshot);
+        if (saved.Status == LocalGuildbookSaveStatus.Failed)
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.CacheWriteFailed, status.Generation));
+        if (saved.Status == LocalGuildbookSaveStatus.OlderSnapshot)
+        {
+            var prior = saved.Snapshot;
+            if (prior is not null)
+                PublishCacheIfCurrent(status.Generation, snapshot.InstallationId, prior);
+            return Task.FromResult(new AccountGuildbookImportResult(false, prior is not null,
+                GuildbookImportRejectionReason.OlderThanLocalSnapshot, status.Generation, prior));
         }
 
         var loaded = _store.Load(status.AccountId!, snapshot.InstallationId);
-        // A sign-out/switch can happen while local IO is in progress. Do not
-        // publish the old account's result after the session generation moved.
-        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
-        {
-            Clear();
-            return Task.FromResult(new AccountGuildbookSyncResult(false, false, true));
-        }
-        if (loaded.Snapshot is { } local)
-        {
-            var guilds = ToGuildDictionary(local.Guilds);
-            lock (_gate)
-            {
-                _cacheByInstallation[snapshot.InstallationId] = guilds;
-                _activeInstallationId = snapshot.InstallationId;
-            }
-            Changed?.Invoke(CachedGuilds);
-            return Task.FromResult(new AccountGuildbookSyncResult(true, accepted, stale));
-        }
+        if (status.Generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+            return Task.FromResult(new AccountGuildbookImportResult(false, false,
+                GuildbookImportRejectionReason.IdentityChanged, _sessions.Status.Generation));
+        if (loaded.Snapshot is not { } local)
+            return Task.FromResult(new AccountGuildbookImportResult(true, false,
+                GuildbookImportRejectionReason.CacheUnreadable, status.Generation));
 
-        return Task.FromResult(new AccountGuildbookSyncResult(false, accepted, stale));
+        PublishCacheIfCurrent(status.Generation, snapshot.InstallationId, local);
+        return Task.FromResult(new AccountGuildbookImportResult(true, true, null, status.Generation, local));
+    }
+
+    private void PublishCacheIfCurrent(long generation, string installationId, ForeverDbSnapshot snapshot)
+    {
+        if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+            return;
+        var guilds = ToGuildDictionary(snapshot.Guilds);
+        lock (_gate)
+        {
+            if (generation != _sessions.Status.Generation || !CanUseLocal(_sessions.Status))
+                return;
+            _cacheByInstallation[installationId] = guilds;
+            _activeInstallationId = installationId;
+        }
+        Changed?.Invoke(CachedGuilds);
+    }
+
+    private static bool IsValidCapture(ForeverDbSnapshot snapshot) =>
+        snapshot.SchemaVersion == 9 &&
+        !string.IsNullOrWhiteSpace(snapshot.InstallationId) &&
+        snapshot.UpdatedAt > 0 &&
+        snapshot.Guilds.Count > 0 &&
+        HasCapture(snapshot);
+
+    private static bool HasCapture(ForeverDbSnapshot snapshot) =>
+        !string.IsNullOrWhiteSpace(snapshot.GuildbookCaptureId) &&
+        snapshot.GuildbookCapturedAt is > 0 &&
+        !string.IsNullOrWhiteSpace(snapshot.GuildbookSourceCharacter);
+
+    private static bool IsOlderOrReplay(ForeverDbSnapshot candidate, ForeverDbSnapshot existing)
+    {
+        var candidateAt = candidate.GuildbookCapturedAt!.Value;
+        var existingAt = existing.GuildbookCapturedAt!.Value;
+        return candidateAt < existingAt ||
+               (candidateAt == existingAt && string.CompareOrdinal(candidate.GuildbookCaptureId, existing.GuildbookCaptureId) <= 0);
     }
 
     private static IReadOnlyDictionary<string, ForeverDbGuild> ToGuildDictionary(IEnumerable<ForeverDbGuild> guilds) =>
@@ -234,30 +325,13 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         CancellationTokenSource previous;
         lock (_gate)
         {
-            _identityEnteredAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            _identityFloor.Clear();
-            foreach (var pair in _lastObserved) _identityFloor[pair.Key] = pair.Value;
             _cacheByInstallation.Clear();
             _activeInstallationId = null;
-            _lastAccepted.Clear();
             previous = _identityCancellation;
             _identityCancellation = new CancellationTokenSource();
         }
         try { previous.Cancel(); } finally { previous.Dispose(); }
         Changed?.Invoke(Array.Empty<ForeverDbGuild>());
-    }
-
-    private bool IsFresh(string installationId, CaptureStamp candidate)
-    {
-        lock (_gate)
-        {
-            if (_lastAccepted.TryGetValue(installationId, out var accepted) &&
-                string.Equals(accepted.CaptureId, candidate.CaptureId, StringComparison.Ordinal)) return false;
-            if (_identityFloor.TryGetValue(installationId, out var floor) &&
-                (string.Equals(floor.CaptureId, candidate.CaptureId, StringComparison.Ordinal) ||
-                 candidate.CapturedAt <= floor.CapturedAt)) return false;
-            return candidate.CapturedAt > _identityEnteredAt;
-        }
     }
 
     private static bool CanUseLocal(AccountStatus status) =>
@@ -269,16 +343,6 @@ public sealed class AccountGuildbookSync : IAccountGuildbookSync, IDisposable
         status.AccountId is not null &&
         status.Fault is not (SessionFault.AuthRejected or SessionFault.LocalCredentialCorrupt or
             SessionFault.StorageFailure or SessionFault.RegisteredVerificationFailed or SessionFault.FeatureDisabled);
-
-    private static CaptureStamp? TryGetCapture(ForeverDbSnapshot snapshot)
-    {
-        if (string.IsNullOrWhiteSpace(snapshot.GuildbookCaptureId) ||
-            snapshot.GuildbookCapturedAt is not > 0 ||
-            string.IsNullOrWhiteSpace(snapshot.GuildbookSourceCharacter)) return null;
-        return new CaptureStamp(snapshot.GuildbookCaptureId, snapshot.GuildbookCapturedAt.Value, snapshot.GuildbookSourceCharacter);
-    }
-
-    private readonly record struct CaptureStamp(string CaptureId, long CapturedAt, string SourceCharacter);
 
     public void Dispose()
     {

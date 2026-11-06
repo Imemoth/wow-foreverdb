@@ -4,7 +4,7 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.9.1-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.9.11-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
@@ -90,7 +90,7 @@ Use the manual GitHub Actions workflow:
 
 It publishes a self-contained `win-x64` artifact named:
 
-    ForeverDB-Companion-win-x64
+    ForeverDB-Companion-0.9.11-alpha-<full-git-sha>-win-x64
 
 For an isolated first-install exercise, follow the
 [clean Windows Account Linking test](../docs/account-v1/account-linking-mvp-windows-test.md).

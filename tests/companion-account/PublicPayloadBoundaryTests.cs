@@ -117,6 +117,7 @@ public sealed class PublicPayloadBoundaryTests
         using var local = new AccountGuildbookSync(rig.Sessions, store);
         rig.Runtime.Sync.SelectOwner("inst-1", OwnerChoice.RegisteredAccount);
         var service = new SyncService(rig.Runtime.Sync, guildbook: local);
+        Assert.True((await local.ImportLocalSnapshotAsync(new ForeverDbExportParser().ParseSavedVariables(WriteExport(rig.Directory)), authorizeFirstImport: true)).CaptureAccepted);
 
         var result = await service.SyncFileAsync(WriteExport(rig.Directory), force: true, trigger: SyncTrigger.Manual);
 
@@ -162,6 +163,7 @@ public sealed class PublicPayloadBoundaryTests
         using var local = new AccountGuildbookSync(rig.Sessions, store);
         rig.Runtime.Sync.SelectOwner("inst-1", OwnerChoice.RegisteredAccount);
         var service = new SyncService(rig.Runtime.Sync, guildbook: local);
+        Assert.True((await local.ImportLocalSnapshotAsync(new ForeverDbExportParser().ParseSavedVariables(WriteExport(rig.Directory)), authorizeFirstImport: true)).CaptureAccepted);
 
         rig.Handler.Offline = true;
         var result = await service.SyncFileAsync(WriteExport(rig.Directory), force: true, trigger: SyncTrigger.Manual);

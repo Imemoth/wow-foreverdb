@@ -91,6 +91,11 @@ public sealed class CompanionSettingsUiContractTests
         Assert.DoesNotContain("SyncNow_Click", handler, StringComparison.Ordinal);
         Assert.DoesNotContain("SyncFileAsync", handler, StringComparison.Ordinal);
         Assert.DoesNotContain("SyncTrigger", handler, StringComparison.Ordinal);
+        Assert.Contains("MessageBox.Show", handler, StringComparison.Ordinal);
+        Assert.Contains("_guildbookImportDiagnostics = FormatGuildbookDiagnostics(result)", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("RecordSyncError", handler, StringComparison.Ordinal);
+        Assert.Contains("GuildbookImportDiagnosticsText", xaml, StringComparison.Ordinal);
+        Assert.Contains("FirstImportAuthorizationDeclined", main, StringComparison.Ordinal);
     }
 
     [Theory]

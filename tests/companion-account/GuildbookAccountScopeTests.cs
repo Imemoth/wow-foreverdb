@@ -19,6 +19,7 @@ public sealed class GuildbookAccountScopeTests
         rig.Runtime.Sync.SelectOwner("inst-1", OwnerChoice.RegisteredAccount);
         var service = new SyncService(rig.Runtime.Sync, guildbook: privateSync);
         var path = WriteExport(rig.Directory, Snapshot("capture-a", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30, "A"));
+        Assert.True((await privateSync.ImportLocalSnapshotAsync(new ForeverDbExportParser().ParseSavedVariables(path), authorizeFirstImport: true)).CaptureAccepted);
 
         var result = await service.SyncFileAsync(path, force: true, trigger: SyncTrigger.Manual);
 
@@ -48,11 +49,11 @@ public sealed class GuildbookAccountScopeTests
         var requestsBefore = rig.Server.Requests.Count;
         var ingestBefore = rig.Server.IngestCount;
 
-        var result = await service.RefreshAsync(new[] { path });
+        var result = await service.RefreshAsync(new[] { path }, (_, _) => Task.FromResult(true));
 
         Assert.Equal(requestsBefore, rig.Server.Requests.Count);
         Assert.Equal(ingestBefore, rig.Server.IngestCount);
-        Assert.Equal(new[] { "inst-1" }, result.AcceptedInstallationIds);
+        Assert.Equal(1, result.CapturesAccepted);
         var guild = Assert.Single(privateSync.CachedGuilds);
         Assert.Equal("Local Guild", guild.Name);
         var member = Assert.Single(guild.Members);
@@ -79,7 +80,7 @@ public sealed class GuildbookAccountScopeTests
     }
 
     [Fact]
-    public async Task A_to_B_clears_memory_rejects_stale_A_and_accepts_only_a_fresh_B_capture()
+    public async Task A_to_B_clears_memory_and_rejects_any_import_from_A_bound_saved_variables()
     {
         using var rig = new Rig();
         var aUser = rig.SeedRegistered("a@example.test", "password-a").User;
@@ -90,7 +91,7 @@ public sealed class GuildbookAccountScopeTests
         var at = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
         var a = Snapshot("capture-a", at, "Character-A", "A guild");
 
-        var acceptedA = await service.SyncAsync(a);
+        var acceptedA = await service.ImportLocalSnapshotAsync(a, authorizeFirstImport: true);
         Assert.True(acceptedA.CaptureAccepted);
         Assert.Equal("A guild", Assert.Single(service.CachedGuilds).Name);
 
@@ -99,17 +100,15 @@ public sealed class GuildbookAccountScopeTests
         var b = rig.Server.AddRegisteredUser("b@example.test", "password-b");
         Assert.Equal(SignInOutcome.Success, await rig.Sessions.SignInRegisteredAsync(b.Email!, b.Password!.ToCharArray()));
 
-        var old = await service.SyncAsync(a);
+        var old = await service.ImportLocalSnapshotAsync(a, authorizeFirstImport: true);
         Assert.False(old.CaptureAccepted);
-        Assert.True(old.Stale);
+        Assert.Equal(GuildbookImportRejectionReason.BoundToAnotherAccount, old.RejectionReason);
         Assert.Empty(service.CachedGuilds);
 
-        var acceptedB = await service.SyncAsync(Snapshot("capture-b", at + 1, "Character-B", "B guild"));
-        Assert.True(acceptedB.CaptureAccepted);
-        Assert.Equal("B guild", Assert.Single(service.CachedGuilds).Name);
-        Assert.NotEqual(
-            store.Load(aUser.Id, "inst-1").Snapshot?.Guilds.Single().Name,
-            service.CachedGuilds.Single().Name);
+        var acceptedB = await service.ImportLocalSnapshotAsync(Snapshot("capture-b", at + 1, "Character-B", "B guild"), authorizeFirstImport: true);
+        Assert.False(acceptedB.CaptureAccepted);
+        Assert.Equal(GuildbookImportRejectionReason.BoundToAnotherAccount, acceptedB.RejectionReason);
+        Assert.Equal("A guild", store.Load(aUser.Id, "inst-1").Snapshot?.Guilds.Single().Name);
     }
 
     [Fact]
@@ -122,14 +121,14 @@ public sealed class GuildbookAccountScopeTests
         var root = Path.Combine(rig.Directory, "guildbook");
         var store = new LocalGuildbookStore(root, TestEnv.Protector());
         using (var first = new AccountGuildbookSync(rig.Sessions, store))
-            Assert.True((await first.SyncAsync(Snapshot("capture-a", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30, "A", "Saved"))).CaptureAccepted);
+            Assert.True((await first.ImportLocalSnapshotAsync(Snapshot("capture-a", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30, "A", "Saved"), authorizeFirstImport: true)).CaptureAccepted);
 
         Assert.NotEmpty(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories));
         rig.Restart();
         await rig.Sessions.InitializeAsync();
         using var second = new AccountGuildbookSync(rig.Sessions, store);
-        var loaded = await second.SyncAsync(new ForeverDbSnapshot { InstallationId = "inst-1" });
-        Assert.True(loaded.Loaded);
+        var loaded = await second.RestoreLocalAsync(new[] { "inst-1" });
+        Assert.Equal(new[] { "inst-1" }, loaded.LoadedInstallationIds);
         Assert.Equal("Saved", Assert.Single(second.CachedGuilds).Name);
         Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
         Assert.NotEmpty(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories));
@@ -146,7 +145,7 @@ public sealed class GuildbookAccountScopeTests
         var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
         var capture = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
         using (var writer = new AccountGuildbookSync(rig.Sessions, store))
-            Assert.True((await writer.SyncAsync(Snapshot("startup-capture", capture, "Startup", "Saved locally"))).CaptureAccepted);
+            Assert.True((await writer.ImportLocalSnapshotAsync(Snapshot("startup-capture", capture, "Startup", "Saved locally"), authorizeFirstImport: true)).CaptureAccepted);
 
         rig.Restart();
         await rig.Sessions.InitializeAsync();
@@ -172,8 +171,8 @@ public sealed class GuildbookAccountScopeTests
         using var service = new AccountGuildbookSync(rig.Sessions, store);
         var capture = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30;
 
-        Assert.True((await service.SyncAsync(SnapshotFor("inst-a", "a-capture", capture, "A", "A guild"))).CaptureAccepted);
-        Assert.True((await service.SyncAsync(SnapshotFor("inst-b", "b-capture", capture + 1, "A", "A second guild"))).CaptureAccepted);
+        Assert.True((await service.ImportLocalSnapshotAsync(SnapshotFor("inst-a", "a-capture", capture, "A", "A guild"), authorizeFirstImport: true)).CaptureAccepted);
+        Assert.True((await service.ImportLocalSnapshotAsync(SnapshotFor("inst-b", "b-capture", capture + 1, "A", "A second guild"), authorizeFirstImport: true)).CaptureAccepted);
         Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
 
         var b = rig.Server.AddRegisteredUser("restore-b@example.test", "password-b");
@@ -220,7 +219,7 @@ public sealed class GuildbookAccountScopeTests
     }
 
     [Fact]
-    public async Task General_export_timestamp_cannot_replace_a_fresher_guildbook_capture()
+    public void General_export_timestamp_cannot_replace_a_fresher_guildbook_capture()
     {
         using var rig = new Rig();
         var store = new LocalGuildbookStore(Path.Combine(rig.Directory, "guildbook"), TestEnv.Protector());
@@ -300,10 +299,11 @@ public sealed class GuildbookAccountScopeTests
         using var service = new AccountGuildbookSync(rig.Sessions, store);
         var snapshot = Snapshot("capture-a", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 30, "A", "A");
 
-        Assert.False((await service.SyncAsync(snapshot)).CaptureAccepted);
+        Assert.Equal(GuildbookImportRejectionReason.AccountVerificationRequired,
+            (await service.ImportLocalSnapshotAsync(snapshot, authorizeFirstImport: true)).RejectionReason);
         Assert.False(service.IsAvailable);
         Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
-        Assert.True((await service.SyncAsync(Snapshot("capture-b", snapshot.GuildbookCapturedAt!.Value + 1, "A", "A2"))).CaptureAccepted);
+        Assert.True((await service.ImportLocalSnapshotAsync(Snapshot("capture-b", snapshot.GuildbookCapturedAt!.Value + 1, "A", "A2"), authorizeFirstImport: true)).CaptureAccepted);
     }
 
     [Fact]

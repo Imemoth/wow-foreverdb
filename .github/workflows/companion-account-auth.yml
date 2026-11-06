@@ -98,6 +98,7 @@ jobs:
           -c Release
           -r win-x64
           --self-contained false
+          -p:BuildCommit=${{ github.sha }}
           -o artifacts/publish-check
 
       - name: Published assembly carries the expected version and the account library
@@ -107,7 +108,7 @@ jobs:
           if (-not (Test-Path "$dir/ForeverDB.Companion.Account.dll")) { throw "account library missing from publish output" }
           $v = (Get-Item "$dir/ForeverDB.Companion.dll").VersionInfo.ProductVersion
           Write-Host "ProductVersion=$v"
-          if (-not $v.StartsWith("0.9.1-alpha")) { throw "unexpected version $v" }
+          if (-not $v.StartsWith("0.9.11-alpha+${{ github.sha }}")) { throw "unexpected version $v" }
 
       - name: git diff --check
         shell: pwsh

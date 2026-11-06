@@ -32,7 +32,8 @@ jobs:
           --no-restore
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
-          -o artifacts/ForeverDB-Companion-win-x64
+          -p:BuildCommit=${{ github.sha }}
+          -o artifacts/ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -41,10 +42,10 @@ jobs:
         shell: pwsh
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
-          & $iscc "installer\ForeverDB.iss"
+          & $iscc /DMyAppBuild="${{ github.sha }}" "installer\ForeverDB.iss"
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: ForeverDB-Companion-Setup
+          name: ForeverDB-Companion-Setup-0.9.11-alpha-${{ github.sha }}
           path: artifacts/installer/*.exe

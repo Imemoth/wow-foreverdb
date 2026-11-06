@@ -31,6 +31,14 @@ public sealed record LocalGuildbookSaveResult(
     LocalGuildbookSaveStatus Status,
     ForeverDbSnapshot? Snapshot = null);
 
+public enum LocalGuildbookBindingStatus
+{
+    Unbound,
+    CurrentAccount,
+    BoundToAnotherAccount,
+    Unreadable
+}
+
 /// <summary>
 /// Encrypted, account/install scoped Guildbook storage. The directory layout is
 /// stable, but both identity components are hashed so account identifiers never
@@ -59,6 +67,106 @@ public sealed class LocalGuildbookStore
     }
 
     public string RootDirectory => _root;
+
+    /// <summary>
+    /// Reads the DPAPI-protected local owner binding for a WoW installation.
+    /// The filename contains only a hash of the installation ID.
+    /// </summary>
+    public LocalGuildbookBindingStatus GetBindingStatus(string accountId, string installationId)
+    {
+        if (!ValidIdentity(accountId, installationId))
+            return LocalGuildbookBindingStatus.Unreadable;
+
+        lock (_gate)
+        {
+            var path = BindingPath(installationId);
+            byte[] bytes;
+            try
+            {
+                bytes = File.ReadAllBytes(path);
+            }
+            catch (FileNotFoundException)
+            {
+                return LocalGuildbookBindingStatus.Unbound;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return LocalGuildbookBindingStatus.Unbound;
+            }
+            catch
+            {
+                return LocalGuildbookBindingStatus.Unreadable;
+            }
+
+            try
+            {
+                var binding = DecodeBinding(bytes, installationId);
+                return string.Equals(binding.AccountId, accountId, StringComparison.Ordinal)
+                    ? LocalGuildbookBindingStatus.CurrentAccount
+                    : LocalGuildbookBindingStatus.BoundToAnotherAccount;
+            }
+            catch
+            {
+                return LocalGuildbookBindingStatus.Unreadable;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates a first-import ownership binding without replacing an existing binding.
+    /// A concurrent process can win the create; the caller receives that binding's result.
+    /// </summary>
+    public LocalGuildbookBindingStatus TryBindToAccount(string accountId, string installationId)
+    {
+        if (!ValidIdentity(accountId, installationId))
+            return LocalGuildbookBindingStatus.Unreadable;
+
+        lock (_gate)
+        {
+            var current = GetBindingStatus(accountId, installationId);
+            if (current != LocalGuildbookBindingStatus.Unbound)
+                return current;
+
+            var path = BindingPath(installationId);
+            var directory = Path.GetDirectoryName(path)!;
+            var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                Directory.CreateDirectory(directory);
+                var envelope = new LocalGuildbookBindingEnvelope
+                {
+                    Version = 1,
+                    AccountId = accountId,
+                    InstallationId = installationId,
+                    BoundAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                };
+                var plain = JsonSerializer.SerializeToUtf8Bytes(envelope, Json);
+                var protectedBytes = _protector.Protect(plain);
+                using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+                {
+                    var encoded = Encoding.ASCII.GetBytes(Convert.ToBase64String(protectedBytes));
+                    stream.Write(encoded);
+                    stream.Flush(flushToDisk: true);
+                }
+
+                // File.Move without overwrite is an atomic create-if-absent operation on this volume.
+                File.Move(temp, path);
+                return LocalGuildbookBindingStatus.CurrentAccount;
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                return GetBindingStatus(accountId, installationId);
+            }
+            catch
+            {
+                return LocalGuildbookBindingStatus.Unreadable;
+            }
+            finally
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+            }
+        }
+    }
 
     public LocalGuildbookReadResult Load(string accountId, string installationId)
     {
@@ -124,8 +232,24 @@ public sealed class LocalGuildbookStore
             return new(LocalGuildbookSaveStatus.InvalidSnapshot);
         }
 
-        lock (_gate)
+        using var processGate = new Mutex(false, "ForeverDB.Guildbook." + Hash(accountId + "\0" + installationId));
+        var ownsProcessGate = false;
+        try
         {
+            try { ownsProcessGate = processGate.WaitOne(TimeSpan.FromSeconds(10)); }
+            catch (AbandonedMutexException) { ownsProcessGate = true; }
+        }
+        catch
+        {
+            return new(LocalGuildbookSaveStatus.Failed);
+        }
+        if (!ownsProcessGate)
+            return new(LocalGuildbookSaveStatus.Failed);
+
+        try
+        {
+            lock (_gate)
+            {
             var existing = Load(accountId, installationId);
             if (existing.Status is LocalGuildbookReadStatus.Unreadable or LocalGuildbookReadStatus.IoError)
             {
@@ -187,6 +311,11 @@ public sealed class LocalGuildbookStore
                 }
                 return new(LocalGuildbookSaveStatus.Failed, existing.Snapshot);
             }
+            }
+        }
+        finally
+        {
+            processGate.ReleaseMutex();
         }
     }
 
@@ -241,6 +370,23 @@ public sealed class LocalGuildbookStore
         return (directory, main, main + ".bak");
     }
 
+    private string BindingPath(string installationId) =>
+        Path.Combine(_root, "bindings", Hash(installationId) + ".binding");
+
+    private LocalGuildbookBindingEnvelope DecodeBinding(byte[] encoded, string installationId)
+    {
+        var protectedBytes = Convert.FromBase64String(Encoding.ASCII.GetString(encoded));
+        var plain = _protector.Unprotect(protectedBytes);
+        var binding = JsonSerializer.Deserialize<LocalGuildbookBindingEnvelope>(plain, Json)
+            ?? throw new InvalidDataException("empty Guildbook binding");
+        if (binding.Version != 1 ||
+            string.IsNullOrWhiteSpace(binding.AccountId) ||
+            !string.Equals(binding.InstallationId, installationId, StringComparison.Ordinal) ||
+            binding.BoundAt <= 0)
+            throw new InvalidDataException("invalid Guildbook binding");
+        return binding;
+    }
+
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -257,6 +403,14 @@ public sealed class LocalGuildbookStore
         public long CapturedAt { get; set; }
         public string SourceCharacter { get; set; } = "";
         public List<ForeverDbGuild> Guilds { get; set; } = new();
+    }
+
+    private sealed class LocalGuildbookBindingEnvelope
+    {
+        public int Version { get; set; }
+        public string AccountId { get; set; } = "";
+        public string InstallationId { get; set; } = "";
+        public long BoundAt { get; set; }
     }
 
 }

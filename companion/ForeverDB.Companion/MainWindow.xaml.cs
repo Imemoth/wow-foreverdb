@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -52,10 +53,16 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
     private bool _updatingGuildbookFilters;
+    private string _guildbookImportDiagnostics = "Local import: not refreshed yet.";
 
     public MainWindow()
     {
         InitializeComponent();
+        var build = typeof(MainWindow).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.9.11-alpha+local";
+        var commit = build.Split('+', 2).ElementAtOrDefault(1) ?? "local";
+        BuildVersionText.Text = $"  •  0.9.11-alpha  •  {commit[..Math.Min(commit.Length, 7)]}";
+        Title = $"ForeverDB Companion 0.9.11-alpha+{commit}";
         Loaded += MainWindow_Loaded;
     }
 
@@ -224,9 +231,10 @@ public partial class MainWindow : Window
         var discoveredInstallations = TryDiscoverInstallations();
         if (_guildbookSync is not null)
         {
-            await GuildbookStartupCoordinator.RestoreAsync(
+            var restored = await GuildbookStartupCoordinator.RestoreAsync(
                 _guildbookSync,
                 discoveredInstallations);
+            _guildbookImportDiagnostics = FormatGuildbookRestoreDiagnostics(restored);
         }
 
         await LoadSearchZonesAsync();
@@ -384,7 +392,8 @@ public partial class MainWindow : Window
 
         if (!_settings.WowRootConfirmed)
         {
-            RecordSyncError("Select and confirm the WoW: Forever installation in Settings before refreshing Guildbook data.");
+            _guildbookImportDiagnostics = "Local refresh unavailable: select and confirm the WoW: Forever installation in Settings.";
+            RefreshGuildbookUi();
             return;
         }
 
@@ -395,15 +404,26 @@ public partial class MainWindow : Window
                 _settings.WowRoot,
                 (_, _) => Task.CompletedTask));
             var files = watcher.FindExistingFiles();
-            var result = await _guildbookLocalRefresh.RefreshAsync(files);
-            if (result.FilesRead == 0)
-                RecordSyncError("No ForeverDB SavedVariables export was found. In WoW run /fdb guildbook refresh, then /reload, and refresh again.");
-            else
-                RefreshGuildbookUi();
+            var result = await _guildbookLocalRefresh.RefreshAsync(
+                files,
+                (request, _) => Task.FromResult(MessageBox.Show(
+                    this,
+                    $"Import this local Guildbook capture for the currently signed-in account?\n\n" +
+                    $"Guilds: {request.GuildCount}\nMembers: {request.MemberCount}\nProfession records: {request.ProfessionCount}\n" +
+                    $"Captured: {DateTimeOffset.FromUnixTimeSeconds(request.CapturedAt).ToLocalTime():g}\n\n" +
+                    "This permanently binds this WoW installation's local Guildbook cache to the current Companion account. " +
+                    "Switching to another account will hide this data; the original account can restore it later. " +
+                    "Guildbook data remains encrypted on this computer and is never uploaded.",
+                    "Authorize local Guildbook import",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning) == MessageBoxResult.Yes));
+            _guildbookImportDiagnostics = FormatGuildbookDiagnostics(result);
+            RefreshGuildbookUi();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            RecordSyncError(ex.Message);
+            _guildbookImportDiagnostics = "Local refresh failed. Check that the WoW SavedVariables files are readable, then retry.";
+            RefreshGuildbookUi();
         }
         finally
         {
@@ -594,6 +614,7 @@ public partial class MainWindow : Window
             }
 
             GuildbookTitleText.Text = "Guildbook";
+            GuildbookImportDiagnosticsText.Text = _guildbookImportDiagnostics;
             GuildbookStatusText.Text =
                 _guildbookGuilds.Count == 0
                     ? "No local Guildbook has been captured for this account yet."
@@ -636,6 +657,7 @@ public partial class MainWindow : Window
 
         GuildbookStatusText.Text =
             $"Captured {captured}. Local only — Stored on this device. Addon roster refresh runs every 30 minutes while logged in.";
+        GuildbookImportDiagnosticsText.Text = _guildbookImportDiagnostics;
 
         GuildbookMembersText.Text =
             roster.MembersCountText;
@@ -645,6 +667,63 @@ public partial class MainWindow : Window
 
         GuildbookOfflineText.Text =
             roster.OfflineCountText;
+    }
+
+    private static string FormatGuildbookDiagnostics(GuildbookLocalRefreshResult result)
+    {
+        var source = result.DataSource switch
+        {
+            GuildbookDataSource.SavedVariables => "WoW SavedVariables",
+            GuildbookDataSource.EncryptedCache => "encrypted local cache",
+            GuildbookDataSource.SavedVariablesAndEncryptedCache => "SavedVariables + encrypted local cache",
+            _ => "no data loaded"
+        };
+        var summary = $"Local refresh: {result.FilesDiscovered} file(s) found, {result.FilesParsed} parsed, " +
+                      $"{result.ValidCaptures} valid capture(s), {result.CapturesAccepted} imported, " +
+                      $"{result.EncryptedCachesLoaded} encrypted cache(s) loaded; " +
+                      $"{result.GuildCount} guild(s), {result.MemberCount} members, {result.ProfessionCount} profession records; source: {source}.";
+        if (result.RejectedByReason.Count > 0)
+        {
+            var reasons = string.Join(", ", result.RejectedByReason
+                .OrderBy(pair => pair.Key)
+                .Select(pair => $"{FormatGuildbookRejection(pair.Key)}: {pair.Value}"));
+            summary += $" Rejected/skipped: {reasons}.";
+        }
+        if (result.FilesDiscovered == 0)
+            summary += " In WoW run /fdb guildbook refresh, wait for capture, then /reload and refresh here.";
+        return summary;
+    }
+
+    private static string FormatGuildbookRejection(GuildbookImportRejectionReason reason) => reason switch
+    {
+        GuildbookImportRejectionReason.MissingFile => "missing file",
+        GuildbookImportRejectionReason.MalformedOrPartialExport => "malformed or partial export",
+        GuildbookImportRejectionReason.NoGuildbookCapture => "no Guildbook capture",
+        GuildbookImportRejectionReason.FirstImportAuthorizationDeclined => "first import not authorized",
+        GuildbookImportRejectionReason.BoundToAnotherAccount => "installation belongs to another account",
+        GuildbookImportRejectionReason.BindingUnreadable => "account binding unreadable",
+        GuildbookImportRejectionReason.AccountVerificationRequired => "verified account required",
+        GuildbookImportRejectionReason.IdentityChanged => "account changed during refresh",
+        GuildbookImportRejectionReason.OlderThanLocalSnapshot => "older capture ignored",
+        GuildbookImportRejectionReason.CacheUnreadable => "encrypted cache unreadable",
+        GuildbookImportRejectionReason.CacheWriteFailed => "encrypted cache write failed",
+        GuildbookImportRejectionReason.SupersededByNewerFile => "older duplicate file skipped",
+        _ => reason.ToString()
+    };
+
+    private string FormatGuildbookRestoreDiagnostics(AccountGuildbookRestoreResult result)
+    {
+        var guilds = _guildbookSync?.CachedGuilds ?? Array.Empty<ForeverDbGuild>();
+        var members = guilds.Sum(guild => guild.Members.Count);
+        var professions = guilds.Sum(guild => guild.Members.Sum(member => member.Professions.Count));
+        var summary = $"Local restore: {result.DiscoveredInstallations} installation(s) checked, " +
+                      $"{result.LoadedInstallationIds.Count} encrypted cache(s) loaded; {guilds.Count} guild(s), " +
+                      $"{members} members, {professions} profession records; source: DPAPI encrypted local cache.";
+        if (result.UnreadableInstallationIds.Count > 0)
+            summary += $" {result.UnreadableInstallationIds.Count} cache(s) unreadable.";
+        if (!result.Authorized)
+            summary += " Account verification required or identity changed during restore.";
+        return summary;
     }
 
     private async Task LoadSearchZonesAsync()

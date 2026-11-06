@@ -44,10 +44,11 @@ jobs:
           --no-restore
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
-          -o artifacts/ForeverDB-Companion-win-x64
+          -p:BuildCommit=${{ github.sha }}
+          -o artifacts/ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ForeverDB-Companion-win-x64
-          path: artifacts/ForeverDB-Companion-win-x64
+          name: ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64
+          path: artifacts/ForeverDB-Companion-0.9.11-alpha-${{ github.sha }}-win-x64

@@ -465,16 +465,18 @@ public partial class MainWindow
             // structurally separate from the snapshot upload API so account actions cannot become an upload path.
             if (_guildbookSync is not null)
             {
-                await GuildbookStartupCoordinator.RestoreAsync(
+                var restored = await GuildbookStartupCoordinator.RestoreAsync(
                     _guildbookSync,
                     discovered);
+                _guildbookImportDiagnostics = FormatGuildbookRestoreDiagnostics(restored);
             }
             RefreshGuildbookUi();
             RefreshAccountUi();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            RecordSyncError(ex.Message);
+            _guildbookImportDiagnostics = "Local restore failed. Check local Guildbook cache access, then retry.";
+            RefreshGuildbookUi();
         }
         finally
         {

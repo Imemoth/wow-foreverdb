@@ -94,7 +94,7 @@ Runbook: [Private project Companion pilot](account-v1/private-project-companion-
   detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
-- Version: **0.9.1-alpha** (C0b local-only identity refresh, runtime environment display and installation/settings safety fixes)
+- Version: **0.9.11-alpha** (Guildbook local import, DPAPI account/install binding, diagnostics and build provenance)
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing

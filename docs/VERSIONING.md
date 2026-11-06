@@ -12,8 +12,8 @@ ForeverDB has three version axes that move independently:
 | --- | --- | --- |
 | Addon | **0.7.1-alpha** | `addon/ForeverDB/Core.lua` + `addon/ForeverDB/ForeverDB.toc` |
 | Export schema | **9** | `FDB.SCHEMA_VERSION` in `addon/ForeverDB/Core.lua` |
-| Companion | **0.9.1-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
-| Installer | **0.9.1-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
+| Companion | **0.9.11-alpha** | `<Version>` in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj` |
+| Installer | **0.9.11-alpha** | `MyAppVersion` in `installer/ForeverDB.iss` |
 | Forever interface | **16001** | `## Interface` in `addon/ForeverDB/ForeverDB.toc` |
 
 ## Consistency rules
@@ -23,11 +23,13 @@ ForeverDB has three version axes that move independently:
 The Companion version is mirrored in `companion/ForeverDB.Companion/ForeverDB.Companion.csproj`,
 `companion/ForeverDB.Companion.Account/ForeverDB.Companion.Account.csproj`,
 `installer/ForeverDB.iss`, the visible WPF strings in `MainWindow.xaml`, `README.md`,
-`companion/README.md`, `CHANGELOG.md` and `docs/ROADMAP.md`.
+`companion/README.md`, `CHANGELOG.md` and `docs/ROADMAP.md`. Every owner-testable
+build also receives the full Git commit in `AssemblyInformationalVersion` and
+the visible title bar displays its short SHA. Windows artifacts include both
+the version and full SHA in their names.
 `scripts/check-companion-account.py` (run by the `Companion account auth (Windows)` workflow)
-fails when they disagree. Companion `0.9.1-alpha` is a Companion-only safety patch over
-Account System V1. It changes neither the addon version nor the export schema: SavedVariables,
-the parser and the ingest payload are unchanged.
+fails when they disagree. Companion `0.9.11-alpha` fixes local Guildbook import and
+account-scoped persistence. It changes neither the addon version nor the export schema.
 
 ### Addon
 
@@ -56,6 +58,9 @@ The Companion `csproj` version and installer `MyAppVersion` must match.
 
 Increase the Companion version for user-visible application changes, resolver
 changes, sync/security changes, cache behavior changes or distribution changes.
+Each distinct owner-testable build must use a new Companion version and a
+version/SHA-specific CI artifact. The next maintenance version after
+`0.9.11-alpha` is `0.9.12-alpha`.
 
 ## Version format
 
