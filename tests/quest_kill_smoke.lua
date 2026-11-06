@@ -1,4 +1,4 @@
-local FDB={DB={questJournal={}}, ParseSourceGuid=function(_,g) return "creature",tonumber(g:match("%-(%d+)%-2$") or g:match("%-(%d+)$")) end,
+local FDB={DB={questJournal={}}, ParseSourceGuid=function(_,g) return "creature",tonumber(g:match("%-(%d+)%-[23]$") or g:match("%-(%d+)$")) end,
  GetCurrentLocation=function() return {mapId=85,zoneName="Tirisfal Glades",subZoneName="Deathknell",x=31,y=66} end}
 local player="Player-1-test"
 local target="Creature-0-0-0-0-1501"
@@ -18,10 +18,11 @@ C_TooltipInfo={GetUnit=function() return {lines={{type=17,leftText=title},{type=
 CreateFrame=function()
  local f={events={}}
  function f:RegisterEvent(e) self.events[e]=true end
- function f:SetScript(_,fn) self.handler=fn end
+ function f:SetScript(kind,fn) self[kind]=fn end
  frames[#frames+1]=f;return f
 end
-local function emit(e,...) for _,f in ipairs(frames) do if f.events[e] then f.handler(f,e,...) end end end
+local function emit(e,...) for _,f in ipairs(frames) do if f.events[e] then f.OnEvent(f,e,...) end end end
+local function tick(delta) for _,f in ipairs(frames) do if f.OnUpdate then f.OnUpdate(f,delta) end end end
 FDB.DB.questJournal[player]={entries={["364"]={questId=364,title=title,status="active",objectives={{text=objective,kind="monster",numFulfilled=0,numRequired=8}}}}}
 assert(loadfile("addon/ForeverDB/QuestKillTracker.lua"))("ForeverDB",FDB)
 FDB:InitializeQuestKillTracker()
@@ -60,6 +61,49 @@ q.status="removed"; title="The Mindless Ones"; target="Creature-0-0-0-0-999"
 emit("PLAYER_TARGET_CHANGED")
 assert(not q.mobObservations["1:999"])
 print("PASS: distinct tooltip mobs, dedupe, progress, no loot dependency, removed quest exclusion")
+
+-- Forever live client reported UnitIsDead but did not yield a usable
+-- UNIT_HEALTH callback. Poll only an already matched, currently targeted GUID.
+local pollFDB={DB={questJournal={}},ParseSourceGuid=FDB.ParseSourceGuid,
+ GetCurrentLocation=FDB.GetCurrentLocation}
+local pollQuest={questId=3901,title="A Rattling Quest",status="active",
+ objectives={{text="Rattlecage Skeleton slain: 0/5",kind="monster",numFulfilled=0,numRequired=5}}}
+pollFDB.DB.questJournal[player]={entries={["3901"]=pollQuest}}
+target="Creature-0-0-0-0-1890-2"
+title="A Rattling Quest";objective="Rattlecage Skeleton slain: 0/5"
+local dead=false
+UnitIsDead=function(unit) return unit=="target" and dead end
+CombatLogGetCurrentEventInfo=nil
+local clock=10
+GetTime=function() return clock end
+assert(loadfile("addon/ForeverDB/QuestKillTracker.lua"))("ForeverDB",pollFDB)
+pollFDB:InitializeQuestKillTracker()
+local output={}
+local originalPrint=print
+print=function(...) local fields={...};for i=1,#fields do fields[i]=tostring(fields[i]) end
+ output[#output+1]=table.concat(fields," ") end
+pollFDB:QuestDeathDebug()
+emit("PLAYER_TARGET_CHANGED")
+assert(pollQuest.mobObservations["1:1890"])
+tick(0.1);tick(0.2)
+assert(pollQuest.mobObservations["1:1890"].observedDeaths==0)
+clock=35 -- long fight; confirmed alive target refreshes the 20-second window
+tick(0.25)
+dead=true -- no UNIT_HEALTH event delivered
+tick(0.25);tick(0.25)
+assert(pollQuest.mobObservations["1:1890"].observedDeaths==1)
+emit("UNIT_HEALTH","target")
+assert(pollQuest.mobObservations["1:1890"].observedDeaths==1)
+target="Creature-0-0-0-0-1890-3" -- a mob already dead when first matched
+emit("PLAYER_TARGET_CHANGED");tick(0.25)
+assert(pollQuest.mobObservations["1:1890"].observedDeaths==1)
+pollFDB:QuestDeathDebug()
+print=originalPrint
+local traceText=table.concat(output,"\n")
+assert(traceText:find("poll-alive",1,true))
+assert(traceText:find("accepted-death npc=1890 source=poll",1,true))
+assert(traceText:find("rejected-no-alive-sample",1,true))
+print("PASS: bounded target poll observes death without health callback or combat log")
 
 -- Optional death APIs may be missing on a client build; core observations
 -- and progress events must still register without invoking protected pcall.

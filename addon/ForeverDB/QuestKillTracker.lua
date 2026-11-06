@@ -5,6 +5,20 @@ local frame
 local seen = {}
 local seenCount = 0
 local MAX_SEEN = 200
+local watchedGuid
+local pollElapsed = 0
+local POLL_INTERVAL = 0.25
+local TRACE_LIMIT = 60
+local deathDebug = false
+local deathTrace = {}
+local healthEvents, combatEvents, pollSamples = 0, 0, 0
+local healthSubscribed, combatSubscribed = false, false
+local function trace(reason, npcId, source)
+    if not deathDebug then return end
+    if #deathTrace >= TRACE_LIMIT then table.remove(deathTrace, 1) end
+    deathTrace[#deathTrace+1] = tostring(reason).." npc="..tostring(npcId or "?")
+        .." source="..tostring(source or "?")
+end
 local function api(fn,...)
     if type(fn) ~= "function" then return nil end
     local ok,a,b,c,d,e,f,g,h=pcall(fn,...)
@@ -46,7 +60,17 @@ end
 function FDB:ObserveQuestMob(unit)
     if unit~="target" and unit~="mouseover" then return end
     local guid=api(UnitGUID,unit)
-    if type(guid)~="string" or seen[guid] then return end
+    if type(guid)~="string" then return end
+    local prior=seen[guid]
+    if prior and (prior.record.status~="active" or not prior.record.mobObservations
+        or prior.record.mobObservations[prior.key]~=prior.entry) then
+        seen[guid]=nil
+        prior=nil
+    end
+    if prior then
+        if unit=="target" and type(UnitIsDead)=="function" then watchedGuid=guid end
+        return
+    end
     local kind,id=self:ParseSourceGuid(guid)
     if kind~="creature" or type(id)~="number" or id<=0 then return end
     local data=C_TooltipInfo and api(C_TooltipInfo.GetUnit,unit)
@@ -86,29 +110,85 @@ function FDB:ObserveQuestMob(unit)
         end
     end
     if seenCount>=MAX_SEEN then seen={};seenCount=0 end
-    seen[guid]={record=record,key=key,at=api(GetTime) or 0,death=false}
+    seen[guid]={record=record,key=key,entry=entry,at=api(GetTime) or 0,death=false,
+        alive=api(UnitIsDead,unit)==false}
+    if unit=="target" and type(UnitIsDead)=="function" then watchedGuid=guid end
+    trace("matched",id,unit)
     seenCount=seenCount+1
 end
-local function countDeath(destGuid)
+local function countDeath(destGuid,source)
     local item=seen[destGuid]
-    if not item or item.death or (api(GetTime) or 0)-item.at>20 then return end
-    if item.record.status~="active" then return end
+    if not item then trace("rejected-unmatched",nil,source); return end
+    local npcId=item.record.mobObservations and item.record.mobObservations[item.key]
+    npcId=npcId and npcId.npcId
+    if item.death then trace("rejected-duplicate",npcId,source); return end
+    if not item.alive then trace("rejected-no-alive-sample",npcId,source); return end
+    if (api(GetTime) or 0)-item.at>20 then trace("rejected-stale",npcId,source); return end
+    if item.record.status~="active" then trace("rejected-inactive",npcId,source); return end
     local entry=item.record.mobObservations and item.record.mobObservations[item.key]
-    if not entry then return end
+    if not entry or entry~=item.entry then trace("rejected-no-entry",npcId,source); return end
     item.death=true
     entry.observedDeaths=entry.observedDeaths+1
     entry.lastDeathAt=api(GetServerTime)
+    trace("accepted-death",npcId,source)
+    if destGuid==watchedGuid then watchedGuid=nil end
 end
 function FDB:ObserveQuestMobDeath()
+    if deathDebug then combatEvents=combatEvents+1 end
     local _,subevent,_,_,_,_,_,destGuid=api(CombatLogGetCurrentEventInfo)
-    if subevent=="UNIT_DIED" then countDeath(destGuid) end
+    if subevent=="UNIT_DIED" then countDeath(destGuid,"combat") end
 end
-function FDB:ObserveQuestTargetDeath(unit)
+function FDB:ObserveQuestTargetDeath(unit,source)
     if unit~="target" and unit~="mouseover" then return end
     -- A dead unit still has its GUID while targeted. Never infer death from
     -- target loss, loot, combat state, or a quest progress increment.
+    local guid=api(UnitGUID,unit)
+    local item=seen[guid]
+    if not item then trace("rejected-unmatched",nil,unit); return end
     local dead=api(UnitIsDead,unit)
-    if dead==true then countDeath(api(UnitGUID,unit)) end
+    if dead==true then
+        countDeath(guid,source or unit)
+        if unit=="target" then watchedGuid=nil end
+    elseif dead==false and not item.death then
+        item.alive=true
+        item.at=api(GetTime) or item.at
+        if source=="poll" and not item.polledAlive then
+            item.polledAlive=true
+            local entry=item.record.mobObservations and item.record.mobObservations[item.key]
+            trace("poll-alive",entry and entry.npcId,"poll")
+        end
+    else
+        trace("rejected-death-api-unavailable",nil,unit)
+    end
+end
+function FDB:PollQuestTargetDeath(delta)
+    if not watchedGuid then return end
+    pollElapsed=pollElapsed+(type(delta)=="number" and delta or 0)
+    if pollElapsed<POLL_INTERVAL then return end
+    pollElapsed=0
+    if not seen[watchedGuid] or api(UnitGUID,"target")~=watchedGuid then
+        trace("watch-ended-target-changed",nil,"poll")
+        watchedGuid=nil
+        return
+    end
+    if deathDebug then pollSamples=pollSamples+1 end
+    self:ObserveQuestTargetDeath("target","poll")
+end
+function FDB:QuestDeathDebug()
+    deathDebug=not deathDebug
+    print("ForeverDB: quest death debug",deathDebug and "ON" or "OFF",
+        "combat="..tostring(type(CombatLogGetCurrentEventInfo)=="function"),
+        "unit="..tostring(type(UnitIsDead)=="function"),
+        "combatSubscribed="..tostring(combatSubscribed),
+        "healthSubscribed="..tostring(healthSubscribed))
+    if deathDebug then
+        deathTrace={}
+        healthEvents,combatEvents,pollSamples=0,0,0
+    else
+        print("ForeverDB: death callbacks", "health="..healthEvents,
+            "combat="..combatEvents,"targetPoll="..pollSamples)
+        for _,line in ipairs(deathTrace) do print("ForeverDB: death trace",line) end
+    end
 end
 function FDB:ObserveQuestProgress()
     local j=journal()
@@ -163,13 +243,23 @@ function FDB:InitializeQuestKillTracker()
     end
     if type(CombatLogGetCurrentEventInfo)=="function" then
         frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+        combatSubscribed=true
     end
-    if type(UnitIsDead)=="function" then frame:RegisterEvent("UNIT_HEALTH") end
+    if type(UnitIsDead)=="function" then
+        frame:RegisterEvent("UNIT_HEALTH")
+        healthSubscribed=true
+    end
+    frame:SetScript("OnUpdate",function(_,delta) FDB:PollQuestTargetDeath(delta) end)
     frame:SetScript("OnEvent",function(_,event,...)
-        if event=="PLAYER_TARGET_CHANGED" then FDB:ObserveQuestMob("target")
+        if event=="PLAYER_TARGET_CHANGED" then
+            watchedGuid=nil
+            FDB:ObserveQuestMob("target")
+            FDB:ObserveQuestTargetDeath("target")
         elseif event=="UPDATE_MOUSEOVER_UNIT" then FDB:ObserveQuestMob("mouseover")
         elseif event=="COMBAT_LOG_EVENT_UNFILTERED" then FDB:ObserveQuestMobDeath()
-        elseif event=="UNIT_HEALTH" then FDB:ObserveQuestTargetDeath(select(1,...))
+        elseif event=="UNIT_HEALTH" then
+            if deathDebug then healthEvents=healthEvents+1 end
+            FDB:ObserveQuestTargetDeath(select(1,...))
         elseif event=="QUEST_LOG_UPDATE" then FDB:ObserveQuestProgress() end
     end)
 end

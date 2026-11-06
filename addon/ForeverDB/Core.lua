@@ -101,6 +101,8 @@ local function registerSlashCommands()
         elseif command == "questapi"
             or command == "quests" then
             FDB:RunQuestApiProbe()
+        elseif command == "quest mobs debug" then
+            FDB:QuestDeathDebug()
         elseif command:match("^quest%s+mobs%s+") then
             FDB:PrintQuestMobs(command:match("^quest%s+mobs%s+(%d+)$"))
         elseif command == "quest debug" then

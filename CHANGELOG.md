@@ -169,7 +169,7 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 
 - Keep an explicit-ID quest offer briefly through `QUEST_FINISHED` when Forever emits it before `QUEST_ACCEPTED`; take the player's interaction position at acceptance.
 - Render session panel and KPI card backgrounds and borders with Frame/Texture APIs to avoid the Blizzard backdrop corner taint path.
-- Count a previously tooltip-matched target's observed death from `UNIT_HEALTH`/`UnitIsDead` as well as supported combat-log `UNIT_DIED`, once per GUID. Keep quest progress unattributed and idempotent across repeated updates.
+- Count a previously tooltip-matched target's observed death from `UNIT_HEALTH`/`UnitIsDead`, supported combat-log `UNIT_DIED`, or a 0.25-second poll while that exact target remains selected. Require an earlier alive sample, dedupe per GUID and expose bounded opt-in `/fdb quest mobs debug` reasons. Keep quest progress unattributed and idempotent across repeated updates.
 - Clear semantic removal metadata on confirmed turn-in and reset mob/progress evidence on reacceptance. No export schema or Companion changes.
 
 ## 0.7.0-alpha — 2026-11-06 (Quest Kill Tracker V1.1)
