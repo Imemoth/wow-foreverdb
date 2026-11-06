@@ -9,7 +9,7 @@ Observed loot, gathering, fishing, GameObject and disenchant database for World 
 | Addon | **0.7.1-alpha** |
 | SavedVariables / export schema | **9** |
 | Forever interface target | **16001** |
-| Companion | **0.9.0-alpha** |
+| Companion | **0.9.11-alpha** |
 
 Version sources and release rules are documented in [docs/VERSIONING.md](docs/VERSIONING.md). Release history is kept in [CHANGELOG.md](CHANGELOG.md).
 
@@ -57,6 +57,7 @@ update-addon.cmd -Ref feat/quest-tracker-v1-local-capture -AddOnsPath "C:\Path\T
 - `/fdb export`
 - `/fdb item <itemID or item link>`
 - `/fdb guild` — short alias for the non-persistent Guildbook capability probe
+- `/fdb guildbook refresh` — explicitly capture the current guild roster/professions locally; wait for capture, then `/reload` or log out/exit to commit WoW SavedVariables before using Guildbook **Refresh data** in Companion
 - `/fdb recipe <profession>` — recipe probe for the current character
 - `/fdb recipe <member> <profession>` — targeted guild-member recipe/crafter probe
 - `/fdb gr ...` — short alias for `/fdb recipe ...`

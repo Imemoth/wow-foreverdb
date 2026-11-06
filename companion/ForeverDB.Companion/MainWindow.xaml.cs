@@ -1,9 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using FolderBrowserDialog = System.Windows.Forms.FolderBrowserDialog;
 using ForeverDB.Companion.Account;
 using ForeverDB.Companion.Controls;
 using ForeverDB.Companion.Models;
@@ -18,11 +24,14 @@ public partial class MainWindow : Window
 
     private SyncService? _syncService;
     private AccountGuildbookSync? _guildbookSync;
+    private GuildbookLocalRefreshService? _guildbookLocalRefresh;
     private SearchService? _searchService;
     private AccountRuntime? _account;
     private string _accountRuntimeKey = "";
     private WowSavedVariablesWatcher? _watcher;
     private readonly SyncHealthState _syncHealth = new();
+    private IReadOnlyList<WowInstallation> _wowInstallations = Array.Empty<WowInstallation>();
+    private bool _populatingSettings;
 
     private readonly Stack<SearchResultItem> _backHistory = new();
     private readonly Stack<SearchResultItem> _forwardHistory = new();
@@ -44,10 +53,16 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, ForeverDbGuild> _guildbookGuilds =
         new(StringComparer.OrdinalIgnoreCase);
     private bool _updatingGuildbookFilters;
+    private string _guildbookImportDiagnostics = "Local import: not refreshed yet.";
 
     public MainWindow()
     {
         InitializeComponent();
+        var build = typeof(MainWindow).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.9.11-alpha+local";
+        var commit = build.Split('+', 2).ElementAtOrDefault(1) ?? "local";
+        BuildVersionText.Text = $"  •  0.9.11-alpha  •  {commit[..Math.Min(commit.Length, 7)]}";
+        Title = $"ForeverDB Companion 0.9.11-alpha+{commit}";
         Loaded += MainWindow_Loaded;
     }
 
@@ -55,13 +70,14 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        _wowInstallations = WowInstallationLocator.Discover();
         _settings = SettingsService.Load();
         PopulateSettings();
 
         await RebuildServicesAsync();
     }
 
-    private async Task RebuildServicesAsync()
+    private async Task RebuildServicesAsync(bool syncExistingFiles = true)
     {
         _searchRequests.Advance();
         _detailRequests.Advance();
@@ -69,6 +85,7 @@ public partial class MainWindow : Window
         _watcher = null;
         _guildbookSync?.Dispose();
         _guildbookSync = null;
+        _guildbookLocalRefresh = null;
         _syncService = null;
         _searchService = null;
 
@@ -85,7 +102,9 @@ public partial class MainWindow : Window
         if (!_syncHealth.ConfigurationReady)
         {
             var message =
-                string.IsNullOrWhiteSpace(_settings.WowRoot)
+                !_settings.WowRootConfirmed
+                    ? "Confirm the WoW installation in Settings before synchronization."
+                    : string.IsNullOrWhiteSpace(_settings.WowRoot)
                     ? "WoW Forever path is not configured."
                     : "Supabase connection is not configured.";
 
@@ -100,6 +119,18 @@ public partial class MainWindow : Window
             _settings.SupabaseKey,
             "production");
         var gate = AccountFeatureGate.EvaluateFromEnvironment(productionEndpoint);
+        var requestedMode = Environment.GetEnvironmentVariable(AccountFeatureGate.ModeVariable);
+        if (AccountFeatureGate.MustBlockProductionFallback(requestedMode, gate))
+        {
+            _account = null;
+            _accountRuntimeKey = "";
+            MapAssetDiagnosticUploader.Runtime = null;
+            RefreshAccountUi();
+            AccountEnvironmentText.Text = $"{requestedMode!.Trim()} configuration rejected — network services disabled. {gate.Reason}";
+            RecordSyncError("The requested isolated account environment is invalid. Network services are disabled instead of using production.");
+            return;
+        }
+
         var runtimeKey =
             $"{gate.Environment}|{gate.AccountsEnabled}|{gate.CredentialSubdirectory}|{gate.Endpoint?.BaseUrl}|{gate.Endpoint?.PublishableKey}|{_settings.SupabaseUrl}|{_settings.SupabaseKey}";
 
@@ -148,7 +179,9 @@ public partial class MainWindow : Window
             // Local-only Guildbook boundary: it has no RPC and no token method, and persists encrypted data on this computer only.
             _guildbookSync = new AccountGuildbookSync(
                 account.Sessions,
-                new LocalGuildbookStore()));
+                new LocalGuildbookStore()),
+            accountSessions: account.Sessions);
+        _guildbookLocalRefresh = new GuildbookLocalRefreshService(_guildbookSync);
 
         _syncService.Authenticated += () =>
             Dispatcher.Invoke(
@@ -191,57 +224,17 @@ public partial class MainWindow : Window
             effective,
             GetSearchTokenAsync);
 
-        if (_settings.AutoSync)
-        {
-            try
-            {
-                _watcher = new WowSavedVariablesWatcher(
-                    _settings.WowRoot,
-                    async (path, cancellationToken) =>
-                    {
-                        if (!_settings.AutoSync ||
-                            _syncService is null)
-                        {
-                            return;
-                        }
-
-                        try
-                        {
-                            await _syncService.SyncFileAsync(
-                                path,
-                                cancellationToken,
-                                force: true,
-                                trigger: SyncTrigger.Auto);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
-                        catch (Exception ex)
-                        {
-                            Dispatcher.Invoke(
-                                () => RecordSyncError(ex.Message));
-                        }
-                    });
-
-                _watcher.Start();
-                _syncHealth.SetWatcherReady(true);
-            }
-            catch (Exception ex)
-            {
-                _watcher?.Dispose();
-                _watcher = null;
-                RecordSyncError(ex.Message);
-            }
-        }
+        StartWatcher();
 
         // Restore the encrypted LOCAL Guildbook before any optional network work. Independent of AutoSync, of sign-in network
         // availability and of the public upload loop; it never parses SavedVariables for upload, obtains a token or calls an endpoint.
         var discoveredInstallations = TryDiscoverInstallations();
         if (_guildbookSync is not null)
         {
-            await GuildbookStartupCoordinator.RestoreAsync(
+            var restored = await GuildbookStartupCoordinator.RestoreAsync(
                 _guildbookSync,
                 discoveredInstallations);
+            _guildbookImportDiagnostics = FormatGuildbookRestoreDiagnostics(restored);
         }
 
         await LoadSearchZonesAsync();
@@ -250,7 +243,8 @@ public partial class MainWindow : Window
 
         _ = RunDeviceBackgroundAsync(account);
 
-        if (_settings.AutoSync &&
+        if (syncExistingFiles &&
+            _settings.AutoSync &&
             _watcher is not null)
         {
             foreach (var file in _watcher.FindExistingFiles())
@@ -302,10 +296,64 @@ public partial class MainWindow : Window
         }
     }
 
+    private void StartWatcher()
+    {
+        if (!_settings.AutoSync || _watcher is not null || _syncService is null)
+        {
+            _syncHealth.SetWatcherReady(false);
+            return;
+        }
+
+        try
+        {
+            _watcher = new WowSavedVariablesWatcher(
+                _settings.WowRoot,
+                async (path, cancellationToken) =>
+                {
+                    if (!_settings.AutoSync || _syncService is null)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        await _syncService.SyncFileAsync(
+                            path,
+                            cancellationToken,
+                            force: true,
+                            trigger: SyncTrigger.Auto);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => RecordSyncError(ex.Message));
+                    }
+                });
+
+            _watcher.Start();
+            _syncHealth.SetWatcherReady(true);
+        }
+        catch (Exception ex)
+        {
+            _watcher?.Dispose();
+            _watcher = null;
+            _syncHealth.SetWatcherReady(false);
+            RecordSyncError(ex.Message);
+        }
+    }
+
     private async void SyncNow_Click(
         object sender,
         RoutedEventArgs e)
     {
+        if (!_settings.WowRootConfirmed)
+        {
+            RecordSyncError("Confirm the WoW installation in Settings before synchronization.");
+            return;
+        }
+
         if (_syncService is null)
         {
             return;
@@ -334,6 +382,52 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             RecordSyncError(ex.Message);
+        }
+    }
+
+    private async void RefreshGuildbook_Click(object sender, RoutedEventArgs e)
+    {
+        if (_guildbookSync is null || !_guildbookSync.IsAvailable || _guildbookLocalRefresh is null)
+            return;
+
+        if (!_settings.WowRootConfirmed)
+        {
+            _guildbookImportDiagnostics = "Local refresh unavailable: select and confirm the WoW: Forever installation in Settings.";
+            RefreshGuildbookUi();
+            return;
+        }
+
+        WowSavedVariablesWatcher? temporaryWatcher = null;
+        try
+        {
+            var watcher = _watcher ?? (temporaryWatcher = new WowSavedVariablesWatcher(
+                _settings.WowRoot,
+                (_, _) => Task.CompletedTask));
+            var files = watcher.FindExistingFiles();
+            var result = await _guildbookLocalRefresh.RefreshAsync(
+                files,
+                (request, _) => Task.FromResult(MessageBox.Show(
+                    this,
+                    $"Import this local Guildbook capture for the currently signed-in account?\n\n" +
+                    $"Guilds: {request.GuildCount}\nMembers: {request.MemberCount}\nProfession records: {request.ProfessionCount}\n" +
+                    $"Captured: {DateTimeOffset.FromUnixTimeSeconds(request.CapturedAt).ToLocalTime():g}\n\n" +
+                    "This permanently binds this WoW installation's local Guildbook cache to the current Companion account. " +
+                    "Switching to another account will hide this data; the original account can restore it later. " +
+                    "Guildbook data remains encrypted on this computer and is never uploaded.",
+                    "Authorize local Guildbook import",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning) == MessageBoxResult.Yes));
+            _guildbookImportDiagnostics = FormatGuildbookDiagnostics(result);
+            RefreshGuildbookUi();
+        }
+        catch (Exception)
+        {
+            _guildbookImportDiagnostics = "Local refresh failed. Check that the WoW SavedVariables files are readable, then retry.";
+            RefreshGuildbookUi();
+        }
+        finally
+        {
+            temporaryWatcher?.Dispose();
         }
     }
 
@@ -520,6 +614,7 @@ public partial class MainWindow : Window
             }
 
             GuildbookTitleText.Text = "Guildbook";
+            GuildbookImportDiagnosticsText.Text = _guildbookImportDiagnostics;
             GuildbookStatusText.Text =
                 _guildbookGuilds.Count == 0
                     ? "No local Guildbook has been captured for this account yet."
@@ -562,6 +657,7 @@ public partial class MainWindow : Window
 
         GuildbookStatusText.Text =
             $"Captured {captured}. Local only — Stored on this device. Addon roster refresh runs every 30 minutes while logged in.";
+        GuildbookImportDiagnosticsText.Text = _guildbookImportDiagnostics;
 
         GuildbookMembersText.Text =
             roster.MembersCountText;
@@ -571,6 +667,63 @@ public partial class MainWindow : Window
 
         GuildbookOfflineText.Text =
             roster.OfflineCountText;
+    }
+
+    private static string FormatGuildbookDiagnostics(GuildbookLocalRefreshResult result)
+    {
+        var source = result.DataSource switch
+        {
+            GuildbookDataSource.SavedVariables => "WoW SavedVariables",
+            GuildbookDataSource.EncryptedCache => "encrypted local cache",
+            GuildbookDataSource.SavedVariablesAndEncryptedCache => "SavedVariables + encrypted local cache",
+            _ => "no data loaded"
+        };
+        var summary = $"Local refresh: {result.FilesDiscovered} file(s) found, {result.FilesParsed} parsed, " +
+                      $"{result.ValidCaptures} valid capture(s), {result.CapturesAccepted} imported, " +
+                      $"{result.EncryptedCachesLoaded} encrypted cache(s) loaded; " +
+                      $"{result.GuildCount} guild(s), {result.MemberCount} members, {result.ProfessionCount} profession records; source: {source}.";
+        if (result.RejectedByReason.Count > 0)
+        {
+            var reasons = string.Join(", ", result.RejectedByReason
+                .OrderBy(pair => pair.Key)
+                .Select(pair => $"{FormatGuildbookRejection(pair.Key)}: {pair.Value}"));
+            summary += $" Rejected/skipped: {reasons}.";
+        }
+        if (result.FilesDiscovered == 0)
+            summary += " In WoW run /fdb guildbook refresh, wait for capture, then /reload and refresh here.";
+        return summary;
+    }
+
+    private static string FormatGuildbookRejection(GuildbookImportRejectionReason reason) => reason switch
+    {
+        GuildbookImportRejectionReason.MissingFile => "missing file",
+        GuildbookImportRejectionReason.MalformedOrPartialExport => "malformed or partial export",
+        GuildbookImportRejectionReason.NoGuildbookCapture => "no Guildbook capture",
+        GuildbookImportRejectionReason.FirstImportAuthorizationDeclined => "first import not authorized",
+        GuildbookImportRejectionReason.BoundToAnotherAccount => "installation belongs to another account",
+        GuildbookImportRejectionReason.BindingUnreadable => "account binding unreadable",
+        GuildbookImportRejectionReason.AccountVerificationRequired => "verified account required",
+        GuildbookImportRejectionReason.IdentityChanged => "account changed during refresh",
+        GuildbookImportRejectionReason.OlderThanLocalSnapshot => "older capture ignored",
+        GuildbookImportRejectionReason.CacheUnreadable => "encrypted cache unreadable",
+        GuildbookImportRejectionReason.CacheWriteFailed => "encrypted cache write failed",
+        GuildbookImportRejectionReason.SupersededByNewerFile => "older duplicate file skipped",
+        _ => reason.ToString()
+    };
+
+    private string FormatGuildbookRestoreDiagnostics(AccountGuildbookRestoreResult result)
+    {
+        var guilds = _guildbookSync?.CachedGuilds ?? Array.Empty<ForeverDbGuild>();
+        var members = guilds.Sum(guild => guild.Members.Count);
+        var professions = guilds.Sum(guild => guild.Members.Sum(member => member.Professions.Count));
+        var summary = $"Local restore: {result.DiscoveredInstallations} installation(s) checked, " +
+                      $"{result.LoadedInstallationIds.Count} encrypted cache(s) loaded; {guilds.Count} guild(s), " +
+                      $"{members} members, {professions} profession records; source: DPAPI encrypted local cache.";
+        if (result.UnreadableInstallationIds.Count > 0)
+            summary += $" {result.UnreadableInstallationIds.Count} cache(s) unreadable.";
+        if (!result.Authorized)
+            summary += " Account verification required or identity changed during restore.";
+        return summary;
     }
 
     private async Task LoadSearchZonesAsync()
@@ -1495,32 +1648,148 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        _settings.WowRoot = WowRootBox.Text.Trim();
-        _settings.SupabaseUrl = SupabaseUrlBox.Text.Trim();
-        _settings.SupabaseKey = SupabaseKeyBox.Text.Trim();
-        _settings.AutoSync = AutoSyncCheck.IsChecked == true;
-        _settings.LaunchWithWindows =
-            LaunchWithWindowsCheck.IsChecked == true;
-        _settings.StartMinimized =
-            StartMinimizedCheck.IsChecked == true;
+        SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+        var root = WowInstallationLocator.Validate(WowRootBox.Text);
+        WowRootStatusText.Text = root.StatusMessage;
+        if (root.Flavor == WowClientFlavor.ClassicBeta)
+        {
+            root = root with
+            {
+                IsValid = false,
+                ErrorMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source.",
+                StatusMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source."
+            };
+            WowRootStatusText.Text = root.StatusMessage;
+        }
+        WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource(
+            root.IsValid ? "SuccessBrush" : "ErrorBrush");
+        WowRootStatusText.Visibility = Visibility.Visible;
+        if (!root.IsValid)
+        {
+            SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+            return;
+        }
 
-        SettingsService.Save(_settings);
-        StartupService.SetEnabled(
-            _settings.LaunchWithWindows,
-            _settings.StartMinimized);
+        var sameConfirmedRoot = _settings.WowRootConfirmed &&
+            string.Equals(root.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase);
 
-        await RebuildServicesAsync();
+        var settings = new CompanionSettings
+        {
+            WowRoot = root.RootPath,
+            WowRootConfirmed = true,
+            SupabaseUrl = SupabaseUrlBox.Text.Trim(),
+            SupabaseKey = SupabaseKeyBox.Text.Trim(),
+            AutoSync = AutoSyncCheck.IsChecked == true,
+            LaunchWithWindows =
+                LaunchWithWindowsCheck.IsChecked == true,
+            StartMinimized = StartMinimizedCheck.IsChecked == true
+        };
 
-        SettingsSaveStatusText.Text = "Settings saved.";
-        SettingsSaveStatusText.Foreground =
-            (System.Windows.Media.Brush)FindResource("SuccessBrush");
-        SettingsSaveStatusText.Visibility =
-            Visibility.Visible;
+        try
+        {
+            SettingsService.Save(settings);
+            _settings = settings;
+            StartupService.SetEnabled(_settings.LaunchWithWindows, _settings.StartMinimized);
+            await RebuildServicesAsync(syncExistingFiles: sameConfirmedRoot);
+
+            SettingsSaveStatusText.Text = "Settings saved.";
+            SettingsSaveStatusText.Foreground = (System.Windows.Media.Brush)FindResource("SuccessBrush");
+            SettingsSaveStatusText.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            SettingsSaveStatusText.Text = $"Settings could not be saved: {ex.Message}";
+            SettingsSaveStatusText.Foreground = (System.Windows.Media.Brush)FindResource("ErrorBrush");
+            SettingsSaveStatusText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void SettingsInput_Changed(object sender, RoutedEventArgs e) =>
+        ClearSettingsSaveStatus();
+
+    private void SettingsInput_Changed(object sender, TextChangedEventArgs e) =>
+        ClearSettingsSaveStatus();
+
+    private void ClearSettingsSaveStatus()
+    {
+        if (SettingsSaveStatusText is not null)
+        {
+            SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void CancelSettings_Click(object sender, RoutedEventArgs e)
+    {
+        PopulateSettings();
+        SettingsSaveStatusText.Visibility = Visibility.Collapsed;
+    }
+
+    private void BrowseWowRoot_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Select the World of Warcraft client folder",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false,
+            InitialDirectory = Directory.Exists(WowRootBox.Text.Trim())
+                ? WowRootBox.Text.Trim()
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+        };
+
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        WowRootBox.Text = dialog.SelectedPath;
+        RefreshWowRootStatus();
+    }
+
+    private void WowInstallationSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_populatingSettings || WowInstallationSelector.SelectedItem is not WowInstallation selected)
+        {
+            return;
+        }
+
+        WowRootBox.Text = selected.RootPath;
+        RefreshWowRootStatus();
+    }
+
+    private void RefreshWowRootStatus()
+    {
+        if (WowRootStatusText is null)
+        {
+            return;
+        }
+
+        var validation = WowInstallationLocator.Validate(WowRootBox.Text);
+        if (validation.Flavor == WowClientFlavor.ClassicBeta)
+        {
+            validation = validation with
+            {
+                IsValid = false,
+                ErrorMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source.",
+                StatusMessage = "The legacy _classic_beta_ client cannot be used as the Forever data source."
+            };
+        }
+
+        var changedPath = !string.Equals(validation.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase);
+        WowRootStatusText.Text = (!_settings.WowRootConfirmed || changedPath) && validation.IsValid
+            ? $"Detected client; save settings to confirm. {validation.StatusMessage} No sync starts before confirmation."
+            : validation.StatusMessage;
+        WowRootStatusText.Foreground = (System.Windows.Media.Brush)FindResource(
+            validation.IsValid ? "SuccessBrush" : "ErrorBrush");
+        WowRootStatusText.Visibility = Visibility.Visible;
     }
 
     private void PopulateSettings()
     {
+        _populatingSettings = true;
         WowRootBox.Text = _settings.WowRoot;
+        WowInstallationSelector.ItemsSource = _wowInstallations;
+        WowInstallationSelector.SelectedItem = _wowInstallations.FirstOrDefault(
+            candidate => string.Equals(candidate.RootPath, _settings.WowRoot, StringComparison.OrdinalIgnoreCase));
         SupabaseUrlBox.Text = _settings.SupabaseUrl;
         SupabaseKeyBox.Text = _settings.SupabaseKey;
         AutoSyncCheck.IsChecked = _settings.AutoSync;
@@ -1528,6 +1797,8 @@ public partial class MainWindow : Window
             _settings.LaunchWithWindows;
         StartMinimizedCheck.IsChecked =
             _settings.StartMinimized;
+        _populatingSettings = false;
+        RefreshWowRootStatus();
     }
 
     private void RecordSyncError(string? message)

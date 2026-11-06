@@ -53,7 +53,13 @@ public partial class MainWindow
             Dispatcher.BeginInvoke(new Action(RefreshAccountUi));
 
         account.Sessions.IdentityChanged += _ =>
+        {
+            // Drop scheduled file events immediately when the active identity changes. The account coordinator
+            // cancels public work; this also prevents a queued watcher callback from being relabelled as new-account work.
+            _watcher?.Dispose();
+            _watcher = null;
             Dispatcher.BeginInvoke(new Action(OnAccountIdentityChanged));
+        };
     }
 
     /// <summary>
@@ -155,13 +161,14 @@ public partial class MainWindow
         }
     }
 
-    private void OnAccountIdentityChanged()
+    private async void OnAccountIdentityChanged()
     {
         // Account-scoped views die with the identity: a displayed code and any message about the previous one.
         HideClaimCard();
         AccountMessageText.Visibility = Visibility.Collapsed;
         RefreshAccountUi();
         RefreshGuildbookUi();
+        await RefreshLocalStateAfterIdentityChangeAsync();
     }
 
     private async Task<string> GetSearchTokenAsync(
@@ -240,16 +247,15 @@ public partial class MainWindow
                 status.VerifiedEmail);
         AccountDetailText.Text =
             AccountMessages.Detail(status);
+        var environmentDescription = AccountFeatureGate.DescribeEffectiveEnvironment(account.Gate, account.Endpoint);
         var claimPilot = account.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
         var privatePilot = account.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
         AccountEnvironmentText.Text =
             claimPilot
-                ? "Owner-only claim pilot: only one selected installation can request a link code. Uploads, owner selection and anonymous creation remain disabled."
+                ? $"{environmentDescription}. Owner-only claim pilot: only one selected installation can request a link code. Uploads, owner selection and anonymous creation remain disabled."
                 : privatePilot
-                ? "Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
-                : enabled
-                    ? $"Account features are enabled for the {account.Gate.Environment.ToString().ToLowerInvariant()} test project (not production)."
-                    : "Account features are off in this build. ForeverDB works anonymously, exactly like before.";
+                ? $"{environmentDescription}. Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
+                : environmentDescription;
 
         var loggedOut = status.State == SessionState.LoggedOut;
         var lost = status.State == SessionState.AnonymousIdentityLost;
@@ -289,6 +295,14 @@ public partial class MainWindow
 
         AccountSignedInPanel.Visibility =
             registered || reauth
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        AccountSwitchButton.Visibility =
+            registered || reauth
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        AccountReturnAnonymousButton.Visibility =
+            status.HasLegacyOwner && status.LegacyFault == SessionFault.None && (registered || reauth)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
@@ -343,6 +357,8 @@ public partial class MainWindow
         var buttonsEnabled = !_accountBusy;
         AccountSignInButton.IsEnabled = buttonsEnabled;
         AccountSignOutButton.IsEnabled = buttonsEnabled;
+        AccountSwitchButton.IsEnabled = buttonsEnabled;
+        AccountReturnAnonymousButton.IsEnabled = buttonsEnabled;
     }
 
     private InstallationRow BuildInstallationRow(
@@ -430,13 +446,10 @@ public partial class MainWindow
         RefreshAccountUi();
     }
 
-    private async Task ResyncAfterIdentityChangeAsync()
+    private async Task RefreshLocalStateAfterIdentityChangeAsync()
     {
         var service = _syncService;
-        var watcher = _watcher;
-
-        if (service is null ||
-            string.IsNullOrWhiteSpace(_settings.WowRoot))
+        if (service is null || string.IsNullOrWhiteSpace(_settings.WowRoot))
         {
             return;
         }
@@ -444,43 +457,31 @@ public partial class MainWindow
         WowSavedVariablesWatcher? temporaryFinder = null;
         try
         {
-            temporaryFinder = watcher ??
-                new WowSavedVariablesWatcher(
-                    _settings.WowRoot,
-                    (_, _) => Task.CompletedTask);
+            temporaryFinder = new WowSavedVariablesWatcher(_settings.WowRoot, (_, _) => Task.CompletedTask);
             var files = temporaryFinder.FindExistingFiles().ToArray();
             var discovered = service.DiscoverInstallations(files);
 
-            // A sign-in after startup must restore that account's encrypted LOCAL Guildbook, for every environment and even when
-            // AutoSync is off. Restoration is completed before, and independently from, any public upload; it uses no network.
+            // Identity changes may refresh inventory and restore encrypted local Guildbook data only. Keep this method
+            // structurally separate from the snapshot upload API so account actions cannot become an upload path.
             if (_guildbookSync is not null)
             {
-                await GuildbookStartupCoordinator.RestoreAsync(
+                var restored = await GuildbookStartupCoordinator.RestoreAsync(
                     _guildbookSync,
                     discovered);
+                _guildbookImportDiagnostics = FormatGuildbookRestoreDiagnostics(restored);
             }
-
-            // Signing in to the real project for the first owner pilot must NOT
-            // auto-upload existing installations, even if AutoSync was enabled.
-            if (_account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot) return;
-
-            foreach (var file in files)
-            {
-                await service.SyncFileAsync(
-                    file,
-                    trigger: SyncTrigger.Auto);
-            }
+            RefreshGuildbookUi();
+            RefreshAccountUi();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            RecordSyncError(ex.Message);
+            _guildbookImportDiagnostics = "Local restore failed. Check local Guildbook cache access, then retry.";
+            RefreshGuildbookUi();
         }
         finally
         {
-            if (watcher is null)
-            {
-                temporaryFinder?.Dispose();
-            }
+            temporaryFinder?.Dispose();
+            StartWatcher();
         }
     }
 
@@ -556,7 +557,6 @@ public partial class MainWindow
             if (outcome is StartAnonymousOutcome.Created or StartAnonymousOutcome.RestoredLegacyIdentity)
             {
                 _signInRequested = false;
-                await ResyncAfterIdentityChangeAsync();
             }
         }
         finally
@@ -633,7 +633,6 @@ public partial class MainWindow
             {
                 _signInRequested = false;
                 AccountEmailBox.Clear();
-                await ResyncAfterIdentityChangeAsync();
             }
         }
         finally
@@ -659,9 +658,100 @@ public partial class MainWindow
 
         try
         {
+            _syncService?.CancelRegisteredDeviceUploads();
             var outcome = await account.Sessions.SignOutRegisteredAsync();
             ShowAccountMessage(
                 AccountMessages.Describe(outcome));
+            if (outcome is SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending)
+            {
+                RefreshAccountUi();
+            }
+        }
+        finally
+        {
+            SetAccountBusy(false);
+        }
+    }
+
+    private async void AccountSwitchAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var account = _account;
+        if (account is null || _accountBusy)
+        {
+            return;
+        }
+
+        SetAccountBusy(true);
+        try
+        {
+            _syncService?.CancelRegisteredDeviceUploads();
+            var outcome = await account.Sessions.SignOutRegisteredAsync();
+            if (outcome is SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending)
+            {
+                _signInRequested = true;
+                AccountEmailBox.Clear();
+                AccountPasswordBox.Clear();
+                ShowAccountMessage(outcome == SignOutOutcome.LocalOnlyRevocationPending
+                    ? "Signed out locally. Server revocation is pending and will be retried; you can now sign in to another account."
+                    : "Signed out. Sign in with the other account when ready.");
+            }
+            else
+            {
+                ShowAccountMessage(AccountMessages.Describe(outcome));
+            }
+        }
+        finally
+        {
+            SetAccountBusy(false);
+        }
+
+        if (_signInRequested)
+        {
+            AccountEmailBox.Focus();
+        }
+    }
+
+    private async void AccountReturnAnonymous_Click(object sender, RoutedEventArgs e)
+    {
+        var account = _account;
+        if (account is null || _accountBusy)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(
+                this,
+                "Sign out of this account and restore this computer's preserved anonymous identity? Its credentials and installation history will be kept.",
+                "Return to anonymous mode",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        SetAccountBusy(true);
+        try
+        {
+            _syncService?.CancelRegisteredDeviceUploads();
+            var signedOut = await account.Sessions.SignOutRegisteredAsync();
+            if (signedOut is not (SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending))
+            {
+                ShowAccountMessage(AccountMessages.Describe(signedOut));
+                return;
+            }
+
+            var restored = await account.Sessions.RestoreLegacyAnonymousAsync();
+            ShowAccountMessage(restored == StartAnonymousOutcome.RestoredLegacyIdentity
+                ? signedOut == SignOutOutcome.LocalOnlyRevocationPending
+                    ? "Restored the preserved anonymous identity. Server revocation of the previous account session remains pending."
+                    : "Restored the preserved anonymous identity."
+                : AccountMessages.Describe(restored));
+
+            if (restored == StartAnonymousOutcome.RestoredLegacyIdentity)
+            {
+                _signInRequested = false;
+            }
         }
         finally
         {

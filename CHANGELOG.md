@@ -8,9 +8,25 @@ version contract and release checklist are documented in
 
 - Addon: **0.7.1-alpha**
 - Export schema: **9**
-- Companion: **0.9.0-alpha**
+- Companion: **0.9.11-alpha**
+
+## 0.9.11-alpha — 2026-11-06 (Guildbook local import and build provenance, PR #176 draft)
+
+- Fixed the local Guildbook refresh path so a valid existing Schema 9 capture can be imported after an explicit first-import authorization, even when captured before the current Companion login.
+- Bound each WoW installation to the authorizing verified local account using DPAPI-protected ownership metadata. Other accounts cannot import or restore that installation's Guildbook; returning to the original account restores its encrypted cache.
+- Added local refresh diagnostics for discovered/parsed files, capture validity, guild/member/profession counts, accepted captures, restored encrypted caches, data source and grouped rejections.
+- Kept the Guildbook button local-only and independent from public snapshot ingestion. Addon `0.7.1-alpha`, Schema 9, and registered-device AutoSync restrictions are unchanged.
+- Each Windows build now carries a full commit in assembly informational version; visible UI shows the short SHA and CI artifacts include version plus full SHA. W5 Windows owner acceptance remains pending.
 
 # Companion
+
+## 0.9.1-alpha — 2026-11-06 (C0b account and settings safety, PR #176 draft)
+
+- Identity changes now refresh local installation inventory and restore local encrypted Guildbook data without invoking snapshot ingestion. Stale sync work is cancelled and never retried under a different identity.
+- Account UI reports the validated effective backend and safe hostname; a rejected isolated-mode configuration disables network services rather than falling back to production.
+- Installation selection has friendly client labels, lists legacy Classic Beta as ineligible, and clears stale save-success messages after edits or validation failures.
+- Registered-device AutoSync remains disabled; Guildbook and private quest journals remain local-only; addon `0.7.1-alpha` and Schema 9 are unchanged.
+- W4-W6 Windows owner acceptance remains pending. This is a review build, not a production release.
 
 ## 0.9.0-alpha — 2026-10-12 (Account System V1 authentication, PR D)
 
