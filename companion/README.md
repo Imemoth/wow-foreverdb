@@ -4,17 +4,20 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.9.11-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
-- automatic WoW Forever path detection
+- bounded WoW client discovery that prefers `_forever_`, with a native folder picker and local install/SavedVariables validation
+- explicit Save confirmation for a detected or changed WoW path; discovery alone never starts synchronization, and `_classic_beta_` is rejected as a Forever data source
 - SavedVariables watcher and automatic authenticated sync
 - Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
   the existing anonymous identity keeps working after the upgrade and is never replaced
   silently; the normal package supports existing-account sign-in, direct installation linking
-  and revocable manual device sync. Activation-file enrollment and registered-device AutoSync
-  remain independently disabled for production
+  and revocable manual device sync. Account switching and restoring the preserved anonymous
+  identity are explicit actions. Registered-device sync requires a fresh proof that the selected
+  verified account owns the target installation. Activation-file enrollment and registered-device
+  AutoSync remain independently disabled
   ([Account Linking MVP](../docs/account-v1/account-linking-mvp.md))
 - item and source search
 - item/source detail navigation with Back / Forward / breadcrumb history
@@ -29,6 +32,11 @@ ForeverDB Companion **0.9.0-alpha** is a .NET 8 WPF application with:
 - Guildbook V1 tab for roster/status/zone/profession browsing
 - sample-quality and quest metadata
 - manual GitHub Actions build and Inno Setup installer workflows
+
+New or changed installation paths remain unconfirmed until the user saves Settings. Existing
+settings are preserved, but older settings without this confirmation record must be reviewed and
+saved once before sync resumes. The legacy `AutoSync` preference is never treated as consent for a
+future registered-device AutoSync feature. See the [C0 Windows acceptance checklist](../docs/companion/windows-acceptance-checklist.md).
 
 Search results intentionally show item names without an Item # prefix. IDs remain
 available in detail metadata where they are useful for diagnostics.
@@ -82,7 +90,7 @@ Use the manual GitHub Actions workflow:
 
 It publishes a self-contained `win-x64` artifact named:
 
-    ForeverDB-Companion-win-x64
+    ForeverDB-Companion-0.9.11-alpha-<full-git-sha>-win-x64
 
 For an isolated first-install exercise, follow the
 [clean Windows Account Linking test](../docs/account-v1/account-linking-mvp-windows-test.md).

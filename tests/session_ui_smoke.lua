@@ -275,6 +275,18 @@ local function test(name, run)
     consolePrint("PASS (simulated): " .. name)
 end
 
+test("session panels avoid Blizzard backdrop corner methods", function()
+    local FDB=setup()
+    truthy(FDB:SessionPlayerReady())
+    FDB:InitializeSessionUI()
+    truthy(FDB.SessionHUDFrame.fallbackBackground)
+    truthy(FDB.SessionHUDFrame.fallbackBorders)
+    falsy(FDB.SessionHUDFrame.backdrop)
+    FDB:ToggleSessionWindow()
+    truthy(FDB.SessionDetailWindow.fallbackBorders)
+    falsy(FDB.SessionDetailWindow.backdrop)
+end)
+
 test("HUD initializes without optional BackdropTemplate helpers", function()
     local FDB = setup({ hasBackdropMixin = false })
     truthy(FDB:SessionPlayerReady())
@@ -981,7 +993,7 @@ local function setupCoreIntegration()
     -- keeps the integration test scoped to session-tracker wiring instead
     -- of duplicating the unrelated collector-smoke fixture.
     for _, name in ipairs({
-        "InitializeGuildApiProbe", "InitializeQuestApiProbe", "InitializeGuildbookTracker",
+        "InitializeGuildApiProbe", "InitializeQuestApiProbe", "InitializeQuestKillTracker", "InitializeQuestTracker", "InitializeGuildbookTracker",
         "InitializeGatheringTracker", "InitializeSkinningTracker",
         "InitializeFishingPoolTracker", "InitializeDisenchantTracker",
         "InitializeLootTracker", "InitializeTooltip",
@@ -1424,15 +1436,15 @@ test("all six KPI cards render in a single equal-width row, matching the dimensi
     end
 end)
 
-test("KPI cards render a colored fill and border via backdrop, or a fallback fill without one", function()
+test("KPI cards render fill and border without Blizzard backdrop mixins", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
     FDB:InitializeSessionUI()
     truthy(FDB:ToggleSessionWindow())
     local card = FDB.SessionDetailWindow.kpi.xpPerHour.card
-    truthy(card.backdrop, "KPI card must request a backdrop when the client supports it")
-    truthy(card.backdropColor, "KPI card must set a fill color")
-    truthy(card.backdropBorderColor, "KPI card must set a restrained border color")
+    falsy(card.backdrop, "KPI card must avoid Blizzard backdrop mixins")
+    truthy(card.fallbackBackground, "KPI card must set a fill texture")
+    truthy(card.fallbackBorders, "KPI card must set border textures")
 
     local FDBNoBackdrop = setup({ hasBackdropMixin = false })
     truthy(FDBNoBackdrop:SessionPlayerReady())
