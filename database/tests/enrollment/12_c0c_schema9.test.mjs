@@ -108,8 +108,8 @@ describe("C0c: nonempty synthetic Schema 9 with actual disposable SQL read-back"
       { item_id: "11127", drops: "2", quantity: "3", quest_drops: "1", quest_ids: [] },
       { item_id: "22222", drops: "1", quantity: "1", quest_drops: "1", quest_ids: ["12345"] },
     ]);
-    assert.deepEqual(initial.locations, [{
-      map_id: "1", zone_name: "Tirisfal Glades", subzone_name: "Brill", x: "40.25", y: "53.75", observations: "3",
+    // The public SQL schema stores coordinates as numeric(5,1), an intentional\n    // one-decimal quantization of the more precise outbound JSON.\n    assert.deepEqual(initial.locations, [{
+      map_id: "1", zone_name: "Tirisfal Glades", subzone_name: "Brill", x: "40.3", y: "53.8", observations: "3",
     }]);
     assert.equal(initial.privateGuilds, 0);
 
