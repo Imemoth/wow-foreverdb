@@ -32,6 +32,7 @@ Requires Node 24 (`../.node-version`). Tests need no environment variables and n
 | `migrations/`, `rollback/` | D1 schema and its tested inverse |
 | `test/` | Unit, contract, integration and security tests |
 | `scripts/register-commands.ts` | Prints (default) or registers staging guild commands |
+| `scripts/staging-preflight.ts` | Read-only Discord readiness check (GET only, token never printed); run by the owner before deployment |
 
 ## Rules this package keeps
 

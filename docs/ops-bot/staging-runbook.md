@@ -38,8 +38,8 @@ OPERATIONS  (private category; visible only to explicitly authorized staff/opera
 Rules that keep the environments apart even though they share one server:
 
 - `OPERATIONS` is private: `@everyone` is denied **View Channel**; only the authorized operators (a dedicated `ops-operators` role, or named users) are allowed. It is a **new** category: nothing is moved into or out of STAFF ONLY.
-- Each bot is allowed **View Channel, Send Messages and Embed Links** in **its own channel only**, through a channel-level permission overwrite for the bot. The staging bot is allowed in `#ops-testing` only: it cannot see or post in `#ops-alerts`, and the production bot has no access to `#ops-testing`. A mistyped channel id in staging therefore fails safe (Discord answers 403, the outbox row goes DEAD and the fallback route reports it) instead of posting into the production channel.
-- Neither bot gets Administrator, Manage Messages, Manage Channels, Mention Everyone, or any permission at the server level.
+- Each bot is allowed **View Channel, Send Messages and Embed Links** in **its own channel only**, through a channel-level permission overwrite for the bot. The staging bot is allowed in `#ops-testing` only (its only explicit grant): it cannot see or post in `#ops-alerts` or any other private channel, and the production bot has no access to `#ops-testing`. Like any member, a bot still inherits whatever `@everyone` may do in **public** channels; that is acceptable because the Worker only ever posts to its configured channel id, and the preflight below checks the grants that matter. A mistyped channel id in staging therefore fails safe (Discord answers 403, the outbox row goes DEAD and the fallback route reports it) instead of posting into the production channel.
+- Neither bot gets Administrator, Manage Messages, Manage Channels, Mention Everyone, or any other explicit permission at the server level (the bot's managed role, if one appears, carries no permissions).
 - Each application's `/azerdex` command is allowed only for the operators and only in its own channel (Server Settings > Integrations > the application > `/azerdex`).
 - The Worker independently enforces: the Ed25519 public key of **its own** application, the application id, the guild allowlist and the operator allowlist. A signature from the other environment's application is rejected.
 
@@ -69,7 +69,8 @@ Everything below is performed by the owner (or by an agent only after the owner 
 2. Create the private `OPERATIONS` category: deny `@everyone` View Channel; allow the operators. Create `#ops-testing` inside it (leave `#ops-alerts` and `#ops-logs` for later). Copy the `#ops-testing` channel id.
 3. In the Discord **Developer Portal** create a new application for staging (not the production one). Under **Bot**: create the bot, turn **Public Bot** off, leave all privileged intents off, copy the token (never paste it into chat, files or GitHub). Under **General Information** copy the **Application ID** and **Public Key**.
 4. Invite the staging bot to the guild only, with **no** permissions: `https://discord.com/oauth2/authorize?client_id=<STAGING_APPLICATION_ID>&scope=bot%20applications.commands&permissions=0&guild_id=1561649407584370809&disable_guild_select=true`.
-5. In `#ops-testing` add a permission overwrite for the staging bot: **View Channel, Send Messages, Embed Links** (nothing else). Confirm the staging bot has no access to any other channel. Make sure its managed role (if one appeared) has no permissions and sits below the staff roles.
+5. In `#ops-testing` add a permission overwrite for the staging bot: **View Channel, Send Messages, Embed Links** (nothing else). Make sure its managed role (if one appeared) has no permissions and sits below the staff roles. Make `#ops-testing` itself deny `@everyone` View Channel (inherited from the private category).
+5b. **Verify (read-only, before any deployment).** From your protected shell run the preflight (section 0.6). It must print `READY`.
 
 **B. Cloudflare and heartbeat**
 
@@ -85,6 +86,19 @@ Everything below is performed by the owner (or by an agent only after the owner 
 12. Run the scenarios in section 5, in `#ops-testing` only.
 
 Each of steps 2 to 5, 7 to 9, 10, 11 and 12 requires the owner's separate authorization before it is carried out.
+
+### 0.6 Read-only Discord preflight
+
+`ops-bot/scripts/staging-preflight.ts` checks the Discord side of one environment using **GET requests only**: it sends no message, changes no permission and registers nothing. It needs the staging bot token, so run it **in your own protected shell** (never paste the token into chat, a file or GitHub; the script never prints it):
+
+```bash
+cd ops-bot && npm ci
+DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=<staging application id> \
+DISCORD_GUILD_ID=1561649407584370809 DISCORD_ALERT_CHANNEL_ID=<#ops-testing id> \
+npx tsx scripts/staging-preflight.ts --env staging
+```
+
+It verifies: the token is a bot token of that application; the application is **not** a public bot and has no privileged gateway intent; the bot is a member of guild `1561649407584370809`; it holds no administrative or moderation permission (explicit or inherited); the alert channel is the text channel `#ops-testing` inside the `OPERATIONS` category; `@everyone` cannot see it; the bot can View Channel, Send Messages and Embed Links there; and the **only private channel the bot can see is its own** (so it cannot see STAFF ONLY, `#ops-alerts` or `#ops-logs`). `Mention Everyone` inherited from `@everyone` is reported as a warning only (every payload disables mentions). The exit code is 0 only when every required check passes. You can paste the PASS/FAIL lines into chat; they contain no secret.
 
 ## 1. Create resources (staging only)
 
@@ -179,6 +193,7 @@ Scenarios: `healthy`, `source_critical`, `g6_stalled`, `g6_missing`, `g6_inactiv
 | 9 | In `#ops-testing` only, revoke the staging bot's Send Messages permission for one cycle, then restore it | Outbox retries; a permanent 403 becomes DEAD, the fallback route announces it once, the heartbeat shows `/fail` |
 | 10 | Remove the cron trigger for 15 minutes (or `wrangler deployments`-pause equivalent) and restore | The heartbeat service alerts on missed pings; after restore the bot opens and later resolves `bot:schedule` |
 | 11 | `/azerdex maintenance start` on the component, trigger `source_critical` | No alert while muted; alert after `end` while still critical |
+| 11c | Preflight | `staging-preflight.ts --env staging` prints `READY` before deployment, and again after any change to the channel, the bot's permissions or the roles |
 | 11b | Environment separation | The staging bot can neither see nor post in `#ops-alerts` or `#ops-logs` (check once `#ops-alerts` exists; a post attempt returns 403 and ends DEAD); the staging application's `/azerdex` is not offered in any other channel; the staging Worker rejects an interaction signed by another application |
 | 11a | Routing and exposure | The four `curl` checks in section 4 return 200 / 401 / 405 / 404; `wrangler deployments list --env staging` shows no preview or version URL in use; no Cloudflare Access application protects the hostname |
 | 12 | Real-runtime checks | Ed25519 verification on the Workers runtime, D1 `changes()` and `RETURNING` behaviour, nonce de-duplication, 429 handling, Discord's 3-second deadline, command permission UI |

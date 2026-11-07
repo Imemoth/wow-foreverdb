@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **236 passed, 0 failed** in 14 files |
+| `npm test` | **255 passed, 0 failed** in 15 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -29,6 +29,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `regex-safety.test.ts` | 18 | CodeQL findings: linear-time text helpers under adversarial input, parsed-URL credential detector |
 | `routing-config.test.ts` | 12 | `wrangler.toml` routing and environment rules, documentation consistency |
 | `worker-endpoint.test.ts` | 7 | the public endpoint through the real Worker `fetch`: signature, authorization, methods, paths |
+| `preflight.test.ts` | 19 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
 ## 2. Required test matrix
@@ -95,3 +96,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 ## 7. Existing Discord server: documentation and configuration reconciliation
 
 The official AzerDex Discord server exists (guild `1561649407584370809`). The staging runbook, production checklist, design record, threat model and PR description were corrected: no new server is created or required; staging uses `#ops-testing` and production `#ops-alerts` (proposed, not yet confirmed as created) in a private `OPERATIONS` category; separate Discord applications, tokens, Workers, D1 databases and heartbeat checks. The guild id became a plain var in both environments. Verified by `discord-topology.test.ts` (configuration and documentation). **Not verified:** that the channels exist, the permission overwrites, command visibility, the managed bot roles and the privacy of `OPERATIONS` when the server opens: all of that is owner-side Discord configuration (runbook 0.5), not done.
+
+## 8. Staging preparation: read-only Discord preflight
+
+`ops-bot/scripts/staging-preflight.ts` verifies the Discord configuration of an environment before deployment with five GET requests (no message, no permission change, no registration; the token is never printed). Its logic is tested against a fixture modelled on the AzerDex server layout (public START HERE and COMMUNITY categories, private STAFF ONLY, private OPERATIONS): a correct configuration passes; Administrator or other forbidden permissions, a moderator role on the bot, access to STAFF ONLY or to the other environment's channel, a missing Send Messages or Embed Links grant, a channel visible to `@everyone`, a channel outside OPERATIONS or with the wrong name, a public bot, privileged intents, a foreign token and a wrong guild each fail; inherited `Mention Everyone` only warns. Mutation check: 5 deliberate breakages (overwrite order, Administrator short-circuit, extra-channel check, public-bot check, guild check) all failed the suite. **Not verified:** the check against the real Discord API and the real server, which happens only when the owner runs it in a protected shell after creating the channel and the bot.
