@@ -110,9 +110,9 @@ public sealed class C0cOfflineTransportTests
             "M|1|Tirisfal%20Glades|0|111",
             "A|1|0|1024|1024|256|256|1.0|2.0|0|synthetic-tile",
             "S|creature|164662|60|Equipment%20Boxes",
-            "B|creature|164662|60|loot|3",
-            "L|creature|164662|60|loot|1|Tirisfal%20Glades|Brill|40.25|53.75|3",
-            "I|creature|164662|60|loot|11127|Scavenged%20Goods|2|3|1|",
+            "B|creature|164662|60|mob|3",
+            "L|creature|164662|60|mob|1|Tirisfal%20Glades|Brill|40.25|53.75|3",
+            "I|creature|164662|60|mob|11127|Scavenged%20Goods|2|3|1|",
             "G|guild-key|Zzguild-Private|PrivateRealmCanary|" + timestamp,
             "C|guild-key|Player-0-ZZPRIVATE|Zzmember-Private|Mage|MAGE|60|Rank|1|1|PrivateZone|0",
             "P|guild-key|Player-0-ZZPRIVATE|171|AlchemyPrivate|300|300|trainer|0"
