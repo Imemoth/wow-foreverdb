@@ -21,7 +21,7 @@ function publicSnapshot(installationId, updatedAt = 5000) {
       sourceLevel: 60,
       name: "Synthetic Equipment Boxes",
       buckets: [{
-        kind: "loot",
+        kind: "mob",
         observations: 3,
         locations: [{
           mapId: 1,
@@ -102,7 +102,7 @@ describe("C0c: nonempty synthetic Schema 9 with actual disposable SQL read-back"
     assert.equal(initial.installation.snapshot_updated_at, "5000");
     assert.equal(initial.installation.schema_version, 9);
     assert.deepEqual(initial.source, [{
-      source_type: "creature", source_id: "164662", source_level: 60, loot_kind: "loot", observations: "3",
+      source_type: "creature", source_id: "164662", source_level: 60, loot_kind: "mob", observations: "3",
     }]);
     assert.deepEqual(initial.items, [
       { item_id: "11127", drops: "2", quantity: "3", quest_drops: "1", quest_ids: [] },
