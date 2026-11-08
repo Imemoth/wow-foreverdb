@@ -106,17 +106,23 @@ describe("world first article: cover assets", () => {
     expect(article.cover).toEqual({
       src: `/content-images/news/${SLUG}.webp`,
       alt: expect.stringMatching(/^[A-Z].{40,}/),
-      attribution: "Original AzerDex editorial illustration",
+      attribution: "Owner-supplied AzerDex editorial illustration",
     });
     const art = SLUG_COVER_ART[SLUG]!;
+    // poster cover: phones reuse the hero file and the poster hero is shown uncropped
+    expect(art.mobileSrc).toBe(article.cover!.src);
+    expect(SLUG_FEATURE[SLUG]!.poster).toBe(true);
     const checks: [string, { width: number; height: number }][] = [
-      [article.cover!.src, COVER_MASTER_SIZE], [art.mobileSrc, COVER_MOBILE_SIZE], [art.cardSrc, COVER_CARD_SIZE], [art.socialSrc, COVER_SOCIAL_SIZE],
+      [article.cover!.src, COVER_MASTER_SIZE], [art.cardSrc, COVER_CARD_SIZE], [art.socialSrc, COVER_SOCIAL_SIZE],
+      // code-authored fallback art keeps the original hero/mobile/card/social cut
+      [art.fallbackSrc!, COVER_MASTER_SIZE], [art.fallbackSrc!.replace("-art.webp", "-art-mobile.webp"), COVER_MOBILE_SIZE],
+      [art.fallbackSrc!.replace("-art.webp", "-art-card.webp"), COVER_CARD_SIZE], [art.fallbackSrc!.replace("-art.webp", "-art-social.webp"), COVER_SOCIAL_SIZE],
     ];
     for (const [src, size] of checks) {
       const file = join(PUBLIC, src);
       expect(existsSync(file), src).toBe(true);
       expect(webpSize(file)).toEqual(size);
-      expect(readFileSync(file).length).toBeLessThan(250_000);
+      expect(readFileSync(file).length).toBeLessThan(400_000);
     }
   });
 });

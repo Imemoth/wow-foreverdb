@@ -11,6 +11,8 @@ import { CLASS_COLORS } from "@/lib/classes/colors";
 export interface FeatureStat { value: string; label: string }
 export interface FeatureRosterEntry { name: string; classId: "mage" | "paladin" | "shaman"; className: string; race: string; color: string }
 export interface FeatureArticle {
+  /** The cover is a finished poster (headline and badges baked in): show it uncropped, with no scrim or text over it. */
+  poster?: boolean;
   kicker: string;
   stats: readonly FeatureStat[];
   rosterTitle: string;
@@ -24,6 +26,7 @@ const entry = (name: string, classId: FeatureRosterEntry["classId"], className: 
 
 export const SLUG_FEATURE: Record<string, FeatureArticle> = {
   "jokerd-team-world-first-level-60-wow-forever": {
+    poster: true,
     kicker: "World First — Level 60",
     stats: [
       { value: "52", label: "Hours" },

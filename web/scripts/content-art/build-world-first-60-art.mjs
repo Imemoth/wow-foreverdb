@@ -9,8 +9,9 @@
 // Five silhouettes (three Mages, a Paladin, a Shaman) stand on a ridge under an arcane moon while an Arcane
 // Explosion shockwave rolls out from their feet. It contains no text: all typography is HTML.
 //
+// This is the FALLBACK art (files end in -art): the primary cover is the owner-supplied poster, see export-world-first-60-poster.mjs.
 // Output (web/public/content-images/news/), cut from one 1920x1080 render:
-//   <slug>.webp         1920x1080  hero, cover.src
+//   <slug>-art.webp     1920x1080  fallback hero
 //   <slug>-mobile.webp   810x1080  portrait crop around the party
 //   <slug>-card.webp     800x600   4:3 thumbnail
 //   <slug>-social.webp  1200x630   og:image / twitter:image
@@ -180,8 +181,8 @@ mkdirSync(OUT, { recursive: true });
 const master = await sharp(Buffer.from(svg), { density: 96 }).resize(W, H).png().toBuffer();
 const enc = (img) => img.webp({ quality: 88, effort: 6, smartSubsample: true });
 const crop = (left, top, width, height) => sharp(master).extract({ left, top, width, height });
-await enc(sharp(master)).toFile(join(OUT, `${SLUG}.webp`));
-await enc(crop(1050, 0, 810, 1080)).toFile(join(OUT, `${SLUG}-mobile.webp`));
-await enc(crop(480, 0, 1440, 1080).resize(800, 600, { kernel: "lanczos3" })).toFile(join(OUT, `${SLUG}-card.webp`));
-await enc(crop(0, 36, 1920, 1008).resize(1200, 630, { kernel: "lanczos3" })).toFile(join(OUT, `${SLUG}-social.webp`));
+await enc(sharp(master)).toFile(join(OUT, `${SLUG}-art.webp`));
+await enc(crop(1050, 0, 810, 1080)).toFile(join(OUT, `${SLUG}-art-mobile.webp`));
+await enc(crop(480, 0, 1440, 1080).resize(800, 600, { kernel: "lanczos3" })).toFile(join(OUT, `${SLUG}-art-card.webp`));
+await enc(crop(0, 36, 1920, 1008).resize(1200, 630, { kernel: "lanczos3" })).toFile(join(OUT, `${SLUG}-art-social.webp`));
 console.log("exported", SLUG);

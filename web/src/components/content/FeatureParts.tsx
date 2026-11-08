@@ -2,9 +2,9 @@ import type { FeatureArticle } from "@/lib/content/feature-articles";
 import { classIconPath } from "@/lib/classes/art";
 
 /** Three compact highlight statistics, shown directly under a feature article's hero. */
-export function FeatureStats({ feature }: { feature: FeatureArticle }) {
+export function FeatureStats({ feature, visuallyHidden = false }: { feature: FeatureArticle; visuallyHidden?: boolean }) {
   return (
-    <dl aria-label="Achievement at a glance" className="mx-auto mt-6 grid max-w-5xl grid-cols-3 gap-px overflow-hidden rounded-xl border border-gold-500/40 bg-gold-500/20">
+    <dl aria-label="Achievement at a glance" className={visuallyHidden ? "sr-only" : "mx-auto mt-6 grid max-w-5xl grid-cols-3 gap-px overflow-hidden rounded-xl border border-gold-500/40 bg-gold-500/20"}>
       {feature.stats.map((s) => (
         <div key={s.label} className="bg-ink-900 px-3 py-4 text-center sm:py-5">
           <dd className="font-[family-name:var(--font-display)] text-3xl font-bold leading-none text-gold-300 sm:text-5xl">{s.value}</dd>

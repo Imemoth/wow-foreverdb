@@ -3,6 +3,7 @@ import type { Article } from "@/lib/content/loader";
 import { articlePath } from "@/lib/content/loader";
 import { articleCoverImages } from "@/lib/content/article-media";
 import { SLUG_FEATURE } from "@/lib/content/feature-articles";
+import { PosterImage } from "@/components/content/PosterImage";
 import { fmtDate } from "@/lib/format";
 
 /** The newest published, non-sample, featured News article that has cover art: the /news lead story. */
@@ -20,6 +21,29 @@ export function NewsFeatureLead({ article }: { article: Article }) {
   const cover = articleCoverImages(article);
   if (!cover) return null;
   const feature = SLUG_FEATURE[article.slug];
+  if (feature?.poster) {
+    // Poster covers carry their own headline and badges, so the art is shown whole beside the text: no scrim, no overlay.
+    return (
+      <section aria-labelledby="news-lead-title" className="grid overflow-hidden rounded-2xl border border-gold-500/50 bg-ink-950 shadow-[0_0_48px_rgb(108_65_199/0.25)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <Link href={articlePath(article)} tabIndex={-1} aria-hidden="true" className="block">
+          <PosterImage cover={cover.hero} alt="" />
+        </Link>
+        <div className="flex flex-col justify-center space-y-3 p-5 sm:p-7">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-bronze-400">{feature.kicker} · AzerDex Editorial</p>
+          <h2 id="news-lead-title" className="font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-parchment sm:text-3xl">
+            <Link href={articlePath(article)} className="no-underline text-parchment hover:text-gold-300">{article.title}</Link>
+          </h2>
+          <p className="text-parchment/90">{article.description}</p>
+          <p className="sr-only">{cover.hero.alt}</p>
+          <p className="flex flex-wrap items-center gap-3 pt-1">
+            <Link href={articlePath(article)} className="btn-primary inline-flex">Read the full story</Link>
+            <span className="text-xs text-mist"><time dateTime={article.publishedAt}>{fmtDate(article.publishedAt)}</time> · {article.readingMinutes} min read</span>
+          </p>
+          <p className="text-xs text-mist">Community achievement reported by AzerDex. Not an official Blizzard announcement.</p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby="news-lead-title" className="relative isolate overflow-hidden rounded-2xl border border-gold-500/50 bg-ink-950 shadow-[0_0_48px_rgb(108_65_199/0.25)] md:flex md:min-h-[400px] md:items-end">
       <div className="relative h-56 sm:h-72 md:absolute md:inset-0 md:h-auto">

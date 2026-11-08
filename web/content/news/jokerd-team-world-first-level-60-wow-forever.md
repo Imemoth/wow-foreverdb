@@ -11,8 +11,8 @@ sample: false
 featured: true
 cover:
   src: /content-images/news/jokerd-team-world-first-level-60-wow-forever.webp
-  alt: Silhouetted party of three Mages, a Paladin with a raised warhammer and a Shaman standing on a ridge beneath a runic moon as an arcane shockwave ripples outward
-  attribution: Original AzerDex editorial illustration
+  alt: "Poster: three Mages, a Paladin raising a golden warhammer and a lightning-wreathed Shaman on a summit at sunset, titled WORLD FIRST 60 with badges 52 Hours, 5 Players, Level 60"
+  attribution: Owner-supplied AzerDex editorial illustration
 related:
   articles: [blog/wow-forever-beginners-guide-2026, blog/wow-forever-new-race-class-combinations]
 ---

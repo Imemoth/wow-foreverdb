@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CategoryBadge } from "@/components/library/CategoryBadge";
 import { ArticleHero } from "@/components/content/ArticleHero";
+import { PosterHero } from "@/components/content/PosterHero";
 import { JsonLd } from "@/components/JsonLd";
 import { Markdown } from "@/components/Markdown";
 import { data } from "@/lib/data";
@@ -61,8 +62,10 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
         { name: a.title },
       ]} />
 
-      {cover && <ArticleHero article={a} cover={cover.hero} label={label} kicker={feature?.kicker} />}
-      {cover && feature && <FeatureStats feature={feature} />}
+      {cover && (feature?.poster
+        ? <PosterHero article={a} cover={cover.hero} label={label} />
+        : <ArticleHero article={a} cover={cover.hero} label={label} kicker={feature?.kicker} />)}
+      {cover && feature && <FeatureStats feature={feature} visuallyHidden={feature.poster} />}
 
       <article className={`${cover ? "mt-8" : "mt-6"} lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10`}>
         {!cover && <header className="min-w-0 max-w-3xl space-y-3 lg:col-start-1 lg:row-start-1">
