@@ -8,6 +8,7 @@ import { visibleArticles, articlePath } from "@/lib/content/loader";
 import { fmtDate } from "@/lib/format";
 import type { NewsRegionFilter } from "@/lib/news/presentation";
 import { pageContext } from "@/lib/page";
+import { NewsFeatureLead, pickLeadArticle } from "@/components/news/NewsFeatureLead";
 
 const PAGE_SIZE = 12;
 const TABS: Array<{ label: string; value: NewsCategory | null }> = [
@@ -64,6 +65,9 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
   const result = adjustedLoad?.result ?? initialLoad.result;
   const newsError = initialLoad.error || Boolean(adjustedLoad?.error);
   const editorial = visibleArticles("news");
+  // The lead story belongs to "All News" and the "AzerDex" tab only, on the first page of an unsearched view.
+  // Blue Post / Official News filters stay purely Blizzard-sourced.
+  const lead = !query && safePage === 1 && (category === null || category === "azerdex") ? pickLeadArticle(editorial) : null;
 
   return (
     <div className="space-y-10">
@@ -75,6 +79,8 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
         </div>
         <Link href="/news/rss.xml" className="btn-ghost text-sm">RSS feed</Link>
       </header>
+
+      {lead && <NewsFeatureLead article={lead} />}
 
       <nav aria-label="News categories" className="flex flex-wrap gap-2">
         {TABS.map((tab) => (
