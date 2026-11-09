@@ -16,8 +16,9 @@ public sealed class InstallationSyncCoordinator
     private readonly TimeProvider _clock;
     private readonly bool _allowUploads;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _installationGates = new(StringComparer.Ordinal);
-    // Keyed by installation AND owner AND identity generation: an upload under one identity is never "synced" for another.
-    private readonly ConcurrentDictionary<(string Installation, string Owner, long Generation), long> _lastSynced = new();
+    // Keyed by installation and local identity generation. The server validates whichever technical credential is used; switching
+    // or logging out advances the generation and clears the cache so no account-scoped upload state crosses that boundary.
+    private readonly ConcurrentDictionary<(string Installation, long Generation), long> _lastSynced = new();
     private readonly ConcurrentDictionary<string, InstallationRecord> _records = new(StringComparer.Ordinal);
     private CancellationTokenSource _generationCts = new();
     private readonly object _ctsLock = new();
@@ -40,6 +41,10 @@ public sealed class InstallationSyncCoordinator
 
     public OwnershipRouter Router => _router;
 
+    /// <summary>Creates the local technical credential before account-scoped private work observes session-generation changes.</summary>
+    public Task<TechnicalIdentityOutcome> PrepareTechnicalIdentityAsync(CancellationToken ct = default) =>
+        _manager.EnsureAnonymousUploadIdentityAsync(ct);
+
     /// <summary>Registers a locally discovered installation (from SavedVariables) without any remote call.</summary>
     public void NoteLocalInstallation(string installationId)
     {
@@ -54,7 +59,7 @@ public sealed class InstallationSyncCoordinator
     public void NoteDeviceUploadAccepted(string installationId)
     {
         var now = _clock.GetUtcNow();
-        Update(installationId, r => r with { Ownership = InstallationOwnership.OwnedByRegisteredAccount, OwnerRole = null, LastBlock = BlockReason.None, LastSyncedAt = now });
+        Update(installationId, r => r with { Ownership = InstallationOwnership.VerifiedTechnicalIdentity, OwnerRole = null, LastBlock = BlockReason.None, LastSyncedAt = now });
     }
 
     /// <summary>
@@ -118,6 +123,8 @@ public sealed class InstallationSyncCoordinator
         // registered-login-only private-project pilot, regardless of AutoSync.
         if (!_allowUploads)
             return SyncAttempt.Blocked(BlockReason.PilotUploadDisabled, InstallationOwnership.Unchecked);
+        // Manual sync can provision the local technical identity on a fresh install; startup normally does this first.
+        await PrepareTechnicalIdentityAsync(ct).ConfigureAwait(false);
         var gate = _installationGates.GetOrAdd(installationId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -160,7 +167,7 @@ public sealed class InstallationSyncCoordinator
             return SyncAttempt.Blocked(route.Block, route.Ownership);
         }
 
-        var cacheKey = (id, route.UserId!, generation);
+        var cacheKey = (id, generation);
         if (!force && _lastSynced.TryGetValue(cacheKey, out var last) && updatedAt <= last)
         {
             return new SyncAttempt(SyncOutcome.UpToDate, BlockReason.None, route.Ownership, route.Role, route.Kind);
@@ -173,6 +180,8 @@ public sealed class InstallationSyncCoordinator
             _router.Invalidate(id);
             if (token.Generation != generation)
             {
+                if (_manager.Status.State is SessionState.ReauthRequired or SessionState.AnonymousIdentityLost)
+                    return SyncAttempt.Blocked(MapTokenFault(token), route.Ownership);
                 throw new IdentityMovedException();
             }
 
@@ -184,11 +193,40 @@ public sealed class InstallationSyncCoordinator
         if (!result.Ok && result.Failure == RpcFailure.Unauthorized && _manager.Generation == generation)
         {
             // The server refused a token our clock still thought valid: refresh the SAME credential once and retry
-            // once. Never another credential.
+            // once before trying another held technical identity.
             var renewed = await _manager.RefreshNowAsync(route.Role!.Value, ct).ConfigureAwait(false);
             if (renewed.Ok && renewed.UserId == route.UserId && renewed.Generation == generation)
             {
                 result = await _rpc.IngestAsync(renewed.AccessToken, json, ct).ConfigureAwait(false);
+            }
+        }
+
+        // The server maps every accepted Auth identity to this installation. A rejection is not interpreted as an owner transfer;
+        // try the other locally held technical credential once (for example, the preserved anonymous identity after account A→B).
+        // The alternative is independently validated by the same server RPC; no client-supplied installation ID can establish it.
+        if (!result.Ok && (result.Failure is RpcFailure.OwnerMismatch or RpcFailure.Unauthorized or RpcFailure.Forbidden) &&
+            _manager.Generation == generation && TryGetAlternateRole(route, out var alternateRole))
+        {
+            var alternate = await _manager.GetAccessTokenAsync(alternateRole, ct).ConfigureAwait(false);
+            if (alternate.Ok && alternate.Generation == generation)
+            {
+                var alternateResult = await _rpc.IngestAsync(alternate.AccessToken, json, ct).ConfigureAwait(false);
+                if (alternateResult.Ok)
+                {
+                    result = alternateResult;
+                    route = new OwnershipRouter.RouteDecision(
+                        InstallationOwnership.VerifiedTechnicalIdentity, BlockReason.None, alternateRole, alternate.Kind, alternate.UserId, generation);
+                }
+                else if (alternateResult.Failure is not (RpcFailure.Unauthorized or RpcFailure.Forbidden or RpcFailure.OwnerMismatch))
+                {
+                    result = alternateResult;
+                }
+            }
+            else if (alternate.Generation != generation)
+            {
+                if (_manager.Status.State is SessionState.ReauthRequired or SessionState.AnonymousIdentityLost)
+                    return SyncAttempt.Blocked(MapTokenFault(alternate), route.Ownership);
+                throw new IdentityMovedException();
             }
         }
 
@@ -220,20 +258,30 @@ public sealed class InstallationSyncCoordinator
             _ => BlockReason.InvalidRequest
         };
 
-        if (result.Failure == RpcFailure.OwnerMismatch)
-        {
-            // The ownership we believed in is wrong (transfer between authorization and ingest, or a wrong explicit
-            // choice). Do NOT retry with another credential: forget the cached route and the choice, show the state.
-            _router.ClearChoice(id);
-            Update(id, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = reason });
-        }
-        else
-        {
-            Update(id, r => r with { LastBlock = reason });
-        }
+        _router.ClearChoice(id);
+        Update(id, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = reason });
 
         var outcome = result.Failure is RpcFailure.InvalidRequest or RpcFailure.MalformedResponse ? SyncOutcome.Failed : SyncOutcome.Blocked;
         return new SyncAttempt(outcome, reason, route.Ownership, route.Role, route.Kind);
+    }
+
+    private bool TryGetAlternateRole(OwnershipRouter.RouteDecision route, out SlotRole role)
+    {
+        var status = _manager.Status;
+        if (route.Kind == SessionKind.Registered && status.HasLegacyOwner)
+        {
+            role = SlotRole.LegacyOwner;
+            return true;
+        }
+
+        if (route.Kind == SessionKind.Anonymous && status.State == SessionState.Registered && status.PrimaryCredentialPresent)
+        {
+            role = SlotRole.Primary;
+            return true;
+        }
+
+        role = default;
+        return false;
     }
 
     private static BlockReason MapTokenFault(TokenResult token) => token.StateAfter switch

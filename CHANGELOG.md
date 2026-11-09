@@ -8,7 +8,15 @@ version contract and release checklist are documented in
 
 - Addon: **0.7.1-alpha**
 - Export schema: **9**
-- Companion: **0.9.11-alpha**
+- Companion: **0.9.12-alpha**
+
+## 0.9.12-alpha — 2026-11-09 (ownerless public ingestion, Draft PR)
+
+- Removed the requirement to claim or choose a website owner before public observation uploads. The Companion creates a DPAPI-protected anonymous technical upload identity independently of website sign-in; Auto Sync remains user-controlled and OFF by default.
+- Added migration 0019 with server-validated, installation-scoped technical identity mappings, legacy credential backfill, no-first-claimer checks, and device enrollment requiring prior proof from the same technical identity. Existing observations and Guildbook rows are preserved; no production migration was applied.
+- Removed installation ownership list/claim routes and UI from AzerDex while keeping normal account authentication and device management. Historical database claim RPCs remain during the compatibility window.
+- Guildbook remains local-only behind the existing 0018 projection and Companion public-payload guard. Added ownerless routing, forged-ID, device-proof and zero-Guildbook-ingest regressions.
+- Automated Windows, SQL integration and browser CI remain pending on this Draft PR. W5/W6 Windows acceptance is deferred; see [ownerless-ingestion-acceptance.md](docs/account-v1/ownerless-ingestion-acceptance.md).
 
 ## 0.9.11-alpha — 2026-11-06 (Guildbook local import and build provenance, PR #176 draft)
 

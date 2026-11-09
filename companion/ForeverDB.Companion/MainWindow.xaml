@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="ForeverDB Companion 0.9.11-alpha"
+        Title="ForeverDB Companion 0.9.12-alpha"
         Width="1180"
         Height="760"
         MinWidth="960"
@@ -44,7 +44,7 @@
                                FontSize="12"
                                FontWeight="SemiBold" />
                     <TextBlock x:Name="BuildVersionText"
-                               Text="  •  0.9.11-alpha"
+                               Text="  •  0.9.12-alpha"
                                Foreground="#677387"
                                FontSize="11"
                                VerticalAlignment="Center" />
@@ -846,24 +846,24 @@
                                                FontSize="11"
                                                TextWrapping="Wrap"
                                                Margin="0,6,0,0"
-                                               Text="Installations owned by the lost identity will not be able to sync from this computer." />
+                                            Text="The previous technical upload credential is unavailable. A replacement identity cannot claim existing server data automatically." />
                                 </StackPanel>
 
                                 <StackPanel x:Name="AccountLegacyPanel"
                                             Margin="0,22,0,0"
                                             Visibility="Collapsed">
-                                    <TextBlock Text="Preserved anonymous identity"
+                                    <TextBlock Text="Preserved technical upload identity"
                                                FontWeight="SemiBold" />
                                     <TextBlock x:Name="AccountLegacyText"
                                                Foreground="{StaticResource MutedTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,4,0,8"
-                                               Text="This computer's original anonymous identity is kept so its installations keep syncing." />
+                                               Text="This computer's anonymous technical credential is DPAPI-protected and kept locally." />
                                     <Button x:Name="AccountForgetLegacyButton"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Height="34"
                                             Click="AccountForgetLegacy_Click"
-                                            Content="Forget anonymous identity…" />
+                                            Content="Forget technical identity…" />
                                 </StackPanel>
 
                                 <StackPanel x:Name="AccountPendingPanel"
@@ -891,116 +891,11 @@
                         </Border>
 
                         <StackPanel Grid.Column="2">
-                            <Border Style="{StaticResource CardStyle}"
-                                    Padding="22">
+                            <Border Style="{StaticResource CardStyle}" Padding="22">
                                 <StackPanel>
-                                    <TextBlock Text="Installations on this computer"
-                                               FontSize="20"
-                                               FontWeight="SemiBold" />
-                                    <TextBlock Text="Who may sync each installation, as confirmed by the server"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Margin="0,4,0,14" />
-                                    <TextBlock x:Name="AccountInstallationsEmptyText"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               TextWrapping="Wrap"
-                                               Text="No installation found yet. Run Sync now on the Status tab after /reload in game." />
-                                    <ItemsControl x:Name="AccountInstallationsList">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border BorderBrush="{StaticResource BorderBrush}"
-                                                        BorderThickness="0,1,0,0"
-                                                        Padding="0,10">
-                                                    <StackPanel>
-                                                        <TextBlock Text="{Binding InstallationId}"
-                                                                   FontFamily="Consolas"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Text="{Binding OwnershipText}"
-                                                                   FontWeight="SemiBold"
-                                                                   Margin="0,3,0,0" />
-                                                        <TextBlock Text="{Binding DetailText}"
-                                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                                   TextWrapping="Wrap"
-                                                                   FontSize="12"
-                                                                   Visibility="{Binding DetailVisibility}" />
-                                                        <StackPanel Orientation="Horizontal"
-                                                                    Margin="0,8,0,0">
-                                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                                    Padding="12,5"
-                                                                    Click="InstallationClaim_Click"
-                                                                    Visibility="{Binding ClaimVisibility}"
-                                                                    Content="{Binding ClaimActionText}" />
-                                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                                    Padding="12,5"
-                                                                    Margin="8,0,0,0"
-                                                                    Click="InstallationCheck_Click"
-                                                                    Visibility="{Binding CheckVisibility}"
-                                                                    Content="Check status" />
-                                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                                    Padding="12,5"
-                                                                    Margin="8,0,0,0"
-                                                                    Click="InstallationChooseAccount_Click"
-                                                                    Visibility="{Binding ChooseAccountVisibility}"
-                                                                    Content="Sync with my account" />
-                                                            <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                                    Padding="12,5"
-                                                                    Margin="8,0,0,0"
-                                                                    Click="InstallationChooseAnonymous_Click"
-                                                                    Visibility="{Binding ChooseAnonymousVisibility}"
-                                                                    Content="Sync anonymously" />
-                                                        </StackPanel>
-                                                    </StackPanel>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
-
-                            <Border x:Name="AccountClaimCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Padding="22"
-                                    Margin="0,16,0,0"
-                                    Visibility="Collapsed">
-                                <StackPanel>
-                                    <TextBlock Text="Link code"
-                                               FontSize="20"
-                                               FontWeight="SemiBold" />
-                                    <TextBlock x:Name="AccountClaimInstallationText"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               FontFamily="Consolas"
-                                               Margin="0,4,0,12"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <Border Background="{StaticResource SurfaceAltBrush}"
-                                            BorderBrush="{StaticResource AccentBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="6"
-                                            Padding="14,12">
-                                        <TextBlock x:Name="AccountClaimCodeText"
-                                                   FontFamily="Consolas"
-                                                   FontSize="17"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AccentHoverBrush}"
-                                                   TextWrapping="Wrap" />
-                                    </Border>
-                                    <TextBlock x:Name="AccountClaimCountdownText"
-                                               Margin="0,8,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               TextWrapping="Wrap"
-                                               FontSize="12"
-                                               Text="The code works once and for 10 minutes. Keep it private: anyone who has it and a ForeverDB account could take over this installation. Requesting a new code cancels this one. The website step that redeems the code arrives in a later update; nothing is linked until the server confirms it." />
-                                    <StackPanel Orientation="Horizontal"
-                                                Margin="0,12,0,0">
-                                        <Button Padding="14,7"
-                                                Click="AccountCopyClaim_Click"
-                                                Content="Copy code" />
-                                        <Button Style="{StaticResource SecondaryButtonStyle}"
-                                                Padding="14,7"
-                                                Margin="8,0,0,0"
-                                                Click="AccountDismissClaim_Click"
-                                                Content="Hide code" />
-                                    </StackPanel>
+                                    <TextBlock Text="Public observation sync" FontSize="20" FontWeight="SemiBold" />
+                                    <TextBlock Text="ForeverDB Companion uses a separate DPAPI-protected technical identity to upload public observations. A website account, installation claim, or owner selection is not required." Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                                    <TextBlock Text="Private Guildbook data stays encrypted on this computer and is scoped to the active local account." Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,10,0,0" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

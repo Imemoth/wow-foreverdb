@@ -59,10 +59,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         var build = typeof(MainWindow).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.9.11-alpha+local";
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.9.12-alpha+local";
         var commit = build.Split('+', 2).ElementAtOrDefault(1) ?? "local";
-        BuildVersionText.Text = $"  •  0.9.11-alpha  •  {commit[..Math.Min(commit.Length, 7)]}";
-        Title = $"ForeverDB Companion 0.9.11-alpha+{commit}";
+        BuildVersionText.Text = $"  •  0.9.12-alpha  •  {commit[..Math.Min(commit.Length, 7)]}";
+        Title = $"ForeverDB Companion 0.9.12-alpha+{commit}";
         Loaded += MainWindow_Loaded;
     }
 
@@ -160,6 +160,10 @@ public partial class MainWindow : Window
         };
 
         await account.Sessions.InitializeAsync();
+        // Public observation uploads use an anonymous technical Auth identity, never a required website account. This creates only
+        // the DPAPI-protected credential; Auto Sync remains governed by its persisted OFF-by-default setting.
+        await account.Sessions.EnsureAnonymousUploadIdentityAsync();
+        await account.Sessions.InitializeAsync();
         RefreshAccountUi();
         _ = RunAccountBackgroundChecksAsync(account);
 
@@ -179,8 +183,7 @@ public partial class MainWindow : Window
             // Local-only Guildbook boundary: it has no RPC and no token method, and persists encrypted data on this computer only.
             _guildbookSync = new AccountGuildbookSync(
                 account.Sessions,
-                new LocalGuildbookStore()),
-            accountSessions: account.Sessions);
+                new LocalGuildbookStore()));
         _guildbookLocalRefresh = new GuildbookLocalRefreshService(_guildbookSync);
 
         _syncService.Authenticated += () =>

@@ -14,6 +14,18 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Ownerless public ingestion — Draft implementation (2026-11-09)
+
+- [x] Remove installation ownership UI and website claim/list routes.
+- [x] Add server-validated technical upload identities and migrate known anonymous/device credentials without deleting rows or history.
+- [x] Keep Auto Sync preference user-controlled and preserve the 0018 Guildbook local-only boundary.
+- [x] Add Companion/web/database regression coverage, including forged installation IDs and a zero-Guildbook-persistence assertion.
+- [ ] Run Windows Companion build/tests, database integration CI and browser CI on the Draft PR; record exact statuses.
+- [ ] Owner runs the manual Windows W5/W6 acceptance matrix in [ownerless-ingestion-acceptance.md](account-v1/ownerless-ingestion-acceptance.md). No manual result is claimed here.
+- [ ] Review unmapped historical installations and the legacy claim-RPC retirement window before any production migration.
+
+Decision: [ADR-018 — Ownerless public observation ingestion](account-v1/adr-018-ownerless-public-ingestion.md).
+
 ## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
 
 - [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.
@@ -94,7 +106,7 @@ Runbook: [Private project Companion pilot](account-v1/private-project-companion-
   detailed window): repo-complete; live Forever acceptance **PASS**.
 
 ### Companion
-- Version: **0.9.11-alpha** (Guildbook local import, DPAPI account/install binding, diagnostics and build provenance)
+- Version: **0.9.12-alpha** (ownerless public ingestion, DPAPI technical identity, Guildbook local import, diagnostics and build provenance)
 - Authenticated Supabase sync
 - Item/source search and detail navigation
 - Multi-zone location browsing

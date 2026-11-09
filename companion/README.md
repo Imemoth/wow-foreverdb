@@ -4,7 +4,7 @@ Windows companion application for ForeverDB.
 
 ## Current alpha
 
-ForeverDB Companion **0.9.11-alpha** is a .NET 8 WPF application with:
+ForeverDB Companion **0.9.12-alpha** is a .NET 8 WPF application with:
 
 - single-instance system tray operation
 - optional Windows startup / start minimized
@@ -12,13 +12,11 @@ ForeverDB Companion **0.9.11-alpha** is a .NET 8 WPF application with:
 - explicit Save confirmation for a detected or changed WoW path; discovery alone never starts synchronization, and `_classic_beta_` is rejected as a Forever data source
 - SavedVariables watcher and automatic authenticated sync
 - Supabase authentication with encrypted local sessions (DPAPI, atomic writes, machine-wide lock):
-  the existing anonymous identity keeps working after the upgrade and is never replaced
-  silently; the normal package supports existing-account sign-in, direct installation linking
-  and revocable manual device sync. Account switching and restoring the preserved anonymous
-  identity are explicit actions. Registered-device sync requires a fresh proof that the selected
-  verified account owns the target installation. Activation-file enrollment and registered-device
-  AutoSync remain independently disabled
-  ([Account Linking MVP](../docs/account-v1/account-linking-mvp.md))
+  public observations use an anonymous technical identity independent of website sign-in; known
+  legacy and device credentials are preserved, and account sign-in remains available for private
+  features. Public sync does not require installation ownership, a claim code or an owner choice.
+  Revocable device sync remains account-authenticated and requires a server-validated technical
+  installation credential before activation. Auto Sync stays OFF unless the user enables it.
 - item and source search
 - item/source detail navigation with Back / Forward / breadcrumb history
 - acquisition tabs for loot, skinning, mining, herbalism, fishing, pools,
@@ -90,7 +88,7 @@ Use the manual GitHub Actions workflow:
 
 It publishes a self-contained `win-x64` artifact named:
 
-    ForeverDB-Companion-0.9.11-alpha-<full-git-sha>-win-x64
+    ForeverDB-Companion-0.9.12-alpha-<full-git-sha>-win-x64
 
 For an isolated first-install exercise, follow the
 [clean Windows Account Linking test](../docs/account-v1/account-linking-mvp-windows-test.md).

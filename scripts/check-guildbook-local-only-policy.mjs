@@ -15,6 +15,8 @@ const HISTORICAL_SHA256 = new Map([
   ["0009_api_security_rate_limits.sql", "e0187986f68d3de01a561bed56968f35962ab4f4999e3a9253ec50dfbe549b96"],
   ["0012_account_ownership_claims.sql", "ca1aaf34b9d6eaadaafcc42ebb5f19d4ae1c3303fb23d6978e7a05e48cb5a31b"],
   ["0014_zero_touch_enrollment.sql", "daf6767a60eef7f450b7af136ac4f10e00cf05bbd452264561d8ee9d9857d3d1"],
+  // 0019 changes authenticated writer routing while retaining the approved 0018 local-only projection.
+  ["0019_technical_installation_ingest.sql", "d090f34286eb9be2df24cd4a46db4afc7eef5e46013840cd15af998e28acb91a"],
 ]);
 
 const sha256 = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
@@ -46,7 +48,7 @@ export function guildbookPolicyViolations(files) {
       [/\b(?:insert\s+into|copy\s+into)\b[^;]*\bselect\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "copy of historical Guildbook records"],
       [/\b(?:insert\s+into|update|delete\s+from)\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "Guildbook cloud data write"],
       [/\b(?:revoke|grant)\s+execute\b[^;]*\w*guildbook\w*/i, "Guildbook RPC privilege change"],
-      [/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\b/i, "ingest wrapper/projection modification"],
+      [/\b(?:create\s+(?:or\s+replace\s+)?function|alter\s+function|drop\s+function)\s+(?:private\.)?(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\b/i, "ingest wrapper/projection modification"],
     ];
     for (const [pattern, reason] of rules) if (pattern.test(sql)) violations.push(`${file.name}: ${reason}`);
   }

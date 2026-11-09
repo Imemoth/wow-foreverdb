@@ -65,6 +65,8 @@ export const REVIEWED_MIGRATIONS: Record<string, string> = {
   "0012_account_ownership_claims.sql": "ca1aaf34b9d6eaadaafcc42ebb5f19d4ae1c3303fb23d6978e7a05e48cb5a31b",
   "0014_zero_touch_enrollment.sql": "daf6767a60eef7f450b7af136ac4f10e00cf05bbd452264561d8ee9d9857d3d1",
   "0015_azerdex_welcome_outbox.sql": "384fb40a7785f811a3d4394dc55bf6725b1f3676c72e313d7998dc37a331dccd",
+  // 0019 deliberately composes with the reviewed 0018 projection while changing only authenticated writer routing.
+  "0019_technical_installation_ingest.sql": "37161028d4e8ce2dae9a2189ef673a5b6bf6fed4ae0dbeaf3f21400ed60bbc5b",
 };
 
 export const KILL_SWITCH_MIGRATION = "0018_disable_guildbook_cloud_sync.sql";

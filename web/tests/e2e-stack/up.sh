@@ -118,7 +118,9 @@ echo "{\"function_status_before_0012\": $BEFORE, \"function_status_after_0012\":
 
 # 4b. 0018 is deliberately part of this disposable acceptance environment: the cloud Guildbook RPCs must be unavailable, and a legacy
 # payload that still carries guilds must store none, before the browser/API isolation tests start.
+"$REPO/database/tests/account/stack.sh" apply14
 "$REPO/database/tests/account/stack.sh" apply18
+"$REPO/database/tests/account/stack.sh" apply19
 GUILDBOOK_AFTER=""
 for i in $(seq 1 100); do
   GUILDBOOK_AFTER="$(curl -s -m 5 -o /dev/null -w '%{http_code}' -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" -H 'content-type: application/json' -d '{"p_installation_id":"x"}' "http://127.0.0.1:$GW/rest/v1/rpc/fdb_account_guildbook_guilds")"

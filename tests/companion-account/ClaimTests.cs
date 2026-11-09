@@ -227,23 +227,23 @@ public class ClaimTests
 
         // Claim issued but not redeemed: still owned by the anonymous identity, nothing "transferred".
         Assert.Equal(LinkCheckOutcome.StillOwnedByAnonymousIdentity, await rig.Runtime.Claims.CheckLinkStatusAsync("inst-1", default));
-        Assert.Equal(InstallationOwnership.OwnedByAnonymousIdentity, rig.Runtime.Sync.Installations.Single().Ownership);
+        Assert.Equal(InstallationOwnership.Unchecked, rig.Runtime.Sync.Installations.Single().Ownership);
         Assert.NotNull(rig.Runtime.Claims.OfferFor("inst-1"));
         Assert.Equal(anon.UserId, rig.Server.OwnerOf("inst-1"));
 
-        // The website redeems it: only now does the status flip, and it flips to the verified registered owner.
+        // The website redeems it: compatibility status confirms the transfer, while the Companion no longer tracks an owner.
         Assert.True(rig.Server.Redeem(Canonical(offer.DisplayCode), registered.Id));
         Assert.Equal(LinkCheckOutcome.TransferConfirmed, await rig.Runtime.Claims.CheckLinkStatusAsync("inst-1", default));
         var record = rig.Runtime.Sync.Installations.Single();
-        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, record.Ownership);
-        Assert.Equal(SlotRole.Primary, record.OwnerRole);
+        Assert.Equal(InstallationOwnership.Unchecked, record.Ownership);
+        Assert.Null(record.OwnerRole);
         Assert.False(record.ClaimPending);
         Assert.True(offer.IsDisposed);
 
-        // The previous anonymous identity is no longer used for that installation.
+        // The server independently validates the preserved technical identity after the legacy transfer.
         var sync = await rig.Runtime.Sync.SyncAsync("inst-1", "{\"p_snapshot\":{\"installationId\":\"inst-1\"}}", 1, false, default);
         Assert.Equal(SyncOutcome.Synced, sync.Outcome);
-        Assert.Equal(registered.Id, JwtInspector.TryDecode(rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth").Last().Bearer)!.Subject);
+        Assert.Equal(anon.UserId, JwtInspector.TryDecode(rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth").Last().Bearer)!.Subject);
     }
 
     [Fact]
@@ -260,8 +260,8 @@ public class ClaimTests
 
         Assert.Equal(LinkCheckOutcome.TransferredSignInRequired, await rig.Runtime.Claims.CheckLinkStatusAsync("inst-1", default));
         var record = rig.Runtime.Sync.Installations.Single();
-        Assert.Equal(InstallationOwnership.TransferredSignInRequired, record.Ownership);
-        Assert.Equal(BlockReason.TransferredSignInRequired, record.LastBlock);
+        Assert.Equal(InstallationOwnership.Unchecked, record.Ownership);
+        Assert.Equal(BlockReason.None, record.LastBlock);
         Assert.Equal(localBefore, File.ReadAllBytes(local));
         Assert.Equal(0, rig.Server.SignupCount);
         Assert.Equal(SessionState.Anonymous, rig.Sessions.Status.State);

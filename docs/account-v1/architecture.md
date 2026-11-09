@@ -1,5 +1,7 @@
 # Account System V1 — architecture
 
+> **Current architecture note (2026-11-09):** The claim-and-transfer flow below is historical. Draft [ADR-018](adr-018-ownerless-public-ingestion.md) replaces installation-owner authorization for public uploads with live Auth sessions and private server-owned technical identity mappings. Website accounts remain available for private account features; the Guildbook stays local-only.
+
 Status: **specification (PR A)**. Facts below were verified against `main` @ `2c31b4a` and, read-only, against the private production Supabase project on 2026-10-11. Nothing here was applied to production.
 
 ## 1. Audit of the actual current implementation

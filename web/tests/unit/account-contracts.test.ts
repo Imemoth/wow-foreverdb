@@ -270,8 +270,8 @@ describe("RPC contract registry", () => {
 
 describe("redirect allowlist", () => {
   it("returns allowlisted pathnames only and drops query and fragment", () => {
-    expect(safeNext("/account/link")).toBe("/account/link");
-    expect(safeNext("/account/link?x=1#y")).toBe("/account/link");
+    expect(safeNext("/account/link")).toBe("/account");
+    expect(safeNext("/account/link?x=1#y")).toBe("/account");
     expect(safeNext("/account/guildbook/")).toBe("/account"); // the Guildbook page is gone: not a redirect target
     expect(safeNext("/account")).toBe("/account");
   });

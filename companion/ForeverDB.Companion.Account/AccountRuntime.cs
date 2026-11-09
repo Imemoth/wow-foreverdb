@@ -108,6 +108,8 @@ public sealed class AccountRuntime
 
         var sessions = new AccountSessionManager(
             vault, new CrossProcessSessionGate(directory), new GoTrueClient(http, endpoint, requestTimeout),
+            // Public ingestion is available even when website-account features are off; the production project already supports
+            // anonymous Companion sessions. Private pilots remain isolated and do not create credentials outside their scope.
             gate.AccountsEnabled, clock, allowAnonymousCreation: !privatePilot,
             allowLegacyRefreshOrRevoke: !claimPilot);
         var rpc = new OwnershipRpcClient(http, endpoint, clock, requestTimeout, allowWrites: !privatePilot,

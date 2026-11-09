@@ -93,7 +93,8 @@ describe("zero-touch enrollment (static)", () => {
   });
 
   it("the redirect allowlist contains the new page", () => {
-    expect(code(join(SRC, "lib/account/contracts.ts"))).toMatch(/"\/account\/installations",\s*"\/account\/devices",/);
+    expect(code(join(SRC, "lib/account/contracts.ts"))).toMatch(/"\/account\/devices"/);
+    expect(code(join(SRC, "lib/account/contracts.ts"))).not.toContain("/account/installations");
   });
 
   it("every new route authenticates through the approved resolver with the session's own token", () => {
@@ -106,8 +107,8 @@ describe("zero-touch enrollment (static)", () => {
     }
   });
 
-  it("the new UI is linked from the account overview and the installation list", () => {
+  it("device management remains linked from the account overview after ownership UI is removed", () => {
     expect(code(join(SRC, "app/account/_ui/AccountDashboard.tsx"))).toContain('href="/account/devices"');
-    expect(code(join(SRC, "app/account/installations/page.tsx"))).toContain('href="/account/devices"');
+    expect(readdirSync(join(SRC, "app/account"))).not.toContain("installations");
   });
 });

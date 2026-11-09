@@ -42,7 +42,7 @@ public class OwnershipRoutingTests
         var result = await w.Sync.SyncAsync("inst-anon", Snapshot("inst-anon"), 100, force: false, default);
 
         Assert.Equal(SyncOutcome.Synced, result.Outcome);
-        Assert.Equal(InstallationOwnership.OwnedByAnonymousIdentity, result.Ownership);
+        Assert.Equal(InstallationOwnership.VerifiedTechnicalIdentity, result.Ownership);
         Assert.Equal(SlotRole.LegacyOwner, result.Role);
         var ingest = Assert.Single(w.Ingests);
         Assert.Equal(w.Anonymous.UserId, SubOf(ingest));
@@ -52,7 +52,7 @@ public class OwnershipRoutingTests
     }
 
     [Fact]
-    public async Task Registered_owned_installation_syncs_only_with_the_registered_token()
+    public async Task Registered_technical_credential_is_tried_after_the_anonymous_credential_is_refused()
     {
         using var w = await World.SignedInWithLegacyAsync();
         w.Server.SetOwner("inst-reg", w.Registered.Id);
@@ -60,15 +60,15 @@ public class OwnershipRoutingTests
         var result = await w.Sync.SyncAsync("inst-reg", Snapshot("inst-reg"), 100, false, default);
 
         Assert.Equal(SyncOutcome.Synced, result.Outcome);
-        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, result.Ownership);
+        Assert.Equal(InstallationOwnership.VerifiedTechnicalIdentity, result.Ownership);
         Assert.Equal(SlotRole.Primary, result.Role);
-        Assert.Equal(w.Registered.Id, SubOf(Assert.Single(w.Ingests)));
-        // The legacy token is not even consulted once the registered session proved ownership.
-        Assert.DoesNotContain(w.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"), r => SubOf(r) == w.Anonymous.UserId);
+        Assert.Equal(w.Registered.Id, SubOf(w.Ingests.Last()));
+        Assert.Equal(2, w.Ingests.Count());
+        Assert.Empty(w.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"));
     }
 
     [Fact]
-    public async Task Multiple_installations_with_different_ownership_each_use_their_own_credential()
+    public async Task Server_validates_each_held_technical_credential_and_new_ids_need_no_owner_choice()
     {
         using var w = await World.SignedInWithLegacyAsync();
         w.Server.SetOwner("a", w.Anonymous.UserId);
@@ -83,65 +83,91 @@ public class OwnershipRoutingTests
 
         Assert.Equal(SyncOutcome.Synced, a.Outcome);
         Assert.Equal(SyncOutcome.Synced, b.Outcome);
-        Assert.Equal(BlockReason.OwnerSelectionRequired, c.Reason);
-        Assert.Equal(BlockReason.OwnerSelectionRequired, d.Reason);
+        Assert.Equal(BlockReason.Forbidden, c.Reason);
+        Assert.Equal(SyncOutcome.Synced, d.Outcome);
 
-        Assert.Equal(2, w.Server.IngestCount);
-        Assert.Null(w.Server.OwnerOf("d"));
-        var byInstallation = w.Ingests.ToDictionary(r => JsonNode.Parse(r.Body)!["p_snapshot"]!["installationId"]!.GetValue<string>(), SubOf);
-        Assert.Equal(w.Anonymous.UserId, byInstallation["a"]);
-        Assert.Equal(w.Registered.Id, byInstallation["b"]);
+        Assert.Equal(3, w.Server.IngestCount);
+        Assert.Equal(w.Anonymous.UserId, w.Server.OwnerOf("d"));
+        var byInstallation = w.Ingests.GroupBy(r => JsonNode.Parse(r.Body)!["p_snapshot"]!["installationId"]!.GetValue<string>())
+            .ToDictionary(g => g.Key, g => g.Last());
+        Assert.Equal(w.Anonymous.UserId, SubOf(byInstallation["a"]));
+        Assert.Equal(w.Registered.Id, SubOf(byInstallation["b"]));
 
         var records = w.Sync.Installations.ToDictionary(r => r.InstallationId);
-        Assert.Equal(InstallationOwnership.OwnedByAnonymousIdentity, records["a"].Ownership);
-        Assert.Equal(InstallationOwnership.OwnedByRegisteredAccount, records["b"].Ownership);
-        Assert.Equal(InstallationOwnership.OwnerSelectionRequired, records["c"].Ownership);
+        Assert.Equal(InstallationOwnership.VerifiedTechnicalIdentity, records["a"].Ownership);
+        Assert.Equal(InstallationOwnership.VerifiedTechnicalIdentity, records["b"].Ownership);
     }
 
     [Fact]
-    public async Task Unknown_ownership_never_triggers_silent_adoption_or_credential_fallback()
+    public async Task Fresh_install_syncs_with_its_authenticated_anonymous_technical_identity_without_owner_choice()
     {
         using var w = await World.SignedInWithLegacyAsync();
 
         var result = await w.Sync.SyncAsync("brand-new", Snapshot("brand-new"), 1, false, default);
 
-        Assert.Equal(SyncOutcome.Blocked, result.Outcome);
-        Assert.Equal(BlockReason.OwnerSelectionRequired, result.Reason);
-        Assert.Empty(w.Ingests);
-        Assert.Null(w.Server.OwnerOf("brand-new"));
+        Assert.Equal(SyncOutcome.Synced, result.Outcome);
+        Assert.Equal(w.Anonymous.UserId, SubOf(Assert.Single(w.Ingests)));
+        Assert.Equal(w.Anonymous.UserId, w.Server.OwnerOf("brand-new"));
+        Assert.Empty(w.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"));
         Assert.Equal(0, w.Server.SignupCount);
     }
 
     [Fact]
-    public async Task Explicit_owner_choice_establishes_ownership_once_and_a_wrong_choice_never_falls_back()
+    public async Task First_manual_sync_creates_a_local_anonymous_technical_identity_without_website_login()
     {
-        using var w = await World.SignedInWithLegacyAsync();
-        w.Sync.SelectOwner("brand-new", OwnerChoice.RegisteredAccount);
+        using var rig = new Rig();
 
-        var first = await w.Sync.SyncAsync("brand-new", Snapshot("brand-new"), 1, false, default);
-        Assert.Equal(SyncOutcome.Synced, first.Outcome);
-        Assert.Equal(w.Registered.Id, w.Server.OwnerOf("brand-new"));
-        Assert.Equal(w.Registered.Id, SubOf(Assert.Single(w.Ingests)));
+        var result = await rig.Runtime.Sync.SyncAsync("fresh-no-login", Snapshot("fresh-no-login"), 1, force: true, default);
 
-        // Someone else's installation with an explicit (wrong) choice: the server refuses, we stop. No second credential.
-        w.Server.SetOwner("theirs", Guid.NewGuid().ToString());
-        w.Sync.SelectOwner("theirs", OwnerChoice.RegisteredAccount);
-        var ingestsBefore = w.Ingests.Count();
-        var wrong = await w.Sync.SyncAsync("theirs", Snapshot("theirs"), 1, false, default);
-        Assert.Equal(BlockReason.OwnerMismatch, wrong.Reason);
-        Assert.Equal(ingestsBefore + 1, w.Ingests.Count());   // exactly one attempt, no retry with another credential
-        var again = await w.Sync.SyncAsync("theirs", Snapshot("theirs"), 1, false, default);
-        Assert.Equal(BlockReason.OwnerSelectionRequired, again.Reason);
-        Assert.Equal(ingestsBefore + 1, w.Ingests.Count());
+        Assert.Equal(SyncOutcome.Synced, result.Outcome);
+        Assert.Equal(1, rig.Server.SignupCount);
+        Assert.Equal(rig.Server.OwnerOf("fresh-no-login"), SubOf(Assert.Single(rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth"))));
+        Assert.Empty(rig.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"));
+        Assert.True(rig.Runtime.Sessions.Status.State == SessionState.Anonymous);
     }
 
     [Fact]
-    public async Task Transferred_installation_pauses_sync_when_no_registered_session_is_available()
+    public async Task Existing_installation_is_authorized_by_the_server_bound_technical_credential()
+    {
+        using var w = await World.SignedInWithLegacyAsync();
+        w.Server.SetOwner("legacy", w.Anonymous.UserId);
+
+        var result = await w.Sync.SyncAsync("legacy", Snapshot("legacy"), 1, false, default);
+
+        Assert.Equal(SyncOutcome.Synced, result.Outcome);
+        Assert.Equal(w.Anonymous.UserId, SubOf(Assert.Single(w.Ingests)));
+        Assert.Empty(w.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"));
+    }
+
+    [Fact]
+    public async Task Fresh_install_needs_no_owner_choice_and_existing_unmapped_install_stays_fail_closed()
+    {
+        using var w = await World.SignedInWithLegacyAsync();
+
+        var first = await w.Sync.SyncAsync("brand-new", Snapshot("brand-new"), 1, false, default);
+        Assert.Equal(SyncOutcome.Synced, first.Outcome);
+        Assert.Equal(w.Anonymous.UserId, w.Server.OwnerOf("brand-new"));
+        Assert.Equal(w.Anonymous.UserId, SubOf(Assert.Single(w.Ingests)));
+
+        // A known installation with no server-mapped technical credential cannot be claimed by its client-supplied ID.
+        w.Server.SetOwner("theirs", Guid.NewGuid().ToString());
+        var ingestsBefore = w.Ingests.Count();
+        var wrong = await w.Sync.SyncAsync("theirs", Snapshot("theirs"), 1, false, default);
+        Assert.Equal(BlockReason.Forbidden, wrong.Reason);
+        Assert.Equal(ingestsBefore + 2, w.Ingests.Count());
+        var again = await w.Sync.SyncAsync("theirs", Snapshot("theirs"), 1, false, default);
+        Assert.Equal(BlockReason.Forbidden, again.Reason);
+        Assert.Equal(ingestsBefore + 4, w.Ingests.Count());
+    }
+
+    [Fact]
+    public async Task Claim_transfer_keeps_the_preserved_technical_upload_identity_valid()
     {
         var w = new World();
         using (w)
         {
             var anon = w.Rig.SeedAnonymous();
+            w.Anonymous = anon;
             w.Server.SetOwner("inst", anon.UserId);
             var registered = w.Server.AddRegisteredUser("a@b.test", "a-long-password-1");
             await w.Rig.Sessions.InitializeAsync();
@@ -153,38 +179,34 @@ public class OwnershipRoutingTests
             Assert.True(w.Server.Redeem(offer.DisplayCode.Replace("FDB-", "").Replace("-", ""), registered.Id));
 
             var next = await w.Sync.SyncAsync("inst", Snapshot("inst", 2), 2, force: true, default);
-            // The cached route still pointed at the anonymous owner: the server refuses (transfer between authorization
-            // and ingest). Never retried with another credential.
-            Assert.Equal(BlockReason.OwnerMismatch, next.Reason);
-            Assert.Equal(1, w.Server.IngestCount);
+            Assert.Equal(SyncOutcome.Synced, next.Outcome);
+            Assert.Equal(2, w.Server.IngestCount);
 
-            // Re-evaluation now says "transferred": paused, asks for registered sign-in.
+            // The preserved anonymous technical identity continues without account sign-in.
             var paused = await w.Sync.SyncAsync("inst", Snapshot("inst", 3), 3, force: true, default);
-            Assert.Equal(SyncOutcome.Blocked, paused.Outcome);
-            Assert.Equal(BlockReason.TransferredSignInRequired, paused.Reason);
-            Assert.Equal(1, w.Server.IngestCount);
+            Assert.Equal(SyncOutcome.Synced, paused.Outcome);
+            Assert.Equal(3, w.Server.IngestCount);
             Assert.Equal(registered.Id, w.Server.OwnerOf("inst"));
             Assert.Equal(0, w.Server.SignupCount);
 
-            // Sign in with the account that owns it now: sync resumes with the registered token.
+            // Account switching does not change the technical upload credential.
             await w.Rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
             var resumed = await w.Sync.SyncAsync("inst", Snapshot("inst", 4), 4, force: true, default);
             Assert.Equal(SyncOutcome.Synced, resumed.Outcome);
-            Assert.Equal(SlotRole.Primary, resumed.Role);
-            Assert.Equal(registered.Id, SubOf(w.Ingests.Last()));
+            Assert.Equal(w.Anonymous.UserId, SubOf(w.Ingests.Last()));
         }
     }
 
     [Fact]
-    public async Task Different_registered_account_is_reported_not_adopted()
+    public async Task Unknown_technical_credentials_are_rejected_without_exposing_an_account_owner()
     {
         using var w = await World.SignedInWithLegacyAsync();
         var other = w.Server.AddRegisteredUser("other@example.test", "another-long-pw-1");
         w.Server.SetOwner("inst", other.Id);
 
         var result = await w.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default);
-        Assert.Equal(BlockReason.OwnerSelectionRequired, result.Reason);   // unknown to every credential we hold
-        Assert.Empty(w.Ingests);
+        Assert.Equal(BlockReason.Forbidden, result.Reason);
+        Assert.Equal(2, w.Ingests.Count());
     }
 
     [Fact]
@@ -202,7 +224,8 @@ public class OwnershipRoutingTests
         await w.Rig.Sessions.InitializeAsync();
 
         var acct = await w.Rig.Runtime.Sync.SyncAsync("acct-inst", Snapshot("acct-inst"), 1, false, default);
-        Assert.Equal(SyncOutcome.StaleDiscarded, acct.Outcome);
+        Assert.Equal(SyncOutcome.Blocked, acct.Outcome);
+        Assert.Equal(BlockReason.ReauthRequired, acct.Reason);
         Assert.Equal(SessionState.ReauthRequired, w.Rig.Sessions.Status.State);
 
         var legacy = await w.Rig.Runtime.Sync.SyncAsync("legacy-inst", Snapshot("legacy-inst"), 1, false, default);
@@ -212,20 +235,13 @@ public class OwnershipRoutingTests
     }
 
     [Fact]
-    public async Task Ownership_lookup_failure_fails_closed_for_ingestion()
+    public async Task Sync_does_not_call_installation_owner_lookup()
     {
         using var w = await World.SignedInWithLegacyAsync();
         w.Server.SetOwner("inst", w.Anonymous.UserId);
-        w.Server.Interceptor = r => r.Path.EndsWith("fdb_installation_link_status", StringComparison.Ordinal) ? new FakeResponse(503, "{}") : null;
-
         var result = await w.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default);
-        Assert.Equal(BlockReason.OwnershipUnavailable, result.Reason);
-        Assert.Empty(w.Ingests);
-
-        // A malformed answer is also not trusted.
-        w.Server.Interceptor = r => r.Path.EndsWith("fdb_installation_link_status", StringComparison.Ordinal) ? new FakeResponse(200, "{\"state\":\"owned\",\"extra\":1}") : null;
-        Assert.Equal(BlockReason.OwnershipUnavailable, (await w.Sync.SyncAsync("inst", Snapshot("inst"), 1, false, default)).Reason);
-        Assert.Empty(w.Ingests);
+        Assert.Equal(SyncOutcome.Synced, result.Outcome);
+        Assert.Empty(w.Server.RequestsTo("/rest/v1/rpc/fdb_installation_link_status"));
     }
 
     // ------------------------------------------------------------------ gate closed: 0.8.x behaviour ----
@@ -307,34 +323,6 @@ public class OwnershipRoutingTests
 
         Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
         Assert.All(rig.Runtime.Sync.Installations, r => Assert.Null(r.LastSyncedAt));
-    }
-
-    [Fact]
-    public async Task Identity_change_while_ownership_is_pending_never_retries_the_old_snapshot_under_the_new_account()
-    {
-        using var w = await World.SignedInWithLegacyAsync();
-        var other = w.Server.AddRegisteredUser("other@example.test", "another-long-password-1");
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var lookups = 0;
-        w.Rig.Handler.Before = async (request, token) =>
-        {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/fdb_installation_link_status", StringComparison.Ordinal) &&
-                Interlocked.Increment(ref lookups) == 1)
-            {
-                entered.TrySetResult();
-                await Task.Delay(Timeout.Infinite, token);
-            }
-        };
-
-        var pending = w.Sync.SyncAsync("inst", Snapshot("inst"), 1, force: true, default);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(SignOutOutcome.Confirmed, await w.Rig.Sessions.SignOutRegisteredAsync());
-        Assert.Equal(SignInOutcome.Success, await w.Rig.Sessions.SignInRegisteredAsync(other.Email!, "another-long-password-1".ToCharArray()));
-        var result = await pending;
-
-        Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
-        Assert.Equal(1, lookups);
-        Assert.Empty(w.Ingests);
     }
 
     [Fact]

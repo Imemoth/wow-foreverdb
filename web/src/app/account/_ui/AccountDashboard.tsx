@@ -1,22 +1,19 @@
 import Link from "next/link";
-import { CheckIcon, CircleUserIcon, InstallIcon, MonitorIcon } from "../_components/icons";
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+import { CheckIcon, CircleUserIcon, MonitorIcon } from "../_components/icons";
 const CARD = "panel flex flex-col gap-3 p-5";
 const CARD_TITLE = "flex items-center gap-2.5 font-[family-name:var(--font-display)] text-lg font-semibold tracking-wide text-gold-300";
 
-/** The /account dashboard. Purely presentational: `installations` is null when the list could not be read (summaries are then generic). */
-export function AccountDashboard({ email, since, installations, welcome }: {
+/** The /account dashboard. Companion public observation sync does not depend on this web account. */
+export function AccountDashboard({ email, since, welcome }: {
   email: string;
   since: string | null;
-  installations: { installation_id: string }[] | null;
   welcome: boolean;
 }) {
   return (
     <div data-account-wide className="space-y-4">
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-gold-300">My Account</h1>
-        <p className="mt-1 text-sm text-mist">Manage your AzerDex account and connected installations.</p>
+        <p className="mt-1 text-sm text-mist">Manage your AzerDex account and personal account services.</p>
       </div>
       {welcome && (
         <p role="status" className="rounded-lg border border-conf-high/40 bg-conf-high/10 px-3 py-2 text-sm text-conf-high">
@@ -46,19 +43,6 @@ export function AccountDashboard({ email, since, installations, welcome }: {
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section className={CARD} aria-labelledby="inst-h">
-          <h2 id="inst-h" className={CARD_TITLE}><InstallIcon className="h-5 w-5" />Companion installations</h2>
-          <p className="text-sm text-mist">
-            {installations && installations.length > 0
-              ? `${plural(installations.length, "installation", "installations")} connected to your account.`
-              : "Manage your AzerDex Companion installations when you are ready."}
-          </p>
-          <div className="mt-auto flex flex-wrap gap-2 pt-1">
-            <Link href="/account/link" className="btn-primary">Connect Companion</Link>
-            <Link href="/account/installations" className="btn-ghost">My installations</Link>
-          </div>
-        </section>
-
         <section className={CARD} aria-labelledby="dev-h">
           <h2 id="dev-h" className={CARD_TITLE}><MonitorIcon className="h-5 w-5" />My Devices</h2>
           <p className="text-sm text-mist">View your registered computers and manage their activation files.</p>

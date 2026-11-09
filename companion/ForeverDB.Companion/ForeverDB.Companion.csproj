@@ -9,7 +9,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>ForeverDB.Companion</AssemblyName>
     <RootNamespace>ForeverDB.Companion</RootNamespace>
-    <Version>0.9.11-alpha</Version>
+    <Version>0.9.12-alpha</Version>
     <BuildCommit Condition="'$(BuildCommit)' == ''">local</BuildCommit>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <InformationalVersion>$(Version)+$(BuildCommit)</InformationalVersion>

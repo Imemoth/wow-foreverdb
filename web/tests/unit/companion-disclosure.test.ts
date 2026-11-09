@@ -95,10 +95,10 @@ describe("Addon and Companion disclosure matches the source", () => {
     expect(text).toMatch(/Officer notes are not collected/);
   });
 
-  it("the device label really is the Windows computer name, and only a hash of the credential is stored", () => {
-    expect(read("companion/ForeverDB.Companion/MainWindow.Account.cs")).toContain("Environment.MachineName");
+  it("device credentials are stored as hashes, and the current activation flow does not send the Windows computer name", () => {
     expect(read("database/migrations/0014_zero_touch_enrollment.sql")).toContain("credential_hash");
-    expect(text).toMatch(/Windows name is sent and stored as the label/);
+    expect(read("companion/ForeverDB.Companion.Account/DeviceRpcClient.cs")).not.toMatch(/MachineName|p_label/);
+    expect(text).not.toMatch(/Windows name is sent and stored as the label/);
   });
 
   it("the Companion has no telemetry or cookies of its own, as stated", () => {
@@ -107,7 +107,7 @@ describe("Addon and Companion disclosure matches the source", () => {
   });
 
   it("every account page that collects personal data links to the notice before the form", () => {
-    for (const p of ["register", "login", "forgot-password", "reset-password", "link", "devices"]) {
+    for (const p of ["register", "login", "forgot-password", "reset-password", "devices"]) {
       const s = read(`web/src/app/account/${p}/page.tsx`);
       expect(s, p).toContain("<PrivacyNote");
       expect(s, p).toContain('import { PrivacyNote } from "../_ui/PrivacyNote"');
@@ -122,7 +122,7 @@ describe("public statements do not contradict the implemented behaviour", () => 
   const pages = ["web/src/app/addon-companion/page.tsx", "web/src/app/about/data/page.tsx", "web/content/guides/getting-started-with-foreverdb.md"];
 
   it("none says the Guildbook is uploaded, stored in the backend, or moved to an account", () => {
-    for (const f of [...pages, "web/src/app/account/link/page.tsx", "web/content/blog/building-a-safe-public-database.md"]) {
+    for (const f of [...pages, "web/content/blog/building-a-safe-public-database.md"]) {
       const s = read(f);
       expect(s, f).not.toMatch(/Guildbook rosters? (stay|stays|are kept|is kept) in the private backend/i);
       expect(s, f).not.toMatch(/its Guildbook to this account/i);

@@ -68,8 +68,8 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
           <li>You can have at most 5 unused files at a time. Revoke one below if you no longer need it.</li>
         </ul>
         <PrivacyNote anchor="companion">
-          A connected computer is recorded with a label (the Windows computer name when it connects from the Companion) and its
-          last activity. See the Addon and Companion section of the
+          A connected computer is recorded with its installation identifier, status and timestamps. See the Addon and Companion
+          section of the
         </PrivacyNote>
         <form method="post" action="/account/api/enrollment/download" className="pt-1">
           <input type="hidden" name={FORM_CSRF_FIELD} value={token} />
@@ -132,7 +132,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
           </ul>
         )}
       </section>
-      <p className="flex gap-4 text-sm"><Link href="/account/installations">Your installations</Link><Link href="/account">Back to your account</Link></p>
+      <p className="flex gap-4 text-sm"><Link href="/account">Back to your account</Link></p>
     </div>
   );
 }

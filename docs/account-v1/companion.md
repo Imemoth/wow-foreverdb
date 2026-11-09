@@ -1,5 +1,7 @@
 # Account System V1 — Windows Companion (PR D, Companion 0.9.0-alpha)
 
+> **Current sync model (2026-11-09):** Installation ownership is no longer required for public observation uploads. The ownership-aware routing details below describe the previous protocol and are retained as compatibility history. See [ADR-018](adr-018-ownerless-public-ingestion.md) and the [ownerless acceptance matrix](ownerless-ingestion-acceptance.md). Manual Windows acceptance remains pending.
+
 Status: **IMPLEMENTED in PR D; CI verified when `Companion account auth (Windows)` passes on the final head; real-Windows UI acceptance PENDING; website redemption IMPLEMENTED in PR E (CI-verified against real GoTrue/PostgREST with test clients); the real-Windows run and staging acceptance remain owner-pending.** Account features are **off by default and refuse the private production project.** Nothing in this PR was applied to, or sent to, production.
 
 Binding inputs: [architecture.md](architecture.md), [ownership-claim-protocol.md](ownership-claim-protocol.md) (§2 state machine, §4 contracts), [security.md](security.md), `web/src/lib/account/contracts.ts`, migration `0012` (PR C, unchanged).

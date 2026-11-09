@@ -262,8 +262,8 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           Companion stores its sign-in session and device credential on your computer in Windows-protected storage.
         </li>
         <li>
-          When you connect a computer to your account from the Companion, the computer&apos;s Windows name is sent and stored as
-          the label of the registered device, so you can recognise it in your account. A device credential is stored as a hash.
+          The current activation flow does not send the computer&apos;s Windows name. The server stores a hash of each device
+          credential and the device&apos;s installation identifier, status and timestamps.
         </li>
         <li>
           Map diagnostics: when you are signed in, the Companion can report the status of map-asset preparation (Companion

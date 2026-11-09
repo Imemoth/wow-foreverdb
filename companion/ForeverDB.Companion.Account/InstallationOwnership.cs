@@ -6,6 +6,8 @@ namespace ForeverDB.Companion.Account;
 public enum InstallationOwnership
 {
     Unchecked,
+    /// <summary>The server validated a technical installation credential for a public observation upload.</summary>
+    VerifiedTechnicalIdentity,
     /// <summary>The verified registered account owns it (fdb_installation_link_status = owned with the registered token).</summary>
     OwnedByRegisteredAccount,
     /// <summary>An anonymous identity (primary or preserved legacy credential) owns it.</summary>
@@ -88,10 +90,9 @@ public enum OwnerChoice
 }
 
 /// <summary>
-/// Chooses, per installation, the ONE credential that may write it, from server-verified ownership
-/// (fdb_installation_link_status). Order: registered session, then the anonymous owner credential.
-/// Unknown, conflicting or unavailable ownership fails closed. It never creates an identity and never
-/// adopts an unknown installation unless the user explicitly chose an owner.
+/// Selects an available authenticated technical credential. The ingest RPC validates the installation-scoped
+/// credential mapping; this router does not call account ownership or claim APIs. A second held credential may
+/// be tried only after the server rejects the first one, and the server validates that credential independently.
 /// </summary>
 public sealed class OwnershipRouter
 {
@@ -131,7 +132,7 @@ public sealed class OwnershipRouter
 
     public void Invalidate(string installationId) => _cache.TryRemove(installationId, out _);
 
-    /// <summary>The user explicitly picked who owns a not-yet-owned installation. Memory only: the server is the truth.</summary>
+    /// <summary>Legacy compatibility hook; current Companion UI and sync flow never request an owner choice.</summary>
     public void SelectOwner(string installationId, OwnerChoice choice)
     {
         _choices[installationId] = choice;
@@ -225,125 +226,24 @@ public sealed class OwnershipRouter
     private async Task<RouteDecision> ResolveFreshAsync(string installationId, long generation, CancellationToken ct)
     {
         var status = _manager.Status;
-        var registeredUnusable = false;
-        var registeredChecked = false;
-        var transferred = false;
-        var sawCredential = false;
-
-        // 1. The registered session, when there is one.
-        if (status.State is SessionState.Registered or SessionState.ReauthRequired && status.PrimaryCredentialPresent)
-        {
-            sawCredential = true;
-            var token = await _manager.GetAccessTokenAsync(SlotRole.Primary, ct).ConfigureAwait(false);
-            if (token.Ok && token.Kind == SessionKind.Registered)
-            {
-                registeredChecked = true;
-                var link = await _rpc.LinkStatusAsync(token.AccessToken, installationId, ct).ConfigureAwait(false);
-                if (!link.Ok)
-                {
-                    return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
-                }
-
-                switch (link.Value)
-                {
-                    case LinkState.Owned:
-                        return new RouteDecision(InstallationOwnership.OwnedByRegisteredAccount, BlockReason.None, SlotRole.Primary, SessionKind.Registered, token.UserId, generation);
-                    case LinkState.Transferred:
-                        // A registered account cannot be a previous owner in V1; a contradictory reply fails closed.
-                        return Block(InstallationOwnership.Conflict, BlockReason.OwnershipConflict, generation);
-                }
-            }
-            else if (token.Fault is SessionFault.NetworkUnavailable or SessionFault.RateLimited or SessionFault.LockTimeout or SessionFault.StorageFailure)
-            {
-                return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
-            }
-            else
-            {
-                registeredUnusable = true;
-            }
-        }
-
-        // 2. The anonymous owner credential: the primary one in anonymous mode, otherwise the preserved legacy slot.
-        SlotRole? anonymousRole = status.State is SessionState.Anonymous or SessionState.AnonymousClaiming
+        SlotRole? role = status.State is SessionState.Anonymous or SessionState.AnonymousClaiming
             ? SlotRole.Primary
-            : status.HasLegacyOwner ? SlotRole.LegacyOwner : null;
-
-        var anonymousUsable = false;
-        if (anonymousRole is { } role)
+            : status.HasLegacyOwner ? SlotRole.LegacyOwner
+            : status.PrimaryCredentialPresent ? SlotRole.Primary : null;
+        if (role is null)
         {
-            sawCredential = true;
-            var token = await _manager.GetAccessTokenAsync(role, ct).ConfigureAwait(false);
-            if (token.Ok && token.Kind == SessionKind.Anonymous)
-            {
-                anonymousUsable = true;
-                var link = await _rpc.LinkStatusAsync(token.AccessToken, installationId, ct).ConfigureAwait(false);
-                if (!link.Ok)
-                {
-                    return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
-                }
-
-                switch (link.Value)
-                {
-                    case LinkState.Owned:
-                        return new RouteDecision(InstallationOwnership.OwnedByAnonymousIdentity, BlockReason.None, role, SessionKind.Anonymous, token.UserId, generation);
-                    case LinkState.Transferred:
-                        transferred = true;
-                        break;
-                }
-            }
-            else if (token.Fault is SessionFault.NetworkUnavailable or SessionFault.RateLimited or SessionFault.LockTimeout or SessionFault.StorageFailure)
-            {
-                return Block(InstallationOwnership.Unavailable, BlockReason.OwnershipUnavailable, generation);
-            }
+            return status.State == SessionState.AnonymousIdentityLost
+                ? Block(InstallationOwnership.Unavailable, BlockReason.AnonymousIdentityLost, generation)
+                : Block(InstallationOwnership.NoCredential, BlockReason.NoCredential, generation);
         }
 
-        // 3. Conclusions. Nothing below ever picks a credential on its own.
-        if (transferred)
+        var token = await _manager.GetAccessTokenAsync(role.Value, ct).ConfigureAwait(false);
+        if (!token.Ok)
         {
-            return registeredChecked
-                ? Block(InstallationOwnership.OwnedByDifferentAccount, BlockReason.OwnedByDifferentAccount, generation)
-                : Block(InstallationOwnership.TransferredSignInRequired, BlockReason.TransferredSignInRequired, generation);
+            return Unusable(token, generation);
         }
 
-        if (registeredUnusable && !_choices.ContainsKey(installationId))
-        {
-            return Block(InstallationOwnership.ReauthRequired, BlockReason.ReauthRequired, generation);
-        }
-
-        if (!sawCredential && status.State == SessionState.AnonymousIdentityLost)
-        {
-            return Block(InstallationOwnership.Unavailable, BlockReason.AnonymousIdentityLost, generation);
-        }
-
-        if (!sawCredential)
-        {
-            return Block(InstallationOwnership.NoCredential, BlockReason.NoCredential, generation);
-        }
-
-        // 4. Unknown to every credential we hold: only an explicit user choice may establish an owner.
-        if (_choices.TryGetValue(installationId, out var choice))
-        {
-            if (choice == OwnerChoice.RegisteredAccount && registeredChecked)
-            {
-                var token = await _manager.GetAccessTokenAsync(SlotRole.Primary, ct).ConfigureAwait(false);
-                if (token.Ok && token.Kind == SessionKind.Registered)
-                {
-                    return new RouteDecision(InstallationOwnership.OwnedByRegisteredAccount, BlockReason.None, SlotRole.Primary, SessionKind.Registered, token.UserId, generation);
-                }
-            }
-            else if (choice == OwnerChoice.AnonymousIdentity && anonymousUsable && anonymousRole is { } chosenRole)
-            {
-                var token = await _manager.GetAccessTokenAsync(chosenRole, ct).ConfigureAwait(false);
-                if (token.Ok && token.Kind == SessionKind.Anonymous)
-                {
-                    return new RouteDecision(InstallationOwnership.OwnedByAnonymousIdentity, BlockReason.None, chosenRole, SessionKind.Anonymous, token.UserId, generation);
-                }
-            }
-
-            _choices.TryRemove(installationId, out _);
-        }
-
-        return Block(InstallationOwnership.OwnerSelectionRequired, BlockReason.OwnerSelectionRequired, generation);
+        return new RouteDecision(InstallationOwnership.VerifiedTechnicalIdentity, BlockReason.None, role, token.Kind, token.UserId, generation);
     }
 
     private static RouteDecision Block(InstallationOwnership ownership, BlockReason reason, long generation) =>
