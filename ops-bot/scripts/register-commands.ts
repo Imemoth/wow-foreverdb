@@ -15,5 +15,7 @@ if (!token || !app || !guild || !/^\d{17,20}$/.test(app) || !/^\d{17,20}$/.test(
 const res = await fetch(`https://discord.com/api/v10/applications/${app}/guilds/${guild}/commands`, {
   method: "PUT", headers: { authorization: `Bot ${token}`, "content-type": "application/json" }, body: JSON.stringify(COMMAND_DEFINITIONS),
 });
+await res.arrayBuffer();                                  // release the connection before the process ends
 console.log(`registered: HTTP ${res.status}`);
-process.exit(res.ok ? 0 : 1);
+// Set the exit code and let Node finish by itself: forcing an exit while the connection is still closing aborts with a libuv assertion on Windows.
+process.exitCode = res.ok ? 0 : 1;

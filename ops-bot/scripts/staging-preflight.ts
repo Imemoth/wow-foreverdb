@@ -20,4 +20,5 @@ if (!hint.ok) console.log(`NOTE  token-shape: ${hint.reason}`);
 const report = await runPreflight({ token: token.trim(), applicationId, guildId, channelId, env });
 for (const c of report.checks) console.log(`${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}  ${c.id}: ${c.message}`);
 console.log(report.ok ? `\nREADY: the ${env} Discord configuration passed every required check.` : `\nNOT READY: fix the FAIL items, then re-run.`);
-process.exit(report.ok ? 0 : 1);
+// Set the exit code instead of forcing an exit, so Node can close its network handles first (a forced exit right after fetch aborts with a libuv assertion on Windows).
+process.exitCode = report.ok ? 0 : 1;
