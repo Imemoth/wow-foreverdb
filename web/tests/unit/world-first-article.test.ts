@@ -40,7 +40,7 @@ describe("world first article: content", () => {
   });
 
   it("body is 600-900 words", () => {
-    const words = bodyText.replace(/<!--.*?-->/g, " ").split(/\s+/).filter(Boolean).length;
+    const words = bodyText.split(ROSTER_MARKER).join(" ").split(/\s+/).filter(Boolean).length;
     expect(words).toBeGreaterThanOrEqual(600);
     expect(words).toBeLessThanOrEqual(900);
   });
