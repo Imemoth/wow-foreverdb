@@ -22,8 +22,8 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
       <p className="text-sm text-mist">Privacy notice version {PRIVACY_NOTICE_VERSION}.</p>
       <p>
         This page describes what the AzerDex website stores and processes, and why. It covers the public website and the
-        optional AzerDex account, and, in a separate section below, the ForeverDB addon and Companion that can be linked to an
-        account.
+        optional AzerDex account, and, in a separate section below, the ForeverDB addon and Companion, which can sync public
+        observations anonymously or use an account-linked device.
       </p>
       <p>
         Browsing the public pages does not require an account. AzerDex does not show advertising. Some personal data is
@@ -50,7 +50,8 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           without them. An account is optional and free.
         </li>
         <li>
-          <strong>Linking a Companion installation:</strong> requires an account (see <a href="#accounts">Accounts</a> and{" "}
+          <strong>Public observation sync from the Companion:</strong> can be used without a website account. A website account
+          is required only to activate and manage a registered device (see <a href="#accounts">Accounts</a> and{" "}
           <a href="#companion">Addon and Companion</a>).
         </li>
         <li>
@@ -110,7 +111,7 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
         </li>
       </ul>
       <p>
-        The sign-up, sign-in, password-recovery and Companion-linking pages link to this notice. Account pages are excluded from
+        The sign-up, sign-in, password-recovery and device-activation pages link to this notice. Account pages are excluded from
         the analytics described below and do not set the anonymous browsing cookie. No consent box is needed for an account:
         its basis is the service you request, not consent.
       </p>
@@ -323,7 +324,7 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           <strong>Account:</strong> kept until deleted on request.
         </li>
         <li>
-          <strong>Link between an installation and an account:</strong> kept while the installation stays linked to the account.
+          <strong>Account-linked device association:</strong> kept while the device remains linked to the account.
         </li>
         <li>
           <strong>Installation statistics (private):</strong> replaced by each upload and kept while the installation exists. There

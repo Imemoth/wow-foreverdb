@@ -141,6 +141,10 @@ describe("privacy page: the disclosure matches the implementation", () => {
     expect(t).toMatch(/Standard Contractual Clauses/);
     expect(t).toMatch(/Browsing the public database, news and guides: no account/);
     expect(t).toMatch(/Creating an account: an email address and a password are required/);
+    expect(t).toMatch(/Public observation sync from the Companion: can be used without a website account/);
+    expect(t).toMatch(/A website account is required only to activate and manage a registered device/);
+    expect(t).not.toMatch(/Linking a Companion installation: requires an account/);
+    expect(t).not.toMatch(/Companion-linking pages/);
     expect(t).not.toMatch(/never processed|no personal data/i);
   });
 
