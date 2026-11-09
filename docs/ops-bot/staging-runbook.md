@@ -104,10 +104,12 @@ It verifies: the token is a bot token of that application; the application is **
 
 ## 1. Create resources (staging only)
 
+The staging D1 database **already exists** (created 2026-11-09 with the owner's authorization through the Cloudflare API connection: name `azerdex-ops-bot-staging`, id `8da3a092-eeee-4b83-8415-a396f9547fb7`, Western Europe, empty) and its id is recorded in `wrangler.toml` `[env.staging]` (a D1 id is not a secret). Do not create a second one. The only remaining step is the migration, which you run with your own `wrangler` (it records the migration so later runs are consistent; the `--remote` flag targets the real database):
+
 ```bash
 cd ops-bot && npm ci
-npx wrangler d1 create azerdex-ops-bot-staging            # copy the database_id into wrangler.toml [env.staging] locally; do not commit a real id without owner review
-npx wrangler d1 migrations apply azerdex-ops-bot-staging --env staging
+npx wrangler@4.158.0 login      # shows the account: it must be the account that owns the database, otherwise the next command cannot find the id
+npx wrangler@4.158.0 d1 migrations apply azerdex-ops-bot-staging --env staging --remote
 ```
 
 Verify the schema: `npx wrangler d1 execute azerdex-ops-bot-staging --env staging --command "select name from sqlite_master where type='table' order by name"` must list exactly: `audit_log, component_state, incident_events, incidents, locks, maintenance, monitor_state, outbox, rate_limits, seen_interactions` (plus Cloudflare's internal tables).

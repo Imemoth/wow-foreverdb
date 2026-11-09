@@ -1,5 +1,6 @@
 # AzerDex Operations Bot. THERE IS NO DEFAULT ENVIRONMENT: always pass `--env staging` or `--env production`.
-# Nothing here is deployed by this repository change. IDs and hostnames below are placeholders; real resources and secrets are
+# Nothing here is deployed by this repository change. The STAGING D1 id below is real (created 2026-11-09, empty, non-secret); the production D1 id
+# and hostname stay placeholders; real resources and secrets are
 # created by the owner per docs/ops-bot/staging-runbook.md and docs/ops-bot/production-release-checklist.md.
 # SECRETS are never written to this file: wrangler secret put DISCORD_BOT_TOKEN --env <env>, etc.
 #
@@ -39,7 +40,7 @@ DISCORD_GUILD_IDS = "1561649407584370809"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "azerdex-ops-bot-staging"
-database_id = "REPLACE_WITH_STAGING_D1_ID"
+database_id = "8da3a092-eeee-4b83-8415-a396f9547fb7"
 migrations_dir = "migrations"
 
 [env.production]

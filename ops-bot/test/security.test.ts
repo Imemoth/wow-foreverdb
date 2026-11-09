@@ -89,7 +89,7 @@ describe("static guarantees: the bot cannot reach or change anything outside its
     const toml = readFileSync(join(ROOT, "wrangler.toml"), "utf8");
     expect(toml).toMatch(/^\[env\.staging\]/m); expect(toml).toMatch(/^\[env\.production\]/m);
     expect(toml.split(/^\[env\./m)[0]).not.toMatch(/d1_databases|crons|\[vars\]/);   // nothing deployable at the top level
-    expect(toml).toContain("REPLACE_WITH_STAGING_D1_ID"); expect(toml).toContain("REPLACE_WITH_PRODUCTION_D1_ID");
+    expect(toml).toContain("8da3a092-eeee-4b83-8415-a396f9547fb7"); expect(toml).toContain("REPLACE_WITH_PRODUCTION_D1_ID");   // staging D1 is real (non-secret id); production stays a placeholder
     expect(toml).not.toMatch(/(token|secret|password|api_key|public_key|webhook)\s*=/i);
     expect(toml).toMatch(/BOT_ENV = "staging"/); expect(toml).toMatch(/BOT_ENV = "production"/);
     expect(toml).toMatch(/HEALTH_PROVIDER = "mock"/); expect(toml).toMatch(/HEALTH_PROVIDER = "http"/);
