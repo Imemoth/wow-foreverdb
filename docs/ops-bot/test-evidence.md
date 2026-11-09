@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **264 passed, 0 failed** in 15 files |
+| `npm test` | **269 passed, 0 failed** in 16 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -30,6 +30,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `routing-config.test.ts` | 12 | `wrangler.toml` routing and environment rules, documentation consistency |
 | `worker-endpoint.test.ts` | 7 | the public endpoint through the real Worker `fetch`: signature, authorization, methods, paths |
 | `preflight.test.ts` | 28 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
+| `scripts.test.ts` | 5 | owner-run scripts exit through `process.exitCode` (Windows libuv assertion after a network call) |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
 ## 2. Required test matrix
@@ -114,4 +115,14 @@ On 2026-11-09 the owner confirmed the Cloudflare account and authorized the Clou
 - **Migration:** the owner applied `0001_ops_bot_init.sql` with `wrangler d1 migrations apply azerdex-ops-bot-staging --env staging --remote` (19 statements, success; this also confirmed the owner's `wrangler` login is in the account that owns the database). Verified read-only through the Cloudflare API connection: exactly the ten bot tables plus wrangler's `d1_migrations` (one row, `0001_ops_bot_init.sql`, applied 13:58:15 UTC), 8 indexes including `incidents_one_active_per_component` (`CREATE UNIQUE INDEX ... where status <> 'RESOLVED'`).
 - **Synthetic runtime check on the real D1** (rows tagged `selftest`, all deleted afterwards; the database was verified empty again, every table at 0): (1) an incident insert with `on conflict do nothing` reported `changes: 1`; (2) a second incident for the same component was ignored by the database itself (`changes: 0`), so the partial unique index and `ON CONFLICT DO NOTHING` behave on D1 exactly as in the tests; (3) an outbox row with a deterministic key inserted once and the duplicate with `insert or ignore` was ignored (`changes: 0`); (4) the rate-limiter upsert with `RETURNING count` returned 1 then 2; (5) deleting the incident removed 2 rows (the incident and its outbox row), so foreign keys and `ON DELETE CASCADE` are enforced on D1.
 - **Read-only Discord preflight, real server:** `READY`, 15 of 15 checks passed (private application, no privileged intents, no dangerous permissions, `#ops-testing` inside the private `OPERATIONS` category, the bot can post there, and the only private channel it can see is its own). The first run failed on a credential problem and the second on the channel being created inside STAFF ONLY; both were fixed on the Discord side and the check was re-run.
-- **Still NOT verified:** Worker deployment and the `workers.dev` URL, the Interactions Endpoint validation by Discord, cron firing, real Discord message behaviour (nonce, 429), the heartbeat service, Workers-runtime Ed25519, and the staging scenarios.
+- **Superseded:** Worker deployment, endpoint validation, cron firing and the heartbeat are now recorded in section 12. Still NOT verified: real Discord message behaviour (nonce, 429) and the staging scenarios.
+
+## 12. Staging Worker: deployment and live checks (2026-11-09)
+
+- **Deployment (owner-run, after an explicit GO):** `azerdex-ops-bot-staging` at `https://azerdex-ops-bot-staging.imemoth.workers.dev`, secrets set through hidden `wrangler secret put` prompts (names verified with `wrangler secret list`, values never seen). No production resource exists.
+- **Hostname behaviour (curl):** `/healthz` 200, unsigned `POST /interactions` 401, bad signature 401, `GET /interactions` 405, unknown paths 404. `preview_urls` is off and no Cloudflare Access sits in front (Discord cannot authenticate to it).
+- **First cron cycle:** 14:25:44 UTC. Read from the real D1: six components HEALTHY, 0 incidents, 0 outbox rows, lock released, heartbeat attempt recorded. The 14:20 slot was missed because the cron schedule had not propagated after the deploy.
+- **Slash-command registration:** guild-scoped, HTTP 200. The Windows `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` printed afterwards came from `process.exit()` right after a network call and did not affect the registration; fixed in `b6e171c` with a guard test.
+- **Interactions Endpoint:** Discord accepted the URL, which exercises Ed25519 verification in the Workers runtime (PING). `/azerdex status` typed by the owner in `#ops-testing` returned an ephemeral reply: Overall HEALTHY, last cycle 14:30 UTC (29 s earlier), 0 open and 0 acknowledged incidents, heartbeat `ok`, six components HEALTHY. This also proves the signed command path, guild and operator authorization, and the D1 read path end to end.
+- **Heartbeat caveat:** `ok` records that the ping was sent, not that Healthchecks received it; the owner confirms the check on the Healthchecks dashboard.
+- **Still NOT verified:** real alert messages (OPEN with the Acknowledge button, ACK, RECOVERED), nonce dedupe and 429 behaviour on real Discord, fallback notifier, and the staging scenarios. They require the owner's separate GO because they post to `#ops-testing`. Production is untouched and still needs the reporting endpoint approval, a real hostname via reviewed PR, and the owner's GO.
