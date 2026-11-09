@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CategoryBadge } from "@/components/library/CategoryBadge";
 import { ArticleHero } from "@/components/content/ArticleHero";
+import { PosterHero } from "@/components/content/PosterHero";
 import { JsonLd } from "@/components/JsonLd";
 import { Markdown } from "@/components/Markdown";
 import { data } from "@/lib/data";
 import { articleCoverImages } from "@/lib/content/article-media";
 import { articlePath, getArticle, visibleArticles, type Article, type Section } from "@/lib/content/loader";
 import { extractGuideToc } from "@/lib/content/toc";
+import { SLUG_FEATURE, splitAtRosterMarker } from "@/lib/content/feature-articles";
+import { FeatureRoster, FeatureStats } from "@/components/content/FeatureParts";
 import { fmtDate } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { itemPath, sourcePath } from "@/lib/routes";
@@ -41,6 +44,8 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
   const label = SECTION_LABEL[section];
   // An article with cover art gets the illustrated hero instead of the plain header; everything below is shared.
   const cover = articleCoverImages(a);
+  const feature = SLUG_FEATURE[a.slug];
+  const bodyParts = feature ? splitAtRosterMarker(a.body) : { before: a.body, after: null };
 
   const sampleNote = (
     <div role="note" className="rounded-lg border border-conf-low/40 bg-conf-low/5 p-3 text-sm text-[#f5d2b4]">
@@ -57,7 +62,10 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
         { name: a.title },
       ]} />
 
-      {cover && <ArticleHero article={a} cover={cover.hero} label={label} />}
+      {cover && (feature?.poster
+        ? <PosterHero article={a} cover={cover.hero} label={label} />
+        : <ArticleHero article={a} cover={cover.hero} label={label} kicker={feature?.kicker} />)}
+      {cover && feature && <FeatureStats feature={feature} visuallyHidden={feature.poster} />}
 
       <article className={`${cover ? "mt-8" : "mt-6"} lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-10`}>
         {!cover && <header className="min-w-0 max-w-3xl space-y-3 lg:col-start-1 lg:row-start-1">
@@ -99,7 +107,13 @@ export async function ArticleReader({ section, slug }: { section: Section; slug:
         <div className={`mt-6 min-w-0 max-w-3xl space-y-6 lg:col-start-1 ${cover ? "lg:row-start-1" : "lg:row-start-2"} lg:mt-0`}>
           {cover && a.sample && sampleNote}
           <div className="rule-ornament" />
-          <Markdown source={a.body} />
+          <Markdown source={bodyParts.before} />
+          {feature && bodyParts.after !== null && (
+            <>
+              <FeatureRoster feature={feature} />
+              <Markdown source={bodyParts.after} />
+            </>
+          )}
 
           {(relItems.length > 0 || relSources.length > 0) && (
             <aside aria-labelledby="rel-db" className="panel p-5">

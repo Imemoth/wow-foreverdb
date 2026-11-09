@@ -17,7 +17,7 @@ import { fmtDate } from "@/lib/format";
  * on very wide screens a 16:9 image is not scaled past the point where a short hero band would crop the subject.
  * The image is the page's LCP element: eager, high fetch priority, explicit dimensions.
  */
-export function ArticleHero({ article, cover, label }: { article: Article; cover: ArticleCoverImages["hero"]; label: string }) {
+export function ArticleHero({ article, cover, label, kicker }: { article: Article; cover: ArticleCoverImages["hero"]; label: string; kicker?: string }) {
   return (
     <div className="relative left-1/2 mt-6 w-screen -ml-[50vw]">
       <header aria-labelledby="article-title" className="relative isolate overflow-hidden bg-ink-950 sm:flex sm:items-end min-[640px]:min-h-[480px] min-[1024px]:min-h-[560px] min-[1600px]:min-h-[640px]">
@@ -40,6 +40,11 @@ export function ArticleHero({ article, cover, label }: { article: Article; cover
         </div>
         <div className="relative z-10 mx-auto -mt-16 w-full max-w-5xl px-4 pb-6 sm:mt-0 sm:pb-12 sm:pt-16">
           <div className="max-w-2xl space-y-3">
+            {kicker && (
+              <p className="inline-flex items-center gap-2 rounded-sm border border-gold-400/70 bg-ink-950/70 px-3 py-1 font-[family-name:var(--font-display)] text-xs font-bold uppercase tracking-[0.28em] text-gold-300 shadow-[0_0_24px_rgb(217_185_120/0.25)] sm:text-sm">
+                <span aria-hidden="true" className="h-2 w-2 rotate-45 bg-gold-400" />{kicker}
+              </p>
+            )}
             <p aria-label={`${label} category`}><CategoryBadge category={article.category} /></p>
             <h1 id="article-title" className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-gold-300 sm:text-4xl lg:text-[2.75rem] [text-shadow:0_2px_14px_rgb(7_9_28/0.85)]">{article.title}</h1>
             <p className="max-w-lg text-base text-parchment/90 sm:text-lg [text-shadow:0_1px_10px_rgb(7_9_28/0.85)]">{article.description}</p>
