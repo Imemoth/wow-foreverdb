@@ -1308,10 +1308,11 @@ public sealed class WowClientMapAssetProvider
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray();
 
-        return (expectedMatches.Length > 0 ? expectedMatches : result)
-            .OrderBy(
-                candidate =>
-                    candidate.Product,
+        IEnumerable<OnlineBuildCandidate> selected =
+            expectedMatches.Length > 0 ? expectedMatches : result;
+
+        return selected
+            .OrderBy(candidate => candidate.Product,
                 StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
