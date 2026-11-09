@@ -18,20 +18,32 @@ public sealed class AutoAtlasBuildEvidence
     public bool SourceValidated { get; init; }
     public IReadOnlyList<long> VerifiedArtIds { get; init; } =
         Array.Empty<long>();
+    public IReadOnlyList<long> ChangedArtIds { get; init; } =
+        Array.Empty<long>();
+    public IReadOnlyList<long> MissingArtIds { get; init; } =
+        Array.Empty<long>();
+    public IReadOnlyList<long> AdditionalArtIds { get; init; } =
+        Array.Empty<long>();
+    public string CandidateUpdateJson { get; init; } = "";
     public string Status { get; init; } = "";
     public string CacheVariant { get; init; } = "";
     public bool IsVerifiedFor(long artId) =>
         SourceValidated && VerifiedArtIds.Contains(artId);
 }
 
-// Trust model: newer builds are never implicitly approved by version family.
+// Trust model: no client build number is pre-approved or pre-denied.
 // A build+product+build key is admitted ONLY after its four exact-version DB2
 // metadata exports have been fully validated and map geometries/FileDataIDs
 // compared against the embedded atlas. The atlas itself remains immutable.
 // No remote FileDataIDs, downloadable DLLs or executable code are accepted.
 public static class AutoAtlasBuildVerifier
 {
-    private const string ExpectedProduct = "wow_classic_beta";
+    private static readonly HashSet<string> SupportedProducts =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "wowf",
+            "wow_classic_beta"
+        };
     private static readonly TimeSpan SuccessTtl = TimeSpan.FromDays(14);
     private static readonly TimeSpan FailureTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan NetworkTimeout = TimeSpan.FromSeconds(18);
@@ -57,6 +69,10 @@ public static class AutoAtlasBuildVerifier
         public string AtlasFingerprint { get; set; } = "";
         public DateTimeOffset VerifiedAtUtc { get; set; }
         public long[] VerifiedArtIds { get; set; } = Array.Empty<long>();
+        public long[] ChangedArtIds { get; set; } = Array.Empty<long>();
+        public long[] MissingArtIds { get; set; } = Array.Empty<long>();
+        public long[] AdditionalArtIds { get; set; } = Array.Empty<long>();
+        public string CandidateUpdateJson { get; set; } = "";
     }
 
     private static HttpClient CreateClient()
@@ -79,7 +95,7 @@ public static class AutoAtlasBuildVerifier
         if (!IsValidIdentity(product, clientVersion, buildKey))
         {
             return Unavailable(
-                "automatic verification requires an active Forever beta product, " +
+                "automatic verification requires an active supported Forever product, " +
                 "numeric client version and exact build key");
         }
 
@@ -94,6 +110,10 @@ public static class AutoAtlasBuildVerifier
             {
                 SourceValidated = true,
                 VerifiedArtIds = proof.VerifiedArtIds,
+                ChangedArtIds = proof.ChangedArtIds,
+                MissingArtIds = proof.MissingArtIds,
+                AdditionalArtIds = proof.AdditionalArtIds,
+                CandidateUpdateJson = proof.CandidateUpdateJson,
                 CacheVariant = variant,
                 Status = "Atlas metadata verified for this exact build (local proof cache)."
             };
@@ -139,9 +159,8 @@ public static class AutoAtlasBuildVerifier
         string? version,
         string? key)
     {
-        if (!string.Equals(
-                product, ExpectedProduct,
-                StringComparison.OrdinalIgnoreCase) ||
+        if (string.IsNullOrWhiteSpace(product) ||
+            !SupportedProducts.Contains(product) ||
             string.IsNullOrWhiteSpace(version) ||
             string.IsNullOrWhiteSpace(key) ||
             version.Length > 40 ||
@@ -206,17 +225,25 @@ public static class AutoAtlasBuildVerifier
 
             var comparison = AtlasMetadataVerifier.Compare(exports, atlas);
 
-            if (!comparison.SourceValid ||
-                comparison.VerifiedArtIds.Count == 0)
+            if (!comparison.SourceValid)
             {
                 return Unavailable(comparison.Reason);
             }
+
+            var candidateUpdateJson =
+                AtlasMetadataVerifier.CreateUpdateCandidateJson(
+                    version,
+                    comparison);
 
             SaveProof(new StoredProof
             {
                 Key = key,
                 AtlasFingerprint = atlasFingerprint,
                 VerifiedArtIds = comparison.VerifiedArtIds.ToArray(),
+                ChangedArtIds = comparison.ChangedArtIds.ToArray(),
+                MissingArtIds = comparison.MissingArtIds.ToArray(),
+                AdditionalArtIds = comparison.AdditionalArtIds.ToArray(),
+                CandidateUpdateJson = candidateUpdateJson,
                 VerifiedAtUtc = DateTimeOffset.UtcNow
             });
 
@@ -224,6 +251,10 @@ public static class AutoAtlasBuildVerifier
             {
                 SourceValidated = true,
                 VerifiedArtIds = comparison.VerifiedArtIds,
+                ChangedArtIds = comparison.ChangedArtIds,
+                MissingArtIds = comparison.MissingArtIds,
+                AdditionalArtIds = comparison.AdditionalArtIds,
+                CandidateUpdateJson = candidateUpdateJson,
                 CacheVariant = variant,
                 Status = comparison.Reason
             };
@@ -322,7 +353,11 @@ public static class AutoAtlasBuildVerifier
                     .FirstOrDefault(value =>
                         value.Key == key &&
                         value.AtlasFingerprint == fingerprint &&
-                        value.VerifiedArtIds is { Length: > 0 } &&
+                        value.VerifiedArtIds is not null &&
+                        value.ChangedArtIds is not null &&
+                        value.MissingArtIds is not null &&
+                        value.AdditionalArtIds is not null &&
+                        value.CandidateUpdateJson is not null &&
                         value.VerifiedArtIds.All(
                             id => FullRevealMapArt.GetEmbeddedAtlas()
                                 .ContainsKey(id)) &&
