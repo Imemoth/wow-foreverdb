@@ -41,7 +41,7 @@ export class HealthchecksHeartbeat implements HeartbeatProvider {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
     try {
-      const res = await this.fetchFn(`${this.pingUrl.replace(/\/$/, "")}${suffix}`, { method: "POST", body: signal, signal: ac.signal, redirect: "error", headers: { "content-type": "text/plain" } });
+      const res = await this.fetchFn(`${this.pingUrl.replace(/\/$/, "")}${suffix}`, { method: "POST", body: signal, signal: ac.signal, redirect: "manual", headers: { "content-type": "text/plain" } });
       return res.ok;
     } catch { return false; } finally { clearTimeout(timer); }
   }
@@ -61,7 +61,7 @@ export class WebhookFallback implements FallbackNotifier {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
     try {
-      const res = await this.fetchFn(this.url, { method: "POST", signal: ac.signal, redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 500) }) });
+      const res = await this.fetchFn(this.url, { method: "POST", signal: ac.signal, redirect: "manual", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 500) }) });
       return res.ok;
     } catch { return false; } finally { clearTimeout(timer); }
   }

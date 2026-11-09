@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **269 passed, 0 failed** in 16 files |
+| `npm test` | **273 passed, 0 failed** in 17 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -31,6 +31,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `worker-endpoint.test.ts` | 7 | the public endpoint through the real Worker `fetch`: signature, authorization, methods, paths |
 | `preflight.test.ts` | 28 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
 | `scripts.test.ts` | 5 | owner-run scripts exit through `process.exitCode` (Windows libuv assertion after a network call) |
+| `workers-runtime-compat.test.ts` | 4 | clients under workerd's fetch restrictions (`redirect: "error"` throws), redirects are failures, source guard |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
 ## 2. Required test matrix
@@ -126,3 +127,7 @@ On 2026-11-09 the owner confirmed the Cloudflare account and authorized the Clou
 - **Interactions Endpoint:** Discord accepted the URL, which exercises Ed25519 verification in the Workers runtime (PING). `/azerdex status` typed by the owner in `#ops-testing` returned an ephemeral reply: Overall HEALTHY, last cycle 14:30 UTC (29 s earlier), 0 open and 0 acknowledged incidents, heartbeat `ok`, six components HEALTHY. This also proves the signed command path, guild and operator authorization, and the D1 read path end to end.
 - **Heartbeat caveat:** `ok` records that the ping was sent, not that Healthchecks received it; the owner confirms the check on the Healthchecks dashboard.
 - **Still NOT verified:** real alert messages (OPEN with the Acknowledge button, ACK, RECOVERED), nonce dedupe and 429 behaviour on real Discord, fallback notifier, and the staging scenarios. They require the owner's separate GO because they post to `#ops-testing`. Production is untouched and still needs the reporting endpoint approval, a real hostname via reviewed PR, and the owner's GO.
+
+## 13. Defect found by the first real staging alert (2026-11-09)
+
+The `source_critical` scenario opened the incident correctly (one OPEN incident, one PENDING outbox row), but the Discord post failed with class `network` and nothing was delivered. **Cause:** the Discord client, health provider, heartbeat and fallback notifier passed `redirect: "error"` to `fetch`; Cloudflare Workers does not implement that mode and throws a `TypeError` before any request is sent (documented in the Workers `Request` reference). All 269 earlier tests used fakes that accept the option, so none could show it. **Consequence for the earlier evidence:** the `Heartbeat: ok` in `/azerdex status` only recorded an attempt, and the heartbeat ping very probably never left the Worker either. **Fix:** `redirect: "manual"` everywhere (a redirect is never followed, so credentials cannot be forwarded, and a 3xx counts as a failure). New `workers-runtime-compat.test.ts` stubs `fetch` like workerd, and one existing assertion that had pinned the bug was corrected. Mutation check: reverting the Discord client to `"error"` fails 3 tests. **Not verified until redeployed:** actual delivery, the heartbeat ping arriving at Healthchecks.

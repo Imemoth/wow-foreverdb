@@ -20,7 +20,7 @@ describe("DiscordRestClient", () => {
     expect(seen!.url).toBe(`https://discord.com/api/v10/channels/${IDS.channel}/messages`);
     const sent = JSON.parse(String(seen!.init.body)); expect(sent.enforce_nonce).toBe(true); expect(sent.nonce).toHaveLength(25);
     expect((seen!.init.headers as Record<string, string>).authorization).toMatch(/^Bot /);
-    expect(seen!.init.redirect).toBe("error");
+    expect(seen!.init.redirect).toBe("manual"); // Workers does not implement "error" (see workers-runtime-compat.test.ts)
   });
   it("HTTP 429: Retry-After header (seconds) is honoured; JSON retry_after is used as fallback; bounded", async () => {
     expect(await mk(async () => res(429, {}, { "retry-after": "2.5" })).createMessage(IDS.channel, {}, "n")).toEqual({ ok: false, class: "rate_limited", status: 429, retryAfterMs: 2500 });

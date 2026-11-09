@@ -104,7 +104,7 @@ async function get<T>(i: Required<Pick<PreflightInput, "token">> & { fetchFn: ty
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), i.timeoutMs);
   try {
-    const res = await i.fetchFn(`${i.apiBase}${path}`, { method: "GET", signal: ac.signal, redirect: "error", headers: { authorization: `Bot ${i.token}`, "user-agent": "AzerDexOpsBot-preflight (read-only)" } });
+    const res = await i.fetchFn(`${i.apiBase}${path}`, { method: "GET", signal: ac.signal, redirect: "manual", headers: { authorization: `Bot ${i.token}`, "user-agent": "AzerDexOpsBot-preflight (read-only)" } });
     return { body: res.ok ? ((await res.json()) as T) : null, status: res.status };
   } catch { return { body: null, status: "network" }; } finally { clearTimeout(timer); }
 }

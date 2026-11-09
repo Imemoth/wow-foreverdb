@@ -40,7 +40,7 @@ export class DiscordRestClient implements DiscordClient {
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
     try {
       const res = await this.fetchFn(`${this.o.apiBase}${path}`, {
-        method, signal: ac.signal, redirect: "error", body: JSON.stringify(body),
+        method, signal: ac.signal, redirect: "manual", body: JSON.stringify(body),
         headers: { "content-type": "application/json", "user-agent": this.o.userAgent ?? "AzerDexOpsBot (https://azerdex.com, 0.1.0)", ...(withBotAuth ? { authorization: `Bot ${this.o.botToken}` } : {}) },
       });
       if (res.ok) {

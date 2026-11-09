@@ -35,7 +35,7 @@ export class HttpHealthProvider implements HealthProvider {
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
     try {
       const res = await this.fetchFn(url.toString(), {
-        method: "GET", redirect: "error", signal: ac.signal,
+        method: "GET", redirect: "manual", signal: ac.signal,
         headers: { accept: "application/json", "x-azerdex-ops-timestamp": String(ts), "x-azerdex-ops-signature": signature },
       });
       if (res.status === 401 || res.status === 403) return { ok: false, failure: "auth", httpStatus: res.status };
