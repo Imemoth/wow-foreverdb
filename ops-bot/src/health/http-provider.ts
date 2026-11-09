@@ -22,7 +22,7 @@ export class HttpHealthProvider implements HealthProvider {
   private readonly now: () => number;
   private readonly timeoutMs: number;
   constructor(private readonly opts: HttpProviderOptions) {
-    this.fetchFn = opts.fetchFn ?? fetch;
+    this.fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init)); // see discord/client.ts: never keep the bare global
     this.now = opts.now ?? Date.now;
     this.timeoutMs = opts.timeoutMs ?? 8000;
   }

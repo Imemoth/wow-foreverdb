@@ -18,7 +18,11 @@ export interface RestClientOptions { apiBase: string; botToken: string; fetchFn?
 export class DiscordRestClient implements DiscordClient {
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number;
-  constructor(private readonly o: RestClientOptions) { this.fetchFn = o.fetchFn ?? fetch; this.timeoutMs = o.timeoutMs ?? 5000; }
+  constructor(private readonly o: RestClientOptions) {
+    // NOT the bare `fetch`: stored on `this` and called as `this.fetchFn(...)`, workerd throws "Illegal invocation".
+    this.fetchFn = o.fetchFn ?? ((input, init) => fetch(input, init));
+    this.timeoutMs = o.timeoutMs ?? 5000;
+  }
 
   createMessage(channelId: string, body: object, nonce: string): Promise<DeliveryResult> {
     if (!SNOWFLAKE.test(channelId)) return Promise.resolve({ ok: false, class: "client" });

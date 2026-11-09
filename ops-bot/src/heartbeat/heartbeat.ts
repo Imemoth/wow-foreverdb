@@ -32,7 +32,7 @@ export class HealthchecksHeartbeat implements HeartbeatProvider {
   constructor(private readonly pingUrl: string, fetchFn?: typeof fetch, private readonly timeoutMs = 4000) {
     const u = new URL(pingUrl);
     if (u.protocol !== "https:") throw new Error("heartbeat url must be https");
-    this.fetchFn = fetchFn ?? fetch;
+    this.fetchFn = fetchFn ?? ((input, init) => fetch(input, init)); // see discord/client.ts: never keep the bare global
   }
   success(s: HeartbeatSignal) { return this.ping("", s); }
   fail(s: HeartbeatSignal) { return this.ping("/fail", s); }
@@ -55,7 +55,7 @@ export class WebhookFallback implements FallbackNotifier {
   private readonly fetchFn: typeof fetch;
   constructor(private readonly url: string, fetchFn?: typeof fetch, private readonly timeoutMs = 5000) {
     if (new URL(url).protocol !== "https:") throw new Error("fallback url must be https");
-    this.fetchFn = fetchFn ?? fetch;
+    this.fetchFn = fetchFn ?? ((input, init) => fetch(input, init)); // see discord/client.ts: never keep the bare global
   }
   async notify(text: string): Promise<boolean> {
     const ac = new AbortController();

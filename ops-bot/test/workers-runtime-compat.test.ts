@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DiscordRestClient } from "../src/discord/client";
 import { HttpHealthProvider } from "../src/health/http-provider";
 import { HealthchecksHeartbeat, WebhookFallback } from "../src/heartbeat/heartbeat";
@@ -57,5 +57,38 @@ describe("clients work under the Workers fetch restrictions", () => {
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : []; });
     const offenders = [...walk(join(ROOT, "src")), ...walk(join(ROOT, "scripts"))].filter((f) => /redirect\s*:\s*["']error["']/.test(readFileSync(f, "utf8")));
     expect(offenders).toEqual([]);
+  });
+  it("no source file keeps the bare global fetch as a default (it would be called with the wrong receiver)", () => {
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : []; });
+    const offenders = walk(join(ROOT, "src")).filter((f) => /\?\?\s*fetch\b(?!\s*\()/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * Second defect from the same first real alert: the clients kept the global `fetch` in a property and called it as `this.fetchFn(...)`.
+ * workerd throws "Illegal invocation" when fetch runs with any `this` other than the global, again reported as a plain "network" failure.
+ * This stub of the GLOBAL fetch has the same restriction; the clients are built WITHOUT an injected fetchFn, like the real Worker does.
+ */
+describe("default (global) fetch is called with the correct receiver", () => {
+  const strictGlobalFetch = function (this: unknown): Promise<Response> {
+    if (this !== undefined && this !== globalThis) return Promise.reject(new TypeError("Illegal invocation: function called with incorrect `this` reference."));
+    return Promise.resolve(new Response(JSON.stringify({ id: "1569332852787642460" }), { status: 200 }));
+  };
+  it("Discord client, heartbeat and fallback notifier", async () => {
+    vi.stubGlobal("fetch", strictGlobalFetch);
+    try {
+      const d = await new DiscordRestClient({ apiBase: "https://discord.com/api/v10", botToken: "x".repeat(40) }).createMessage("1569332852787642459", { content: "t" }, "n1");
+      expect(d).toEqual({ ok: true, messageId: "1569332852787642460" });
+      expect(await new HealthchecksHeartbeat("https://hc-ping.com/abc").success("ok")).toBe(true);
+      expect(await new WebhookFallback("https://ntfy.example/topic").notify("t")).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("health provider", async () => {
+    vi.stubGlobal("fetch", strictGlobalFetch);
+    try {
+      const r = await new HttpHealthProvider({ url: "https://reports.example/functions/v1/ops-health", secret: "s".repeat(32), now: () => 1_700_000_000_000 }).fetchSnapshot();
+      expect(r).not.toMatchObject({ failure: "network" }); // reaches the response handling (bad content type here), i.e. fetch itself did not throw
+    } finally { vi.unstubAllGlobals(); }
   });
 });

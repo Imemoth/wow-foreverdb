@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **273 passed, 0 failed** in 17 files |
+| `npm test` | **276 passed, 0 failed** in 17 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -31,7 +31,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `worker-endpoint.test.ts` | 7 | the public endpoint through the real Worker `fetch`: signature, authorization, methods, paths |
 | `preflight.test.ts` | 28 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
 | `scripts.test.ts` | 5 | owner-run scripts exit through `process.exitCode` (Windows libuv assertion after a network call) |
-| `workers-runtime-compat.test.ts` | 4 | clients under workerd's fetch restrictions (`redirect: "error"` throws), redirects are failures, source guard |
+| `workers-runtime-compat.test.ts` | 7 | clients under workerd's fetch restrictions (`redirect: "error"` throws), redirects are failures, source guard |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
 ## 2. Required test matrix
@@ -131,3 +131,5 @@ On 2026-11-09 the owner confirmed the Cloudflare account and authorized the Clou
 ## 13. Defect found by the first real staging alert (2026-11-09)
 
 The `source_critical` scenario opened the incident correctly (one OPEN incident, one PENDING outbox row), but the Discord post failed with class `network` and nothing was delivered. **Cause:** the Discord client, health provider, heartbeat and fallback notifier passed `redirect: "error"` to `fetch`; Cloudflare Workers does not implement that mode and throws a `TypeError` before any request is sent (documented in the Workers `Request` reference). All 269 earlier tests used fakes that accept the option, so none could show it. **Consequence for the earlier evidence:** the `Heartbeat: ok` in `/azerdex status` only recorded an attempt, and the heartbeat ping very probably never left the Worker either. **Fix:** `redirect: "manual"` everywhere (a redirect is never followed, so credentials cannot be forwarded, and a 3xx counts as a failure). New `workers-runtime-compat.test.ts` stubs `fetch` like workerd, and one existing assertion that had pinned the bug was corrected. Mutation check: reverting the Discord client to `"error"` fails 3 tests. **Not verified until redeployed:** actual delivery, the heartbeat ping arriving at Healthchecks.
+
+**Second defect, same alert (found after the redeploy of the first fix: attempt 3 failed the same way).** The clients stored the global `fetch` in a property and called it as `this.fetchFn(...)`; workerd throws `Illegal invocation` for any receiver other than the global, again surfaced as `network`. Reproduced first (a stub of the global `fetch` with that restriction failed the two new tests on the unfixed code), then fixed by wrapping (`(input, init) => fetch(input, init)`) in all five places, plus a source guard against a bare `?? fetch`. 276 tests in 17 files, `npm audit` 0 vulnerabilities. The lesson recorded here: fakes injected through `fetchFn` hide every runtime-binding problem; the only real proof is delivery on the Worker. **Still not verified until the next redeploy:** that the alert is actually posted.

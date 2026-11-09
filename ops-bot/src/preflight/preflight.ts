@@ -111,7 +111,7 @@ async function get<T>(i: Required<Pick<PreflightInput, "token">> & { fetchFn: ty
 
 /** Five read-only GETs. The token is only used as an Authorization header and is never part of the report. */
 export async function runPreflight(input: PreflightInput): Promise<PreflightReport> {
-  const ctx = { token: input.token, fetchFn: input.fetchFn ?? fetch, apiBase: input.apiBase ?? "https://discord.com/api/v10", timeoutMs: input.timeoutMs ?? 8000 };
+  const ctx = { token: input.token, fetchFn: input.fetchFn ?? ((u, init) => fetch(u, init)), apiBase: input.apiBase ?? "https://discord.com/api/v10", timeoutMs: input.timeoutMs ?? 8000 };
   const userRes = await get<{ id: string; bot?: boolean }>(ctx, "/users/@me");
   const user = userRes.body;
   // Without a valid token the remaining calls would only repeat the same failure: stop after the first one.
