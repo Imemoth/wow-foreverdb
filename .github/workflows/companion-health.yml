@@ -12,6 +12,9 @@ on:
       - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
+      - 'docs/0.7-acceptance-test.md'
+      - 'docs/0.7-auto-atlas-verification.md'
+      - 'docs/companion-map-atlas-compatibility.md'
       - '.github/workflows/companion-health.yml'
   pull_request:
     paths:
@@ -22,6 +25,9 @@ on:
       - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
+      - 'docs/0.7-acceptance-test.md'
+      - 'docs/0.7-auto-atlas-verification.md'
+      - 'docs/companion-map-atlas-compatibility.md'
       - '.github/workflows/companion-health.yml'
   workflow_dispatch:
 

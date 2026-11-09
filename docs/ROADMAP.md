@@ -312,8 +312,10 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       FileDataIDs, and reports every compatible, changed, missing and new art.
       See [Companion atlas compatibility](companion-map-atlas-compatibility.md).
       Full Reveal stays on the base art when compatibility is unverified or an
-      individual art is proven incompatible. Windows exact-build atlas probe
-      and client acceptance remain open until CI and owner evidence land.
+      individual art is proven incompatible. Exact-build Windows metadata probe
+      passed 84/84 for 1.60.1.70862, with no changed/missing/new IDs; Companion
+      build and map regressions passed. Live client/CASC map acceptance remains
+      open for owner verification.
 
 ## 0.7.x — Collector coverage closure
 
