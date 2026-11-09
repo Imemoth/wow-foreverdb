@@ -12,6 +12,9 @@ on:
       - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
+      - 'docs/0.7-acceptance-test.md'
+      - 'docs/0.7-auto-atlas-verification.md'
+      - 'docs/companion-map-atlas-compatibility.md'
       - '.github/workflows/companion-health.yml'
   pull_request:
     paths:
@@ -22,6 +25,9 @@ on:
       - 'tests/companion-map-reveal/**'
       - 'database/migrations/**'
       - 'docs/0.8-guildbook-acceptance.md'
+      - 'docs/0.7-acceptance-test.md'
+      - 'docs/0.7-auto-atlas-verification.md'
+      - 'docs/companion-map-atlas-compatibility.md'
       - '.github/workflows/companion-health.yml'
   workflow_dispatch:
 
@@ -59,9 +65,27 @@ jobs:
         run: dotnet run --project tests/companion-map-reveal/Companion.MapReveal.Tests.csproj -c Release
 
       - name: Current Forever DB2 metadata transport probe (informational)
-        if: github.event_name == 'pull_request' && github.head_ref == 'research/full-reveal-map-art-gate'
+        if: >-
+          (github.event_name == 'pull_request' &&
+            (github.head_ref == 'research/full-reveal-map-art-gate' ||
+             github.head_ref == 'fix/azerdex-wowf-atlas-compatibility')) ||
+          (github.event_name == 'workflow_dispatch' &&
+            github.ref_name == 'fix/azerdex-wowf-atlas-compatibility')
         continue-on-error: true
         run: dotnet run --project tests/companion-map-reveal/Companion.MapReveal.Tests.csproj -c Release -- --probe-current-forever
+
+      - name: Upload latest-build atlas inventory and update candidate
+        if: >-
+          always() &&
+          ((github.event_name == 'pull_request' &&
+            github.head_ref == 'fix/azerdex-wowf-atlas-compatibility') ||
+           (github.event_name == 'workflow_dispatch' &&
+            github.ref_name == 'fix/azerdex-wowf-atlas-compatibility'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-coverage-wowf-1.60.1.70862
+          path: artifacts/*.json
+          if-no-files-found: ignore
 
       - name: git diff --check
         shell: pwsh

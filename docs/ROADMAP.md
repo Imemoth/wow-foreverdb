@@ -315,6 +315,19 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       [Full verification design / test gate](0.7-auto-atlas-verification.md).
 - [ ] Preserve marker / cluster / heatmap overlays and current location navigation
       behavior when changing the underlying map-art variant.
+      **2026-11-09 global atlas compatibility follow-up:** owner reports
+      full-reveal maps missing across zones on active WoW Forever Product
+      `wowf`, build `1.60.1.70862`. The shared exact-build verifier previously
+      rejected `wowf` and the CASC full-reveal path was pinned to
+      `wow_classic_beta`; the release follow-up removes version allowlists,
+      validates each active product/build against DB2 map geometry and ordered
+      FileDataIDs, and reports every compatible, changed, missing and new art.
+      See [Companion atlas compatibility](companion-map-atlas-compatibility.md).
+      Full Reveal stays on the base art when compatibility is unverified or an
+      individual art is proven incompatible. Exact-build Windows metadata probe
+      passed 84/84 for 1.60.1.70862, with no changed/missing/new IDs; Companion
+      build and map regressions passed. Live client/CASC map acceptance remains
+      open for owner verification.
 
 ## 0.7.x — Collector coverage closure
 

@@ -23,18 +23,7 @@ public sealed record FullRevealTile(
 public static class FullRevealMapArt
 {
     public const string SourceBuildVersion = "1.60.1.70009";
-    public const string VerifiedClientBuildVersion = "1.60.1.70245";
-    public const string VariantId = "full-overlays-verified-70009-70245-v2";
-
-    private static readonly HashSet<string> VerifiedBuildVersions =
-        new(StringComparer.Ordinal)
-        {
-            SourceBuildVersion,
-            VerifiedClientBuildVersion
-        };
-
-    public static bool IsSupportedBuildVersion(string? version) =>
-        version is not null && VerifiedBuildVersions.Contains(version);
+    public const string VariantId = "full-overlays-embedded-reference-v3";
 
     private const int TileSize = 256;
     private const string ResourceName =
@@ -55,53 +44,11 @@ public static class FullRevealMapArt
     public static int TileCount => Data.Value.Values.Sum(
         regions => regions.Sum(region => region.FileDataIds.Count));
 
-    // Describe an exact-build/atlas gate failure without attempting any
-    // cross-build FileDataID lookups. Keep the displayed version compact and
-    // numeric so diagnostic UI cannot leak arbitrary .build.info strings.
-    public static string ExplainUnavailability(
-        long mapArtId,
-        IReadOnlyList<string> activeBuildVersions)
+    // This immutable atlas is reference data, not proof that another build
+    // is compatible. Callers must first validate exact-build DB2 geometry and
+    // tile IDs with AutoAtlasBuildVerifier.
+    public static IReadOnlyList<FullRevealRegion> Find(long mapArtId)
     {
-        if (!Data.Value.ContainsKey(mapArtId))
-        {
-            return $"art #{mapArtId} is not in the reveal atlas";
-        }
-
-        if (activeBuildVersions.Any(IsSupportedBuildVersion))
-        {
-            return "";
-        }
-
-        var installed = activeBuildVersions
-            .Where(version => !string.IsNullOrWhiteSpace(version))
-            .Select(version =>
-                new string(version
-                    .Where(character =>
-                        char.IsAsciiDigit(character) || character == '.')
-                    .Take(32)
-                    .ToArray()))
-            .Where(version => version.Length > 0)
-            .Distinct(StringComparer.Ordinal)
-            .Take(3)
-            .ToArray();
-
-        const string acceptedBuilds =
-            SourceBuildVersion + " or " + VerifiedClientBuildVersion;
-
-        return installed.Length == 0
-            ? $"active client build unknown; atlas verified for {acceptedBuilds}"
-            : $"active build {string.Join(", ", installed)}; atlas verified for {acceptedBuilds}";
-    }
-
-    public static IReadOnlyList<FullRevealRegion> Find(
-        long mapArtId,
-        string? activeBuildVersion)
-    {
-        if (!IsSupportedBuildVersion(activeBuildVersion))
-        {
-            return Array.Empty<FullRevealRegion>();
-        }
-
         return Data.Value.TryGetValue(mapArtId, out var regions)
             ? regions
             : Array.Empty<FullRevealRegion>();
