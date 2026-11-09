@@ -4,18 +4,17 @@ Two layers, both for `web/content/news/jokerd-team-world-first-level-60-wow-fore
 
 ## Primary cover: owner-supplied poster
 
-Status: **owner-supplied illustration, supplied in the PR #178 follow-up request on 2026-11-08.** It is the "WORLD FIRST 60"
-poster (three Mages, a Paladin with a raised warhammer, a Shaman, headline and 52 Hours / 5 Players / Level 60 badges baked
+Status: **owner-supplied illustration, supplied in the PR #178 follow-up request on 2026-11-09 (replacing the first poster supplied on 2026-11-08).** Per the owner, it was generated with OpenAI ChatGPT image generation on 2026-11-09. It is the "WORLD FIRST 60"
+poster (three Undead Mages, an Undead Paladin with a raised warhammer, a Troll Shaman, Horde banners, AzerDex™ logo, headline and 52 Hours / 5 Players / Level 60 badges baked
 into the art). It is not a game screenshot and not a competitor image, and nothing is hotlinked.
 
-- **Not recorded:** how it was made (generator/model, prompts) and any licence terms of that tool. The owner supplied it for this
-  use; if terms or prompts are on file, add them here. This record does not guess.
-- The poster's characters are illustrative; it is not evidence of the players' races (the article states races from tracker
-  reports, and the Shaman is reported as a Troll).
+- **Origin (owner's statement):** OpenAI ChatGPT image generation, 2026-11-09. **Not recorded:** the exact model version, prompts, and the licence terms of that service; add them here if on file. This record does not guess.
+- It shows three Undead Mages, an Undead Paladin and a Troll Shaman under Horde banners, with the AzerDex™ logo, matching the races
+  in tracker reports. The characters remain illustrative, not portraits of the real players.
 - The master (1672x941, re-encoded as WebP q96) is kept in `docs/azerdex-world-first-art/masters/`. That directory is
   documentation only; it is not under `web/public` and is never served.
 - Variants are cut by `web/scripts/content-art/export-world-first-60-poster.mjs` (crop to exact aspect, one lanczos3 resize,
-  WebP q88, nothing stretched or repainted):
+  WebP q80, nothing stretched or repainted):
 
 | File (`web/public/content-images/news/`) | Size | Used for |
 | --- | --- | --- |

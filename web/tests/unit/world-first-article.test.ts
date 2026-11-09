@@ -15,7 +15,7 @@ import { pickLeadArticle } from "@/components/news/NewsFeatureLead";
 const SLUG = "jokerd-team-world-first-level-60-wow-forever";
 const PUBLIC = join(process.cwd(), "public");
 const article = loadAllArticles().find((a) => a.slug === SLUG)!;
-const bodyText = article.body.split("## Sources and notes")[0]!;
+const bodyText = article.body;
 
 function webpSize(file: string): { width: number; height: number } {
   const b = readFileSync(file);
@@ -55,17 +55,12 @@ describe("world first article: content", () => {
 
   it("is never presented as an official Blizzard announcement and invents no quotes", () => {
     expect(bodyText).toMatch(/not a Blizzard announcement/i);
-    expect(article.body).toMatch(/not affiliated with Blizzard/i);
     expect(bodyText).not.toMatch(/[“"][^"”\n]{12,}[”"]/); // no quoted speech in the body
   });
 
-  it("cites the three primary sources over https and hotlinks no competitor images", () => {
-    const urls = [...article.body.matchAll(/\]\((https:\/\/[^)\s]+)\)/g)].map((m) => m[1]!);
-    expect(urls).toEqual(expect.arrayContaining([
-      "https://www.wowhead.com/forever/news/world-first-level-60s-in-wow-forever-in-less-than-three-days-383797",
-      "https://www.icy-veins.com/wow-forever/news/three-mages-a-paladin-and-a-shaman-hit-level-60-first-in-wow-forever/",
-      "https://www.warcrafttavern.com/forever/news/world-first-level-60s-in-wow-forever-paladin-shaman-3-mages/",
-    ]));
+  it("renders no closing sources block and hotlinks no external or competitor images", () => {
+    expect(extractGuideToc(article.body).map((t) => t.text.toLowerCase())).not.toContain("sources and notes");
+    expect(article.body).not.toMatch(/https?:\/\//);
     expect(article.body).not.toMatch(/!\[/);
   });
 

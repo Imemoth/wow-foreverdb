@@ -11,7 +11,7 @@ sample: false
 featured: true
 cover:
   src: /content-images/news/jokerd-team-world-first-level-60-wow-forever.webp
-  alt: "Poster: three Mages, a Paladin raising a golden warhammer and a lightning-wreathed Shaman on a summit at sunset, titled WORLD FIRST 60 with badges 52 Hours, 5 Players, Level 60"
+  alt: "Poster: three Undead Mages, an Undead Paladin raising a golden warhammer and a Troll Shaman wreathed in lightning beneath Horde banners, titled WORLD FIRST 60 with the AzerDex logo"
   attribution: Owner-supplied AzerDex editorial illustration
 related:
   articles: [blog/wow-forever-beginners-guide-2026, blog/wow-forever-new-race-class-combinations]
@@ -62,13 +62,3 @@ For anyone planning their own journey, the lesson is portable. Read the class pa
 To Jokerd Prime, Burning Speed, Vitochie Gofast, Cloud Bells and Lmgd Mmr: congratulations. You turned a launch weekend into a story, and you proved that the fastest way to the top of Azeroth can also be the most generous. Every player who logs in this week has a new benchmark to look up at, and a reminder that the best races are run in company.
 
 See you at 60.
-
-## Sources and notes
-
-AzerDex Editorial compiled this report from public community coverage; all figures are as reported there, and timings are approximate.
-
-- Wowhead: [World First Level 60s in WoW: Forever in Less Than Three Days](https://www.wowhead.com/forever/news/world-first-level-60s-in-wow-forever-in-less-than-three-days-383797)
-- Icy Veins: [Three Mages, a Paladin and a Shaman Hit Level 60 First in WoW: Forever](https://www.icy-veins.com/wow-forever/news/three-mages-a-paladin-and-a-shaman-hit-level-60-first-in-wow-forever/)
-- Warcraft Tavern: [World First Level 60s in WoW: Forever, Paladin, Shaman and 3 Mages](https://www.warcrafttavern.com/forever/news/world-first-level-60s-in-wow-forever-paladin-shaman-3-mages/)
-
-AzerDex is a fan-made project and is not affiliated with Blizzard Entertainment. This article is original AzerDex editorial writing. Its cover is an original AzerDex illustration, not a game screenshot.
