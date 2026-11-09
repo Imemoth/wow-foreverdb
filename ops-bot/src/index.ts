@@ -1,6 +1,7 @@
 import { ConfigError, parseConfig, parseHeartbeatUrl, type Config, type Env } from "./config";
 import { systemClock, type Db } from "./db";
 import { DiscordRestClient } from "./discord/client";
+import { createFaultFetch } from "./discord/fault";
 import { handleInteractionRequest } from "./discord/interactions";
 import { HttpHealthProvider } from "./health/http-provider";
 import { MockHealthProvider } from "./health/mock-provider";
@@ -38,7 +39,7 @@ export default {
       log.error("config_invalid", { issues: e instanceof ConfigError ? e.issues : ["unexpected"] });
       return json({ error: "service_unavailable" }, 503);
     }
-    const discord = new DiscordRestClient({ apiBase: rt.cfg.discord.apiBase, botToken: rt.cfg.discord.botToken });
+    const discord = new DiscordRestClient({ apiBase: rt.cfg.discord.apiBase, botToken: rt.cfg.discord.botToken, fetchFn: createFaultFetch(rt.cfg.env, rt.db) });
     return handleInteractionRequest(request, { db: rt.db, cfg: rt.cfg, clock: systemClock, discord, log, waitUntil: (p) => ctx.waitUntil(p) });
   },
 
@@ -51,7 +52,7 @@ export default {
       if (hb) await new HealthchecksHeartbeat(hb).fail("config_error");
       throw e;
     }
-    const discord = new DiscordRestClient({ apiBase: rt.cfg.discord.apiBase, botToken: rt.cfg.discord.botToken });
+    const discord = new DiscordRestClient({ apiBase: rt.cfg.discord.apiBase, botToken: rt.cfg.discord.botToken, fetchFn: createFaultFetch(rt.cfg.env, rt.db) });
     const heartbeat = rt.heartbeat ?? { success: async () => true, fail: async () => true, log: async () => true };
     ctx.waitUntil(runCycle({ db: rt.db, cfg: rt.cfg, clock: systemClock, provider: rt.provider, discord, heartbeat, fallback: rt.fallback, log }).then(() => undefined));
   },
