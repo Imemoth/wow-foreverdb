@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERM, basePermissions, channelPermissions, has, canView, ALL, type Channel, type Role, type Overwrite } from "../src/preflight/permissions";
-import { CONFIRMED_GUILD_ID, EXPECTED_CHANNEL, evaluatePreflight, runPreflight, type PreflightData, type PreflightEnv } from "../src/preflight/preflight";
+import { CONFIRMED_GUILD_ID, EXPECTED_CHANNEL, authFailure, diagnoseToken, evaluatePreflight, runPreflight, type PreflightData, type PreflightEnv } from "../src/preflight/preflight";
 
 const G = CONFIRMED_GUILD_ID;
 const BOT = "900000000000000100", APP = BOT;
@@ -174,5 +174,78 @@ describe("runPreflight performs read-only requests and never leaks the token", (
     expect((await runPreflight({ ...input, fetchFn: fake([], { [`/guilds/${G}/roles`]: 403, [`/guilds/${G}/channels`]: 403 }) })).ok).toBe(false);
     const down = (async () => { throw new TypeError("network"); }) as unknown as typeof fetch;
     expect((await runPreflight({ ...input, fetchFn: down })).ok).toBe(false);
+  });
+});
+
+describe("authentication failures are explained precisely (owner-facing diagnostics)", () => {
+  const TOKEN_B64 = Buffer.from(APP).toString("base64").replace(/=+$/, "");
+  const GOOD_TOKEN = `${TOKEN_B64}.GhIjKl.${"x".repeat(27)}`;                   // synthetic: same shape as a real bot token, not a credential
+  const none = (userStatus: PreflightData["userStatus"]) => evaluatePreflight(data(guild(), { user: null, application: null, roles: null, memberRoles: null, channels: null, ...(userStatus === undefined ? {} : { userStatus }) }));
+
+  it("a rejected credential reports ONE precise failure with the HTTP status instead of four cascading ones", () => {
+    const checks = none(401);
+    expect(checks.map((c) => c.id)).toEqual(["guild-is-confirmed-server", "discord-auth", "remaining-checks-not-run"]);
+    const auth = checks.find((c) => c.id === "discord-auth")!;
+    expect(auth.status).toBe("fail");
+    expect(auth.message).toContain("HTTP 401");
+    for (const hint of ["Public Key", "Client Secret", "reset", "Bot "]) expect(auth.message).toContain(hint);
+    expect(failing(checks)).toContain("remaining-checks-not-run");     // the run can never be READY after an auth failure
+  });
+  it("other statuses and network problems are told apart", () => {
+    expect(authFailure(403)).toContain("HTTP 403");
+    expect(authFailure(429)).toContain("rate-limited");
+    expect(authFailure("network")).toMatch(/could not reach discord\.com/);
+    expect(authFailure(undefined)).toMatch(/could not reach discord\.com/);
+    expect(authFailure(500)).toContain("HTTP 500");
+  });
+  it("runPreflight stops after the first failed call (no cascade of requests with a bad credential) and never echoes the token", async () => {
+    const calls: string[] = [];
+    const TOKEN = "NOT_A_TOKEN_CANARY_0123456789abcdefghij";
+    const f = (async (url: string | URL | Request) => { calls.push(new URL(String(url)).pathname); return new Response("{}", { status: 401 }); }) as typeof fetch;
+    const report = await runPreflight({ token: TOKEN, applicationId: APP, guildId: G, channelId: CH_OPS_TEST, env: "staging", fetchFn: f });
+    expect(report.ok).toBe(false);
+    expect(calls).toEqual(["/api/v10/users/@me"]);
+    expect(report.checks.find((c) => c.id === "discord-auth")!.message).toContain("401");
+    expect(JSON.stringify(report)).not.toContain(TOKEN);
+  });
+  it("a network failure is reported as such, not as a bad token", async () => {
+    const down = (async () => { throw new TypeError("network"); }) as unknown as typeof fetch;
+    const report = await runPreflight({ token: "T".repeat(40), applicationId: APP, guildId: G, channelId: CH_OPS_TEST, env: "staging", fetchFn: down });
+    expect(report.checks.find((c) => c.id === "discord-auth")!.message).toMatch(/could not reach discord\.com/);
+  });
+  it("a user-account credential or another application's token is told apart from an invalid token", () => {
+    const asUser = evaluatePreflight(data(guild(), { user: { id: BOT, bot: false } }));
+    expect(asUser.find((c) => c.id === "bot-identity")!.message).toMatch(/user account, not a bot/);
+    const other = evaluatePreflight(data(guild(), { user: { id: "900000000000000999", bot: true } }));
+    expect(other.find((c) => c.id === "bot-identity")!.message).toMatch(/different application/);
+  });
+
+  describe("diagnoseToken: offline, advisory, never reveals the token", () => {
+    it("accepts a well-formed token of the right application", () => expect(diagnoseToken(GOOD_TOKEN, APP)).toEqual({ ok: true }));
+    it("flags whitespace, a 'Bot ' prefix and values of the wrong kind (Public Key, Client Secret, Application ID)", () => {
+      expect(diagnoseToken(`${GOOD_TOKEN}\n`, APP)).toMatchObject({ ok: false, reason: expect.stringContaining("whitespace") });
+      expect(diagnoseToken(`Bot ${GOOD_TOKEN}`, APP)).toMatchObject({ ok: false, reason: expect.stringContaining("'Bot ' prefix") });
+      expect(diagnoseToken(`${GOOD_TOKEN.slice(0, 20)} ${GOOD_TOKEN.slice(20)}`, APP)).toMatchObject({ ok: false, reason: expect.stringContaining("contains whitespace") });
+      const publicKey = "f77e67748d4a15411db0c5da9951c6aa1e31ea1fac6c678996802914c6915a0c";
+      const clientSecret = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+      for (const wrong of [publicKey, clientSecret, APP]) {
+        const d = diagnoseToken(wrong, APP);
+        expect(d.ok).toBe(false);
+        if (!d.ok) expect(d.reason).toMatch(/shape of a bot token/);
+      }
+    });
+    it("detects a token that belongs to another application and names that (non-secret) application id", () => {
+      const other = `${Buffer.from("900000000000000999").toString("base64").replace(/=+$/, "")}.GhIjKl.${"y".repeat(27)}`;
+      const d = diagnoseToken(other, APP);
+      expect(d.ok).toBe(false);
+      if (!d.ok) { expect(d.reason).toContain("900000000000000999"); expect(d.reason).toContain(APP); }
+    });
+    it("no diagnosis ever contains any part of the token", () => {
+      const tokens = [GOOD_TOKEN, `${GOOD_TOKEN} `, `Bot ${GOOD_TOKEN}`, "f77e67748d4a15411db0c5da9951c6aa1e31ea1fac6c678996802914c6915a0c", "Secret_Value_ABCDEFGHIJ0123456789", `${Buffer.from("900000000000000999").toString("base64")}.abcdef.${"z".repeat(30)}`];
+      for (const t of tokens) {
+        const d = diagnoseToken(t, APP);
+        if (!d.ok) for (const chunk of [t.slice(0, 12), t.slice(-12)]) expect(d.reason).not.toContain(chunk.trim());
+      }
+    });
   });
 });
