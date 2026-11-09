@@ -35,10 +35,20 @@ because the site CSP forbids inline style attributes.)
 
 `web/tests/unit/world-first-article.test.ts` asserts every file exists with exactly the documented dimensions.
 
-## Sources for the article's facts
+## Internal research references (not shown on the page)
 
-Wowhead, Icy Veins and Warcraft Tavern coverage (linked in the article), cross-checked against Endgame Tools and Forever Guides
-trackers for races and the roster. The three primary pages could not all be read in full from the authoring environment
-(Icy Veins returned HTTP 403; Wowhead returned only its headline), so the final-4%-of-level-59 and Arcane Explosion details
-rest on the brief and tracker summaries. Sources disagree by minutes on whose level-up landed first, so the piece presents a
-joint world first and gives no exact timestamps or quotations.
+The article deliberately renders no sources block. These are the references the facts were checked against while it was written,
+kept here for editors:
+
+- Wowhead: "World First Level 60s in WoW: Forever in Less Than Three Days"
+  (https://www.wowhead.com/forever/news/world-first-level-60s-in-wow-forever-in-less-than-three-days-383797)
+- Icy Veins: "Three Mages, a Paladin and a Shaman Hit Level 60 First in WoW: Forever"
+  (https://www.icy-veins.com/wow-forever/news/three-mages-a-paladin-and-a-shaman-hit-level-60-first-in-wow-forever/)
+- Warcraft Tavern: "World First Level 60s in WoW: Forever, Paladin, Shaman and 3 Mages"
+  (https://www.warcrafttavern.com/forever/news/world-first-level-60s-in-wow-forever-paladin-shaman-3-mages/)
+- Cross-checks for races and the roster: Endgame Tools and Forever Guides trackers.
+
+Limits of that research: the three primary pages could not all be read in full from the authoring environment (Icy Veins returned
+HTTP 403; Wowhead returned only its headline), so the final-4%-of-level-59 and Arcane Explosion details rest on the brief and
+tracker summaries. Sources disagree by minutes on whose level-up landed first, so the piece presents a joint world first and gives
+no exact timestamps or quotations. The article text itself names Icy Veins once, for the later solo level 60.
