@@ -334,7 +334,7 @@ local function ensureGeoBucket(db, source, kind)
     local unknownSources = db.geographicStats.unknown.sources
     local sourceKey = FDB:SourceKey(source.sourceType, source.sourceId, source.sourceLevel)
     local geoSource = unknownSources[sourceKey]
-    if not geoSource then
+    if type(geoSource) ~= "table" then
         geoSource = {
             sourceType = source.sourceType,
             sourceId = source.sourceId,
@@ -345,29 +345,46 @@ local function ensureGeoBucket(db, source, kind)
         }
         unknownSources[sourceKey] = geoSource
     end
+    if type(geoSource.buckets) ~= "table" then geoSource.buckets = {} end
     local bucket = geoSource.buckets[kind]
-    if not bucket then bucket = { observations = 0, items = {} }; geoSource.buckets[kind] = bucket end
+    if type(bucket) ~= "table" then
+        bucket = { observations = 0, items = {} }
+        geoSource.buckets[kind] = bucket
+    end
+    bucket.observations = tonumber(bucket.observations) or 0
+    if type(bucket.items) ~= "table" then bucket.items = {} end
     return geoSource, bucket
 end
 
-local function addUnknownObservation(db, source, kind, observedItems)
-    local geoSource, bucket = ensureGeoBucket(db, source, kind)
-    bucket.observations = bucket.observations + 1
+local function incrementGeographicItems(bucket, observedItems)
     for itemId, observed in pairs(observedItems or {}) do
         local key = tostring(itemId)
         local item = bucket.items[key]
-        if not item then
-            item = { itemId = tonumber(itemId), name = observed.name, drops = 0, quantity = 0, questDrops = 0, questIds = {} }
+        if type(item) ~= "table" then
+            item = { itemId = tonumber(itemId), drops = 0, quantity = 0, questDrops = 0, questIds = {} }
             bucket.items[key] = item
         end
+        item.itemId = item.itemId or tonumber(itemId)
+        item.drops = tonumber(item.drops) or 0
+        item.quantity = tonumber(item.quantity) or 0
+        item.questDrops = tonumber(item.questDrops) or 0
+        if type(item.questIds) ~= "table" then item.questIds = {} end
         if observed.name and observed.name ~= "" then item.name = observed.name end
         item.drops = item.drops + 1
         item.quantity = item.quantity + (tonumber(observed.quantity) or 1)
         if observed.isQuestItem then
             item.questDrops = item.questDrops + 1
-            if observed.questId and observed.questId > 0 then item.questIds[tostring(observed.questId)] = true end
+            if observed.questId and observed.questId > 0 then
+                item.questIds[tostring(observed.questId)] = true
+            end
         end
     end
+end
+
+local function addUnknownObservation(db, source, kind, observedItems)
+    local geoSource, bucket = ensureGeoBucket(db, source, kind)
+    bucket.observations = bucket.observations + 1
+    incrementGeographicItems(bucket, observedItems)
 end
 
 local function addInteractionZoneObservation(db, source, kind, observedItems, attribution)
@@ -393,7 +410,7 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
     end
     local zoneKey = tostring(mapId) .. "|" .. zoneName
     local zone = interactionZone.zones[zoneKey]
-    if not zone then
+    if type(zone) ~= "table" then
         zone = {
             mapId = mapId,
             zoneName = zoneName,
@@ -404,8 +421,9 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
     end
 
     local sourceKey = FDB:SourceKey(source.sourceType, source.sourceId, source.sourceLevel)
+    if type(zone.sources) ~= "table" then zone.sources = {} end
     local geoSource = zone.sources[sourceKey]
-    if not geoSource then
+    if type(geoSource) ~= "table" then
         geoSource = {
             sourceType = source.sourceType,
             sourceId = source.sourceId,
@@ -417,27 +435,16 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
         zone.sources[sourceKey] = geoSource
     end
 
+    if type(geoSource.buckets) ~= "table" then geoSource.buckets = {} end
     local bucket = geoSource.buckets[kind]
-    if not bucket then
+    if type(bucket) ~= "table" then
         bucket = { observations = 0, items = {} }
         geoSource.buckets[kind] = bucket
     end
+    bucket.observations = tonumber(bucket.observations) or 0
+    if type(bucket.items) ~= "table" then bucket.items = {} end
     bucket.observations = bucket.observations + 1
-    for itemId, observed in pairs(observedItems or {}) do
-        local key = tostring(itemId)
-        local item = bucket.items[key]
-        if not item then
-            item = { itemId = tonumber(itemId), name = observed.name, drops = 0, quantity = 0, questDrops = 0, questIds = {} }
-            bucket.items[key] = item
-        end
-        if observed.name and observed.name ~= "" then item.name = observed.name end
-        item.drops = item.drops + 1
-        item.quantity = item.quantity + (tonumber(observed.quantity) or 1)
-        if observed.isQuestItem then
-            item.questDrops = item.questDrops + 1
-            if observed.questId and observed.questId > 0 then item.questIds[tostring(observed.questId)] = true end
-        end
-    end
+    incrementGeographicItems(bucket, observedItems)
     return true
 end
 

@@ -502,12 +502,19 @@ end)
 test("malformed geographic SavedVariables recover before global observation counters change", function()
     local f = setup()
     f.DB.geographicStats.unknown.sources = "invalid"
-    f.DB.geographicStats.interactionZone.zones = false
+    f.DB.geographicStats.interactionZone.zones["42|Test Zone"] = "invalid"
     assert(f:RecordObservation("herbalism", "gameobject", 1618, "Herb", {
         [2447] = { name = "Peacebloom", quantity = 1 },
     }, 0, nil))
     equal(f.DB.sources["gameobject:1618"].buckets.herbalism.observations, 1)
     equal(f.DB.geographicStats.unknown.sources["gameobject:1618"].buckets.herbalism.observations, 1)
+    assert(f:RecordObservation("mob", "creature", 1, "Mob", {}, 1, nil, {
+        class = "verified_interaction_zone", evidence = "loot_event",
+        mapId = 42, zoneName = "Test Zone",
+    }))
+    equal(f.DB.sources["creature:1:1"].buckets.mob.observations, 1)
+    equal(f.DB.geographicStats.interactionZone.zones["42|Test Zone"]
+        .sources["creature:1:1"].buckets.mob.observations, 1)
 end)
 
 test("geography diagnostics expose counts and candidate APIs without changing SavedVariables or export", function()
