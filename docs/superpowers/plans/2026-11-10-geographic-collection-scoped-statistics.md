@@ -71,11 +71,36 @@ These ranges are not pass/fail coverage goals. Correct Unknown classification ou
 ## Revision ordering and recovery contract
 
 - The Addon persists `snapshotRevision` under its existing installation ID and increments it for each changed exported snapshot. The first geography-aware snapshot for an existing installation may start at revision 1; the DB high-water mark is initialized to 0 for legacy installations.
+- Revision 1 is a bootstrap case, not permission to overwrite the existing installation. Under the installation lock, compare its `updatedAt` with `public.installations.snapshot_updated_at` before any writes. A lower timestamp is stale and rejected. An equal timestamp is accepted only when a versioned canonical digest of the incoming global projection equals the already persisted global aggregate state; equal-time mismatch is an ambiguous conflict and is rejected. A greater timestamp may proceed under the existing legacy ordering, but only after confirming the current server installation and the complete source/item/location replacement is atomic. Revision and payload acceptance are committed together.
+- The server computes bootstrap equality using a versioned semantic digest over the same global observation fields and canonical ordering used by the legacy writer; do not compare raw JSON byte order. If the persisted rows cannot be represented unambiguously by that digest, fail closed and require a separately reviewed recovery procedure. Never fall back to “revision 1 wins.”
 - The server accepts a greater revision even when second-resolution `updatedAt` is equal, atomically replacing global and scoped snapshots. Same revision + same canonical payload is idempotent; same revision + different canonical payload is a conflict; lower revision is a no-op with a recovery result.
 - The Companion stores an encrypted local high-water mirror keyed by installation ID as a recovery signal. It never silently raises an older SavedVariables revision and resubmits stale contents.
-- On restore/concurrency conflict, the client pauses ingestion and compares the local revision and timestamp with the server high-water/timestamp. If the local snapshot is lower or equal-but-conflicting, the owner must restore the newest SavedVariables copy or explicitly fork to a new installation ID. The old installation remains intact; a fork starts at revision 1 and never merges/deletes the old data.
-- An older client sends no revision and retains timestamp-only global behavior. If accepted, it clears that installation's scoped contribution and marks geography coverage `legacy`, but does not lower the server revision high-water mark. On upgrade, a local revision above the high-water resumes normally; otherwise the same restore/fork gate applies. No automatic rebase of unknown old-client contents.
+- On restore/concurrency conflict, the client pauses ingestion and compares the local revision and timestamp with the server high-water/timestamp. If the local snapshot is lower or equal-but-conflicting, the owner must restore the newest SavedVariables copy. Never raise the revision and resend without proving the base is current.
+- A fork is an explicit “start a new collector” action, not an installation-ID-only edit. It preserves the old server installation/global aggregates; archives the prior local snapshot locally; generates a fresh authorized installation identity; and starts the new upload database with zero source observations, item drops, quest counts, scoped counts, and locations. Only events recorded after the fork are uploaded under the new identity. Do not copy old aggregate counters to the new ID: that would double-count them in global statistics. Do not delete, merge, or rewrite the old server installation.
+- Once an installation has accepted a geography-aware snapshot, reject every timestamp-only payload from an older Addon/Companion with a version-conflict response, regardless of whether its timestamp is lower, equal, or greater. Leave both global and scoped rows and the revision high-water mark unchanged. This prevents stale global replacement and accidental deletion of scoped contributions. Older clients retain legacy timestamp behavior only for installations that have never accepted the geography contract. No silent downgrade path is provided.
+- On upgrade after a blocked downgrade, resume only with a geography-aware snapshot whose revision is above the server high-water and whose ordering is accepted. Otherwise require SavedVariables restore or the explicit empty-counter fork above. No automatic rebase of unknown old-client contents.
 - Installation identity rotation creates a new independent installation record and revision sequence. It must use the existing authorized enrollment/identity workflow; client-supplied ID changes cannot claim or rewrite an existing identity. Existing server records are retained.
+
+## Phase 0: Attribution feasibility investigation (before Geo A)
+
+This is a read-only/static and local WoW diagnostic gate; it does not write to a server, upload diagnostics, or collect private character data. Inspect the `wowf` build's available APIs and existing Addon event paths, then exercise the source events on a local test character. Record only counts and evidence classes, not names, coordinates, GUIDs, or account data.
+
+| Event type | Evidence in current code | Initial feasibility finding | Geo A default until verified |
+|---|---|---|---|
+| Creature loot | `LootTracker.lua` uses `GetLootSourceInfo`/source GUIDs; `GetCurrentLocation()` is the player's map/position. Current path has no source map field. | No source-specific map evidence is established. Verify whether `wowf` exposes a GUID-to-map/source API for the corpse actually looted. | Unknown for all creature loot unless that API is verified. |
+| Skinning | `GatheringTracker.lua` can retain a creature GUID in the pending flow; saved location is captured from the player. A GUID alone has no map. | No source-specific creature map evidence is established. Verify whether the skinning event exposes an authoritative source map or only the player interaction context. | Unknown unless source map is explicitly proven. |
+| Herbalism/mining | Spell success can identify an interaction; `UnitGUID("npc")` may identify a gameobject and the current code captures player map during the pending window. | A matching interaction and map may prove the same map instance, but exact node map/coordinates are not currently read from the object. Verify same-map guarantees in this client build. | Unknown unless interaction-to-source GUID and valid map are both proven; player coordinates remain interaction provenance only. |
+| Fishing | `FishingPoolTracker.lua` may see a pool object via world cursor/tooltip and correlates cast/hover context; current projected location derives from the player. | Verify which `wowf` builds expose a readable pool GUID/map and whether catch-to-cast correlation is reliable. Cast map can support zone scope only if client semantics prove the cast's water is in that map; it never proves pool coordinates. | Unknown without verified cast context and valid map identity. |
+
+**Feasibility task steps:**
+
+- [ ] Build an API/evidence matrix for `wowf` build `1.60.1.70862`: record API name, event timing, returned source identity, map identity availability, and whether evidence is source map, interaction map, player position, or absent.
+- [ ] Add local Lua fixtures that model each observed evidence shape, including secret/unavailable tooltip values, expired pending interactions, map transitions, and mismatched source GUIDs.
+- [ ] On a local test character, verify at least 20 controlled events per available collector type (creature loot, skinning, herb/mining, fishing); record only evidence-class counts in the test report. Do not synchronize these snapshots.
+- [ ] Compare actual evidence counts with the provisional planning ranges below. If sample/API evidence is unavailable, mark that collector “unverified” and retain 100% Unknown as the safe planning assumption.
+- [ ] Publish the evidence matrix and revise the estimates before opening Geo A. Any event without source-map proof remains Unknown even if this reduces coverage.
+
+The current estimates below are hypotheses only, not feasibility results, telemetry, or acceptance targets. Geo A must use the findings above; passing this gate does not authorize weakening attribution rules.
 
 ## Phase 1: Addon collection and revision persistence
 
@@ -105,6 +130,7 @@ These ranges are not pass/fail coverage goals. Correct Unknown classification ou
 - Assert creature loot, skinning, quest rewards, and player-position-only fixtures become Unknown.
 - Assert each event increments exactly one leaf or Unknown bucket, including zero-drop observations.
 - Assert restore preserves installation ID/revision, revisions increase for changed export state, and legacy schema exports remain parseable.
+- Assert each source attribution fixture agrees with Phase 0 evidence; any event without verified source-map evidence remains Unknown.
 
 **Gate:** `lua5.1` and `lua5.4` collector smoke suites plus `luac5.1 -p` / `luac5.4 -p` on addon and new test files pass in CI. Report forecast vs fixture-observed Unknown ratios by collector; do not change safe Unknown behavior to meet a percentage target.
 
@@ -136,6 +162,9 @@ These ranges are not pass/fail coverage goals. Correct Unknown classification ou
 - Serialized JSON includes revision and permitted observation fields only; Guildbook names, members, professions, roster fields, and private character values are absent.
 - Test same-second higher revision, exact replay, lower revision, duplicate revision with different content, server/local watermark mismatch, SavedVariables restore, older-client response, and installation-ID fork behavior.
 - Assert a lower restored snapshot is not automatically assigned a higher revision and sent.
+- Assert fork output has a fresh authorized installation ID and zero historical counters/locations; old SavedVariables stay local-only and old server global totals remain unchanged.
+- Assert first geography revision 1 is stale when `updatedAt` is lower than the accepted legacy snapshot; equal-time bootstrap succeeds only on an exact semantic global-state digest match and otherwise conflicts without writes.
+- Assert timestamp-only clients are blocked after geography activation for lower, equal, and higher timestamps, while legacy timestamp behavior remains before activation.
 
 **Gate:** `dotnet test tests/companion-account/Companion.Account.Tests.csproj` and the Windows x64 Companion build pass. This PR does not require a database or remote environment.
 
@@ -160,9 +189,12 @@ These ranges are not pass/fail coverage goals. Correct Unknown classification ou
 **Acceptance tests (apply migrations in order, including 0018 then 0019):**
 
 - Preflight fails when required prior functions/policies are missing; verify 0019 auth/payload checks still wrap geography ingestion.
-- Legacy payload updates global rows, clears scoped rows only when accepted, marks coverage legacy, and retains revision high-water.
+- Legacy payloads retain timestamp-only global behavior before geography activation; once activated, lower/equal/higher timestamp-only payloads are rejected without changing global rows, scoped rows, coverage, or revision high-water.
 - Current payload with higher revision replaces both datasets atomically; same timestamp/higher revision succeeds; exact replay does not double counts; stale revision is a no-op; conflicting equal revision fails without partial writes.
 - Concurrent revisions serialize; loser becomes stale/conflict; invalid registry identity and malformed counters roll back all writes.
+- Bootstrap regression: revision 1 from restored state older than accepted legacy data is a no-op; equal-time identical digest may attach scoped state; equal-time mismatch fails closed; a greater timestamp follows the legacy recency rule within the same atomic transaction. Compare global aggregates, scoped rows, accepted timestamp, and revision high-water before/after every rejection.
+- Fork regression: the old installation aggregates remain unchanged; a new authorized ID starts with zero historic global/scoped/location counts; one post-fork event contributes once.
+- Downgrade regression: timestamp-only clients are rejected after geography activation at lower/equal/higher timestamps; global rows, scoped rows, coverage status, and revision high-water remain unchanged. Confirm old-client timestamp behavior before activation.
 - New/ambiguous/unregistered maps resolve to Unknown while global ingestion succeeds.
 - Historical records stay Global/Legacy; no location-based backfill occurs.
 - Migration rollback/preflight fixtures and Guildbook retention/local-only tests from enrollment still pass.

@@ -52,12 +52,24 @@ conflict. Revision comparison and global/scoped replacement occur atomically
 under the existing installation lock.
 
 Older Addons send no revision and retain the existing timestamp-only global
-ordering, including equal-timestamp replacement behavior. The revision
-high-water mark remains separate and is retained if an accepted legacy
-snapshot clears scoped rows during downgrade. A geography-aware client must
-resume above that high-water mark. Revision state is scoped to installation
-identity; a reset/new identity starts a new sequence and cannot reuse another
-installation's revision.
+ordering, including equal-timestamp replacement behavior, only until that
+installation accepts its first geography-aware snapshot. After activation,
+timestamp-only uploads are rejected and do not change either global or scoped
+data. The revision high-water mark is retained. Revision state is scoped to
+installation identity; a reset/new identity starts a new sequence and cannot
+reuse another installation's revision.
+
+The first geography-aware snapshot for an installation with accepted legacy
+state bootstraps at revision 1 only after a server-side comparison with that
+installation's existing state. A lower `updatedAt` than
+`public.installations.snapshot_updated_at` is rejected before any writes. An
+equal timestamp is accepted only if a versioned semantic digest of the
+incoming global projection matches the currently persisted global aggregate
+state; a mismatch is ambiguous and fails closed. The digest uses canonical
+field ordering and the legacy writer's global semantics, not raw JSON byte
+ordering. If the current rows cannot be compared unambiguously, bootstrap is
+rejected for explicit recovery. Revision 1 never overrides the legacy
+timestamp or global-state comparison.
 
 Historical installation observations and item drops have no trustworthy shared
 geographic key. The location observations cannot repair the missing item link;
@@ -161,10 +173,12 @@ branch's migration ledger) with:
    source identity + loot kind, with observations.
 4. `installation_geographic_item_stats`: the same key plus item ID, with drop,
    quantity, quest-drop counts and quest IDs.
-5. Installation geography coverage metadata: geography contract version and
-   the first complete scoped snapshot/update time. This distinguishes a true
+5. Installation geography/revision metadata: geography contract activation
+   state, contract version, first complete scoped snapshot/update time,
+   monotonic revision high-water, and versioned canonical global-projection
+   digest for safe legacy bootstrap comparison. This distinguishes a true
    scoped collection interval from an installation's earlier Global/Legacy
-   history.
+   history and allows bootstrap/replay checks before destructive writes.
 
 All installation tables remain private aggregate inputs: enable RLS, revoke
 direct `anon` and `authenticated` table access, and grant no raw-table access to
@@ -179,23 +193,32 @@ DTO.
 - A current geography contract is validated against the server registry and
   monotonic revision ordering, then replaces that installation's scoped rows
   atomically with the global rows.
-- A legacy payload with no geography contract still updates global tables. Its
-  geography coverage becomes `legacy` and its prior scoped contribution is
-  removed in the same transaction, so a downgrade cannot leave stale scoped
-  data visible. The revision high-water mark is retained across downgrade; a
-  later geography-aware client must submit a higher revision. Legacy clients
-  retain timestamp-only ordering and equal-timestamp behavior.
-- A new Companion with an old Addon keeps global behavior; no scope-specific
-  counts are invented.
-- A new Addon against a backend without the migration keeps global collection
-  working; the Companion reports scoped statistics unavailable until the
-  server capability is present.
+- A legacy payload with no geography contract retains existing timestamp-only
+  global behavior only until that installation has accepted its first
+  geography-aware snapshot. After activation, timestamp-only payloads are
+  rejected with a version-conflict response at lower, equal, or higher
+  timestamps; neither global nor scoped rows, coverage state, nor revision
+  high-water are changed. This prevents old clients from silently replacing
+  newer global state or deleting scoped contributions.
+- A new Companion with an old Addon, or a new Addon with an old Companion,
+  keeps global-only behavior before geography activation. Once activated, the
+  old side must be upgraded before that installation can sync again; the
+  Companion reports the required update.
+- A new Addon against a backend without the geography migration keeps legacy
+  global behavior only if the installation has not already activated the
+  geography contract. The Companion reports scoped statistics unavailable.
+- Fork recovery is an explicit fresh-collector operation. It preserves the
+  prior installation and server aggregates, creates a new authorized
+  installation identity, and starts with zero historical observations,
+  item/quest counts, scoped counts, and locations. Only post-fork events are
+  uploaded under the new identity. Historical counters are never copied to a
+  second installation, preventing global double counting.
 - A newer map identity absent from the validated registry is stored in
   Unknown, not rejected as an invalid global observation.
 
-The stale snapshot check remains before any deletes. Equal-timestamp replay
-replaces the same per-installation sets and produces identical aggregates.
-No Guildbook field is copied into the scoped ingest projection.
+The stale/bootstrap/revision checks remain before any deletes. Equal-revision
+replay replaces the same per-installation sets and produces identical
+aggregates. No Guildbook field is copied into the scoped ingest projection.
 
 ## Scoped query API
 
@@ -253,7 +276,10 @@ installation rows or reuse Companion RPC access for the website.
    the future additive geography migration. That migration must preserve the
    0019 auth, payload, size, source-count, and Guildbook-stripping protections.
    Environments without 0019 retain their existing global contract only;
-   scoped ingestion is unavailable.
+   scoped ingestion is unavailable. An installation already marked as
+   geography-active cannot fall back to timestamp-only ingestion if the
+   geography migration is absent; fail closed and require the supported
+   backend/client pair.
 2. Generate and review the canonical map registry from WoW Forever metadata
    and client assets. Discover supported `wowf` builds automatically; do not
    maintain an exact-build allowlist. Validate map identity, hierarchy, map
@@ -306,10 +332,12 @@ Fixtures and integration cases cover:
   builds reusing validated map mappings, content/metadata changes triggering
   targeted validation, and build-number-only changes not producing false
   incompatibility;
-- current contract, old Addon payload, and old Companion projection;
+- current contract, old Addon payload/old Companion projection before and after
+  geography activation, and explicit fork recovery;
 - concurrent snapshots, same-second revisions, exact replay, conflicting
   duplicate revision, stale snapshot no-op, and downgrade/return to a legacy
-  client while preserving the revision high-water mark;
+  client where post-activation legacy requests are rejected without changing
+  global/scoped state or the revision high-water mark;
 - atomic rollback on invalid scope/oversized payload;
 - event-specific attribution for known source maps, player-position-only
   events resolving to Unknown, and ambiguous source/map relationships;
