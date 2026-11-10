@@ -103,13 +103,16 @@ export async function runCycle(d: CycleDeps): Promise<CycleResult> {
     const deliveryFailing = outbox.dead > 0 || (oldest?.c != null && clock.now() - oldest.c > 30 * 60_000);
 
     let signal: HeartbeatSignal = "ok";
-    if (deliveryFailing) { signal = "delivery_failing"; await d.heartbeat.fail(signal); }
+    let pingAccepted: boolean;
+    if (deliveryFailing) { signal = "delivery_failing"; pingAccepted = await d.heartbeat.fail(signal); }
     else {
       if (failure) { signal = "supabase_degraded"; await d.heartbeat.log(signal); }
       else if (gapMinutes !== null && gapMinutes > t.cronGapMinutes) { signal = "schedule_gap"; await d.heartbeat.log(signal); }
-      await d.heartbeat.success(signal);
+      pingAccepted = await d.heartbeat.success(signal);
     }
-    await setState(db, "last_heartbeat", `${signal}@${clock.now()}`, clock.now());
+    await setState(db, "last_heartbeat", `${signal}@${clock.now()}`, clock.now()); // the SIGNAL the bot chose to send
+    // What the bot can actually know: did the heartbeat service answer HTTP 2xx. Receipt/processing is confirmed only by the external monitor.
+    await setState(db, "last_heartbeat_http", `${d.heartbeat.configured === false ? "not_configured" : pingAccepted ? "accepted" : "failed"}@${clock.now()}`, clock.now());
     log.info("cycle_completed", { reporting: failure ? "degraded" : "ok", failureClass: failure, attempts, transitions: transitions.length, sent: outbox.sent, dead: outbox.dead, signal });
     return { status: "completed", reporting: failure ? "degraded" : "ok", failure, transitions, outbox, heartbeat: signal, gapMinutes };
   } catch (e) {

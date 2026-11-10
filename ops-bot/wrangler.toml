@@ -29,6 +29,8 @@ preview_urls = false
 
 [env.staging]
 name = "azerdex-ops-bot-staging"
+# STAGING-ONLY entry: adds the Discord fault injection used for acceptance tests. Production keeps the top-level `main` (no injection code in its bundle).
+main = "src/index.staging.ts"
 workers_dev = true
 preview_urls = false
 [env.staging.triggers]

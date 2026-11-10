@@ -6,6 +6,8 @@
 export type HeartbeatSignal = "ok" | "supabase_degraded" | "delivery_failing" | "cycle_error" | "config_error" | "schedule_gap";
 
 export interface HeartbeatProvider {
+  /** False when no heartbeat URL is configured (nothing is sent). Absent means configured. */
+  readonly configured?: boolean;
   /** Cycle completed: monitoring ran, state persisted, outbox processed. */
   success(signal: HeartbeatSignal): Promise<boolean>;
   /** Explicit failure of the BOT (not of Supabase): triggers the provider's alert route immediately. */
@@ -15,9 +17,10 @@ export interface HeartbeatProvider {
 }
 
 export class NoopHeartbeat implements HeartbeatProvider {
-  async success(): Promise<boolean> { return true; }
-  async fail(): Promise<boolean> { return true; }
-  async log(): Promise<boolean> { return true; }
+  readonly configured = false;
+  async success(): Promise<boolean> { return false; }
+  async fail(): Promise<boolean> { return false; }
+  async log(): Promise<boolean> { return false; }
 }
 
 export class RecordingHeartbeat implements HeartbeatProvider {

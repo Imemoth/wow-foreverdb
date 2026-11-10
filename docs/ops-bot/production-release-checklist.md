@@ -31,6 +31,8 @@
 - [ ] Hostname verified before connecting Discord: `GET /healthz` returns `{"ok":true}`, an unsigned `POST /interactions` returns 401, and `GET /interactions` returns 405.
 - [ ] Production heartbeat check (period 5 min, grace 10 min) with alert integrations independent of Discord; separate fallback route.
 - [ ] Secrets set with `wrangler secret put --env production`: bot token, public key, application id, channel id (`#ops-alerts`), operator ids, heartbeat URL, fallback URL, reporting URL and secret. The guild id is the plain var `DISCORD_GUILD_IDS` in `wrangler.toml` (guild `1561649407584370809`), not a secret. `BOT_ENV=production`, `HEALTH_PROVIDER=http` (production refuses `mock`).
+- [ ] The production bundle has no staging-only code: `npx wrangler deploy --dry-run --env production --outdir <dir>` and `grep -c fault_discord <dir>/index.js` prints 0 (the staging entry is `src/index.staging.ts`).
+- [ ] The production fallback route is its own webhook and **runs immediately when data arrives** (not on demand, not the staging webhook).
 - [ ] D1 backup/export taken before first use of production data (the database starts empty; record that).
 
 ## Gate E: activation (owner present)

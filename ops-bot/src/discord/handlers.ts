@@ -37,6 +37,15 @@ export async function handleCommand(ctx: HandlerCtx, data: { name?: string; opti
   }
 }
 
+/** HTTP acceptance by the heartbeat service is NOT independent confirmation of receipt: only the external monitor shows that. */
+export function heartbeatHttpLabel(v: string | null): string {
+  const kind = v?.split("@")[0];
+  if (kind === "accepted") return "accepted by the service (HTTP 2xx; receipt is confirmed only by the external monitor)";
+  if (kind === "failed") return "FAILED (the service did not answer HTTP 2xx)";
+  if (kind === "not_configured") return "not configured";
+  return "none yet";
+}
+
 async function status(ctx: HandlerCtx): Promise<Json> {
   const { db, cfg, now } = ctx;
   const comps = await db.prepare("select component, state, reason_code, since from component_state order by component").all<{ component: string; state: string; reason_code: string; since: number }>();
@@ -44,6 +53,7 @@ async function status(ctx: HandlerCtx): Promise<Json> {
   const lastCycle = last ? Number(last) : null;
   const open = await db.prepare("select status, count(*) as n from incidents where status <> 'RESOLVED' group by status").all<{ status: string; n: number }>();
   const hb = await getState(db, "last_heartbeat");
+  const hbHttp = await getState(db, "last_heartbeat_http");
   const maint = await db.prepare("select component, ends_at from maintenance where ended_at is null and ends_at > ? order by ends_at").bind(now).all<{ component: string; ends_at: number }>();
   const overall = overallState(comps.results.map((c) => c.state), lastCycle, now, cfg.tuning.cronGapMinutes);
   const lines = [
@@ -51,7 +61,7 @@ async function status(ctx: HandlerCtx): Promise<Json> {
     `Overall: **${overall}**${lastCycle === null ? " (no monitoring cycle recorded yet)" : now - lastCycle > cfg.tuning.cronGapMinutes * 60_000 ? " (monitor stalled: last cycle too old)" : ""}`,
     `Last monitoring cycle: ${lastCycle ? `${formatUtc(lastCycle)} (${formatAgo(lastCycle, now)})` : "never"}`,
     `Open incidents: ${open.results.find((o) => o.status === "OPEN")?.n ?? 0} open, ${open.results.find((o) => o.status === "ACKNOWLEDGED")?.n ?? 0} acknowledged`,
-    `Heartbeat: ${hb ? sanitizeText(hb.split("@")[0] ?? "", 30) : "none yet"}`,
+    `Heartbeat: signal ${hb ? sanitizeText(hb.split("@")[0] ?? "", 30) : "none yet"}; ping ${heartbeatHttpLabel(hbHttp)}`,
     "",
     ...comps.results.map((c) => `• ${sanitizeText(c.component, 60)}: ${c.state} (${sanitizeText(c.reason_code, 60)}, since ${formatUtc(c.since)})`),
   ];

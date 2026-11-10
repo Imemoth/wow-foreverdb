@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **286 passed, 0 failed** in 18 files |
+| `npm test` | **297 passed, 0 failed** in 19 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -32,6 +32,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `preflight.test.ts` | 28 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
 | `scripts.test.ts` | 5 | owner-run scripts exit through `process.exitCode` (Windows libuv assertion after a network call) |
 | `workers-runtime-compat.test.ts` | 7 | clients under workerd's fetch restrictions (`redirect: "error"` throws), redirects are failures, source guard |
+| `final-corrections.test.ts` | 11 | RECOVERED label for an undelivered alert, DEAD stays terminal and is announced once, fault injection absent from the production bundle (real esbuild bundles of both entries), heartbeat HTTP acceptance vs receipt |
 | `fault.test.ts` | 10 | staging-only Discord fault injection: never built outside staging, 429/403/503 handled by the real client and outbox, compare-and-set consumption |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
@@ -179,7 +180,7 @@ Heartbeat behaviour (D1 `last_heartbeat` and the Healthchecks events and emails)
 2. **A dead alert is never retried.** After DEAD, the engine keeps no pending OPEN, so only the one-time fallback notice reaches humans while the incident stays open. That is the intended role of the fallback, but its route must be reliable (see the Make note above).
 3. **`last_error_class` is not cleared on success**, so a delivered row can still show an earlier class (cosmetic).
 4. **A command acknowledgement edits the alert one cycle later** (about 2 minutes), the button edits at once; both end in the same state.
-5. **`last_heartbeat` still records that a ping was attempted, not that Healthchecks received it.** The Healthchecks log and emails were the proof here.
+5. **`last_heartbeat` records the signal the bot chose, not receipt** (corrected in section 18: the bot now also records whether the heartbeat service answered HTTP 2xx, and `/azerdex status` says that only the external monitor confirms receipt). The Healthchecks log and emails were the proof here.
 6. **Not verified:** a real Discord 429 or 5xx from the real API (injected responses use the real parsing and retry code, but the real service was not stressed), the 120-minute reminder, the bot-side duration bounds of `maintenance` on staging, Healthchecks events during the `supabase_degraded` windows, and everything in production.
 7. **Operator process:** the owner typed a webhook URL as a secret NAME, which would have made the Worker ignore it silently and put the token into pasted output. It was caught by `secret list`, the entry was deleted and the correct secret was set (the rotation of the exposed webhook URL was requested; its completion is the owner's to confirm) and the runbook now warns (section 2 of the staging runbook). Always run `secret list` after setting secrets.
 8. **Platform lesson (sections 13):** fakes injected through `fetchFn` hid two Workers-runtime defects; only a delivery on the real Worker proves the transport.
@@ -201,3 +202,14 @@ Heartbeat behaviour (D1 `last_heartbeat` and the Healthchecks events and emails)
 | Baseline | 10 incidents, 10 RECOVERED rows, 2 DEAD and 2 fallback rows in total (both from the two controlled fallback tests), 0 active incidents, 0 pending outbox rows, six components HEALTHY, heartbeat `ok`, `fault_discord` removed |
 
 Which endpoint received it: D1 alone cannot tell the new webhook from the old one (both answer success to a plain POST). The Make execution on the scenario linked to the new webhook is the proof; a detached webhook cannot start the scenario. **Not shown:** a mailbox-side view of the email (the Resend `Delivered` event is the evidence).
+
+## 18. Final corrections before review (2026-11-10), Gate A follow-ups
+
+Four justified corrections from the staging acceptance, no redesign, no new infrastructure:
+
+1. **RECOVERED labels an undelivered alert.** When the OPEN alert has no Discord message (its row is DEAD), the RECOVERED embed carries an `Original alert` field: "NOT DELIVERED to Discord (delivery failed). The incident was announced on the fallback route. This is the first Discord message about it." Without a message and without a DEAD row (muted or still pending) it says "NOT POSTED". A delivered alert adds nothing.
+2. **DEAD stays terminal.** Pinned by test: after a permanent failure the row is never re-sent over four more critical cycles, the fallback notice is sent exactly once, and bounded retry for transient failures is unchanged.
+3. **The fault injection is not in the production bundle.** `src/index.ts` (production and the top level of `wrangler.toml`) builds the Worker with no options; only `src/index.staging.ts` (selected by `[env.staging] main`) imports `src/discord/fault.ts`. The runtime gate on `BOT_ENV` remains as a second line of defence. Verified with the real tool: `wrangler deploy --dry-run --env staging` bundles `index.staging.js` containing the injection (1 match of `fault_discord`); `--dry-run --env production` bundles `index.js` with 0 matches of `fault_discord` and of the injected-response strings. The tests bundle both entries with esbuild and also check `wrangler.toml` and the importers.
+4. **Heartbeat semantics.** `last_heartbeat` is the signal the bot chose to send; the new `last_heartbeat_http` records `accepted` (the service answered HTTP 2xx), `failed`, or `not_configured` (a missing URL no longer reads as success). `/azerdex status` shows "signal ok; ping accepted by the service (HTTP 2xx; receipt is confirmed only by the external monitor)". Independent confirmation remains the external monitor (Healthchecks status and alerts).
+
+Mutation checks (each break caught by the new tests): label removed from the renderer, outbox always reporting delivered, heartbeat result ignored, production entry wired to the injection, staging entry removed from `wrangler.toml`. 297 tests in 19 files, typecheck clean. The changes need a staging redeploy to take effect there; none was made.

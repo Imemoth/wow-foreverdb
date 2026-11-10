@@ -6,6 +6,12 @@ export const COLOR = { critical: 0xd33a2c, ack: 0xe0a526, recovered: 0x2f9e5a, i
 const EPHEMERAL = 64;
 
 export type MessageKind = "OPEN" | "UPDATE" | "REMINDER" | "RECOVERED" | "EDIT_ALERT";
+/** What happened to the original OPEN alert, so a RECOVERED message never reads as the end of a story the operators never saw. */
+export type OriginalAlert = "delivered" | "failed" | "not_posted";
+const ORIGINAL_ALERT_NOTE: Record<Exclude<OriginalAlert, "delivered">, string> = {
+  failed: "NOT DELIVERED to Discord (delivery failed). The incident was announced on the fallback route. This is the first Discord message about it.",
+  not_posted: "NOT POSTED to Discord (notifications were muted or still pending). This is the first Discord message about it.",
+};
 
 function contextLines(raw: string): string {
   let ctx: Record<string, unknown> = {};
@@ -23,7 +29,7 @@ export function ackButton(incidentId: string, disabled = false) {
 }
 
 /** Renders the incident message from CURRENT incident state, so a late delivery or an edit is never stale. */
-export function renderIncidentMessage(i: IncidentRow, kind: MessageKind, envLabel: string) {
+export function renderIncidentMessage(i: IncidentRow, kind: MessageKind, envLabel: string, originalAlert: OriginalAlert = "delivered") {
   const resolved = i.status === "RESOLVED" || kind === "RECOVERED";
   const title = kind === "RECOVERED" ? `RECOVERED: ${sanitizeText(i.component, 60)}`
     : kind === "REMINDER" ? `STILL CRITICAL: ${sanitizeText(i.component, 60)}`
@@ -40,6 +46,7 @@ export function renderIncidentMessage(i: IncidentRow, kind: MessageKind, envLabe
       { name: "First observed", value: formatUtc(i.first_seen_at), inline: true },
       { name: "Occurrences", value: String(i.occurrences), inline: true },
       ...(i.ack_by && i.status === "ACKNOWLEDGED" ? [{ name: "Acknowledged by", value: `<@${/^\d{5,25}$/.test(i.ack_by) ? i.ack_by : "0"}>`, inline: true }] : []),
+      ...(kind === "RECOVERED" && originalAlert !== "delivered" ? [{ name: "Original alert", value: ORIGINAL_ALERT_NOTE[originalAlert], inline: false }] : []),
       { name: "Context", value: contextLines(i.context), inline: false },
     ],
     footer: { text: `${i.id} · ${envLabel}` },

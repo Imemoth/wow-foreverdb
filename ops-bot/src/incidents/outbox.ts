@@ -1,7 +1,7 @@
 import { changes, type Db } from "../db";
 import type { Config } from "../config";
 import type { DiscordClient } from "../discord/client";
-import { renderIncidentMessage, type MessageKind } from "../discord/messages";
+import { renderIncidentMessage, type MessageKind, type OriginalAlert } from "../discord/messages";
 import { getIncident, addEvent } from "./engine";
 import type { Logger } from "../util/log";
 
@@ -32,7 +32,7 @@ export async function processOutbox(db: Db, discord: DiscordClient, cfg: Config,
     if (!inc) { await db.prepare("update outbox set status = 'DEAD', last_error_class = 'incident_gone' where id = ?").bind(row.id).run(); continue; }
     if (row.kind === "EDIT_ALERT" && !inc.alert_message_id) { await db.prepare("update outbox set status = 'SENT', sent_at = ? where id = ?").bind(now, row.id).run(); continue; }
 
-    const body = renderIncidentMessage(inc, row.kind, cfg.env);
+    const body = renderIncidentMessage(inc, row.kind, cfg.env, row.kind === "RECOVERED" ? await originalAlertState(db, inc.id, inc.alert_message_id) : "delivered");
     const channel = inc.alert_channel_id ?? cfg.discord.alertChannelId;
     const res = row.kind === "EDIT_ALERT"
       ? await discord.editMessage(channel, inc.alert_message_id!, body)
@@ -80,4 +80,11 @@ export async function pendingFallbacks(db: Db): Promise<Array<{ id: string; inci
 }
 export async function markFallbackSent(db: Db, id: string, now: number): Promise<void> {
   await db.prepare("update outbox set fallback_sent_at = ? where id = ? and fallback_sent_at is null").bind(now, id).run();
+}
+
+/** DEAD alerts stay terminal (they are not retried; the fallback route announces them once). A later RECOVERED message says so. */
+async function originalAlertState(db: Db, incidentId: string, alertMessageId: string | null): Promise<OriginalAlert> {
+  if (alertMessageId) return "delivered";
+  const open = await db.prepare("select status from outbox where incident_id = ? and kind = 'OPEN' order by created_at desc limit 1").bind(incidentId).first<{ status: string }>();
+  return open?.status === "DEAD" ? "failed" : "not_posted";
 }
