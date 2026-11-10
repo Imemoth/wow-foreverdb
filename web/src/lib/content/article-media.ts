@@ -52,6 +52,7 @@ export const CATEGORY_MEDALLION: Record<string, string> = {
   Companion: "/library/medallions/wayfinder.webp",
   Engineering: "/library/medallions/cartography.webp",
   Editorial: "/library/medallions/inkwell.webp",
+  "Community Milestone": "/library/medallions/chronicle.webp",
 };
 
 /**
@@ -73,6 +74,8 @@ export interface ArticleCoverArt {
   cardSrc: string;
   socialSrc: string;
   heroPosition: string;
+  /** Optional fallback art (always the same subject), painted as a CSS background behind a poster-style hero image. */
+  fallbackSrc?: string;
 }
 
 export const COVER_MASTER_SIZE = { width: 1920, height: 1080 } as const;
@@ -81,6 +84,14 @@ export const COVER_CARD_SIZE = { width: 800, height: 600 } as const;
 export const COVER_SOCIAL_SIZE = { width: 1200, height: 630 } as const;
 
 export const SLUG_COVER_ART: Record<string, ArticleCoverArt> = {
+  "jokerd-team-world-first-level-60-wow-forever": {
+    // Poster-style cover (headline baked into the art, shown uncropped): phones use the same 16:9 file.
+    mobileSrc: "/content-images/news/jokerd-team-world-first-level-60-wow-forever.webp",
+    fallbackSrc: "/content-images/news/jokerd-team-world-first-level-60-wow-forever-art.webp",
+    cardSrc: "/content-images/news/jokerd-team-world-first-level-60-wow-forever-card.webp",
+    socialSrc: "/content-images/news/jokerd-team-world-first-level-60-wow-forever-social.webp",
+    heroPosition: "object-center",
+  },
   "wow-forever-beginners-guide-2026": {
     mobileSrc: "/content-images/blog/wow-forever-beginners-guide-2026-mobile.webp",
     cardSrc: "/content-images/blog/wow-forever-beginners-guide-2026-card.webp",
@@ -96,7 +107,7 @@ export const SLUG_COVER_ART: Record<string, ArticleCoverArt> = {
 };
 
 export interface ArticleCoverImages {
-  hero: { src: string; mobileSrc: string; alt: string; attribution: string; width: number; height: number; position: string };
+  hero: { src: string; mobileSrc: string; fallbackSrc?: string; alt: string; attribution: string; width: number; height: number; position: string };
   card: { src: string; alt: string; width: number; height: number };
   social: { src: string; width: number; height: number };
 }
@@ -113,6 +124,7 @@ export function articleCoverImages(a: Pick<Article, "slug" | "cover">): ArticleC
     hero: {
       src: a.cover.src,
       mobileSrc: art?.mobileSrc ?? a.cover.src,
+      ...(art?.fallbackSrc ? { fallbackSrc: art.fallbackSrc } : {}),
       alt: a.cover.alt,
       attribution: a.cover.attribution,
       ...COVER_MASTER_SIZE,
