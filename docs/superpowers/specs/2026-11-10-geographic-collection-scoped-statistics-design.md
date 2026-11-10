@@ -98,6 +98,13 @@ coordinate maps may resolve to one collection scope, and a city map may have an
 independent coordinate system. Marker rendering continues to use the original
 observation `mapId`, `x`, and `y` unchanged.
 
+Each scoped contribution also retains its attribution evidence class. A
+`verified_source_map` contribution may support source-position map display;
+`verified_interaction_zone` supports zone-level totals only and must never be
+rendered as a source point. The public response preserves these classes in
+aggregate coverage metadata. A scope receiving both classes reports them
+separately so interaction evidence is not presented as source-map coverage.
+
 Canonical mappings come from a versioned, CI-validated WoW Forever map manifest.
 The manifest records map IDs, parent IDs, map type, continent ancestry, and the
 evidence/build used to classify each map as continent, zone, or city. The
@@ -116,14 +123,42 @@ and are reported as coverage gaps until reviewed evidence is added.
 ## Collection and snapshot contract
 
 At `RecordObservation`, use an event-type-specific attribution resolver; do
-not assume the player's current position is the source location. Attribute an
-event only from a map identity tied to its actual source, such as an identified
-gathering node/container or a source entity with an explicitly known map.
-Creature loot, quest rewards, crafted items, mail, and other events without an
-authoritative source map resolve to `Unknown`, even when player position is
-available. Ambiguous source identity or event-to-map relationship also
-resolves to `Unknown`. Player position remains separate location provenance
-and is not promoted to source attribution. The resolver and evidence type are
+not treat player coordinates as source coordinates. The contract distinguishes
+four evidence states:
+
+1. `verified_source_map`: an API or validated source record explicitly ties
+   the observed source identity to a verified coordinate map. Only this state
+   can support source-position markers.
+2. `verified_interaction_zone`: a concrete source identity is tied to a loot
+   interaction event, and a valid, unambiguous player zone/map identity is
+   sampled synchronously with that event. This proves the zone where the loot
+   interaction was recorded, not the creature/node's exact coordinates or
+   necessarily its spawn point. It may contribute to zone-level counts only;
+   its player coordinates are never reused as source coordinates.
+3. `unverified_player_position`: a player map/position exists without an
+   event-to-source interaction link. It remains provenance/context only and
+   contributes to no named geographic scope.
+4. `unknown`: source, map, timing, or zone identity is absent, contradictory,
+   or ambiguous. This is the safe result for all other event types.
+
+For a loot interaction, the resolver requires one recognized, unambiguous
+source GUID from the loot API; an event-time player map ID that resolves to
+matching valid map metadata; a non-empty zone identity consistent with that
+map; no map/zone transition during capture; and, for a pending gathering or
+fishing action, a matching source and still-valid interaction window. Missing
+map metadata, multiple candidate sources, a mismatched pending source, a
+stale interaction, or inconsistent map/zone readings fail closed to `Unknown`.
+An ID such as 1420 is not sufficient by itself: map IDs can have distinct
+zone labels/aliases, so the map ID and validated zone identity are considered
+together. The registry must preserve the evidence class and must not promote
+interaction-zone counts to source-map counts. Creature loot can therefore be
+zone-attributed without claiming exact creature coordinates only when those
+checks pass. Quest rewards, crafted items, mail, and events without a linked
+source interaction remain `Unknown` unless a separate event-specific resolver
+is proven.
+
+Player position outside the linked interaction callback remains
+`unverified_player_position` context only. The resolver and evidence type are
 part of the geography contract and are tested per event type.
 
 Increment exactly one scoped source observation bucket, including events with
@@ -170,7 +205,7 @@ branch's migration ledger) with:
    mapping status. A map identity can resolve to no more than one active
    terminal scope.
 3. `installation_geographic_source_stats`: installation + canonical scope +
-   source identity + loot kind, with observations.
+   attribution evidence class + source identity + loot kind, with observations.
 4. `installation_geographic_item_stats`: the same key plus item ID, with drop,
    quantity, quest-drop counts and quest IDs.
 5. Installation geography/revision metadata: geography contract activation
@@ -339,8 +374,11 @@ Fixtures and integration cases cover:
   client where post-activation legacy requests are rejected without changing
   global/scoped state or the revision high-water mark;
 - atomic rollback on invalid scope/oversized payload;
-- event-specific attribution for known source maps, player-position-only
-  events resolving to Unknown, and ambiguous source/map relationships;
+- event-specific attribution for verified source maps, verified loot
+  interaction zones without source coordinates, player-position-only events
+  resolving to Unknown, and ambiguous source/map relationships (including
+  duplicate map IDs with different zone labels, map transitions, invalid map
+  metadata, multiple source GUIDs, and stale/mismatched pending interactions);
 - exact quest-drop/quantity semantics and preservation of original coordinates;
 - unauthenticated and anonymous-key-only RPC denial; authenticated gate,
   execution/payload budgets, row caps, aggregate-only output, independent
