@@ -11,6 +11,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const cases: Array<{ file: string; firstNetworkCall: string }> = [
   { file: "scripts/register-commands.ts", firstNetworkCall: "await fetch(" },
   { file: "scripts/staging-preflight.ts", firstNetworkCall: "await runPreflight(" },
+  { file: "scripts/check-health-endpoint.ts", firstNetworkCall: "await runEndpointChecks(" },
 ];
 
 describe("owner-run scripts exit cleanly after network calls", () => {

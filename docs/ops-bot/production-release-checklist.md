@@ -13,11 +13,12 @@
 - [ ] No secret, URL or clear operator id found in `wrangler tail` output.
 - [ ] Cost and limits confirmed (Workers requests, Cron Triggers, D1 reads/writes, heartbeat provider plan).
 
-## Gate C: Supabase reporting endpoint (separate approval and separate PR)
+## Gate C: Supabase reporting endpoint (implemented in its own PR; applying it needs a separate owner GO)
 
-- [ ] [supabase-reporting-contract.md](supabase-reporting-contract.md) reviewed; projection function, dedicated role and Edge Function reviewed by the owner.
-- [ ] Validated on an isolated non-production database; jobs 3 to 7 and all existing functions proven unchanged (md5 of commands and of function bodies); rollback rehearsed.
-- [ ] Owner explicit GO to apply it to project `chcoypkjzxfznsqmmbrq` and to create its secrets.
+- [ ] [supabase-reporting-contract.md](supabase-reporting-contract.md) reviewed; `0019_ops_health_report.sql` (projection function, dedicated role), the Edge Function `azerdex-ops-health` and the rollback reviewed by the owner.
+- [x] Validated on a disposable PostgreSQL with synthetic data (`scripts/ops-health-sql-tests.sh`, `ops-bot/test/gate-c-*.test.ts`, also run in CI): correct output for healthy, warning, critical, stale and unavailable data; read-only least-privilege role; authentication and bounded-execution failures; contract compatibility with the bot's real provider; jobs 3 to 7 and all existing functions byte-identical (fingerprints); rollback rehearsed and re-applied. No paid Supabase staging project was created.
+- [ ] Owner explicit GO to apply it to project `chcoypkjzxfznsqmmbrq`, then in this order (operator procedure in the contract document): baseline fingerprints recorded, `0019` applied (baseline unchanged), role password set out of band, Edge Function secrets created, function deployed with `--no-verify-jwt`.
+- [ ] `ops-bot/scripts/check-health-endpoint.ts` prints `READY` against the deployed function (four refusals, one signed read, valid and fresh).
 
 ## Gate D: production resources (owner-created)
 
