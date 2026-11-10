@@ -84,6 +84,8 @@ local function registerSlashCommands()
         elseif command == "export" then
             FDB:BuildExportSnapshot()
             print(PREFIX, "export snapshot rebuilt:", #ForeverDB_Export, "bytes")
+        elseif command == "geodiag" then
+            FDB:PrintGeographyDiagnostics()
         elseif command == "fork" then
             if StaticPopup_Show then
                 StaticPopup_Show("FOREVERDB_CONFIRM_INSTALLATION_FORK")
@@ -142,7 +144,7 @@ local function registerSlashCommands()
             local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
             FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb fork, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status|debug], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb geodiag, /fdb export, /fdb fork, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status|debug], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end

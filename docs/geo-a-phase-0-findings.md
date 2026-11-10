@@ -30,6 +30,24 @@ For each available type (creature loot, skinning, herbalism, mining, fishing), c
 4. For creature loot and skinning, test source targets whose map position can be queried, if any supported API exists; distinguish target identity from source position.
 5. Report verified source-map, interaction-only, unavailable, and ambiguous counts. Ambiguous cases remain Unknown. Do not use proximity or player location to increase geographic coverage.
 
+## Safe repeatable gameplay acceptance
+
+The addon diagnostic is read-only. It does not write SavedVariables, change revisions, reset counters, fork an installation, rebuild the export, or contact a network service.
+
+The in-game command is `/fdb geodiag`. It prints the current persisted revision, `updatedAt`, SavedVariables schema, per-kind lifetime observation totals, and conservative evidence classes (`source-map`, `player-context-only`, and `no-location-context`). It then reports whether `player`, `target`, `npc`, and `mouseover` have a recognized source-GUID type and candidate map ID, plus whether the world-cursor API exposes a readable gameobject GUID candidate. The probe never prints GUIDs, names, tooltip strings, or coordinates. Unit map IDs are candidate readings only, not source attribution.
+
+1. Keep Companion closed for the entire sample. Ensure Auto Sync is off before the test and leave it off; do not open a Companion sync flow afterward until the owner has decided what to do with the test observations. The addon itself does not upload.
+2. Log in to a test character on `wowf 1.60.1.70862`. Do **not** run `/fdb fork`, `/fdb session reset`, or any counter reset. Existing counters and SavedVariables are retained.
+3. At the start of the sample, run `/fdb geodiag`. Save a screenshot or transcribe only the collector event counts, Unknown/context counts, API availability and revision. Do not share names, GUIDs, coordinates, or character/account identifiers.
+4. Perform 20 controlled events for one collector class at a time: creature loot (`mob`), skinning, herbalism, mining, and ordinary fishing catches. Run `/fdb geodiag` after each 20-event group. Compare the start/end `events` line for that class; for fishing, record `fishing` and `fishing_pool` separately and report both. A smaller difference means some interactions did not produce a collector observation. Repeat the baseline/end pair for every class.
+5. During a creature or skinning sample, run `/fdb geodiag` while the source target is still available. During herb/mining, run it while the node is targeted/hovered and immediately after the gather interaction. During fishing, run it while hovering the pool and after the catch. Record whether the candidate `target`/`npc`/`mouseover` unit map matches the player map and whether `world-cursor evidence` reports a readable gameobject GUID candidate. The command prints candidate map IDs only; those readings are probes, **not proof** that the event source has that map.
+6. Include deliberate failure/ambiguity trials: move maps between interaction and result when safe, let gathering/fishing windows expire, use a missing or secret tooltip value if naturally available, and interact with a different source after an expired pending event. Do not manufacture or expose secret values.
+7. In each report, classify only the event counts as source-map-proven, interaction-context-only, map-unavailable, or ambiguous. In Geo A, the report must show `source-map: 0`; all events are Unknown. The `player-context-only` figure is a count of legacy location rows and never an attribution result. If the API appears to provide source-map evidence, retain the raw values locally and report only counts plus the API name/result shape for review.
+8. Capture the ending revision. Re-running `/fdb geodiag` without gameplay should leave revision, counters, and export unchanged. Gameplay observations may advance the revision; the delta need not equal event count because map metadata or other exported records may also change.
+9. Leave the test observations in SavedVariables. Do not restore an old file, reset counters, fork, export/upload them, or enable sync as part of this acceptance. Owner review of the anonymized evidence counts is the next gate.
+
+The command displays a summary of lifetime persisted counters, so always compare start/end values. Existing global counters are not backfilled into the new Unknown bucket; on older characters, lifetime `events` may therefore exceed lifetime `unknown`. Compare each value with its own baseline. It does not create a disposable test bucket or provide an automatic “undo”; this keeps the existing installation identity and saved history intact.
+
 ## Geo A behavior
 
 - Existing global source, item, and location counters remain intact for legacy compatibility.

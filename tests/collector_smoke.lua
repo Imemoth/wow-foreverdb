@@ -96,7 +96,7 @@ local function setup(api)
         local item = state.slots[slot]
         return nil, item.name or "Test Output", item.qty, nil, nil, nil, false, nil
     end
-    for _, file in ipairs({ "Core", "Database", "Exporter", "LocationTracker",
+    for _, file in ipairs({ "Core", "Database", "Exporter", "GeoDiagnostics", "LocationTracker",
         "GatheringTracker", "DisenchantTracker", "LootTracker" }) do
         assert(loadfile("addon/ForeverDB/" .. file .. ".lua"))("ForeverDB", FDB)
     end
@@ -285,6 +285,12 @@ test("installation fork requires the explicit slash-command confirmation", funct
         "InitializeLootTracker", "InitializeTooltip",
     }) do f[name] = function() end end
     s:event("ADDON_LOADED", "ForeverDB")
+    local revisionBeforeDiagnostics = f.DB.snapshotRevision
+    local exportBeforeDiagnostics = ForeverDB_Export
+    SlashCmdList.FOREVERDB("geodiag")
+    contains(table.concat(s.messages, "\n"), "local geography diagnostics (read-only; no reset or sync)")
+    equal(f.DB.snapshotRevision, revisionBeforeDiagnostics)
+    equal(ForeverDB_Export, exportBeforeDiagnostics)
     SlashCmdList.FOREVERDB("fork")
     equal(shown, "FOREVERDB_CONFIRM_INSTALLATION_FORK")
     equal(f.DB.installationId, oldId)
@@ -339,6 +345,31 @@ test("all five planned collector classes remain Unknown without source-map proof
         equal(bucket.locations, nil)
         contains(ForeverDB_Export, "Z|unknown|" .. case[2] .. "|" .. case[3])
     end
+end)
+
+test("geography diagnostics expose counts and candidate APIs without changing SavedVariables or export", function()
+    local f, s = setup()
+    s.guid = "Creature-0-0-0-0-7000-0001"
+    UnitGUID = function(unit)
+        return (unit == "target" or unit == "npc") and s.guid or nil
+    end
+    f:RecordObservation("mob", "creature", 7000, "Synthetic mob", {
+        [700] = { name = "Synthetic item", quantity = 1 },
+    }, 7, { mapId = 42, zoneName = "Fixture", x = 40, y = 50 })
+    local beforeRevision = f.DB.snapshotRevision
+    local beforeUpdatedAt = f.DB.updatedAt
+    local beforeSaved = f.DB.sources["creature:7000:7"].buckets.mob.observations
+    local beforeExport = ForeverDB_Export
+    f:PrintGeographyDiagnostics()
+    local report = table.concat(s.messages, "\n")
+    contains(report, "revision:")
+    contains(report, "mob events: 1 unknown: 1 source-map: 0 player-context-only: 1 no-location-context: 0")
+    contains(report, "api candidate target recognized source guid: creature")
+    contains(report, "candidate only; not source-map proof")
+    equal(f.DB.snapshotRevision, beforeRevision)
+    equal(f.DB.updatedAt, beforeUpdatedAt)
+    equal(f.DB.sources["creature:7000:7"].buckets.mob.observations, beforeSaved)
+    equal(ForeverDB_Export, beforeExport)
 end)
 
 test("herbalism expires; unrelated object is not an herb", function()
