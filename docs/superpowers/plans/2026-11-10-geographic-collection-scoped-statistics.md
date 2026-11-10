@@ -66,7 +66,7 @@ No collector-specific attribution telemetry exists yet, so the values below are 
 | Fishing | `FishingPoolTracker.lua` records cast/hover context and may correlate a pool object; regular water casts can lack a readable pool GUID | **5–25%** when cast-to-catch correlation and a valid map are present; **100%** without valid cast context | Use the map captured at the cast event only when the catch is correlated to that cast. Pool hover/map context may improve identity; projected/player coordinates are not pool coordinates. |
 | Any other event without source evidence | No authoritative source map | **100%** | Unknown. |
 
-These ranges are not pass/fail coverage goals. Correct Unknown classification outranks a lower Unknown percentage. A phase gate fails if any player-position-only fixture lands in a named Zone/City. If a short owner-approved acceptance sample is later desired, it must use aggregate counts only and must not upload the observations; no live collection is required for implementation acceptance.
+These ranges are not pass/fail coverage goals or verified measurements. Correct Unknown classification outranks a lower Unknown percentage. A phase gate fails if any player-position-only fixture lands in a named Zone/City. If a short owner-approved acceptance sample is later desired, it must use aggregate counts only and must not upload the observations; no live collection is required for implementation acceptance.
 
 ## Revision ordering and recovery contract
 
@@ -107,7 +107,17 @@ This is a read-only/static and local WoW diagnostic gate; it does not write to a
 
 **Owner gameplay checks still required:** On `wowf 1.60.1.70862`, inspect redacted evidence-class counts for creature loot, skinning, herb, mining, and fishing: whether `GetLootSourceInfo` GUIDs can be mapped to a source map; whether `C_Map.GetBestMapForUnit("target")` or another API resolves the looted creature; whether a gathering cast's `npc` GUID corresponds to the actual node and its map; and whether fishing cast completion can be correlated to the catch and pool map. Leave Auto Sync disabled and share no names, coordinates, GUIDs, or account fields. If the client lacks evidence, mark the event unsupported and retain Unknown.
 
-**Geo A decision:** Phase 0 supports building the counter/revision framework but does not support assigning any of these collector classes to a named Zone or City. Geo A must initially attribute all five classes to Unknown; the provisional percentages below remain unverified hypotheses and are not used for rollout sizing.
+**Initial Geo A decision (superseded by the follow-up below):** Phase 0 supported the counter/revision framework but had no verified map-attribution evidence, so the initial implementation assigned all five classes to Unknown. Provisional percentages below were unverified hypotheses and are not used for rollout sizing.
+
+### Follow-up owner evidence and revised interaction-zone model — 2026-11-10
+
+The owner completed 20 live creature-loot observations; all 20 were Unknown under the initial conservative Geo A classifier. These are retained as Unknown; they are not backfilled or reclassified. The observation count does not establish whether the current `wowf` API returned valid event-time map metadata because the report contains no redacted map/API evidence.
+
+The revised design separates `verified_source_map`, `verified_interaction_zone`, `unverified_player_position`, and `Unknown`. A unique source GUID delivered by `GetLootSourceInfo()` at `LOOT_READY`, paired with a stable and valid event-time zone/map identity, may establish **where the loot interaction was recorded**. It does not establish a creature's or node's exact coordinates. The Addon may count this only at zone scope, without retaining the player's coordinates in the geographic counter. It must fail closed for missing or inconsistent map metadata, duplicate source GUIDs, map transitions, invalid coordinate maps, expired interactions, or pending-source mismatch. A map ID alone (including 1420) does not resolve a zone alias; the map name and zone identity must agree.
+
+The local implementation in stacked Draft PR #189 adds regression fixtures for map 1420/Tirisfal Glades, a conflicting zone alias, map transitions, source ambiguity, gathering-source mismatch/expiry, and coordinate validity. These fixtures establish only code behavior. Runtime classification remains unverified until the owner repeats a local-only gameplay sample on `wowf 1.60.1.70862` with `/fdb geodiag`, Companion closed, and Auto Sync disabled.
+
+The owner also reported a global herbalism count change from 94 to 95 while geographic Unknown remained zero. Existing legacy global rows are not backfilled, so the current diagnostic exposes `legacy/unclassified` separately. For a new event, `RecordObservation` now increments exactly one of interaction-zone or Unknown. The reported aggregate values do not by themselves prove which addon build or SavedVariables state produced them; a same-build before/after diagnostic is required if the discrepancy recurs.
 
 **Feasibility task steps:**
 
