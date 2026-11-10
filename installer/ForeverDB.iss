@@ -1,5 +1,8 @@
 #define MyAppName "ForeverDB Companion"
-#define MyAppVersion "0.9.0-alpha"
+#define MyAppVersion "0.9.11-alpha"
+#ifndef MyAppBuild
+  #define MyAppBuild "local"
+#endif
 #define MyAppPublisher "ForeverDB"
 #define MyAppExeName "ForeverDB.Companion.exe"
 
@@ -13,7 +16,7 @@ DefaultGroupName=ForeverDB
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\artifacts\installer
-OutputBaseFilename=ForeverDB-Companion-Setup-{#MyAppVersion}
+OutputBaseFilename=ForeverDB-Companion-Setup-{#MyAppVersion}-{#MyAppBuild}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -26,7 +29,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Name: "autostart"; Description: "Launch ForeverDB Companion with Windows"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
-Source: "..\artifacts\ForeverDB-Companion-win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\artifacts\ForeverDB-Companion-{#MyAppVersion}-{#MyAppBuild}-win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Zero-touch enrollment: an activation file placed next to Setup (the website's "Download for my account") is handed to the
 ; Companion's per-user activation folder. The Companion redeems it on first start and deletes it afterwards; Setup only copies it

@@ -202,8 +202,7 @@ public class OwnershipRoutingTests
         await w.Rig.Sessions.InitializeAsync();
 
         var acct = await w.Rig.Runtime.Sync.SyncAsync("acct-inst", Snapshot("acct-inst"), 1, false, default);
-        Assert.Equal(SyncOutcome.Blocked, acct.Outcome);
-        Assert.Equal(BlockReason.ReauthRequired, acct.Reason);
+        Assert.Equal(SyncOutcome.StaleDiscarded, acct.Outcome);
         Assert.Equal(SessionState.ReauthRequired, w.Rig.Sessions.Status.State);
 
         var legacy = await w.Rig.Runtime.Sync.SyncAsync("legacy-inst", Snapshot("legacy-inst"), 1, false, default);
@@ -308,6 +307,34 @@ public class OwnershipRoutingTests
 
         Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
         Assert.All(rig.Runtime.Sync.Installations, r => Assert.Null(r.LastSyncedAt));
+    }
+
+    [Fact]
+    public async Task Identity_change_while_ownership_is_pending_never_retries_the_old_snapshot_under_the_new_account()
+    {
+        using var w = await World.SignedInWithLegacyAsync();
+        var other = w.Server.AddRegisteredUser("other@example.test", "another-long-password-1");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lookups = 0;
+        w.Rig.Handler.Before = async (request, token) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/fdb_installation_link_status", StringComparison.Ordinal) &&
+                Interlocked.Increment(ref lookups) == 1)
+            {
+                entered.TrySetResult();
+                await Task.Delay(Timeout.Infinite, token);
+            }
+        };
+
+        var pending = w.Sync.SyncAsync("inst", Snapshot("inst"), 1, force: true, default);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(SignOutOutcome.Confirmed, await w.Rig.Sessions.SignOutRegisteredAsync());
+        Assert.Equal(SignInOutcome.Success, await w.Rig.Sessions.SignInRegisteredAsync(other.Email!, "another-long-password-1".ToCharArray()));
+        var result = await pending;
+
+        Assert.Equal(SyncOutcome.StaleDiscarded, result.Outcome);
+        Assert.Equal(1, lookups);
+        Assert.Empty(w.Ingests);
     }
 
     [Fact]

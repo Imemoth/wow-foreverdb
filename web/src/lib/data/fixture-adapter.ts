@@ -1,3 +1,4 @@
+import { buildNewsCards, threadUpdates, type NewsEntrySource } from "@/lib/news/cards";
 import "server-only";
 import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
@@ -78,7 +79,7 @@ function searchRow(si: Pick<SI, "entity_kind" | "display_kind" | "item_id" | "so
 const byDropOrder = (a: DropRow, b: DropRow) =>
   confRank(a.confidence) - confRank(b.confidence) || (b.rateLower ?? -1) - (a.rateLower ?? -1) || b.observations - a.observations;
 
-type FixtureNewsEntry = NewsEntry & { authoritative?: boolean };
+type FixtureNewsEntry = NewsEntrySource;
 
 /**
  * Deterministic News fixtures exercise the same public-read contract as the
@@ -160,15 +161,27 @@ const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
     canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/user-created/9017/2", title: "Blizzard reply to user topic",
     author: "Kaivax", region: "us", publishedAt: "2026-10-18T13:00:00.000Z", modifiedAt: null,
     ingestedAt: "2026-10-18T13:01:00.000Z", excerpt: "A reply in a user-created topic.", category: "bluepost", importance: 100, featured: true,
+    // Verified staff reply inside a PLAYER-created topic: shown as a staff reply; the player opener (9017) stays hidden.
+    authorUserId: 3390, authorGroup: "community-manager", threadOrigin: "community",
+  },
+  {
+    id: 9021, slug: "us-bluepost-official-update-forever-beta", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us",
+    sourceEntryId: "post:9021", sourceTopicId: "topic:us-forever-beta", sourcePostNumber: 4, threadKey: "us:topic:us-forever-beta",
+    canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/forever-beta/9001/4", title: "US Bluepost opener — Forever Beta",
+    author: "Kaivax", region: "us", publishedAt: "2026-10-24T10:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-24T10:01:00.000Z", excerpt: "A later verified Blizzard update to the Forever beta notes.", category: "bluepost", importance: 0, featured: false,
+    authorUserId: 3390, authorGroup: "community-manager", threadOrigin: "official",
+  },
+  // Spoof attempt: the display name matches a Blizzard employee but nothing proves it. A reply without verified provenance
+  // (no user id / group / origin) must stay invisible regardless of its author name.
+  {
+    id: 9022, slug: "spoofed-staff-name-reply", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu",
+    sourceEntryId: "post:9022", sourceTopicId: "topic:eu-forever-beta", sourcePostNumber: 3, threadKey: "eu:topic:eu-forever-beta",
+    canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/forever-beta/9002/3", title: "Spoofed staff display name must not appear",
+    author: "Kaivax", region: "eu", publishedAt: "2026-10-25T00:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-25T00:01:00.000Z", excerpt: "A player whose display name is Kaivax.", category: "bluepost", importance: 100, featured: true,
   },
 ];
-
-function visibleNewsFixtures(): NewsEntry[] {
-  return NEWS_FIXTURE_ENTRIES
-    .filter((entry) => entry.authoritative !== false)
-    .filter((entry) => entry.sourceType !== "bluepost" || entry.sourcePostNumber === 1)
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || b.id - a.id);
-}
 
 export class FixtureAdapter implements PublicDataAdapter {
   readonly mode = "synthetic-sample" as const;
@@ -345,24 +358,18 @@ export class FixtureAdapter implements PublicDataAdapter {
   }
 
   async newsList(query: NewsQuery): Promise<NewsPage> {
-    const text = query.query.trim().toLowerCase();
-    const rows = visibleNewsFixtures().filter((entry) =>
-      (query.category == null || entry.category === query.category)
-      && (text === "" || `${entry.title} ${entry.excerpt}`.toLowerCase().includes(text)));
+    const rows = buildNewsCards(NEWS_FIXTURE_ENTRIES, { category: query.category, query: query.query, region: query.region });
     const start = (query.page - 1) * query.pageSize;
     const pageRows = rows.slice(start, start + query.pageSize);
     return { rows: pageRows, total: pageRows.length ? rows.length : 0 };
   }
 
   async newsFeatured(limit: number): Promise<NewsEntry[]> {
-    return [...visibleNewsFixtures()]
-      .sort((a, b) => Number(b.featured) - Number(a.featured) || b.importance - a.importance
-        || b.publishedAt.localeCompare(a.publishedAt) || b.id - a.id)
-      .slice(0, Math.min(Math.max(limit, 1), 12));
+    return buildNewsCards(NEWS_FIXTURE_ENTRIES, { featuredFirst: true }).slice(0, Math.min(Math.max(limit, 1), 12));
   }
 
   async newsEntry(slug: string): Promise<NewsEntry | null> {
-    return visibleNewsFixtures().find((entry) => entry.slug === slug) ?? null;
+    return threadUpdates(NEWS_FIXTURE_ENTRIES, slug);
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {

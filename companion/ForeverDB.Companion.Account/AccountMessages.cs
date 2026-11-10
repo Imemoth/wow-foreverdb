@@ -266,6 +266,8 @@ public static class AccountMessages
         StartAnonymousOutcome.AlreadyAnonymous => "Already using ForeverDB anonymously.",
         StartAnonymousOutcome.AlreadySignedIn => "A ForeverDB account sign-in exists. Sign in again instead of creating an anonymous identity.",
         StartAnonymousOutcome.ConfirmationRequired => "Confirmation is required to replace the lost identity.",
+        StartAnonymousOutcome.NoPreservedIdentity => "This computer has no preserved anonymous identity. Nothing was created.",
+        StartAnonymousOutcome.PreservedIdentityUnavailable => "The preserved anonymous identity is unavailable. Nothing was replaced and no new identity was created.",
         StartAnonymousOutcome.Unavailable => "ForeverDB could not be reached. Nothing was changed.",
         StartAnonymousOutcome.RateLimited => "Too many requests. Wait a moment and try again.",
         StartAnonymousOutcome.Refused => "The server refused to create an anonymous identity.",

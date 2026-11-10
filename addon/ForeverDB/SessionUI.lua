@@ -335,74 +335,37 @@ end
 
 --- Frame construction ------------------------------------------------------
 
--- "BackdropTemplate" is only a registered virtual XML template on clients
--- that ship the BackdropTemplateMixin (Legion 7.1+). Passing that literal
--- string to CreateFrame on a client without it errors inside CreateFrame
--- itself, before any code can inspect the returned frame -- so the guard
--- has to happen here, not inside applyBackdrop().
-local function backdropTemplateName()
-    if BackdropTemplateMixin then return "BackdropTemplate" end
-    return nil
+local function paintPanel(frame, fillColor, edgeColor)
+    -- BackdropTemplateMixin:SetBackdropBorderColor reads BottomRightCorner in
+    -- Blizzard protected code on Forever. Plain textures avoid that path.
+    local background = frame:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints(frame)
+    background:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
+    frame.fallbackBackground = background
+    local borders = {}
+    for index, edge in ipairs({"TOP", "BOTTOM", "LEFT", "RIGHT"}) do
+        local line = frame:CreateTexture(nil, "BORDER")
+        line:SetColorTexture(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4])
+        if edge == "TOP" or edge == "BOTTOM" then
+            line:SetHeight(1)
+            line:SetPoint(edge .. "LEFT", frame, edge .. "LEFT", 0, 0)
+            line:SetPoint(edge .. "RIGHT", frame, edge .. "RIGHT", 0, 0)
+        else
+            line:SetWidth(1)
+            line:SetPoint("TOP" .. edge, frame, "TOP" .. edge, 0, 0)
+            line:SetPoint("BOTTOM" .. edge, frame, "BOTTOM" .. edge, 0, 0)
+        end
+        borders[index] = line
+    end
+    frame.fallbackBorders = borders
 end
 
 local function applyBackdrop(frame)
-    if frame.SetBackdrop then
-        frame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 16,
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        if frame.SetBackdropColor then frame:SetBackdropColor(0.03, 0.03, 0.03, 0.9) end
-        if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0.55, 0.45, 0.18, 1) end
-        return
-    end
-
-    -- Guarded fallback for a client where BackdropTemplate mixins are
-    -- unavailable: a plain dark texture using only base Frame/Texture
-    -- APIs, so the HUD never errors on a limited client.
-    local background = frame:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints(frame)
-    if background.SetColorTexture then
-        background:SetColorTexture(0.03, 0.03, 0.03, 0.9)
-    end
-    frame.fallbackBackground = background
+    paintPanel(frame, {0.03, 0.03, 0.03, 0.9}, {0.55, 0.45, 0.18, 1})
 end
 
--- A small flat-color card fill + thin restrained border, used for the KPI
--- band's six cards. "Interface\Buttons\WHITE8x8" is a plain recolorable
--- white texture bundled with the client (safe on any build), used purely
--- as a tintable rectangle for both the fill and the 1px edge.
-local CARD_BACKDROP = {
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Buttons\\WHITE8x8",
-    edgeSize = 1,
-    insets = { left = 0, right = 0, top = 0, bottom = 0 },
-}
-
 local function applyCardBackdrop(frame, fillColor, edgeColor)
-    if frame.SetBackdrop then
-        frame:SetBackdrop(CARD_BACKDROP)
-        if frame.SetBackdropColor then
-            frame:SetBackdropColor(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
-        end
-        if frame.SetBackdropBorderColor then
-            frame:SetBackdropBorderColor(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4])
-        end
-        return
-    end
-
-    -- Guarded fallback for a client without backdrop mixin support: fill
-    -- only, no border -- consistent with applyBackdrop()'s HUD/window
-    -- fallback.
-    local background = frame:CreateTexture(nil, "BACKGROUND")
-    background:SetAllPoints(frame)
-    if background.SetColorTexture then
-        background:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4])
-    end
-    frame.fallbackBackground = background
+    paintPanel(frame, fillColor, edgeColor)
 end
 
 -- Prevents a FontString from wrapping to a second line: KPI cards and
@@ -430,7 +393,7 @@ local function createLabelValue(parent, labelTemplate, valueTemplate, x, y)
 end
 
 function FDB:BuildSessionHUDFrame()
-    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionHUD", UIParent)
     frame:SetSize(HUD_WIDTH, HUD_HEIGHT)
     frame:SetFrameStrata("MEDIUM")
     frame:SetMovable(true)
@@ -644,7 +607,7 @@ function FDB:CancelSessionResetConfirmation()
 end
 
 local function buildResetConfirmFrame(FDB)
-    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent)
     frame:SetSize(CONFIRM_WIDTH, CONFIRM_HEIGHT)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     applyBackdrop(frame)
@@ -721,7 +684,7 @@ end
 -- label/value are single-line (setSingleLine) so long text clips inside
 -- the card rather than wrapping and resizing the visual grid.
 local function createKPICard(parent, x, y, width, height, labelText)
-    local card = CreateFrame("Frame", nil, parent, backdropTemplateName())
+    local card = CreateFrame("Frame", nil, parent)
     card:SetSize(width, height)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     applyCardBackdrop(card, KPI_CARD_FILL_COLOR, KPI_CARD_EDGE_COLOR)
@@ -798,7 +761,7 @@ local function createGroupPanel(parent, x, y, width, height, headingText, headin
 end
 
 function FDB:BuildSessionDetailWindow()
-    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent, backdropTemplateName())
+    local frame = CreateFrame("Frame", "ForeverDBSessionWindow", UIParent)
     frame:SetSize(DETAIL_WIDTH, DETAIL_HEIGHT)
     frame:SetMovable(true)
     frame:EnableMouse(true)

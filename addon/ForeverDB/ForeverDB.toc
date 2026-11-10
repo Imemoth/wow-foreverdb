@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: ForeverDB
-## Notes: Observed loot, gathering, fishing pool, skinning and disenchant tracker for World of Warcraft: Forever
+## Notes: Loot, quest, gathering, fishing, skinning and disenchant observations for World of Warcraft: Forever
 ## Author: Imemoth
-## Version: 0.5.0-alpha
+## Version: 0.7.1-alpha
 ## SavedVariables: ForeverDB_Saved, ForeverDB_Export
 
 Core.lua
@@ -14,6 +14,8 @@ LocationTracker.lua
 MapTracker.lua
 GuildApiProbe.lua
 QuestApiProbe.lua
+QuestTracker.lua
+QuestKillTracker.lua
 GuildbookTracker.lua
 GatheringTracker.lua
 SkinningTracker.lua

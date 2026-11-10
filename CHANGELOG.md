@@ -6,11 +6,27 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.5.0-alpha**
+- Addon: **0.7.1-alpha**
 - Export schema: **9**
-- Companion: **0.9.0-alpha**
+- Companion: **0.9.11-alpha**
+
+## 0.9.11-alpha — 2026-11-06 (Guildbook local import and build provenance, PR #176 draft)
+
+- Fixed the local Guildbook refresh path so a valid existing Schema 9 capture can be imported after an explicit first-import authorization, even when captured before the current Companion login.
+- Bound each WoW installation to the authorizing verified local account using DPAPI-protected ownership metadata. Other accounts cannot import or restore that installation's Guildbook; returning to the original account restores its encrypted cache.
+- Added local refresh diagnostics for discovered/parsed files, capture validity, guild/member/profession counts, accepted captures, restored encrypted caches, data source and grouped rejections.
+- Kept the Guildbook button local-only and independent from public snapshot ingestion. Addon `0.7.1-alpha`, Schema 9, and registered-device AutoSync restrictions are unchanged.
+- Each Windows build now carries a full commit in assembly informational version; visible UI shows the short SHA and CI artifacts include version plus full SHA. W5 Windows owner acceptance remains pending.
 
 # Companion
+
+## 0.9.1-alpha — 2026-11-06 (C0b account and settings safety, PR #176 draft)
+
+- Identity changes now refresh local installation inventory and restore local encrypted Guildbook data without invoking snapshot ingestion. Stale sync work is cancelled and never retried under a different identity.
+- Account UI reports the validated effective backend and safe hostname; a rejected isolated-mode configuration disables network services rather than falling back to production.
+- Installation selection has friendly client labels, lists legacy Classic Beta as ineligible, and clears stale save-success messages after edits or validation failures.
+- Registered-device AutoSync remains disabled; Guildbook and private quest journals remain local-only; addon `0.7.1-alpha` and Schema 9 are unchanged.
+- W4-W6 Windows owner acceptance remains pending. This is a review build, not a production release.
 
 ## 0.9.0-alpha — 2026-10-12 (Account System V1 authentication, PR D)
 
@@ -78,7 +94,7 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Made the map header controls wrap responsively instead of clipping the zoom/status area.
 - Replaced raw acquisition keys such as `fishing_pool` with user-facing location labels.
 
-## 0.7.0-alpha — 2026-09-25
+## 0.7.1-alpha — 2026-09-25
 
 - Added multi-zone location browsing: selecting a location row changes the active map.
 - Preserved all zones associated with a detail result.
@@ -164,6 +180,35 @@ The Account Linking MVP now enables existing-account sign-in, direct installatio
 - Established the search/detail UI baseline.
 
 # Addon
+
+## 0.7.1-alpha — 2026-11-06 (Quest Tracker live stabilization)
+
+- Keep an explicit-ID quest offer briefly through `QUEST_FINISHED` when Forever emits it before `QUEST_ACCEPTED`; take the player's interaction position at acceptance.
+- Render session panel and KPI card backgrounds and borders with Frame/Texture APIs to avoid the Blizzard backdrop corner taint path.
+- Count a previously tooltip-matched target's observed death from `UNIT_HEALTH`/`UnitIsDead`, supported combat-log `UNIT_DIED`, or a 0.25-second poll while that exact target remains selected. Require an earlier alive sample, dedupe per GUID and expose bounded opt-in `/fdb quest mobs debug` reasons. Keep quest progress unattributed and idempotent across repeated updates.
+- Clear semantic removal metadata on confirmed turn-in and reset mob/progress evidence on reacceptance. No export schema or Companion changes.
+
+## 0.7.0-alpha — 2026-11-06 (Quest Kill Tracker V1.1)
+
+- Local quest-to-mob observations pair unique active quest/objective tooltip text with an NPC GUID and player map location. Target/mouseover interaction works without a loot drop.
+- Deaths of previously matched unit instances and observed objective counter changes are separate evidence; counter changes are not attributed to a particular mob. `/fdb quest mobs <id>` inspects local observations. No new schema-9 export row or public data path.
+
+## 0.6.1-alpha — 2026-11-06 (Quest acceptance provenance)
+
+- Quest dialog snapshots now survive a missing GetQuestID when the actual accepted quest title is uniquely corroborated by the active log. NPC identity is still read only from the dialog npc unit; location is the observed player interaction position.
+- `/fdb quest debug` enables a bounded, opt-in event trace without raw character GUIDs. Ambiguous, stale and mismatched offers remain unmatched.
+
+## 0.6.0-alpha — 2026-11-05 (Quest Tracker V1: local-only capture)
+
+- Hardened legacy quest index/ID handling, unavailable events, dialog lifetime, duplicate confirmations and repeatable quest lifecycles. Added actual description/level/progress capture, reload log observation, coalesced objective updates and `/fdb quest status` diagnostics.
+- Item-source search and tooltips retain quest IDs and show locally known titles while preserving observed drop rates. Added real loot/database/export privacy and compatibility regression checks.
+- Pipeline decision and follow-up contracts: [quest V1 boundary](docs/quest-tracker/v1-pipeline-and-follow-up.md).
+
+- Records quest acceptance with quest ID, title, objective summary, the actual quest dialog NPC and player map location when exposed by the live client.
+- Tracks active quest objective text and unambiguously identified required item IDs; captures quest turn-in NPC/location and the offered fixed/choice item rewards plus any XP/money amounts surfaced by quest APIs. Rewards are explicitly an offer preview, **not proof of which choice was selected**.
+- On creature loot, links a quest item from GetLootSlotInfo or a verified active item objective to the same existing source/item record. The mob tooltip prioritizes observed quest items and labels them **[Quest item]**. Loot/item export line I and schema 9 remain unchanged.
+- Quest journal is per-character and local SavedVariables only; no Companion, ingestion, public database, Guildbook cloud, or remote API changes. Commands: `/fdb quest` (last locally seen quest) and `/fdb quest <questID>`.
+- Acceptance gate: mocked event/loot smoke tests plus **real Forever client** accept/turn-in/choice/reload tests required; API availability can differ from Classic/Retail, and missing fields are left unknown rather than inferred.
 
 ## 0.5.0-alpha — 2026-09-28
 

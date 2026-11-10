@@ -26,7 +26,7 @@ def check(condition: bool, message: str) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# 1. Version consistency (Companion/Installer/UI/docs move together; addon and schema are NOT touched here)
+# 1. Version consistency (Companion/Installer/UI/docs move together; addon mirrors must agree)
 # ---------------------------------------------------------------------------------------------
 csproj = read("companion/ForeverDB.Companion/ForeverDB.Companion.csproj")
 match = re.search(r"<Version>([^<]+)</Version>", csproj)
@@ -55,13 +55,18 @@ check(f"| Companion | **{version}** |" in read("README.md"), "README.md Companio
 check(f"ForeverDB Companion **{version}**" in read("companion/README.md"), "companion/README.md version mismatch")
 check(f"- Version: **{version}**" in read("docs/ROADMAP.md"), "docs/ROADMAP.md Companion version mismatch")
 
-# The addon version and the export schema must not move in this change.
+# The addon may release independently, but every mirrored addon version must
+# remain consistent. Export schema 9 remains an explicit Companion compatibility gate.
 core = read("addon/ForeverDB/Core.lua")
 toc = read("addon/ForeverDB/ForeverDB.toc")
 core_version = re.search(r'FDB\.VERSION\s*=\s*"([^"]+)"', core)
 toc_version = re.search(r"##\s*Version:\s*(\S+)", toc)
 check(core_version is not None and toc_version is not None and core_version.group(1) == toc_version.group(1), "addon Core.lua / TOC versions differ")
-check("| Addon | **0.5.0-alpha** |" in versioning, "addon version in VERSIONING.md changed unexpectedly")
+addon_version = core_version.group(1) if core_version else "?"
+check(f"| Addon | **{addon_version}** |" in versioning, "addon version in VERSIONING.md differs from Core.lua")
+check(f"| Addon | **{addon_version}** |" in read("README.md"), "README.md addon version differs from Core.lua")
+check(f"- Addon: **{addon_version}**" in read("CHANGELOG.md"), "CHANGELOG.md current addon version differs from Core.lua")
+check(re.search(rf"## {re.escape(addon_version)} — ", read("CHANGELOG.md")) is not None, "CHANGELOG.md has no current addon release entry")
 check("| Export schema | **9** |" in versioning, "export schema in VERSIONING.md changed unexpectedly")
 
 # ---------------------------------------------------------------------------------------------
@@ -132,9 +137,13 @@ check("public const bool DeviceAutoSyncApproved = false;" in gate, "DeviceAutoSy
 account_workflow = read(".github/workflows/companion-account-auth.yml")
 normal_build_workflow = read(".github/workflows/companion-build.yml")
 check("account-linking-mvp-win-x64" not in account_workflow, "account CI must not publish a special Account Linking build")
-check("name: ForeverDB-Companion-win-x64" in normal_build_workflow, "normal Companion artifact name changed")
+check("ForeverDB-Companion-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64" in normal_build_workflow, "normal Companion artifact is not version/SHA scoped")
+check("-p:BuildCommit=${{ env.COMPANION_BUILD_COMMIT }}" in normal_build_workflow, "normal Companion assembly is missing its build commit identity")
 check("--self-contained true" in normal_build_workflow, "normal Companion build must stay self-contained")
 check("-p:PublishSingleFile=true" in normal_build_workflow, "normal Companion build must stay single-file")
+installer_workflow = read(".github/workflows/companion-installer.yml")
+check("ForeverDB-Companion-Setup-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}" in installer_workflow, "installer artifact is not version/SHA scoped")
+check("ForeverDB-Companion-{#MyAppVersion}-{#MyAppBuild}-win-x64" in read("installer/ForeverDB.iss"), "installer input is not version/SHA scoped")
 
 # Tests may only use the production host as a deny-list fixture.
 for p in (ROOT / "tests" / "companion-account").rglob("*.cs"):

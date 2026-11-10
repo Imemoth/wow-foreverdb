@@ -24,6 +24,12 @@ The existing editorial Markdown system remains the AzerDex-authored archive. Dat
 
 `database/public-read/tests/news_model_security.sql` checks RLS, direct table privileges, and function grants. `database/public-read/tests/news_model_behavior.sql` runs transactional insert, identical-hash no-op, revision snapshot, and partial-error audit assertions, then rolls everything back.
 
+> **Superseded in part by [News Collector V2](news-collector-v2.md).** The V1 statements below that "only `post_number = 1`
+> is admitted", that the Tracker "treats the returned page as the incremental window", and that revision mode refreshes only
+> openers describe the *pre-V2* behaviour. V2 (migration `0011`) admits verified Blizzard staff replies, paginates with the
+> `before=<created_at>` cursor (Blizzard ignores `?page=`), tracks revisions persistently and adds ingestion monitoring. The
+> roles, secrets, credential procedure and the cleanup scripts in this document remain valid.
+
 ## Bluepost deduplication hotfix
 
 The collector now admits only `post_number = 1` from the authoritative US/EU
