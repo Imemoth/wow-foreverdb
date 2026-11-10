@@ -34,6 +34,7 @@ local function setup(api)
     SlashCmdList = {}
     ForeverDB_Saved = { installationId = "offline-fixture", sources = {} }
     ForeverDB_Export = nil
+    ForeverDB_ForkArchive = {}
     CreateFrame = function()
         local frame = { events = {} }
         function frame:RegisterEvent(event) self.events[event] = true end
@@ -134,6 +135,15 @@ test("herbalism identity, item aggregation, status/last and export", function()
     equal(f.DB.lastObservation.totalQuantity, 4)
     equal(f.DB.lastObservation.location.x, 42)
     equal(f.DB.lastObservation.location.y, 33.5)
+    local unknown =
+        f.DB.geographicStats.unknown.sources["gameobject:1618"]
+            .buckets.herbalism
+    equal(unknown.observations, 1)
+    equal(unknown.items["2447"].drops, 1)
+    equal(unknown.items["2447"].quantity, 3)
+    equal(unknown.items["765"].drops, 1)
+    equal(unknown.locations, nil)
+    equal(f.DB.snapshotRevision, 2)
     equal(f.PendingGathering, nil)
     equal(f:GetDatabaseStats().unresolvedLootWindows, 0)
     f:PrintStatus(); f:PrintLastObservation()
@@ -141,6 +151,9 @@ test("herbalism identity, item aggregation, status/last and export", function()
     contains(table.concat(s.messages, "\n"), "last: herbalism gameobject 1618")
     contains(ForeverDB_Export, "B|gameobject|1618|0|herbalism|1")
     contains(ForeverDB_Export, "I|gameobject|1618|0|herbalism|2447|Test Output|1|3|0|")
+    contains(ForeverDB_Export, "Q|1|2")
+    contains(ForeverDB_Export, "Z|unknown|gameobject|1618|0|herbalism|1|source_map_unverified")
+    contains(ForeverDB_Export, "Y|unknown|gameobject|1618|0|herbalism|2447|Test Output|1|3|0|")
     local x, y = ForeverDB_Export:match(
         "L|gameobject|1618|0|herbalism|42|Test Zone|Test Subzone|([^|]+)|([^|]+)|1")
     equal(tonumber(x), 42)
@@ -171,6 +184,161 @@ test("herbalism identity, item aggregation, status/last and export", function()
     equal(b.observations, 2)
     equal(b.items["2447"].drops, 2)
     equal(b.items["2447"].quantity, 5)
+end)
+
+test("same-second observations advance the persisted snapshot revision", function()
+    local f = setup()
+    local before = f.DB.snapshotRevision
+    equal(f.DB.updatedAt, 1100)
+
+    f:RecordObservation("mob", "creature", 123, "Test Creature", {
+        [501] = { name = "Test Item", quantity = 1 },
+    }, 10, nil)
+    equal(f.DB.updatedAt, 1100)
+    equal(f.DB.snapshotRevision, before + 1)
+
+    f:RecordObservation("mob", "creature", 123, "Test Creature", {
+        [501] = { name = "Test Item", quantity = 1 },
+    }, 10, nil)
+    equal(f.DB.updatedAt, 1100)
+    equal(f.DB.snapshotRevision, before + 2)
+    contains(ForeverDB_Export, "Q|1|3")
+end)
+
+test("legacy observations are not retroactively copied into geographic counters", function()
+    local f = setup()
+    ForeverDB_Saved = {
+        schemaVersion = 9,
+        installationId = "legacy-installation",
+        updatedAt = 900,
+        sources = {
+            ["creature:987:12"] = {
+                sourceType = "creature",
+                sourceId = 987,
+                sourceLevel = 12,
+                name = "Historical Creature",
+                buckets = {
+                    mob = {
+                        observations = 17,
+                        items = {
+                            ["654"] = {
+                                itemId = 654,
+                                name = "Historical Item",
+                                drops = 4,
+                                quantity = 6,
+                                questDrops = 0,
+                                questIds = {},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    f:InitializeDatabase()
+    f:BuildExportSnapshot()
+    equal(f.DB.sources["creature:987:12"].buckets.mob.observations, 17)
+    equal(next(f.DB.geographicStats.unknown.sources), nil)
+    equal(f.DB.snapshotRevision, 1)
+    equal(ForeverDB_Export:find("Z|unknown|creature|987|12|mob", 1, true), nil)
+end)
+
+test("fork archives history locally and starts a new installation with zero counters", function()
+    local f = setup()
+    f:RecordObservation("mob", "creature", 987, "Historical Creature", {
+        [654] = { name = "Historical Item", quantity = 2 },
+    }, 12, nil)
+    f.DB.guildbookCapture = { captureId = "local-guildbook-marker", capturedAt = 1001 }
+    f.DB.guilds = { legacy = { name = "Local Guild" } }
+    local oldId = f.DB.installationId
+    local oldSources = f.DB.sources
+
+    local ok, newId = f:ForkInstallation()
+    equal(ok, true)
+    assert(newId and newId ~= oldId, "fork must create a new installation identity")
+    equal(ForeverDB_ForkArchive[oldId].snapshot.sources, oldSources)
+    equal(ForeverDB_ForkArchive[oldId].snapshot.sources["creature:987:12"].buckets.mob.observations, 1)
+    equal(f.DB.installationId, newId)
+    equal(next(f.DB.sources), nil)
+    equal(next(f.DB.geographicStats.unknown.sources), nil)
+    equal(f.DB.snapshotRevision, 1)
+    equal(f.DB.guildbookCapture, nil)
+    equal(next(f.DB.guilds), nil)
+    equal(ForeverDB_Export:find("Historical Creature", 1, true), nil)
+    equal(ForeverDB_Export:find("Local Guild", 1, true), nil)
+end)
+
+test("installation fork requires the explicit slash-command confirmation", function()
+    local f, s = setup()
+    f:RecordObservation("mob", "creature", 987, "Historical Creature", {
+        [654] = { name = "Historical Item", quantity = 2 },
+    }, 12, nil)
+    local oldId = f.DB.installationId
+    local shown
+    StaticPopup_Show = function(dialog) shown = dialog end
+    for _, name in ipairs({
+        "InitializeDatabase", "InitializeSessionTracker", "InitializeSessionUI",
+        "InitializeGuildApiProbe", "InitializeQuestApiProbe", "InitializeQuestKillTracker",
+        "InitializeQuestTracker", "InitializeGuildbookTracker", "InitializeGatheringTracker",
+        "InitializeSkinningTracker", "InitializeFishingPoolTracker", "InitializeDisenchantTracker",
+        "InitializeLootTracker", "InitializeTooltip",
+    }) do f[name] = function() end end
+    s:event("ADDON_LOADED", "ForeverDB")
+    SlashCmdList.FOREVERDB("fork")
+    equal(shown, "FOREVERDB_CONFIRM_INSTALLATION_FORK")
+    equal(f.DB.installationId, oldId)
+    equal(ForeverDB_ForkArchive[oldId], nil)
+    StaticPopupDialogs[shown].OnAccept()
+    assert(f.DB.installationId ~= oldId, "accepting confirmation starts a fresh identity")
+    equal(ForeverDB_ForkArchive[oldId].snapshot.installationId, oldId)
+end)
+
+test("restored counters without their installation ID are held until an empty fork", function()
+    local f = setup()
+    ForeverDB_Saved = {
+        schemaVersion = 9,
+        updatedAt = 900,
+        sources = {
+            ["creature:111:8"] = {
+                sourceType = "creature", sourceId = 111, sourceLevel = 8,
+                name = "Restored mob", buckets = { mob = { observations = 8, items = {} } },
+            },
+        },
+    }
+    f:InitializeDatabase()
+    equal(f.DB.installationRecoveryRequired, true)
+    equal(f.DB.installationId, nil)
+    equal(f:BuildExportSnapshot(), "")
+    equal(f.DB.sources["creature:111:8"].buckets.mob.observations, 8)
+    local ok, newId = f:ForkInstallation()
+    equal(ok, true)
+    assert(newId and newId ~= "", "confirmed fork creates a new identity")
+    assert(next(ForeverDB_ForkArchive) ~= nil, "restored counters are retained in the local fork archive")
+    equal(next(f.DB.sources), nil)
+end)
+
+test("all five planned collector classes remain Unknown without source-map proof", function()
+    local f = setup()
+    local cases = {
+        { "mob", "creature", 11, 4 },
+        { "skinning", "creature", 12, 5 },
+        { "herbalism", "gameobject", 13, 0 },
+        { "mining", "gameobject", 14, 0 },
+        { "fishing", "gameobject", 15, 0 },
+    }
+    for _, case in ipairs(cases) do
+        f:RecordObservation(case[1], case[2], case[3], "Synthetic source", {
+            [700] = { name = "Synthetic item", quantity = 2 },
+        }, case[4], nil)
+        local key = f:SourceKey(case[2], case[3], case[4])
+        local bucket = f.DB.geographicStats.unknown.sources[key].buckets[case[1]]
+        equal(f.DB.sources[key].buckets[case[1]].observations, 1)
+        equal(bucket.observations, 1)
+        equal(bucket.items["700"].quantity, 2)
+        equal(bucket.locations, nil)
+        contains(ForeverDB_Export, "Z|unknown|" .. case[2] .. "|" .. case[3])
+    end
 end)
 
 test("herbalism expires; unrelated object is not an herb", function()

@@ -3,8 +3,11 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.7.1-alpha"
-FDB.SCHEMA_VERSION = 9
+FDB.VERSION = "0.7.2-alpha"
+FDB.SCHEMA_VERSION = 10
+-- The Companion's public ingestion contract remains schema 9; Geo A records
+-- are optional addon-export extensions until a later Companion phase parses them.
+FDB.EXPORT_SCHEMA_VERSION = 9
 FDB.DEBUG = true
 
 local PREFIX = "|cff7dd3fcForeverDB|r"
@@ -37,6 +40,9 @@ function FDB:PrintStatus()
     )
     print("unresolved loot windows:", stats.unresolvedLootWindows)
     print("installation:", db.installationId or "missing")
+    if db.installationRecoveryRequired then
+        print("installation recovery required: export paused; review /fdb fork confirmation")
+    end
     print("export bytes:", type(ForeverDB_Export) == "string" and #ForeverDB_Export or 0)
 end
 
@@ -78,6 +84,12 @@ local function registerSlashCommands()
         elseif command == "export" then
             FDB:BuildExportSnapshot()
             print(PREFIX, "export snapshot rebuilt:", #ForeverDB_Export, "bytes")
+        elseif command == "fork" then
+            if StaticPopup_Show then
+                StaticPopup_Show("FOREVERDB_CONFIRM_INSTALLATION_FORK")
+            else
+                print(PREFIX, "installation fork confirmation is unavailable")
+            end
         elseif command:match("^item%s+") then
             local argument = command:match("^item%s+(.+)$")
             local itemId = tonumber(argument or "")
@@ -130,10 +142,25 @@ local function registerSlashCommands()
             local sessionArgs = rawCommand:match("^%S+%s*(.-)$") or ""
             FDB:HandleSessionCommand(sessionArgs)
         else
-            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status|debug], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
+            print(PREFIX, "commands: /fdb status, /fdb last, /fdb export, /fdb fork, /fdb item <id/link>, /fdb guild, /fdb guildbook refresh, /fdb questapi, /fdb quest [id|status|debug], /fdb recipe <profession>, /fdb recipe <member> <profession>, /fdb session [pause|resume|reset|hud|lock|timeout <min>|idle <min>], /fdb debug")
         end
     end
 end
+
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs.FOREVERDB_CONFIRM_INSTALLATION_FORK = {
+    text = "Start a fresh ForeverDB installation? Existing local observation history will be archived on this character and will not be re-uploaded. Guildbook data will be cleared from the active installation.",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function()
+        local ok = FDB:ForkInstallation()
+        if ok then print(PREFIX, "started a fresh installation; previous history is archived locally") end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 local frame = CreateFrame("Frame")
 FDB.EventFrame = frame
