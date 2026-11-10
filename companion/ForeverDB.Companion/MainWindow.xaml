@@ -1,6 +1,7 @@
 <Window x:Class="ForeverDB.Companion.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:ForeverDB.Companion.Models"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="ForeverDB Companion 0.9.12-alpha"
         Width="1180"
@@ -284,14 +285,56 @@
                                     Margin="10,0,0,0"
                                     Click="Search_Click"
                                     Content="Search" />
-                            <ComboBox x:Name="SearchZoneSelector"
-                                      DockPanel.Dock="Right"
-                                      Width="220"
-                                      Height="40"
-                                      Margin="10,0,0,0"
-                                      VerticalContentAlignment="Center"
-                                      SelectionChanged="SearchZoneSelector_SelectionChanged"
-                                      ToolTip="Limit search results to an observed zone" />
+                            <Grid DockPanel.Dock="Right"
+                                  Width="250"
+                                  Height="40"
+                                  Margin="10,0,0,0">
+                                <Button x:Name="SearchZoneButton"
+                                        Height="40"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,0"
+                                        Click="SearchZoneButton_Click"
+                                        Content="All zones"
+                                        ToolTip="Choose a geographic scope" />
+                                <Popup x:Name="SearchZonePopup"
+                                       PlacementTarget="{Binding ElementName=SearchZoneButton}"
+                                       Placement="Bottom"
+                                       StaysOpen="False"
+                                       AllowsTransparency="True">
+                                    <Border Width="330"
+                                            MaxHeight="430"
+                                            Padding="8"
+                                            Background="{StaticResource SurfaceBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5">
+                                        <DockPanel>
+                                            <TextBox x:Name="SearchZoneTreeFilter"
+                                                     DockPanel.Dock="Top"
+                                                     Height="34"
+                                                     Margin="0,0,0,8"
+                                                     VerticalContentAlignment="Center"
+                                                     ToolTip="Search zones and subzones"
+                                                     TextChanged="SearchZoneTreeFilter_TextChanged"
+                                                     KeyDown="SearchZoneTreeFilter_KeyDown" />
+                                            <TreeView x:Name="SearchZoneTree"
+                                                      SelectedItemChanged="SearchZoneTree_SelectedItemChanged">
+                                                <TreeView.ItemContainerStyle>
+                                                    <Style TargetType="TreeViewItem">
+                                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                                    </Style>
+                                                </TreeView.ItemContainerStyle>
+                                                <TreeView.Resources>
+                                                    <HierarchicalDataTemplate DataType="{x:Type models:ZoneExplorerNode}"
+                                                                              ItemsSource="{Binding Children}">
+                                                        <TextBlock Text="{Binding Name}" />
+                                                    </HierarchicalDataTemplate>
+                                                </TreeView.Resources>
+                                            </TreeView>
+                                        </DockPanel>
+                                    </Border>
+                                </Popup>
+                            </Grid>
                             <TextBox x:Name="SearchBox"
                                      Height="40"
                                      FontSize="14"

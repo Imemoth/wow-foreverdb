@@ -29,6 +29,69 @@ var service = new SearchService(
     settings,
     _ => Task.FromResult("test-auth-token"));
 
+var geography = ZoneExplorerBuilder.Build(
+    new[]
+    {
+        new SearchZoneOption { MapId = 1, ZoneName = "Eastern Kingdoms" },
+        new SearchZoneOption { MapId = 12, ZoneName = "Elwynn Forest" },
+        new SearchZoneOption { MapId = 37, ZoneName = "Northshire Valley" },
+        new SearchZoneOption { MapId = 141, ZoneName = "Tirisfal Glades" },
+        new SearchZoneOption { MapId = 141, ZoneName = "Crusader's Outpost" },
+        new SearchZoneOption { MapId = 999, ZoneName = "Unmapped Field" }
+    },
+    new[]
+    {
+        new ForeverDbMap { MapId = 1, Name = "Eastern Kingdoms", ParentMapId = 0 },
+        new ForeverDbMap { MapId = 12, Name = "Elwynn Forest", ParentMapId = 1 },
+        new ForeverDbMap { MapId = 37, Name = "Northshire Valley", ParentMapId = 12 },
+        new ForeverDbMap { MapId = 141, Name = "Tirisfal Glades", ParentMapId = 1 }
+    });
+var eastern = geography.Single(node => node.Name == "Eastern Kingdoms");
+var elwynn = eastern.Children.Single(node => node.Name == "Elwynn Forest");
+var northshire = elwynn.Children.Single(node => node.Name == "Northshire Valley");
+Check(eastern.Scope?.IsAggregate == true &&
+      eastern.Scope.IncludedScopes.Count == 5,
+    "continent scope includes observed descendants from verified parent-map links");
+Check(elwynn.Scope?.IsAggregate == true &&
+      elwynn.Scope.IncludedScopes.Any(scope => scope.MapId == 37),
+    "primary-zone scope includes subzone descendants");
+Check(northshire.Scope?.MapId == 37 &&
+      northshire.Scope.ZoneName == "Northshire Valley",
+    "subzone remains selectable by its canonical map ID");
+Check(eastern.Children.Single(node => node.Name == "Tirisfal Glades")
+      .Children.Single().Children.Single().Name == "Crusader's Outpost" &&
+      eastern.Children.Single(node => node.Name == "Tirisfal Glades")
+          .Children.Single().IsUnknownMapping,
+    "same-map alternate label stays selectable but explicitly ambiguous");
+var unknownRoot = geography.Single(node => node.Name == "Unknown mapping");
+Check(unknownRoot.Children.Single().Scope?.ZoneName == "Unmapped Field" &&
+      unknownRoot.Scope?.IsUnknownMapping == true,
+    "missing parent metadata remains visible and explicitly unknown");
+var filteredTree = ZoneExplorerBuilder.Filter(geography, "Northshire");
+Check(filteredTree.Count == 1 && filteredTree[0].IsExpanded &&
+      filteredTree[0].Children.Single().IsExpanded &&
+      filteredTree[0].Children.Single().Children.Single().Name == "Northshire Valley",
+    "tree search retains and expands the full matching hierarchy path");
+var scopeLocations = ZoneExplorerBuilder.FilterLocations(
+    new[]
+    {
+        new DetailLocation { MapId = 12, ZoneName = "Elwynn Forest", SubZoneName = "Northshire Valley" },
+        new DetailLocation { MapId = 12, ZoneName = "Elwynn Forest", SubZoneName = "" },
+        new DetailLocation { MapId = 141, ZoneName = "Tirisfal Glades" }
+    },
+    elwynn.Scope);
+Check(scopeLocations.Count == 2 &&
+      scopeLocations.All(location => location.MapId == 12),
+    "zone scope includes known and unknown subzone locations on the exact scoped map");
+Check(ZoneExplorerBuilder.FilterLocations(
+        scopeLocations,
+        northshire.Scope).Count == 0,
+    "subzone selection does not infer identity from the location display string");
+Check(ZoneExplorerBuilder.FilterLocations(
+        scopeLocations,
+        SearchZoneOption.AllZones).Count == scopeLocations.Count,
+    "All zones preserves all available locations");
+
 var zones = await service.GetAvailableZonesAsync();
 
 Check(handler.Requests.Count == 1 &&
@@ -130,6 +193,21 @@ Check(scopedResults.Count == 2 &&
                   "Cadet",
                   StringComparison.OrdinalIgnoreCase)),
     "specific zone returns only RPC-scoped matches");
+
+handler.ClearRequests();
+var multiZoneScope = new SearchZoneOption
+{
+    IsAggregate = true,
+    MapDisplayName = "Eastern Kingdoms",
+    IncludedScopes = new[] { tirisfal, crusadersOutpost }
+};
+var multiZoneResults = await service.SearchAsync("Cadet", multiZoneScope);
+Check(handler.Requests.Count == 2 &&
+      handler.Requests.All(request => request.Url.EndsWith(
+          "/rest/v1/rpc/get_foreverdb_search_in_zone", StringComparison.Ordinal)),
+    "aggregate search composes bounded requests for its observed exact scopes");
+Check(multiZoneResults.Count == 2,
+    "aggregate search deduplicates identical entities returned from multiple scopes");
 
 handler.ClearRequests();
 

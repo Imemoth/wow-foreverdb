@@ -10,19 +10,34 @@ public sealed class SearchZoneOption
 {
     public long? MapId { get; init; }
     public string ZoneName { get; init; } = "";
+    public long ParentMapId { get; init; }
+    public string MapDisplayName { get; init; } = "";
+    public bool IsUnknownMapping { get; init; }
+    public bool IsAggregate { get; init; }
+    public IReadOnlyList<SearchZoneOption> IncludedScopes { get; init; } =
+        Array.Empty<SearchZoneOption>();
 
     public bool IsAllZones =>
-        !MapId.HasValue ||
-        string.IsNullOrWhiteSpace(ZoneName);
+        !IsAggregate && (!MapId.HasValue || string.IsNullOrWhiteSpace(ZoneName));
 
     public string DisplayText =>
         IsAllZones
             ? "All zones"
-            : ZoneName;
+            : IsAggregate ? MapDisplayName : ZoneName;
 
     public static SearchZoneOption AllZones { get; } = new();
 
     public override string ToString() => DisplayText;
+}
+
+public sealed class ZoneExplorerNode
+{
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+    public SearchZoneOption? Scope { get; set; }
+    public bool IsUnknownMapping { get; init; }
+    public bool IsExpanded { get; set; }
+    public List<ZoneExplorerNode> Children { get; } = new();
 }
 
 public sealed class SearchResultItem
