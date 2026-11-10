@@ -184,3 +184,20 @@ Heartbeat behaviour (D1 `last_heartbeat` and the Healthchecks events and emails)
 7. **Operator process:** the owner typed a webhook URL as a secret NAME, which would have made the Worker ignore it silently and put the token into pasted output. It was caught by `secret list`, the entry was deleted and the correct secret was set (the rotation of the exposed webhook URL was requested; its completion is the owner's to confirm) and the runbook now warns (section 2 of the staging runbook). Always run `secret list` after setting secrets.
 8. **Platform lesson (sections 13):** fakes injected through `fetchFn` hid two Workers-runtime defects; only a delivery on the real Worker proves the transport.
 9. **Session note:** the Cloudflare tooling and the session worker restarted several times during the run; results were re-read from D1 each time, and read races (reading while a cycle was running) were re-queried before drawing conclusions.
+
+## 17. Fallback webhook rotation verification (2026-11-10, staging only)
+
+**Exposure finding (before rotation).** The complete Make webhook URL (hostname plus its 32-character path token) appeared once in the session, in a message that pasted `wrangler secret list` output in which a secret NAME was the full URL. The hostname alone had appeared earlier in the `secret put` output. The URL was not in the repository, any git ref, the scratchpad or any PR comment. The wrongly named secret was deleted, a correctly named `FALLBACK_WEBHOOK_URL` was set, and the owner created a new Make webhook (scenario run set to immediate), set the Cloudflare secret through the hidden prompt, and confirmed the names with `secret list`. After this test the owner deleted the detached old webhook, which is what invalidates the exposed address. The URL and token are deliberately not reproduced anywhere in this repository.
+
+**Controlled test.** One synthetic 403 (`forbidden:1`) plus `source_critical`, staging Worker, mock provider, no deploy. Times UTC.
+
+| Step | Result |
+| --- | --- |
+| Worker | `INC-261110-87VE` opened 09:55:40; OPEN row DEAD at 09:55:45 (`auth 403`, 1 attempt), no Discord message; `fallback_sent_at` 09:55:48.4, one fallback row added (fallback total 1 to 2); heartbeat `delivery_failing` 09:55:49 |
+| Make | the owner's scenario history shows one execution at 09:55:48 (10:55:48 Budapest), status success: the webhook module received the notice text for the incident, the webhook response returned status 200 body `accepted`, the Resend module ran. The Make API connection available to the agent lacks `organization view`, so these facts come from the owner's screenshots |
+| Resend | log entry from `alerts@azerdex.com` to `support@azerdex.com`, subject "AZERDEX OPS - Discord delivery failure", Sent and Delivered 09:55; its ID matches the Make Resend module output |
+| Healthchecks | DOWN email 09:55:49 (body `delivery_failing`), next `ok` ping 10:00, status back to up |
+| Recovery | healthy polls 10:00:40 and 10:05:40, RESOLVED 10:05:39, one RECOVERED message (`1569654279306743883`) |
+| Baseline | 10 incidents, 10 RECOVERED rows, 2 DEAD and 2 fallback rows in total (both from the two controlled fallback tests), 0 active incidents, 0 pending outbox rows, six components HEALTHY, heartbeat `ok`, `fault_discord` removed |
+
+Which endpoint received it: D1 alone cannot tell the new webhook from the old one (both answer success to a plain POST). The Make execution on the scenario linked to the new webhook is the proof; a detached webhook cannot start the scenario. **Not shown:** a mailbox-side view of the email (the Resend `Delivered` event is the evidence).
