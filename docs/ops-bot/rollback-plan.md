@@ -18,7 +18,7 @@ The bot is additive and self-contained: it creates nothing in Supabase, never ch
 
 ## Notes
 
-- Step 8 does not exist while the reporting endpoint is undeployed (the current state): then Supabase needs **no** rollback because nothing was changed.
+- Step 8 now exists: the reporting endpoint was deployed to production on 2026-11-10 (GO-1). Supabase therefore needs this rollback if the bot is withdrawn: delete the Edge Function `azerdex-ops-health` (or its secrets), then run `database/ops/0019_ops_health_report_rollback.sql`. Rolling back the bot alone (steps 1 to 7) does not require it; the endpoint is read-only and unused until GO-3.
 - Rolling back the bot does not roll back G6: job 7 keeps running and still shows failures in `cron.job_run_details` (the operational signal that existed before the bot).
 - Partial rollback is safe at any point: disabling the Cron Trigger alone leaves the bot idle and silent, and the heartbeat service (if not paused) then reports the missed pings, which is the intended signal.
 - The down migration is tested: it removes exactly the tables the up migration created, leaves unrelated tables untouched, is idempotent, and the schema can be re-applied (`ops-bot/test/security.test.ts`).
