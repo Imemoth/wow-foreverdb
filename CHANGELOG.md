@@ -6,9 +6,17 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.7.1-alpha**
+- Addon: **0.7.2-alpha**
+- SavedVariables schema: **10**
 - Export schema: **9**
 - Companion: **0.9.12-alpha**
+
+## 0.7.2-alpha — 2026-11-10 (Geo A, Draft PR #189)
+
+- Added explicit Unknown geographic source/item counters while preserving global observations and the Companion schema-9 export records.
+- Added persistent same-second snapshot revisions and an owner-confirmed `/fdb fork` recovery path that archives old local history and starts with empty counters.
+- Source-map attribution for creature loot, skinning, herbalism, mining and fishing remains unverified on the live WoW Forever client; all five collector types remain Unknown.
+- Draft implementation and evidence: [Geo A Phase 0 findings](docs/geo-a-phase-0-findings.md).
 
 ## 0.9.12-alpha — 2026-11-09 (ownerless public ingestion, Draft PR)
 

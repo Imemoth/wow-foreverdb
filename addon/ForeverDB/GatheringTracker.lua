@@ -50,10 +50,10 @@ function FDB:GetPendingGatheringKind(sourceGuid)
     if not pending then return nil end
 
     if pending.guid and sourceGuid and pending.guid ~= sourceGuid then
-        local sourceType = self:ParseSourceGuid(sourceGuid)
-        if pending.kind == "skinning" and sourceType == "creature" then
-            return nil
-        end
+        return nil
+    end
+    if pending.guid and not sourceGuid then
+        return nil
     end
 
     return pending.kind

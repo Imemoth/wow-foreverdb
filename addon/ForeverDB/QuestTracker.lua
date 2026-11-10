@@ -230,7 +230,10 @@ local function rewardPreview()
 end
 
 local function markChanged()
-    if FDB.DB then FDB.DB.updatedAt = timestamp() end
+    if FDB.DB then
+        if FDB.TouchSnapshot then FDB:TouchSnapshot()
+        else FDB.DB.updatedAt = timestamp() end
+    end
 end
 
 local function traceQuest(event, id, giver, title, outcome)

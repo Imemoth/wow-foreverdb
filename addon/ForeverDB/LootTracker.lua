@@ -125,7 +125,10 @@ local function getFishingZoneSource()
 end
 
 local function getSourceGuidFromLoot()
-    if not GetLootSourceInfo then return nil end
+    if not GetLootSourceInfo then return nil, false, false end
+
+    local sources = {}
+    local hasUnrecognized = false
 
     for slot = 1, GetNumLootItems() do
         local sourceInfo = { GetLootSourceInfo(slot) }
@@ -135,12 +138,114 @@ local function getSourceGuidFromLoot()
             local sourceType, sourceId = FDB:ParseSourceGuid(guid)
 
             if sourceType and sourceId then
-                return guid
+                sources[guid] = true
+            elseif guid ~= nil then
+                hasUnrecognized = true
             end
         end
     end
 
-    return nil
+    local guid
+    local count = 0
+    for candidate in pairs(sources) do
+        guid = candidate
+        count = count + 1
+    end
+    return count == 1 and guid or nil, count > 1 or hasUnrecognized, count == 1 and not hasUnrecognized
+end
+
+local function safeCall(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
+    return ok and value or nil
+end
+
+local function getLootInteractionZone()
+    if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetMapInfo
+        and C_Map.GetPlayerMapPosition) then
+        return nil
+    end
+
+    local mapId = safeCall(C_Map.GetBestMapForUnit, "player")
+    if type(mapId) ~= "number" or mapId <= 0 then return nil end
+
+    local mapInfo = safeCall(C_Map.GetMapInfo, mapId)
+    if type(mapInfo) ~= "table"
+        or tonumber(mapInfo.mapID) ~= mapId
+        or type(mapInfo.name) ~= "string"
+        or mapInfo.name == ""
+        or type(mapInfo.mapType) ~= "number"
+        or type(mapInfo.parentMapID) ~= "number"
+        or mapInfo.parentMapID <= 0 then
+        return nil
+    end
+
+    local zoneMapType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+    if mapInfo.mapType ~= zoneMapType then return nil end
+    local parentInfo = safeCall(C_Map.GetMapInfo, mapInfo.parentMapID)
+    if type(parentInfo) ~= "table"
+        or tonumber(parentInfo.mapID) ~= mapInfo.parentMapID
+        or type(parentInfo.name) ~= "string"
+        or parentInfo.name == "" then
+        return nil
+    end
+
+    local zoneName = safeCall(GetZoneText)
+    if type(zoneName) ~= "string" or zoneName == "" or zoneName ~= mapInfo.name then
+        return nil
+    end
+
+    -- Confirm this is a usable coordinate map without retaining the player's
+    -- point as a source location.
+    local position = safeCall(C_Map.GetPlayerMapPosition, mapId, "player")
+    if position == nil then return nil end
+    local x, y
+    local ok, getter = pcall(function() return position.GetXY end)
+    if ok and type(getter) == "function" then
+        ok, x, y = pcall(getter, position)
+    else
+        ok, x, y = pcall(function() return position.x, position.y end)
+    end
+    if not ok or type(x) ~= "number" or type(y) ~= "number"
+        or x < 0 or x > 1 or y < 0 or y > 1 then
+        return nil
+    end
+
+    return { mapId = mapId, zoneName = zoneName }
+end
+
+local function sameInteractionZone(first, second)
+    return first ~= nil and second ~= nil
+        and first.mapId == second.mapId
+        and first.zoneName == second.zoneName
+end
+
+local function resolveLootInteractionZone(sourceGuid, directSource, ambiguousSource,
+    before, after, pending, captureStartedAt, stalePending)
+    local capturedAt = GetTime and GetTime() or captureStartedAt
+    if not directSource or ambiguousSource or not sourceGuid
+        or stalePending
+        or not sameInteractionZone(before, after)
+        or not capturedAt or capturedAt < captureStartedAt then
+        return nil
+    end
+
+    if pending then
+        if not pending.guid or pending.guid ~= sourceGuid then return nil end
+        local pendingLocation = pending.location
+        if not pendingLocation
+            or tonumber(pendingLocation.mapId) ~= before.mapId
+            or pendingLocation.zoneName ~= before.zoneName then
+            return nil
+        end
+    end
+
+    return {
+        class = "verified_interaction_zone",
+        mapId = before.mapId,
+        zoneName = before.zoneName,
+        evidence = "loot_event",
+    }
 end
 
 local function getFallbackGuid()
@@ -326,6 +431,16 @@ function FDB:CaptureLootWindow()
     local kind
     local location
     local observedLevel
+    local directSource = false
+    local ambiguousSource = false
+    local interactionZoneBefore
+    local pending
+    local originalSourceType
+    local originalSourceId
+    local captureStartedAt = GetTime and GetTime() or 0
+    local pendingBefore = self.PendingGathering
+    local stalePending = pendingBefore ~= nil
+        and captureStartedAt - (tonumber(pendingBefore.at) or captureStartedAt) > 12
 
     local disenchant =
         self.GetActiveDisenchant
@@ -339,9 +454,13 @@ function FDB:CaptureLootWindow()
             or ("Item " .. tostring(disenchant.itemId))
         kind = "disenchant"
     else
-        sourceGuid =
-            getSourceGuidFromLoot()
-            or getFallbackGuid()
+        interactionZoneBefore = getLootInteractionZone()
+        local lootSourceGuid
+        lootSourceGuid, ambiguousSource, directSource = getSourceGuidFromLoot()
+        sourceGuid = lootSourceGuid
+        if not sourceGuid and not ambiguousSource then
+            sourceGuid = getFallbackGuid()
+        end
 
         sourceType, sourceId =
             self:ParseSourceGuid(sourceGuid)
@@ -354,6 +473,7 @@ function FDB:CaptureLootWindow()
             )
             return
         end
+        originalSourceType, originalSourceId = sourceType, sourceId
 
         sourceName =
             resolveSourceName(
@@ -386,7 +506,7 @@ function FDB:CaptureLootWindow()
                 getFishingZoneSource()
         end
 
-        local pending =
+        pending =
             self.GetPendingGathering
             and self:GetPendingGathering()
 
@@ -424,6 +544,15 @@ function FDB:CaptureLootWindow()
     end
 
     local items = collectItems()
+    local interactionZoneAfter = getLootInteractionZone()
+    local interactionAttribution
+    if sourceType == originalSourceType and sourceId == originalSourceId then
+        interactionAttribution = resolveLootInteractionZone(
+            sourceGuid, directSource, ambiguousSource,
+            interactionZoneBefore, interactionZoneAfter,
+            pending, captureStartedAt, stalePending
+        )
+    end
 
     self:RecordObservation(
         kind,
@@ -432,7 +561,8 @@ function FDB:CaptureLootWindow()
         sourceName,
         items,
         observedLevel,
-        location
+        location,
+        interactionAttribution
     )
 
     local itemKinds = 0

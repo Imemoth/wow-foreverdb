@@ -2,12 +2,13 @@
 ## Title: ForeverDB
 ## Notes: Loot, quest, gathering, fishing, skinning and disenchant observations for World of Warcraft: Forever
 ## Author: Imemoth
-## Version: 0.7.1-alpha
-## SavedVariables: ForeverDB_Saved, ForeverDB_Export
+## Version: 0.7.2-alpha
+## SavedVariables: ForeverDB_Saved, ForeverDB_Export, ForeverDB_ForkArchive
 
 Core.lua
 Database.lua
 Exporter.lua
+GeoDiagnostics.lua
 SessionTracker.lua
 SessionUI.lua
 LocationTracker.lua
