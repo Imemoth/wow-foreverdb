@@ -14,7 +14,8 @@ export async function signRequest(secret: string, method: string, path: string, 
 export interface HttpProviderOptions { url: string; secret: string; fetchFn?: typeof fetch; now?: () => number; timeoutMs?: number }
 
 /**
- * Client for the FUTURE protected reporting endpoint (designed in docs/ops-bot/supabase-reporting-contract.md, not deployed).
+ * Client for the protected reporting endpoint (supabase/functions/azerdex-ops-health, see docs/ops-bot/supabase-reporting-contract.md).
+ * Implemented and validated on a disposable database, NOT deployed to production until the owner approves it.
  * Read-only GET; strict response validation; every failure is classified, none throws.
  */
 export class HttpHealthProvider implements HealthProvider {
