@@ -9,7 +9,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` (strict TypeScript, `noUncheckedIndexedAccess`) | pass |
-| `npm test` | **276 passed, 0 failed** in 17 files |
+| `npm test` | **286 passed, 0 failed** in 18 files |
 | `npm audit --omit=dev` / `npm audit` | 0 vulnerabilities / 0 vulnerabilities |
 | Mutation check (deliberately broken behaviour must fail the suite) | 7 of 7 caught, source restored |
 | Regression tests for the CodeQL findings | 4 of 18 failed on the unfixed code (the 200,000-character case took 65 s), all pass after the fix |
@@ -32,6 +32,7 @@ Run date: 2026-11-06 (sandbox, Node 22.23 locally; CI pins Node 24). All results
 | `preflight.test.ts` | 28 | read-only Discord preflight: permission arithmetic in Discord's documented order, every misconfiguration, read-only requests, token never leaked |
 | `scripts.test.ts` | 5 | owner-run scripts exit through `process.exitCode` (Windows libuv assertion after a network call) |
 | `workers-runtime-compat.test.ts` | 7 | clients under workerd's fetch restrictions (`redirect: "error"` throws), redirects are failures, source guard |
+| `fault.test.ts` | 10 | staging-only Discord fault injection: never built outside staging, 429/403/503 handled by the real client and outbox, compare-and-set consumption |
 | `discord-topology.test.ts` | 10 | existing guild `1561649407584370809`: per-environment separation in configuration, documentation consistency |
 
 ## 2. Required test matrix
@@ -150,3 +151,36 @@ Run with the owner's GO, on Worker version `1849daf1` (both fixes of section 13)
 | 15:00:39 | healthy poll 2: incident RESOLVED, exactly one RECOVERED message (`1569366134103220305`) | D1 + screenshot |
 
 Also proven: the durable outbox retried a failing delivery without storms or duplicates; a click-time reply and the later durable edit coexist on one message; no reminder was queued while ACKNOWLEDGED (`reminder_count` 0); recovery needed two healthy polls. **Healthchecks:** the check went down at 14:48 (no ping had ever left the Worker, section 13), emailed the owner, and came up with the first real ping at 14:50; POSTs every 5 minutes after that. This is the independent monitor working as designed. **Not yet verified:** the other scenarios (`g6_stalled`, `g6_missing`, `g6_inactive`, `reporting_down`, `stale_snapshot`), a real Discord 429, the fallback notifier, the reminder after 120 minutes, `/azerdex maintenance`, and the delivery-recorded heartbeat status (`last_heartbeat` still records an attempt, not receipt). Production remains untouched.
+
+## 15. Remaining staging acceptance, runtime evidence (2026-11-09 and 2026-11-10)
+
+Everything below ran on the deployed staging Worker (mock health provider, staging D1, `#ops-testing` only) with the owner's explicit GO. Times are UTC and come from D1 timestamps; Discord-side facts come from the owner's screenshots. No production resource, no real Supabase job and no Quest branch was touched, and no real Discord rate limit was provoked. After every test the scenario was restored to `healthy` and the next test started only after the incident was RESOLVED (two healthy polls) with exactly one RECOVERED message.
+
+| # | Scenario | OPEN | ACK | Recovery | Dedupe and notes |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `g6_stalled` (`INC-261109-4TKP`) | opened 15:10:39, one alert at attempt 1 | button, 15:38 | RESOLVED 15:50:40, one RECOVERED | 6 occurrences, still one alert; a malformed id on `/azerdex ack` answered "Invalid incident id.", a repeat answered "already acknowledged, no change" |
+| 2 | `g6_missing` (`INC-261109-CL3C`) | opened 16:05, one alert | button, 16:08 | RESOLVED 16:15:39, one RECOVERED | durable `EDIT_ALERT` followed on the same message |
+| 3 | `g6_inactive` (`INC-261109-6SKA`) | opened 16:25:39, one alert | **slash command** `/azerdex ack`, 16:28 | RESOLVED 16:40:40, one RECOVERED | the alert message was edited at the next cycle (16:30:40), same message id |
+| 4 | `reporting_down` (`INC-261109-EDH5`) | failures 1 and 2 (16:45, 16:50): nothing created; failure 3 (16:55:40): one CRITICAL alert | button, 17:04 | RESOLVED 17:35:39, one RECOVERED | outage lasted about 40 minutes, 7 occurrences, no second alert, no reminder |
+| 5 | `stale_snapshot` (`INC-261109-VL58`) | failures 1 and 2: nothing (mid-check: `reporting_failures` 2, all components UNKNOWN, 0 incidents, outbox unchanged); failure 3 (18:15:40): one alert, reason `reporting_unavailable_stale` | button, 18:29 | RESOLVED 18:45:40, one RECOVERED | a 45-minute-old snapshot is a reporting failure, never health |
+| 6 | `/azerdex maintenance` (`INC-261109-YPHL`) | mute on the source 18:38:56 to 18:48:56; incident opened 18:40:40 with `NOTIFY_SUPPRESSED`, no message; the deferred OPEN went out once at 18:50:41 (the first cycle after expiry) | button, 18:55 | RESOLVED, one RECOVERED | audit rows for start, a second mute on `bot:schedule` and its `end` (`ended=1`); `list` shows and clears; a bad component name is refused, a 1-minute duration is refused by Discord's own option bounds (the bot-side check is unit-tested only); invalid inputs left no records |
+| 7 | Discord 429 (`INC-261110-Z5A4`, synthetic) | two injected 429s (07:50:40, 07:55:40), the OPEN row stayed PENDING with `attempts` 0 and the 20 s Retry-After applied; delivered at 08:00:42, one message | not performed (acknowledgement is covered by tests 1 to 6) | RESOLVED 08:15:40, one RECOVERED | no storm, no DEAD row, heartbeat stayed `ok` |
+| 8 | Fallback (`INC-261110-Q63Z`, synthetic 403) | OPEN got 403, row DEAD after 1 attempt (`NOTIFY_DEAD`), no Discord message | none | RESOLVED 09:20:40, **one RECOVERED message was still sent** | exactly one fallback notice (`fallback_sent_at` 09:05:46, six seconds after the incident opened), never repeated |
+
+Heartbeat behaviour (D1 `last_heartbeat` and the Healthchecks events and emails): `ok` every cycle; `supabase_degraded` during tests 4 and 5 (the bot is alive but cannot see Supabase; the Healthchecks event list for those windows was not reviewed); `delivery_failing` at 09:05:47 on test 8 sent the failure ping, Healthchecks emailed DOWN (body `delivery_failing`) and emailed UP 4 min 53 s later when the next cycle's `ok` arrived, a single failure with no flapping. After all tests: 9 incidents, 9 RESOLVED, exactly 9 RECOVERED rows (one each), 1 DEAD row, 1 fallback row, 0 active incidents, all six components HEALTHY, `fault_discord` removed.
+
+**Fallback route:** the notice reached the owner's Make webhook, which sent an email ("Discord delivery failed for incident INC-261110-Q63Z (OPEN, auth). Check the staging/production runbook."), delivered at 09:07. The scenario was set to run on demand, so the email was only sent when the scenario was run; the Worker's call itself succeeded at once. **Production requirement:** the fallback scenario must run immediately when data arrives.
+
+**Fault injection (staging only):** `src/discord/fault.ts`, section 5.1 of the staging runbook, `test/fault.test.ts`. A D1 counter makes the next N Discord channel-message calls return a synthetic 429, 503 or 403 that the real client code parses; interaction replies are never touched; production never builds it; mutation checks catch removing the staging gate, the compare-and-set and the host check.
+
+## 16. Observations, residual risks and operator-process findings
+
+1. **RECOVERED without a visible OPEN.** When the OPEN alert is DEAD (permanent failure), recovery still posts a RECOVERED message, so the channel shows a recovery for an incident nobody saw. Arguably useful, but confusing; consider labelling such a recovery "alert was not delivered". No change was made.
+2. **A dead alert is never retried.** After DEAD, the engine keeps no pending OPEN, so only the one-time fallback notice reaches humans while the incident stays open. That is the intended role of the fallback, but its route must be reliable (see the Make note above).
+3. **`last_error_class` is not cleared on success**, so a delivered row can still show an earlier class (cosmetic).
+4. **A command acknowledgement edits the alert one cycle later** (about 2 minutes), the button edits at once; both end in the same state.
+5. **`last_heartbeat` still records that a ping was attempted, not that Healthchecks received it.** The Healthchecks log and emails were the proof here.
+6. **Not verified:** a real Discord 429 or 5xx from the real API (injected responses use the real parsing and retry code, but the real service was not stressed), the 120-minute reminder, the bot-side duration bounds of `maintenance` on staging, Healthchecks events during the `supabase_degraded` windows, and everything in production.
+7. **Operator process:** the owner typed a webhook URL as a secret NAME, which would have made the Worker ignore it silently and put the token into pasted output. It was caught by `secret list`, the entry was deleted, the webhook URL was rotated and the runbook now warns (section 2 of the staging runbook). Always run `secret list` after setting secrets.
+8. **Platform lesson (sections 13):** fakes injected through `fetchFn` hid two Workers-runtime defects; only a delivery on the real Worker proves the transport.
+9. **Session note:** the Cloudflare tooling and the session worker restarted several times during the run; results were re-read from D1 each time, and read races (reading while a cycle was running) were re-queried before drawing conclusions.

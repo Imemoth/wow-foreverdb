@@ -124,6 +124,8 @@ for s in DISCORD_BOT_TOKEN DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_ALE
 done
 ```
 
+**The secret NAME is the literal word shown above (for example `FALLBACK_WEBHOOK_URL`); the URL or token is only ever typed at the hidden `Enter a secret value` prompt.** Real incident (2026-11-09, staging): a webhook URL was typed as the NAME, so the Worker would have ignored it (silent no-op fallback) and the URL, token included, appeared in `secret list` output pasted into a chat. Always run `npx wrangler secret list --env staging` after setting secrets: it prints names only, and every name must be one of the names above. If a URL ever appears as a name, delete that entry (`secret delete "<exact name>"`) and rotate the URL at its provider.
+
 (`OPERATOR_ROLE_IDS` optionally.) All of these come from the **staging** Discord application and `#ops-testing`; none may be a production value. `DISCORD_GUILD_IDS` is a plain var in `wrangler.toml` (the existing guild `1561649407584370809`); do not also set it as a secret. Staging uses `HEALTH_PROVIDER=mock` from `wrangler.toml`; no Supabase credential exists in staging.
 
 ## 3. Register commands (guild-scoped, staging)
@@ -204,6 +206,18 @@ Scenarios: `healthy`, `source_critical`, `g6_stalled`, `g6_missing`, `g6_inactiv
 | 13 | Log review | `wrangler tail` output contains no token, URL or clear operator id |
 
 Record the evidence (timestamps, screenshots without secrets) in `docs/ops-bot/test-evidence.md` under "Staging validation".
+
+### 5.1 Staging-only fault injection (429, 5xx, 403) and the fallback route
+
+A real Discord rate limit must never be provoked. Instead, write a counter into D1 and the next N Discord **channel message** calls (create or edit; never interaction replies) receive a synthetic response that the real client code then parses like a real one:
+
+```
+npx wrangler d1 execute azerdex-ops-bot-staging --env staging --command "insert into monitor_state (key, value, updated_at) values ('fault_discord','rate_limited:1', strftime('%s','now')*1000) on conflict(key) do update set value = excluded.value, updated_at = excluded.updated_at"
+```
+
+Kinds: `rate_limited` (429 + `Retry-After: 20`, the attempt is given back and retried at the next cycle), `server_error` (503, retried with backoff, DEAD after the attempt limit), `forbidden` (403, DEAD at once and announced once on the fallback route). The counter is consumed by compare-and-set, a malformed value injects nothing, and the code is only built when `BOT_ENV` is `staging` (`src/discord/fault.ts`, guarded by `test/fault.test.ts`). Clear it with `fault_discord` = `rate_limited:0` after a test.
+
+The fallback route needs its own staging secret (a throwaway webhook that accepts a JSON POST, for example an ntfy topic with a random name): `npx wrangler secret put FALLBACK_WEBHOOK_URL --env staging`, entered at the hidden prompt, never in chat or files.
 
 ## 6. Tear down staging
 
