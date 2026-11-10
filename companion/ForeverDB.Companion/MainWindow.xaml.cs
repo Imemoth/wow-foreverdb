@@ -43,7 +43,8 @@ public partial class MainWindow : Window
     // zone's filtered list temporarily does not contain it.
     private SearchResultItem? _selectedSearchResult;
     private bool _updatingSearchResults;
-    private bool _updatingSearchZoneSelector;
+    private IReadOnlyList<ZoneExplorerNode> _zoneExplorerNodes = Array.Empty<ZoneExplorerNode>();
+    private SearchZoneOption _selectedSearchZone = SearchZoneOption.AllZones;
     private int _searchVersion;
     private SearchZoneOption? _zoneBrowseScope;
     private long _zoneBrowseTotal;
@@ -89,9 +90,9 @@ public partial class MainWindow : Window
         _syncService = null;
         _searchService = null;
 
-        SearchZoneSelector.ItemsSource =
-            new[] { SearchZoneOption.AllZones };
-        SearchZoneSelector.SelectedIndex = 0;
+        _selectedSearchZone = SearchZoneOption.AllZones;
+        SearchZoneButton.Content = "All zones";
+        SearchZoneTree.ItemsSource = Array.Empty<ZoneExplorerNode>();
 
         _syncHealth.Configure(_settings);
         RefreshSyncHealthUi();
@@ -736,43 +737,117 @@ public partial class MainWindow : Window
             return;
         }
 
-        _updatingSearchZoneSelector = true;
-
         try
         {
-            var zones =
-                await _searchService.GetAvailableZonesAsync();
-
-            SearchZoneSelector.ItemsSource = zones;
-            SearchZoneSelector.SelectedItem =
-                zones.FirstOrDefault(zone => zone.IsAllZones)
-                ?? zones.FirstOrDefault();
+            _zoneExplorerNodes = await _searchService.GetZoneExplorerAsync();
+            SearchZoneTree.ItemsSource = _zoneExplorerNodes;
+            _selectedSearchZone = _zoneExplorerNodes
+                .FirstOrDefault(node => node.Id == "all")?.Scope
+                ?? SearchZoneOption.AllZones;
+            SearchZoneButton.Content = "All zones";
         }
         catch
         {
-            SearchZoneSelector.ItemsSource =
-                new[] { SearchZoneOption.AllZones };
-            SearchZoneSelector.SelectedIndex = 0;
-        }
-        finally
-        {
-            _updatingSearchZoneSelector = false;
+            _zoneExplorerNodes = new[]
+            {
+                new ZoneExplorerNode
+                {
+                    Id = "all",
+                    Name = "All zones",
+                    Scope = SearchZoneOption.AllZones
+                }
+            };
+            SearchZoneTree.ItemsSource = _zoneExplorerNodes;
+            _selectedSearchZone = SearchZoneOption.AllZones;
+            SearchZoneButton.Content = "All zones";
         }
     }
 
-    private async void SearchZoneSelector_SelectionChanged(
-        object sender,
-        SelectionChangedEventArgs e)
+    private void SearchZoneButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_updatingSearchZoneSelector ||
-            _searchService is null)
+        SearchZoneTreeFilter.Text = "";
+        SearchZoneTree.ItemsSource = _zoneExplorerNodes;
+        SearchZonePopup.IsOpen = !SearchZonePopup.IsOpen;
+        if (SearchZonePopup.IsOpen)
         {
-            return;
+            SearchZoneTreeFilter.Focus();
         }
+    }
 
-        // Changing the scope only refreshes the left-hand results. Detail,
-        // breadcrumb and Back/Forward are independent navigation state.
-        await RunSearchAsync(preserveDetailNavigation: true);
+    private void SearchZoneTreeFilter_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        SearchZoneTree.ItemsSource = ZoneExplorerBuilder.Filter(
+            _zoneExplorerNodes,
+            SearchZoneTreeFilter.Text);
+    }
+
+    private void SearchZoneTreeFilter_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            SearchZonePopup.IsOpen = false;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            var first = FirstSelectable(SearchZoneTree.ItemsSource as IEnumerable<ZoneExplorerNode>);
+            if (first is not null) SelectZoneNode(first);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab)
+        {
+            SearchZoneTree.Focus();
+        }
+    }
+
+    private void SearchZoneTree_SelectedItemChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is ZoneExplorerNode node) SelectZoneNode(node);
+    }
+
+    private void SelectZoneNode(ZoneExplorerNode node)
+    {
+        if (node.Scope is null) return;
+        _selectedSearchZone = node.Scope;
+        SearchZoneButton.Content = GetZonePath(node.Id) ?? node.Name;
+        SearchZonePopup.IsOpen = false;
+        if (_searchService is not null)
+        {
+            _detailRequests.Advance();
+            ResetSearchState();
+            _ = RunSearchAsync();
+        }
+    }
+
+    private string? GetZonePath(string nodeId)
+    {
+        var path = new List<string>();
+        bool Find(IEnumerable<ZoneExplorerNode> nodes)
+        {
+            foreach (var node in nodes)
+            {
+                path.Add(node.Name);
+                if (node.Id == nodeId) return true;
+                if (Find(node.Children)) return true;
+                path.RemoveAt(path.Count - 1);
+            }
+            return false;
+        }
+        return Find(_zoneExplorerNodes) ? string.Join(" › ", path) : null;
+    }
+
+    private static ZoneExplorerNode? FirstSelectable(IEnumerable<ZoneExplorerNode>? nodes)
+    {
+        if (nodes is null) return null;
+        foreach (var node in nodes)
+        {
+            if (node.Scope is not null) return node;
+            var child = FirstSelectable(node.Children);
+            if (child is not null) return child;
+        }
+        return null;
     }
 
     private async void Search_Click(
@@ -802,9 +877,7 @@ public partial class MainWindow : Window
         }
 
         var query = SearchBox.Text.Trim();
-        var selectedZone =
-            SearchZoneSelector.SelectedItem as SearchZoneOption
-            ?? SearchZoneOption.AllZones;
+        var selectedZone = _selectedSearchZone;
         var isZoneBrowse =
             query.Length == 0 && !selectedZone.IsAllZones;
         var searchVersion = ++_searchVersion;
@@ -1155,7 +1228,9 @@ public partial class MainWindow : Window
 
             var detail =
                 await _searchService.GetDetailAsync(
-                    result, detailCancellation);
+                    result,
+                    _selectedSearchZone,
+                    detailCancellation);
 
             // Back/Forward and repeated item-source drilldown are async.
             // An older request must not replace a newer selection's panel.

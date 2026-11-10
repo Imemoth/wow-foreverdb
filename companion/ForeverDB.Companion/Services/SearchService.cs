@@ -65,7 +65,10 @@ public sealed class SearchService
                 new SearchZoneOption
                 {
                     MapId = mapId,
-                    ZoneName = zoneName
+                    ZoneName = zoneName,
+                    ParentMapId = MapMetadataStore.Find(mapId)?.ParentMapId ?? 0,
+                    MapDisplayName = MapMetadataStore.Find(mapId)?.Name ?? zoneName,
+                    IsUnknownMapping = MapMetadataStore.Find(mapId) is null
                 });
         }
 
@@ -82,6 +85,13 @@ public sealed class SearchService
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<ZoneExplorerNode>> GetZoneExplorerAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var scopes = await GetAvailableZonesAsync(cancellationToken);
+        return ZoneExplorerBuilder.Build(scopes, MapMetadataStore.LoadAll());
+    }
+
     public const int ZoneCatalogPageSize = 50;
 
     // Browse only observed items/sources in a concrete zone. Unlike named
@@ -90,6 +100,47 @@ public sealed class SearchService
         SearchZoneOption zone,
         int offset = 0,
         CancellationToken cancellationToken = default)
+    {
+        if (zone.IsAggregate)
+        {
+            var requestedCount = offset + ZoneCatalogPageSize;
+            var pages = await Task.WhenAll(zone.IncludedScopes.Select(async scope =>
+            {
+                var entries = new List<SearchResultItem>();
+                long total = 0;
+                for (var pageOffset = 0; pageOffset < requestedCount; pageOffset += ZoneCatalogPageSize)
+                {
+                    var page = await BrowseExactZoneAsync(scope, pageOffset, cancellationToken);
+                    total = page.TotalCount;
+                    entries.AddRange(page.Results);
+                    if (page.Results.Count < ZoneCatalogPageSize || entries.Count >= total)
+                    {
+                        break;
+                    }
+                }
+                return (entries, total);
+            }));
+
+            var combined = pages.SelectMany(page => page.entries)
+                .GroupBy(ResultIdentity, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(result => result.Kind)
+                .ThenBy(result => result.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return new ZoneCatalogPage
+            {
+                Results = combined.Skip(offset).Take(ZoneCatalogPageSize).ToArray(),
+                TotalCount = combined.LongLength
+            };
+        }
+
+        return await BrowseExactZoneAsync(zone, offset, cancellationToken);
+    }
+
+    private async Task<ZoneCatalogPage> BrowseExactZoneAsync(
+        SearchZoneOption zone,
+        int offset,
+        CancellationToken cancellationToken)
     {
         if (zone.IsAllZones || !zone.MapId.HasValue ||
             zone.MapId.Value <= 0 ||
@@ -166,6 +217,18 @@ public sealed class SearchService
 
         var token = await _accessTokenProvider(cancellationToken);
 
+        if (zone?.IsAggregate == true)
+        {
+            var batches = await Task.WhenAll(zone.IncludedScopes.Select(async scope =>
+                await SearchAsync(trimmed, scope, cancellationToken)));
+            return batches.SelectMany(batch => batch)
+                .GroupBy(ResultIdentity, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(result => result.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(result => result.Kind)
+                .ToArray();
+        }
+
         if (zone is not null &&
             !zone.IsAllZones)
         {
@@ -195,6 +258,11 @@ public sealed class SearchService
 
         return BuildZoneSearchResults(results, trimmed);
     }
+
+    private static string ResultIdentity(SearchResultItem result) =>
+        result.Kind == SearchEntityKind.Item
+            ? $"I:{result.ItemId}"
+            : $"S:{result.SourceType}:{result.SourceId}:{result.SourceLevel}";
 
     private static IReadOnlyList<SearchResultItem> BuildZoneSearchResults(
         JsonElement data,
@@ -364,15 +432,17 @@ public sealed class SearchService
 
     public async Task<EntityDetail> GetDetailAsync(
         SearchResultItem result,
+        SearchZoneOption? zone = null,
         CancellationToken cancellationToken = default)
     {
         return result.Kind == SearchEntityKind.Item
-            ? await GetItemDetailAsync(result, cancellationToken)
-            : await GetSourceDetailAsync(result, cancellationToken);
+            ? await GetItemDetailAsync(result, zone, cancellationToken)
+            : await GetSourceDetailAsync(result, zone, cancellationToken);
     }
 
     private async Task<EntityDetail> GetItemDetailAsync(
         SearchResultItem result,
+        SearchZoneOption? zone,
         CancellationToken cancellationToken)
     {
         var dataTask =
@@ -388,7 +458,19 @@ public sealed class SearchService
         await Task.WhenAll(dataTask, locationsTask);
 
         var rows = ParseObservedRows(await dataTask);
-        var locations = await locationsTask;
+        var allLocations = await locationsTask;
+        var locations = ZoneExplorerBuilder.FilterLocations(allLocations, zone);
+
+        if (zone is not null && !zone.IsAllZones)
+        {
+            var scopedSources = locations
+                .Select(location =>
+                    $"{location.SourceType}|{location.SourceId}|{location.SourceLevel}|{location.LootKind}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            rows = rows.Where(row => scopedSources.Contains(
+                $"{row.SourceType}|{row.SourceId}|{row.SourceLevel}|{row.LootKind}"))
+                .ToList();
+        }
 
         rows = HideHistoricalRowsWhenExactLevelExists(rows);
         ApplyLocationSummaries(rows, locations);
@@ -416,7 +498,8 @@ public sealed class SearchService
         {
             Title = $"{result.Name}",
             Subtitle =
-                $"Item #{result.ItemId} · {sourceCount} observed source row(s)",
+                $"Item #{result.ItemId} · {sourceCount} observed source row(s)" +
+                ScopeStatsDisclosure(zone),
             Groups = groups,
             Locations = locations
         };
@@ -424,6 +507,7 @@ public sealed class SearchService
 
     private async Task<EntityDetail> GetSourceDetailAsync(
         SearchResultItem result,
+        SearchZoneOption? zone,
         CancellationToken cancellationToken)
     {
         var dataTask =
@@ -443,7 +527,9 @@ public sealed class SearchService
         await Task.WhenAll(dataTask, locationsTask);
 
         var rows = ParseObservedRows(await dataTask);
-        var locations = await locationsTask;
+        var locations = ZoneExplorerBuilder.FilterLocations(
+            await locationsTask,
+            zone);
 
         ApplyLocationSummaries(rows, locations);
 
@@ -485,11 +571,16 @@ public sealed class SearchService
         return new EntityDetail
         {
             Title = result.Name,
-            Subtitle = subtitle,
+            Subtitle = subtitle + ScopeStatsDisclosure(zone),
             Groups = groups,
             Locations = locations
         };
     }
+
+    private static string ScopeStatsDisclosure(SearchZoneOption? scope) =>
+        scope is null || scope.IsAllZones
+            ? ""
+            : " · locations filtered to this scope; drop totals/rates remain global";
 
     private static List<ObservedRow> ParseObservedRows(JsonElement data)
     {

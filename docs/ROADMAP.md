@@ -329,6 +329,15 @@ Current acceptance procedure: [0.7 acceptance test](0.7-acceptance-test.md).
       build and map regressions passed. Live client/CASC map acceptance remains
       open for owner verification.
 
+- [ ] Companion hierarchical Search zone explorer and consistent geographic
+      scope filtering — implementation branch `feat/companion-hierarchical-zone-explorer`
+      is based on temporary integrated acceptance PR #181. The tree uses
+      exported UiMapID/parentMapID metadata, keeps incomplete ancestry visible as
+      Unknown mapping, and composes existing exact zone search scopes. Full
+      acceptance remains blocked: current stats/location RPCs do not provide
+      scoped item/source aggregates, and WPF build/CI/Windows acceptance has not
+      run. See [zone explorer implementation notes](companion-zone-explorer.md).
+
 ## 0.7.x — Collector coverage closure
 
 - [x] Herbalism / Disenchant repo-side acceptance preparation: tracker review,
