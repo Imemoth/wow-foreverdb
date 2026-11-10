@@ -104,6 +104,9 @@ Each scoped contribution also retains its attribution evidence class. A
 rendered as a source point. The public response preserves these classes in
 aggregate coverage metadata. A scope receiving both classes reports them
 separately so interaction evidence is not presented as source-map coverage.
+The validated event-time map identity is retained as attribution provenance
+for interaction-zone contributions, but it is not exposed as an individual
+point or used to infer source coordinates.
 
 Canonical mappings come from a versioned, CI-validated WoW Forever map manifest.
 The manifest records map IDs, parent IDs, map type, continent ancestry, and the
@@ -143,11 +146,16 @@ four evidence states:
 
 For a loot interaction, the resolver requires one recognized, unambiguous
 source GUID from the loot API; an event-time player map ID that resolves to
-matching valid map metadata; a non-empty zone identity consistent with that
-map; no map/zone transition during capture; and, for a pending gathering or
+matching valid zone map metadata and a valid parent; a non-empty zone identity
+consistent with that map; a valid normalized coordinate map (used only to
+validate map availability, never retained as the source point); no map/zone
+transition during the synchronous capture; and, for a pending gathering or
 fishing action, a matching source and still-valid interaction window. Missing
-map metadata, multiple candidate sources, a mismatched pending source, a
-stale interaction, or inconsistent map/zone readings fail closed to `Unknown`.
+map metadata, a mismatched pending source, a stale interaction, or inconsistent
+map/zone readings fail closed to `Unknown`. If distinct source GUIDs in one
+loot window cannot be uniquely linked to the observed items, do not record a
+source observation; increment the existing unresolved-loot diagnostic rather
+than guessing or double-counting.
 An ID such as 1420 is not sufficient by itself: map IDs can have distinct
 zone labels/aliases, so the map ID and validated zone identity are considered
 together. The registry must preserve the evidence class and must not promote
@@ -205,7 +213,9 @@ branch's migration ledger) with:
    mapping status. A map identity can resolve to no more than one active
    terminal scope.
 3. `installation_geographic_source_stats`: installation + canonical scope +
-   attribution evidence class + source identity + loot kind, with observations.
+   attribution evidence class + evidence map identity + source identity + loot
+   kind, with observations. This preserves map aliases/provenance while zone
+   queries can aggregate their validated map identities safely.
 4. `installation_geographic_item_stats`: the same key plus item ID, with drop,
    quantity, quest-drop counts and quest IDs.
 5. Installation geography/revision metadata: geography contract activation
