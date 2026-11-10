@@ -41,6 +41,24 @@ under the installation advisory lock. Older `updatedAt` snapshots are ignored.
 Replaying an equal/current snapshot is safe because the replacement is atomic.
 New geographic rows will use that same lock, stale check, and transaction.
 
+The Addon timestamp has only second resolution, so timestamp alone cannot order
+successive snapshots produced within one second. The geography contract adds a
+persistent `snapshotRevision`, monotonically increasing for the stable
+installation ID whenever exported state changes. The server stores the last
+accepted revision. A higher revision is newer even if `updatedAt` is equal; a
+lower revision is stale and a no-op. Replaying the same revision with the same
+canonical payload is idempotent; reusing a revision for different content is a
+conflict. Revision comparison and global/scoped replacement occur atomically
+under the existing installation lock.
+
+Older Addons send no revision and retain the existing timestamp-only global
+ordering, including equal-timestamp replacement behavior. The revision
+high-water mark remains separate and is retained if an accepted legacy
+snapshot clears scoped rows during downgrade. A geography-aware client must
+resume above that high-water mark. Revision state is scoped to installation
+identity; a reset/new identity starts a new sequence and cannot reuse another
+installation's revision.
+
 Historical installation observations and item drops have no trustworthy shared
 geographic key. The location observations cannot repair the missing item link;
 they must not be used to manufacture historical zone drop counts.
@@ -70,29 +88,51 @@ observation `mapId`, `x`, and `y` unchanged.
 
 Canonical mappings come from a versioned, CI-validated WoW Forever map manifest.
 The manifest records map IDs, parent IDs, map type, continent ancestry, and the
-evidence/build used to classify each map as continent, zone, or city. Runtime
-display names and `subZoneName` are never used as the sole mapping key. The
-server owns the accepted registry. The ingestion payload identifies the
-observed map identity, and the server resolves it to one canonical leaf scope;
-unknown, invalid, or ambiguous map identities resolve to `Unknown` and are
-reported as coverage gaps. New map IDs stay unknown until registry evidence is
-reviewed and added.
+evidence/build used to classify each map as continent, zone, or city. The
+registry is product-scoped and includes the actual Forever `wowf` product; it
+does not use an exact client-build allowlist. A verified mapping can be reused
+by later Forever builds when map identity, hierarchy, map type, coordinate
+space, and geometry remain compatible. Content hashes and metadata
+fingerprints provide evidence: matching fingerprints support reuse, while
+changed content triggers validation of the affected map and regeneration only
+when necessary. A build-number change alone is not incompatibility, and an
+unverified build is never labelled verified. Runtime display names and
+`subZoneName` are never sole mapping keys. The server owns the accepted
+registry. Unknown, invalid, or ambiguous map identities resolve to `Unknown`
+and are reported as coverage gaps until reviewed evidence is added.
 
 ## Collection and snapshot contract
 
-At `RecordObservation`, resolve the event's observed WoW map ID to a candidate
-collection map key. Increment exactly one scoped source observation bucket,
-including events with no items or zero drops. For each item observed in that
-event, increment the matching scoped item drop count, quantity, quest-drop
-count, and quest ID set. Preserve the existing global counters unchanged. If
-there is no trustworthy map identity, increment the explicit Unknown bucket.
+At `RecordObservation`, use an event-type-specific attribution resolver; do
+not assume the player's current position is the source location. Attribute an
+event only from a map identity tied to its actual source, such as an identified
+gathering node/container or a source entity with an explicitly known map.
+Creature loot, quest rewards, crafted items, mail, and other events without an
+authoritative source map resolve to `Unknown`, even when player position is
+available. Ambiguous source identity or event-to-map relationship also
+resolves to `Unknown`. Player position remains separate location provenance
+and is not promoted to source attribution. The resolver and evidence type are
+part of the geography contract and are tested per event type.
+
+Increment exactly one scoped source observation bucket, including events with
+no items or zero drops. For each item observed in that event, increment the
+matching scoped item drop count, quantity, quest-drop count, and quest ID set.
+Preserve the existing global counters unchanged. Unknown-attributed events
+remain in Unknown contribution and coverage counters, but are excluded from
+named zone/city and continent totals; they are never discarded or redistributed.
+Coverage reports known versus Unknown observations so the UI can explain the
+gap without presenting Unknown as a geographic area.
 
 The addon SavedVariables schema advances and exports a versioned geography
 contract alongside the existing global source data. The scoped aggregate grain
 is:
 
-- source: `(scope map identity, source type, source ID, source level, loot kind)`
+- source: `(canonical scope ID, source type, source ID, source level, loot kind)`
 - item: the source grain plus `item ID`
+
+Where separate coordinate maps feed the same canonical scope, retain their
+map identities in the bounded location aggregate/provenance grain so map
+rendering does not collapse different coordinate spaces.
 
 The export preserves the existing location records unchanged. It does not
 derive scoped item counts by joining those records later.
@@ -136,12 +176,15 @@ the general addon schema version alone. This matters because an older Companion
 may parse a newer addon export but omit unknown fields when building its public
 DTO.
 
-- A current geography contract is validated against the server registry, then
-  replaces that installation's scoped rows atomically with the global rows.
+- A current geography contract is validated against the server registry and
+  monotonic revision ordering, then replaces that installation's scoped rows
+  atomically with the global rows.
 - A legacy payload with no geography contract still updates global tables. Its
   geography coverage becomes `legacy` and its prior scoped contribution is
   removed in the same transaction, so a downgrade cannot leave stale scoped
-  data visible.
+  data visible. The revision high-water mark is retained across downgrade; a
+  later geography-aware client must submit a higher revision. Legacy clients
+  retain timestamp-only ordering and equal-timestamp behavior.
 - A new Companion with an old Addon keeps global behavior; no scope-specific
   counts are invented.
 - A new Addon against a backend without the migration keeps global collection
@@ -169,10 +212,21 @@ zone and city RPCs aggregate one terminal scope. The query surface returns:
 - distinct item/source search entities and exact total counts;
 - scoped source observations including installations with zero item drops;
 - scoped item drops, quantity, quest semantics and observed drop rate;
-- raw location rows only for matching source/map identities, preserving the
-  coordinate map identity;
+- safely aggregated location cells for matching source/map identities,
+  preserving coordinate map identity and returning deterministic coarse-cell
+  coordinates instead of individual observation points;
 - aggregate coverage metadata distinguishing scoped collection from Global /
   Legacy history.
+
+No RPC returns per-installation records or installation identifiers. Location
+counts and rates are grouped server-side by source/map and coarse spatial cell,
+subject to a minimum independent-installation cohort threshold. Cells below
+the threshold are suppressed or rolled into a coarser cell. Each RPC has
+bounded page size, result count, execution budget, and payload size. Responses
+contain only aggregate counts/rates and safe cell coordinates; they never
+expose raw coordinates, per-installation locations, or a way to infer one
+installation's contribution. These controls apply to detail and map endpoints
+as well as search.
 
 The denominator is computed from geographic source rows independently of item
 rows, matching the zero-drop correctness fixed for global statistics in
@@ -193,24 +247,37 @@ installation rows or reuse Companion RPC access for the website.
 
 ## Migration dependencies and rollout
 
-1. Generate and review the canonical map registry from the exact WoW Forever
-   map metadata used by the addon/runtime. Add data-quality checks for duplicate
-   aliases, parent cycles, invalid map types, missing continent ancestry, and
-   city/zone classification. Unverified maps remain Unknown.
-2. Add the geography-aware Addon event aggregation/export and parser DTO behind
+1. Migration 0019 is a required backend prerequisite: it establishes the
+   guarded public observation ingestion wrapper and the payload limits on which
+   the geography-aware writer builds. Verify 0019 is present before applying
+   the future additive geography migration. That migration must preserve the
+   0019 auth, payload, size, source-count, and Guildbook-stripping protections.
+   Environments without 0019 retain their existing global contract only;
+   scoped ingestion is unavailable.
+2. Generate and review the canonical map registry from WoW Forever metadata
+   and client assets. Discover supported `wowf` builds automatically; do not
+   maintain an exact-build allowlist. Validate map identity, hierarchy, map
+   type, coordinate space, geometry, and content/metadata fingerprints. Reuse
+   mappings when checks pass; flag affected maps for regeneration only when
+   evidence shows asset or geometry changes. Check duplicate aliases, parent
+   cycles, invalid map types, missing continent ancestry, and city/zone
+   classification. Unverified maps remain Unknown and unverified builds are
+   never labelled verified.
+3. Add the geography-aware Addon event aggregation/export and parser DTO behind
    the explicit geography contract version. Keep global counters byte-for-byte
-   equivalent and preserve schema-9 exports.
-3. Add the additive SQL migration, transactional ingest and aggregate-only
+   equivalent, preserve schema-9 exports, and add monotonic snapshot revisions.
+4. Add the additive SQL migration, transactional ingest and aggregate-only
    scoped RPCs. Run migration preflight, rollback-shape checks and security
    assertions only in local/CI PostgreSQL + GoTrue environments.
-4. Update the Companion Search UI to Continent → Zone / City, remove subzones as
+5. Update the Companion Search UI to Continent → Zone / City, remove subzones as
    selectable/statistics scopes, call server-side scoped RPCs, display
    coverage, and switch maps only within one coordinate identity.
-5. Add a supported-client rollout note. New Addon/Companion pair requires the
-   server migration for scoped APIs; old clients keep global collection. No
-   production migration, environment creation, deployment or PR merge is
+6. Add a supported-client rollout note. New Addon/Companion pair requires both
+   migration 0019 and the follow-on geography migration for scoped APIs; old
+   clients and backends without these migrations keep global collection only.
+   No production migration, environment creation, deployment or PR merge is
    included in this design or its first implementation PR.
-6. After owner approval, execute a separate deployment plan with production
+7. After owner approval, execute a separate deployment plan with production
    preflight, backup/rollback, migration ordering, client compatibility window,
    and post-deploy validation. No production change occurs by merging code
    alone.
@@ -218,6 +285,8 @@ installation rows or reuse Companion RPC access for the website.
 No historical backfill is planned. Existing location metadata remains
 available for maps, but historical item drops and rates remain Global / Legacy
 because their numerator cannot be connected reliably to a location.
+Unknown coverage is reported separately and is never imputed to a named zone
+or city.
 
 ## Verification plan
 
@@ -233,13 +302,22 @@ Fixtures and integration cases cover:
 - city totals included once at continent scope and absent from surrounding zone;
 - continent rollup equals its zone + city leaves with no double counting;
 - Global / Legacy rows remain in All zones but never enter scoped rates;
-- unknown, invalid, ambiguous, and newly added map IDs;
-- current contract, old Addon payload, old Companion projection, replayed and
-  concurrent snapshots, and downgrade to a legacy client;
-- stale snapshot no-op and atomic rollback on invalid scope/oversized payload;
+- unknown, invalid, ambiguous, and newly added map IDs; compatible `wowf`
+  builds reusing validated map mappings, content/metadata changes triggering
+  targeted validation, and build-number-only changes not producing false
+  incompatibility;
+- current contract, old Addon payload, and old Companion projection;
+- concurrent snapshots, same-second revisions, exact replay, conflicting
+  duplicate revision, stale snapshot no-op, and downgrade/return to a legacy
+  client while preserving the revision high-water mark;
+- atomic rollback on invalid scope/oversized payload;
+- event-specific attribution for known source maps, player-position-only
+  events resolving to Unknown, and ambiguous source/map relationships;
 - exact quest-drop/quantity semantics and preservation of original coordinates;
-- unauthenticated and anonymous-key-only RPC denial; authenticated gate, budget,
-  row caps and aggregate-only output;
+- unauthenticated and anonymous-key-only RPC denial; authenticated gate,
+  execution/payload budgets, row caps, aggregate-only output, independent
+  installation cohort thresholding, coarse location cells, and absence of
+  per-installation output;
 - negative assertions that no Guildbook key/table is accepted into or returned
   from the public observation API.
 
