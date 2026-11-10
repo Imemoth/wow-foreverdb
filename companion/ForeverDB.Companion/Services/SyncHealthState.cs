@@ -49,8 +49,13 @@ public sealed class SyncHealthState
     {
         AutoSyncEnabled = settings.AutoSync;
 
+        var normalizedWowRoot = (settings.WowRoot ?? "").TrimEnd('\\', '/');
+        var lastSeparator = Math.Max(normalizedWowRoot.LastIndexOf('\\'), normalizedWowRoot.LastIndexOf('/'));
+        var flavorDirectory = normalizedWowRoot[(lastSeparator + 1)..];
         var wowConfigured =
-            !string.IsNullOrWhiteSpace(settings.WowRoot);
+            settings.WowRootConfirmed &&
+            !string.IsNullOrWhiteSpace(settings.WowRoot) &&
+            !string.Equals(flavorDirectory, "_classic_beta_", StringComparison.OrdinalIgnoreCase);
 
         var supabaseUrlConfigured =
             Uri.TryCreate(

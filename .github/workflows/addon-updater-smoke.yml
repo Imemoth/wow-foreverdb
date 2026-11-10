@@ -1,0 +1,19 @@
+name: Addon updater smoke tests
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/update-addon.ps1'
+      - 'update-addon.cmd'
+      - 'tests/update_addon_smoke.ps1'
+      - '.github/workflows/addon-updater-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  updater-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test branch, commit, destination and CMD forwarding
+        shell: pwsh
+        run: ./tests/update_addon_smoke.ps1

@@ -20,6 +20,7 @@ concurrency:
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  COMPANION_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
   # The standard binary supports account linking, but this test process stays explicitly offline: tests use an in-process fake
   # (and a loopback fake for the multi-process cases) and never contact hosted Supabase.
   FOREVERDB_ACCOUNT_MODE: "disabled"
@@ -35,6 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.COMPANION_BUILD_COMMIT }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -99,6 +101,7 @@ jobs:
           -c Release
           -r win-x64
           --self-contained false
+          -p:BuildCommit=${{ env.COMPANION_BUILD_COMMIT }}
           -o artifacts/publish-check
 
       - name: Published assembly carries the expected version and the account library
@@ -108,7 +111,7 @@ jobs:
           if (-not (Test-Path "$dir/ForeverDB.Companion.Account.dll")) { throw "account library missing from publish output" }
           $v = (Get-Item "$dir/ForeverDB.Companion.dll").VersionInfo.ProductVersion
           Write-Host "ProductVersion=$v"
-          if (-not $v.StartsWith("0.9.0-alpha")) { throw "unexpected version $v" }
+          if (-not $v.StartsWith("0.9.11-alpha+${{ env.COMPANION_BUILD_COMMIT }}")) { throw "unexpected version $v" }
 
       - name: git diff --check
         shell: pwsh

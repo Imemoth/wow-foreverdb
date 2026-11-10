@@ -218,6 +218,30 @@ public static class AccountFeatureGate
     public static AccountGateDecision EvaluateFromEnvironment(AccountEndpoint productionEndpoint) =>
         EvaluateForRuntime(name => Environment.GetEnvironmentVariable(name), productionEndpoint);
 
+    /// <summary>Rejects a failed isolated-mode configuration instead of silently routing its data requests to production.</summary>
+    public static bool MustBlockProductionFallback(string? requestedMode, AccountGateDecision gate)
+    {
+        var mode = (requestedMode ?? "").Trim().ToLowerInvariant();
+        return mode.Length > 0 && mode is not ("production" or "disabled") && !gate.AccountsEnabled;
+    }
+
+    /// <summary>Builds a non-secret user-facing label from the validated gate and the endpoint actually used at runtime.</summary>
+    public static string DescribeEffectiveEnvironment(AccountGateDecision gate, AccountEndpoint effectiveEndpoint)
+    {
+        if (gate.Environment == AccountEnvironment.ProductionAccountLinking && gate.AccountsEnabled)
+            return $"Production Account Linking — production backend ({SafeHost(effectiveEndpoint)})";
+        if (gate.Environment == AccountEnvironment.Staging && gate.AccountsEnabled)
+            return $"Staging — isolated staging backend ({SafeHost(effectiveEndpoint)})";
+        if (gate.Environment == AccountEnvironment.Local && gate.AccountsEnabled)
+            return $"Local — local testing backend ({SafeHost(effectiveEndpoint)})";
+        return "Disabled — account services unavailable.";
+    }
+
+    private static string SafeHost(AccountEndpoint endpoint) =>
+        Uri.TryCreate(endpoint.BaseUrl, UriKind.Absolute, out var uri)
+            ? uri.IsDefaultPort ? uri.IdnHost : $"{uri.IdnHost}:{uri.Port}"
+            : "endpoint unavailable";
+
     private static AccountGateDecision EvaluateStandardProduction(AccountEndpoint endpoint)
     {
         if (!ProductionAccountAuthApproved)

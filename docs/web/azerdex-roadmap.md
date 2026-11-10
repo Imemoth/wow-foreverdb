@@ -1,10 +1,12 @@
 # AzerDex website roadmap
 
-Authoritative milestone ledger for the **public AzerDex website** (`web/`), tracked
+Historical milestone and acceptance ledger for the **public AzerDex website** (`web/`), tracked
 separately from `docs/ROADMAP.md`'s Addon/Companion/Account System V1 milestones. This
 file exists because `docs/ROADMAP.md`'s own "Web — public ForeverDB website" section
 predates the AzerDex rebrand and does not mention any of the milestones below — see the
-note added there pointing here.
+note added there pointing here. Current priorities and dependencies are maintained in
+the [AzerDex Product & Engineering Roadmap](azerdex-product-roadmap.md); historical status
+below is not a claim about the latest production deployment.
 
 **Status terms used throughout:** `IMPLEMENTED` (code exists, built), `CI VERIFIED`
 (the relevant automated checks pass on the stated head), `RUNTIME VERIFIED` (exercised
