@@ -114,6 +114,6 @@ Account registration, login and the profile pages are enabled **publicly on `htt
 
 Navigation: `SiteHeader` loads exactly one module from the account zone, the server seam `app/account/_ui/HeaderAccount.tsx`, which renders nothing unless Account is enabled and ready; the signed-in state is resolved client-side from `/account/api/me` because the session cookie is `Path=/account`. `MobileNav` only receives an opaque slot. `account-boundary.test.ts` pins this single exception. Tests: `tests/unit/account-public-beta.test.ts`.
 
-## ADR-020 — Admin Platform ADM-00 architecture and governance (Partially decided)
+## ADR-020 — Admin Platform ADM-00 architecture and governance (Owner-approved product policy)
 
-The [formal ADM-00 decision record](adr-020-admin-platform-adm-00.md) records the approved editorial publishing rules separately from the proposed role matrix, workflow and security controls. Its open owner and technical gates precede ADM-01/ADM-03 implementation. ADR-008 remains the current Git-managed editorial delivery until a later CMS delivery design is accepted and implemented.
+The [formal ADM-00 decision record](adr-020-admin-platform-adm-00.md) records owner-approved roles, editorial publishing, MFA, grant duration, audit baseline and governance boundaries separately from proposed detailed role defaults and open technical/security gates. ADM-01 design may begin; privileged implementation requires security review. ADR-008 remains the current Git-managed editorial delivery until a later CMS delivery design is accepted and implemented.
