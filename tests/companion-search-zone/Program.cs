@@ -199,7 +199,11 @@ var multiZoneScope = new SearchZoneOption
 {
     IsAggregate = true,
     MapDisplayName = "Eastern Kingdoms",
-    IncludedScopes = new[] { tirisfal, crusadersOutpost }
+    IncludedScopes = new[]
+    {
+        tirisfal,
+        new SearchZoneOption { MapId = 1420, ZoneName = "Crusader's Outpost" }
+    }
 };
 var multiZoneResults = await service.SearchAsync("Cadet", multiZoneScope);
 Check(handler.Requests.Count == 2 &&
