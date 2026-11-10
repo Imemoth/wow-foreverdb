@@ -1,7 +1,7 @@
 # ForeverDB Web documentation
 
 1. [Current-state assessment](00-current-state-assessment.md): audit, production ledger, findings F-1…F-9
-2. [Architecture decisions](architecture-decisions.md): ADR-001…010
+2. [Architecture decisions](architecture-decisions.md): ADR-001…019, with the separate [ADM-00 ADR-020](adr-020-admin-platform-adm-00.md)
 3. [Threat model](threat-model.md)
 4. [Data classification & allowlist](data-classification.md)
 5. [API contract, rate limits & caching](api-contract.md)
@@ -16,7 +16,7 @@
 - [CI structure and release gates](release-gates.md) — check names, aggregate gate and required-check ruleset.
 - [Release parity: beta vs production](release-parity.md) — approved feature switches, variable classification, trusted live gate, staged-production acceptance and rollback.
 - [Dependency audit exceptions](dependency-audit-exceptions.md) — the single owner-approved, time-limited exception (GHSA-g3hv-75wg-m249, expires 2026-12-15), what the gate enforces, removal criteria.
-- [AzerDex Product & Engineering Roadmap](azerdex-product-roadmap.md) — proposed central forward-looking priority, ADM-00–ADM-05 and active-work ledger; [Admin Platform access-control specification](admin-platform-access-control.md) is its proposed authorization design.
+- [AzerDex Product & Engineering Roadmap](azerdex-product-roadmap.md) — central forward-looking priority, ADM-00–ADM-05 and active-work ledger; [ADM-00 ADR-020](adr-020-admin-platform-adm-00.md) records owner-approved product policy and open technical/security gates, with the [Admin Platform access-control specification](admin-platform-access-control.md) as its implementation-facing companion.
 - [AzerDex website roadmap](azerdex-roadmap.md) — historical P1–P3 implementation/acceptance ledger. `docs/ROADMAP.md` retains Addon/Companion/Account evidence.
 - [Class Guides & Talent Calculator (V1)](class-guides-talents.md) — routes, talent data source/version and rule confidence, how to update data and add guides, build-code format, tests.
 - [Race Guides (V1) & versioned racial-ability data](race-guides.md) — routes, baseline + append-only change records, evidence rules, source coverage and unresolved values, how to process a new patch, tests.
