@@ -1,0 +1,24 @@
+name: ADM-01B-1 private authorization schema
+
+on:
+  pull_request:
+    paths:
+      - 'database/migrations/0020_admin_private_authorization.sql'
+      - 'database/rollback/0020_admin_private_authorization_rollback.sql'
+      - 'database/tests/admin_private/**'
+      - '.github/workflows/admin-private-schema.yml'
+
+jobs:
+  admin-private-sql-isolation:
+    name: ADM-01B-1 SQL/RLS/grant isolation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run disposable PostgreSQL security suite
+        env:
+          FDB_ADMIN_PG_IMAGE: postgres:${{ matrix.postgres }}
+        run: bash database/tests/admin_private/run-docker.sh
