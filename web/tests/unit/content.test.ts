@@ -13,8 +13,13 @@ describe("editorial content", () => {
       expect(a.slug).toMatch(/^[a-z0-9-]+$/);
     }
   });
-  it("initial articles are labelled as editorial samples", () => {
-    expect(loadAllArticles().every((a) => a.sample)).toBe(true);
+  it("seed articles are labelled as editorial samples; only the reviewed launch posts are not", () => {
+    // A new non-sample article must be a deliberate, reviewed addition: extend this allowlist in the same PR
+    // (see tests/unit/launch-articles.test.ts for what a reviewed launch post has to satisfy).
+    // (World First Level 60: tests/unit/world-first-article.test.ts.)
+    const REVIEWED = ["jokerd-team-world-first-level-60-wow-forever", "wow-forever-beginners-guide-2026", "wow-forever-new-race-class-combinations"];
+    const nonSample = loadAllArticles().filter((a) => !a.sample).map((a) => a.slug).sort();
+    expect(nonSample).toEqual(REVIEWED);
   });
 });
 
