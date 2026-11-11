@@ -17,10 +17,20 @@ const HISTORICAL_SHA256 = new Map([
   ["0014_zero_touch_enrollment.sql", "daf6767a60eef7f450b7af136ac4f10e00cf05bbd452264561d8ee9d9857d3d1"],
 ]);
 
+// Reviewed exception to the ingest wrapper/projection rule: the EXACT bytes of one migration, pinned by sha256 (the same mechanism as the historical files above,
+// normalised for line endings). 0019_technical_installation_ingest.sql only CALLS private.foreverdb_ingest_snapshot_impl_v1 and private.fdb_public_snapshot
+// (pre-flight existence tests, and one call that passes every upload through the Guildbook-stripping projection); it never defines, alters, drops or re-grants
+// either, and it refuses to run unless the 0018 guard is in place. Reviewed against the 0018 boundary on 2026-11-11.
+// Nothing here depends on parsing SQL: ANY other byte in the file, even a comment, changes the hash and returns the file to the broad rule below. The entry
+// exempts ONLY the wrapper/projection rule; every Guildbook rule still applies to the file. Change this entry only in its own reviewed guard PR.
+export const REVIEWED_PROJECTION_USE_SHA256 = new Map([
+  ["0019_technical_installation_ingest.sql", "37161028d4e8ce2dae9a2189ef673a5b6bf6fed4ae0dbeaf3f21400ed60bbc5b"],
+]);
+
 const sha256 = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
 const uncomment = (sql) => sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ");
 
-export function guildbookPolicyViolations(files) {
+export function guildbookPolicyViolations(files, reviewedUse = REVIEWED_PROJECTION_USE_SHA256) {
   const violations = [];
   const has0018 = files.some((f) => f.name === "0018_disable_guildbook_cloud_sync.sql");
   if (!has0018) violations.push("approved 0018 protection migration is missing");
@@ -37,6 +47,7 @@ export function guildbookPolicyViolations(files) {
     if (HISTORICAL_SHA256.get(path.basename(file.name)) === hash) continue;
 
     const sql = uncomment(file.sql);
+    const reviewedProjectionUse = reviewedUse.get(path.basename(file.name)) === hash;
     const rules = [
       [/\bprivate\s*\.\s*account_guildbook_[a-z0-9_]*/i, "account-scoped cloud Guildbook storage"],
       [/\b(?:create|alter)\s+table\b[^;]*(?:guildbook|installation_guilds|installation_guild_members|installation_guild_professions)/i, "Guildbook cloud table definition or alteration"],
@@ -46,7 +57,7 @@ export function guildbookPolicyViolations(files) {
       [/\b(?:insert\s+into|copy\s+into)\b[^;]*\bselect\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "copy of historical Guildbook records"],
       [/\b(?:insert\s+into|update|delete\s+from)\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "Guildbook cloud data write"],
       [/\b(?:revoke|grant)\s+execute\b[^;]*\w*guildbook\w*/i, "Guildbook RPC privilege change"],
-      [/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\b/i, "ingest wrapper/projection modification"],
+      ...(reviewedProjectionUse ? [] : [[/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\b/i, "ingest wrapper/projection modification"]]),
     ];
     for (const [pattern, reason] of rules) if (pattern.test(sql)) violations.push(`${file.name}: ${reason}`);
   }
