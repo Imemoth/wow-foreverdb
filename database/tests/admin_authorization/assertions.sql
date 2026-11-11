@@ -137,11 +137,26 @@ do $test$ begin
     end if;
 end $test$;
 -- Column-level UPDATE exists only to permit FOR SHARE; forced RLS WITH CHECK
--- false must still prevent an executor from changing an assignment.
+-- false must still prevent an executor from changing any lockable Admin row.
 do $test$ begin
+    begin
+        update admin_private.active_policy set singleton=singleton;
+        raise exception 'executor changed active policy';
+    exception when insufficient_privilege then null;
+    end;
+    begin
+        update admin_private.staff_subjects set user_id=user_id;
+        raise exception 'executor changed staff subject';
+    exception when insufficient_privilege then null;
+    end;
     begin
         update admin_private.role_assignments set assignment_id=assignment_id;
         raise exception 'executor changed an assignment';
+    exception when insufficient_privilege then null;
+    end;
+    begin
+        update admin_private.direct_grants set grant_id=grant_id;
+        raise exception 'executor changed a direct grant';
     exception when insufficient_privilege then null;
     end;
 end $test$;
