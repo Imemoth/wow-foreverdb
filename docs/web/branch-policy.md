@@ -23,7 +23,7 @@ Consequence of strictness: **merges to one branch are serial.** After a merge, e
 2. **`release` to `main`:** a dedicated, reviewed synchronisation PR (merge commit, never squash, never automatic), after a batch of production merges. Resolve conflicts in that PR.
 3. **`main` to `release`:** only through a reviewed release-candidate or hotfix PR that lists exactly what is promoted. Admin work in particular stays on `main` until such a PR.
 4. A change to a **policy guard** (for example `scripts/check-guildbook-local-only-policy.mjs`) is its own PR to the branch it protects, never bundled with the feature that needs it: the guard workflow runs the base branch's script, so a PR cannot loosen the guard it is judged by.
-5. Hosted database changes are never implied by a merge. Each hosted migration needs its own explicit owner approval, its registry row (`database/MIGRATIONS.md`) and its evidence.
+5. Hosted database changes are never implied by a merge. Each hosted migration needs its own explicit owner approval, its registry row (`database/MIGRATIONS.md`) and its evidence. The `Migration registry` workflow (informational, not a required check) runs `scripts/check-migration-registry.mjs` when a migration directory or the registry changes, and fails on duplicate registry IDs or ledger aliases, unregistered or doubly claimed migration files, and unexplained number differences.
 
 ## 4. Dependabot
 

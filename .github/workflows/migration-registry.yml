@@ -1,0 +1,39 @@
+name: Migration registry
+
+# Informational, NOT a required check, by design (docs/web/release-gates.md: a path-filtered workflow never reports on unrelated PRs, and a required check
+# that never reports blocks them). It runs when a migration directory, the registry or this check changes, and on demand. It reads files only: no database,
+# no secrets, no network.
+on:
+  pull_request:
+    paths:
+      - 'database/**'
+      - 'scripts/check-migration-registry*'
+      - '.github/workflows/migration-registry.yml'
+  push:
+    branches: [main, release]
+    paths:
+      - 'database/**'
+      - 'scripts/check-migration-registry*'
+      - '.github/workflows/migration-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-registry-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-registry:
+    name: migration-registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Registry is consistent with the migration directories
+        run: node scripts/check-migration-registry.mjs
+      - name: Registry check tests (including mutation-style negative cases)
+        run: node --test scripts/check-migration-registry.test.mjs
