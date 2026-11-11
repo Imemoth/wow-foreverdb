@@ -69,7 +69,9 @@ Rules: `.strict()` (unknown fields are rejected), `sources` 1 to 16 entries, cod
 
 `ops-bot/test/gate-c-handler.test.ts` (authentication matrix, allow-list, failure mapping, caching, bounded execution, compatibility with the bot's real signing function, provider and zod contract) and `gate-c-e2e.test.ts` (bot provider -> endpoint core -> the real SQL function as the restricted role -> the bot's evaluation and incident engine) cover the HTTP and bot side. Mutation checks (removing the `PUBLIC` revoke, the allow-list, adding a table grant, making the function volatile, touching an existing object, leaving the role behind after the rollback, granting the role `pub` access) each fail the suite. **Not validated here:** real `pg_cron` / `pg_net` behaviour, the Supabase pooler, and the deployed Edge runtime; the post-deployment check below covers the last two, and the first is covered by the G2 functions already running in production.
 
-## Option G: the HMAC-gated Data API RPC (implemented in a separate PR, NOT applied)
+## Option G: the HMAC-gated Data API RPC (PR #190; APPLIED IN PRODUCTION 2026-11-11, 48 h observation running)
+
+Status 2026-11-11: `0020` applied, function `azerdex-ops-health` v10 deployed, owner acceptance 9/9 READY. The reporter login and `OPS_HEALTH_DATABASE_URL` are kept for rollback until the observation ends; `0021` has not been run. Evidence: [option-g-production-evidence.md](option-g-production-evidence.md). The GO-1 record below is historical: the direct-login path it describes is superseded by this section once `0021` is applied.
 
 Option G replaces the direct database login in the Edge Function by a gated call to `public.ops_health_report()` through the Data API as plain `anon`
 (migrations `0020_ops_health_gated_rpc.sql`, its rollback and `0021_drop_ops_reporter_login.sql`, `report-source.ts`, a read-only verifier and a PostgREST HTTP test suite). It keeps this
