@@ -112,6 +112,43 @@ describe("guildbook-local-only-policy", () => {
     assert(violations.some((v) => v.includes("new Guildbook RPC/function")));
   });
 
+  it("does not let the pre-flight form become an object handle for dynamic SQL (negative, found by independent review)", () => {
+    const handle = "to_regprocedure('private.fdb_public_snapshot(jsonb)')";
+    const wrapperHandle = "to_regprocedure('private.foreverdb_ingest_snapshot_impl_v1(jsonb)')";
+    const attempts = {
+      "drop through a text cast": `do $$ begin execute 'drop function '||${handle}::text; end $$;`,
+      "alter through format": `do $$ begin execute format('alter function %s security invoker', ${handle}); end $$;`,
+      "rename the wrapper through a handle": `do $$ begin execute 'alter function '||${wrapperHandle}::text||' rename to zz'; end $$;`,
+      "call the wrapper through a regproc handle without the projection": `do $$ begin execute 'select '||(${wrapperHandle}::regproc)::text||'($1)' into r using p; end $$;`,
+      "update pg_proc by handle": `update pg_proc set prosrc = 'select $1' where oid = ${handle};`,
+      "oid variable then drop": `do $$ declare o oid := ${handle}; begin execute format('drop function %s', o::regprocedure); end $$;`,
+    };
+    for (const [label, extra] of Object.entries(attempts)) {
+      assert(wrapperProjection(guildbookPolicyViolations([approved, { name: REVIEWED, sql: `${reviewed0019}\n${extra}` }])).length > 0, label);
+    }
+  });
+
+  it("rejects the suffixed legacy wrapper in any file (negative, pre-existing gap)", () => {
+    for (const sql of [
+      "create function public.x(p jsonb) returns jsonb language sql security definer as $$ select private.foreverdb_ingest_snapshot_impl_v1_legacy(p) $$;",
+      "grant execute on function private.foreverdb_ingest_snapshot_impl_v1_legacy(jsonb) to anon;",
+    ]) assert(wrapperProjection(guildbookPolicyViolations([approved, { name: "0020_x.sql", sql }])).length > 0, sql);
+  });
+
+  it("a quote cannot hide a comment marker, and a comment cannot hide a statement (negative, pre-existing gap)", () => {
+    for (const sql of [
+      "select '--'; drop function private.fdb_public_snapshot(jsonb);",
+      "select '/*';\ndrop function private.fdb_public_snapshot(jsonb);\nselect '*/';",
+      "select $$--$$; alter function private.fdb_public_snapshot(jsonb) security invoker;",
+      "select '--'; create table private.account_guildbook_x (a int);",
+    ]) assert(guildbookPolicyViolations([approved, { name: "0020_x.sql", sql }]).length > 0, sql);
+  });
+
+  it("still ignores real comments and strings that merely contain comment markers (positive)", () => {
+    assert.deepEqual(guildbookPolicyViolations([approved, { name: "0017_collector.sql", sql: "/* outer /* private.fdb_public_snapshot */ still comment */ select 'a--b' as x;\n-- private.fdb_public_snapshot is defined in 0018" }]), []);
+    assert.deepEqual(guildbookPolicyViolations([approved, { name: REVIEWED, sql: "create function public.f() returns int language plpgsql as $$ begin -- note: private.fdb_public_snapshot is defined in 0018\n return 1; end $$;" }]), []);
+  });
+
   it("keeps the broad rule for every other migration, including a copy of the reviewed text (negative)", () => {
     assert(wrapperProjection(guildbookPolicyViolations([approved, { name: "0017_collector.sql", sql: "select private.fdb_public_snapshot('{}'::jsonb);" }])).length > 0);
   });
