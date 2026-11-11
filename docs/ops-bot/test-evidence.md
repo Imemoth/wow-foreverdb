@@ -213,3 +213,14 @@ Four justified corrections from the staging acceptance, no redesign, no new infr
 4. **Heartbeat semantics.** `last_heartbeat` is the signal the bot chose to send; the new `last_heartbeat_http` records `accepted` (the service answered HTTP 2xx), `failed`, or `not_configured` (a missing URL no longer reads as success). `/azerdex status` shows "signal ok; ping accepted by the service (HTTP 2xx; receipt is confirmed only by the external monitor)". Independent confirmation remains the external monitor (Healthchecks status and alerts).
 
 Mutation checks (each break caught by the new tests): label removed from the renderer, outbox always reporting delivered, heartbeat result ignored, production entry wired to the injection, staging entry removed from `wrangler.toml`. 297 tests in 19 files, typecheck clean. The changes need a staging redeploy to take effect there; none was made.
+
+## 19. Production Supabase reporting endpoint, GO-1 acceptance (2026-11-10)
+
+Merged code: PR #174 `a68d295`, PR #184 `ba378a7` on `release`. Production project `chcoypkjzxfznsqmmbrq`; the full record (baseline and final fingerprints, hashes, versions, defects, open finding) is in [supabase-reporting-contract.md](supabase-reporting-contract.md) "Production activation record (GO-1)". Summary:
+
+- Migration `ops_0019_health_report` applied 13:00 UTC; fingerprints of cron jobs 3 to 7, all functions, schemas, relations and roles identical before and after (final check at ~15:00 UTC).
+- Edge Function `azerdex-ops-health` source verified byte-identical to `release`; bundle hash `9e7a4d03f25a3f6f0d8ea60414a9980aab06dba599a07a4993ee3ca262bbcf7c`; the other three functions unchanged.
+- Owner-run endpoint check 14:48 UTC: 9 of 9 PASS, signed GET 200, contract v1 valid, fresh, 3 sources ok, G6 present/active/succeeded. The pooler shows `azerdex_ops_reporter` authenticated.
+- Two operator-side defects found and fixed (Windows clock skew gave 401; a wrong user in the stored database URL gave 503). One accidental exposure of the HMAC secret, rotated.
+- **Not satisfied / open:** inherited `PUBLIC` privileges on `pg_net` (least privilege only partly achieved); off-machine backup copy unconfirmed.
+- Not started: GO-2 (production Discord and Cloudflare resources) and GO-3 (activation).
