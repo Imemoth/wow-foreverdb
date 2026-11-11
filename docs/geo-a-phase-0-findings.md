@@ -32,6 +32,18 @@ Local fixtures exercise exact loot source GUID parsing, verified and correlated 
 
 The full addon smoke suite and syntax checks run under Lua 5.1 and Lua 5.4. Results are reported with the Geo A implementation PR. In-game source evidence requires owner participation because no WoW Forever client/runtime is available in this environment.
 
+## Third-party behavior-reference comparison
+
+The supplied archives and public GatherLite repository were inspected outside the ForeverDB tree. No reference source, library, or copied implementation was added to this repository.
+
+| Reference path | Observed correlation behavior | Identity and location assumptions | ForeverDB implication |
+| --- | --- | --- | --- |
+| GatherLite 8.4.5 `scripts/methods.lua` (the public repository inspected was commit `8581b01`, version 8.4.4) | Tracks `UNIT_SPELLCAST_SENT`, then matching `UNIT_SPELLCAST_SUCCEEDED`; associates `LOOT_OPENED` only when success was within about one second. | Carries cast GUID as a cast token and uses the player's captured map/coordinates as the node location. It does not match the loot GameObject GUID to the cast GUID. | Useful event-order reference only. ForeverDB keeps CastGUID distinct, waits for one unique loot-source GUID, and never stores player coordinates as source coordinates. Four seconds is an explicit unmeasured Forever compromise, not copied timing behavior. |
+| Gatherer 7.3.1 `Swag/LibSwag.lua`, `GatherEvent.lua`, `GatherApi.lua`, `GatherDropRates.lua` | Tracks gathering spell/name and success time, then accepts loot-opened results within roughly one second; loot text/tooltip data helps classify nodes and outputs. | Does not use a modern CastGUID/GameObject GUID identity join in the inspected path. Position is derived from player position. Its drop-rate denominator is based on observed loot output, so an empty loot window is not retained as a zero-drop observation. | Do not adopt tooltip/name heuristics as source proof. Preserve ForeverDB's unique-source and zone validation, and retain zero-drop observations only when independent source identity exists. |
+| GatherTogether 0.6.4 `Core.lua` | Fishing uses cast-start/stop state and correlates the catch around `LOOT_OPENED` while still casting or within about five seconds. | Captures player location/zone and map position; does not establish fishing-pool GUID identity or a source coordinate. | Fishing remains outside the new mining/herbalism correlation tier. A player fishing location alone stays non-geographic/Unknown under the source-attribution contract. |
+
+These projects are behavioral references rather than evidence of WoW Forever 1.60.1.70862 runtime semantics. The actual event availability, argument tuples, event ordering and cast-to-loot latency must be confirmed by the owner in-game. The chosen collector fails closed when those runtime values do not satisfy its checks.
+
 ## Owner gameplay checks still required
 
 For each available type (creature loot, skinning, herbalism, mining, fishing), capture at least 20 controlled interactions on `wowf` build `1.60.1.70862`, without syncing. Record only counts of evidence classes, not names, coordinates, GUIDs, or character identifiers:
