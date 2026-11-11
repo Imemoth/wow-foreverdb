@@ -1,6 +1,6 @@
 # Geographic Collection and Scoped Statistics Design
 
-Status: **proposed for owner review; implementation has not started**.
+Status: **owner-approved design; Geo A addon work is tracked separately in Draft PR #189**.
 
 ## Intent
 
@@ -127,7 +127,7 @@ and are reported as coverage gaps until reviewed evidence is added.
 
 At `RecordObservation`, use an event-type-specific attribution resolver; do
 not treat player coordinates as source coordinates. The contract distinguishes
-four evidence states:
+five evidence states:
 
 1. `verified_source_map`: an API or validated source record explicitly ties
    the observed source identity to a verified coordinate map. Only this state
@@ -138,10 +138,17 @@ four evidence states:
    interaction was recorded, not the creature/node's exact coordinates or
    necessarily its spawn point. It may contribute to zone-level counts only;
    its player coordinates are never reused as source coordinates.
-3. `unverified_player_position`: a player map/position exists without an
+3. `correlated_interaction_zone`: a supported gathering interaction is
+   linked to one unique loot-window source by a successful, bounded cast-to-loot
+   sequence and a stable, validated player zone. It supports zone totals only.
+   It does not prove that the player stood at the source, identify a node's
+   coordinates, or establish the source's map independently. This is a weaker
+   event-correlation claim than `verified_interaction_zone` and remains a
+   distinct class in storage, export, diagnostics and public coverage.
+4. `unverified_player_position`: a player map/position exists without an
    event-to-source interaction link. It remains provenance/context only and
    contributes to no named geographic scope.
-4. `unknown`: source, map, timing, or zone identity is absent, contradictory,
+5. `unknown`: source, map, timing, or zone identity is absent, contradictory,
    or ambiguous. This is the safe result for all other event types.
 
 For a loot interaction, the resolver requires one recognized, unambiguous
@@ -149,10 +156,10 @@ source GUID from the loot API; an event-time player map ID that resolves to
 matching valid zone map metadata and a valid parent; a non-empty zone identity
 consistent with that map; a valid normalized coordinate map (used only to
 validate map availability, never retained as the source point); no map/zone
-transition during the synchronous capture; and, for a pending gathering or
-fishing action, a matching source and still-valid interaction window. Missing
-map metadata, a mismatched pending source, a stale interaction, or inconsistent
-map/zone readings fail closed to `Unknown`. If distinct source GUIDs in one
+transition during the synchronous capture; and, for an action that needs
+additional correlation, a matching source and still-valid interaction window.
+Missing map metadata, a mismatched pending source, a stale interaction, or
+inconsistent map/zone readings fail closed to `Unknown`. If distinct source GUIDs in one
 loot window cannot be uniquely linked to the observed items, do not record a
 source observation; increment the existing unresolved-loot diagnostic rather
 than guessing or double-counting.
@@ -168,6 +175,44 @@ is proven.
 Player position outside the linked interaction callback remains
 `unverified_player_position` context only. The resolver and evidence type are
 part of the geography contract and are tested per event type.
+
+### Gathering cast-to-loot correlation
+
+Herbalism and mining may have no readable GameObject GUID at cast start. The
+Addon may still record a `correlated_interaction_zone` contribution when all
+of these conditions hold:
+
+1. It observes the player's `UNIT_SPELLCAST_SENT` for a recognized gathering
+   spell, then `UNIT_SPELLCAST_SUCCEEDED` for the same spell and operation.
+   The CastGUID identifies the cast, not the GameObject. When both events
+   provide a CastGUID, they must match exactly. If neither provides one, only
+   one unambiguous, non-overlapping SENT→SUCCEEDED sequence for that spell is
+   eligible. If just one event supplies an ID, or IDs conflict, correlation is
+   rejected.
+2. A new player cast, unrelated player cast, spell failure/interruption,
+   overlapping candidate, stale event, or source candidate conflict invalidates
+   the candidate. A GameObject GUID captured from `UnitGUID("npc")` at SENT or
+   SUCCEEDED is retained as an observed source candidate and must match the
+   unique loot source. A GUID first returned by the loot API is not represented
+   as though it had been observed at cast time.
+3. Within four seconds after success, one unique, recognized GameObject source
+   is exposed by the loot API. Multiple sources, unknown source values, or an
+   ambiguous loot window fail closed. Multiple loot slots from that one source
+   still represent one observation; item rows are aggregated within it.
+4. The validated player map/zone identity remains the same at SENT, success,
+   and loot capture; the zone name, map type/hierarchy, parent metadata and
+   normalized coordinate-map validity all pass the ordinary interaction-zone
+   checks. Player coordinates are not saved as node coordinates.
+
+The four-second success-to-loot window is an explicit conservative engineering
+bound, not a measured Forever latency guarantee. It is between the one-second
+GatherLite and five-second GatherTogether reference windows; neither reference
+is copied. The 12-second pending-operation lifetime bounds the full sequence.
+If `UNIT_SPELLCAST_SENT` is unavailable, a success-only event may retain legacy
+global classification, but it cannot earn `correlated_interaction_zone`.
+The Addon never treats a CastGUID as a GameObject GUID or awards source-map
+evidence from this correlation. Ambiguous cases go to `unknown`; the collector
+does not broaden the window to increase coverage.
 
 Increment exactly one scoped source observation bucket, including events with
 no items or zero drops. For each item observed in that event, increment the

@@ -294,3 +294,47 @@ The current estimates below are hypotheses only, not feasibility results, teleme
 - Run Lua 5.1/5.4, .NET unit/integration, PostgreSQL + GoTrue security, and Windows x64 package workflows on exact phase HEADs.
 - Review payload diffs and SQL RPC outputs for Guildbook exclusion and aggregate-only privacy; verify `git diff` contains no production configuration/secrets.
 - Keep every implementation PR Draft until upstream merge/dependency and all phase acceptance gates pass. Request owner approval before any merge or production migration/deployment.
+
+## Geo A evidence-model refinement: gathering cast-to-loot
+
+The Addon phase may add the distinct evidence class `correlated_interaction_zone`
+for mining/herbalism only. This is a zone-only contribution supported by a
+bounded successful gathering-cast → unique loot-source relationship; it is not
+source-map evidence and does not move the player's coordinates into the source
+record. The cast's CastGUID is not the GameObject GUID. A GameObject GUID that
+first appears in loot data remains loot-time evidence and must not be described
+as having been observed at cast start.
+
+Geo A requirements for this case:
+
+- Track one player gathering candidate from `UNIT_SPELLCAST_SENT` through
+  matching `UNIT_SPELLCAST_SUCCEEDED` to `LOOT_READY` or `LOOT_OPENED`. Require
+  exact CastGUID equality when both events expose it. If neither exposes one,
+  allow only the one active, ordered, non-overlapping same-spell operation; a
+  one-sided or conflicting ID fails closed.
+- Use an explicit 12-second pending-operation lifetime and a four-second
+  success-to-loot bound. Four seconds is an engineering bound bracketed by the
+  one-second GatherLite and five-second GatherTogether reference behavior; it
+  has not been measured against live Forever latency. Do not expand it solely
+  to increase coverage.
+- Require one recognized loot-source GUID, no conflicting source candidate,
+  stable validated player zone/map identity at SENT, success, and loot, and
+  ordinary map hierarchy/coordinate-map validity. The player position is used
+  only as zone interaction context. Multiple source identities or unknown
+  sources remain Unknown/unresolved.
+- A success-only legacy path may continue existing global kind classification
+  but cannot receive correlated geography. Failures, interrupts, unrelated or
+  overlapping casts, timeout, map change, duplicate loot events, and ambiguous
+  source sets must not create correlated contributions.
+- Preserve global observations, item/drop/quantity counters, revisions,
+  installation identity, legacy locations, duplicate suppression and zero-drop
+  source observations. Add one and only one geographic evidence contribution;
+  never backfill old Unknown or legacy rows. Keep Companion parser compatibility
+  by using optional export records that existing parsers ignore.
+
+Focused Geo A fixtures cover both Lua 5.1 and 5.4, including the no-CastGUID
+single-operation path, cast mismatch, failure/interruption, unrelated/overlap,
+timeout, map transition, source ambiguity, multi-slot and duplicate loot, empty
+loot, counters/export and no source-coordinate leakage. Live WoW Forever gameplay
+remains the acceptance gate for event argument order and the actual success-to-
+loot latency; static references and simulated APIs are not live measurements.
