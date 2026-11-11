@@ -156,6 +156,14 @@ jobs:
           cd supabase/functions/publish-observations && deno check index.ts
       - name: Public-read migrations 0001-0005 applied as a NON-superuser admin (hosted-like), publication, ops and security SQL tests
         run: ./scripts/public-hosted-compat.sh
+      - name: News Collector Edge Function type-check (Deno; the collector logic itself is covered by web unit tests)
+        run: cd supabase/functions/azerdex-news-collector && deno check index.ts
+      - name: News migrations 0001/0002/0008-0011 as a NON-superuser admin, V2 provenance/thread/revision/health SQL tests, rollback round-trip
+        run: ./scripts/news-sql-tests.sh
+      - name: Ops health report migration 0019 (read-only projection, least-privilege role, jobs 3-7 and G2 functions unchanged, rollback)
+        run: ./scripts/ops-health-sql-tests.sh
+      - name: Ops health endpoint Edge Function type-check (Deno; its logic is covered by the ops-bot tests)
+        run: cd supabase/functions/azerdex-ops-health && deno check index.ts
       - name: Failure, recovery, idempotency and concurrency of the publication pipeline (isolated, hosted-like database)
         run: ./scripts/public-failure-recovery-tests.sh
       - name: End-to-end publication pipeline on ephemeral PostgreSQL

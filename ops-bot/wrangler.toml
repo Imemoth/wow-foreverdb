@@ -1,0 +1,65 @@
+# AzerDex Operations Bot. THERE IS NO DEFAULT ENVIRONMENT: always pass `--env staging` or `--env production`.
+# Nothing here is deployed by this repository change. The STAGING D1 id below is real (created 2026-11-09, empty, non-secret); the production D1 id
+# and hostname stay placeholders; real resources and secrets are
+# created by the owner per docs/ops-bot/staging-runbook.md and docs/ops-bot/production-release-checklist.md.
+# SECRETS are never written to this file: wrangler secret put DISCORD_BOT_TOKEN --env <env>, etc.
+#
+# DISCORD: both environments use the owner's EXISTING AzerDex server (guild id below; a guild id is a public identifier, not a secret, so it is
+#   a plain var and the allowlist is reviewable). Staging and production are separated by everything else: their own Discord application, bot
+#   token, public key, application id, alert channel (#ops-testing vs #ops-alerts), operator ids, Worker, D1 database and heartbeat check.
+#   Those per-environment values are secrets (wrangler secret put ... --env <env>) and are NOT in this file.
+#
+# ROUTING (verified against Cloudflare's Workers documentation, 2026-11-06):
+#   * `workers_dev` defaults to TRUE when a configuration has no `route`/`routes`, and to false otherwise. Every scope below therefore
+#     states `workers_dev` and `preview_urls` explicitly instead of relying on a default.
+#   * The top level exposes NOTHING: a bare `wrangler deploy` (no --env) must never publish a public, unconfigured Worker.
+#   * staging    -> https://azerdex-ops-bot-staging.<account-subdomain>.workers.dev (Discord must reach /interactions over public HTTPS).
+#   * production -> a Custom Domain on a Cloudflare zone the owner controls. Cloudflare recommends routes/custom domains for production
+#                   (workers.dev is intended for personal and hobby use). The hostname below is an RFC 2606 `.invalid` placeholder, so
+#                   `wrangler deploy --env production` cannot succeed until a reviewed PR replaces it.
+#   * `preview_urls = false` everywhere: from Wrangler 4.44 the preview-URL default follows `workers_dev`, which would otherwise add a
+#     second public hostname per version.
+#   * Do NOT put Cloudflare Access in front of the interactions hostname: Discord cannot authenticate to it. The endpoint is protected
+#     by Ed25519 signature verification, replay protection and operator authorization inside the Worker.
+name = "azerdex-ops-bot"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = false
+preview_urls = false
+
+[env.staging]
+name = "azerdex-ops-bot-staging"
+# STAGING-ONLY entry: adds the Discord fault injection used for acceptance tests. Production keeps the top-level `main` (no injection code in its bundle).
+main = "src/index.staging.ts"
+workers_dev = true
+preview_urls = false
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+[env.staging.vars]
+BOT_ENV = "staging"
+HEALTH_PROVIDER = "mock"
+DISCORD_GUILD_IDS = "1561649407584370809"
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "azerdex-ops-bot-staging"
+database_id = "8da3a092-eeee-4b83-8415-a396f9547fb7"
+migrations_dir = "migrations"
+
+[env.production]
+name = "azerdex-ops-bot"
+workers_dev = false
+preview_urls = false
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+[[env.production.routes]]
+pattern = "REPLACE-WITH-PRODUCTION-OPS-HOSTNAME.invalid"
+custom_domain = true
+[env.production.vars]
+BOT_ENV = "production"
+HEALTH_PROVIDER = "http"
+DISCORD_GUILD_IDS = "1561649407584370809"
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "azerdex-ops-bot"
+database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+migrations_dir = "migrations"

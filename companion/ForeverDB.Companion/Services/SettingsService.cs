@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
 using ForeverDB.Companion.Models;
 
@@ -13,18 +16,23 @@ public static class SettingsService
     private static readonly string SettingsPath =
         Path.Combine(DirectoryPath, "settings.json");
 
-    public static CompanionSettings Load()
+    public static CompanionSettings Load(string? settingsPath = null, IEnumerable<string>? searchRoots = null)
     {
-        Directory.CreateDirectory(DirectoryPath);
+        var filePath = settingsPath ?? SettingsPath;
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
 
-        if (!File.Exists(SettingsPath))
+        if (!File.Exists(filePath))
         {
             var settings = new CompanionSettings
             {
-                WowRoot = DetectWowRoot()
+                WowRoot = DetectWowRoot(searchRoots)
             };
 
-            Save(settings);
+            Save(settings, filePath);
             return settings;
         }
 
@@ -32,14 +40,14 @@ public static class SettingsService
         {
             var settings =
                 JsonSerializer.Deserialize<CompanionSettings>(
-                    File.ReadAllText(SettingsPath))
+                    File.ReadAllText(filePath))
                 ?? new CompanionSettings();
 
             var changed = false;
 
             if (string.IsNullOrWhiteSpace(settings.WowRoot))
             {
-                settings.WowRoot = DetectWowRoot();
+                settings.WowRoot = DetectWowRoot(searchRoots);
                 changed = true;
             }
 
@@ -59,7 +67,7 @@ public static class SettingsService
 
             if (changed)
             {
-                Save(settings);
+                Save(settings, filePath);
             }
 
             return settings;
@@ -68,40 +76,49 @@ public static class SettingsService
         {
             return new CompanionSettings
             {
-                WowRoot = DetectWowRoot()
+                WowRoot = DetectWowRoot(searchRoots)
             };
         }
     }
 
-    public static void Save(CompanionSettings settings)
+    public static void Save(CompanionSettings settings, string? settingsPath = null)
     {
-        Directory.CreateDirectory(DirectoryPath);
+        var filePath = settingsPath ?? SettingsPath;
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
 
         File.WriteAllText(
-            SettingsPath,
+            filePath,
             JsonSerializer.Serialize(
                 settings,
                 new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    public static string DetectWowRoot()
+    public static string DetectWowRoot(IEnumerable<string>? searchRoots = null)
     {
-        var candidates = new[]
-        {
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "World of Warcraft",
-                "_classic_beta_"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                "World of Warcraft",
-                "_classic_beta_"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "World of Warcraft",
-                "_classic_beta_")
-        };
+        var forever = WowInstallationLocator.Discover(searchRoots)
+            .Where(x => x.Flavor == WowClientFlavor.Forever)
+            .ToArray();
+        return forever.Length == 1 ? forever[0].RootPath : "";
+    }
 
-        return candidates.FirstOrDefault(Directory.Exists) ?? "";
+    /// <summary>Fills an unset root from one unambiguous Forever install; never changes an explicit path.</summary>
+    public static CompanionSettings ApplyDetectedWowRoot(
+        CompanionSettings settings,
+        IEnumerable<WowInstallation> installations)
+    {
+        if (string.IsNullOrWhiteSpace(settings.WowRoot))
+        {
+            var forever = installations.Where(x => x.Flavor == WowClientFlavor.Forever).ToArray();
+            if (forever.Length == 1)
+            {
+                settings.WowRoot = forever[0].RootPath;
+            }
+        }
+
+        return settings;
     }
 }

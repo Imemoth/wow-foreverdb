@@ -177,7 +177,9 @@ export async function ArticleHub({
           <div className="space-y-4">
             {topFeatured && <ArticleSpotlight article={topFeatured} image={SLUG_FEATURED_IMAGE[topFeatured.slug]!} />}
             {gridResults.length > 0 && (
-              <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              // Cards with cover art are taller than text-only ones; top-align the row then, so a text-only card is not
+              // stretched into a mostly empty box. All-text grids (News) keep the default equal-height rows.
+              <ul className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 ${gridResults.some((a) => a.cover) ? "items-start [&>li]:h-auto" : ""}`}>
                 {gridResults.map((a) => <ArticleCard key={a.slug} article={a} section={section} />)}
               </ul>
             )}

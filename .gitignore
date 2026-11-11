@@ -16,3 +16,9 @@ map-atlas-out/
 __pycache__/
 *.pyc
 *.blp
+
+# AzerDex Operations Bot (ops-bot/): local Wrangler state and developer secrets never enter Git
+ops-bot/node_modules/
+ops-bot/.wrangler/
+ops-bot/.dev.vars
+ops-bot/.dev.vars.*

@@ -57,3 +57,21 @@ export function cleanNewsExcerpt(value: string, maxLength = 180): string {
   const readable = boundary > 0 ? clipped.slice(0, boundary) : clipped;
   return `${readable.replace(/[\s,;:]+$/, "")}...`;
 }
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * The three dates a card can show, kept separate: when the topic was first posted, when its latest VERIFIED official post/edit
+ * happened, and whether that is a meaningful update (more than an hour after the original). Ingestion time is never shown.
+ */
+export function newsDates(entry: Pick<NewsEntry, "publishedAt" | "officialUpdatedAt" | "threadPublishedAt">): { original: string; latest: string; updated: boolean } {
+  const latest = entry.officialUpdatedAt && entry.officialUpdatedAt > entry.publishedAt ? entry.officialUpdatedAt : entry.publishedAt;
+  const original = entry.threadPublishedAt && entry.threadPublishedAt < entry.publishedAt ? entry.threadPublishedAt : entry.publishedAt;
+  return { original, latest, updated: Date.parse(latest) - Date.parse(original) > HOUR_MS };
+}
+
+export function newsKindLabel(entry: Pick<NewsEntry, "category" | "entryKind">, base: string): string {
+  if (entry.entryKind === "official_update") return "OFFICIAL UPDATE";
+  if (entry.entryKind === "staff_reply") return "STAFF REPLY";
+  return base;
+}

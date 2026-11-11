@@ -1,0 +1,48 @@
+{
+  "$comment": "Owner-approved, time-limited dependency-audit exceptions. Read by web/scripts/audit-gate.mjs; rules in web/scripts/lib/audit-policy.mjs; record in docs/web/dependency-audit-exceptions.md. An entry that expires, goes obsolete or stops matching the verified dependency graph FAILS the Dependency audit job. Never add an entry without the owner's recorded decision.",
+  "exceptions": [
+    {
+      "project": "web",
+      "id": "GHSA-g3hv-75wg-m249",
+      "package": "minimatch",
+      "range": "<11.0.1",
+      "severity": "moderate",
+      "expires": "2026-12-15",
+      "approvedBy": "Repository owner (Imemoth)",
+      "approvedOn": "2026-11-02",
+      "rationale": "minimatch <11.0.1 can be driven into a denial of service by a crafted glob (CWE-405). It is reachable only through the ESLint toolchain, a devDependency that is never bundled: the production audit reports 0 vulnerabilities, and the glob patterns are repository-authored configuration and file paths. No compatible fix exists: the latest release of every consumer pins minimatch ^3.1.x or ^10.x, no published version of any of them accepts minimatch >= 11, and minimatch 11 no longer exports the callable default that eslint-plugin-react, eslint-plugin-import and eslint-plugin-jsx-a11y call (a global override crashes those rules at lint time, verified).",
+      "removalCriteria": "Remove this entry as soon as the audit no longer reports GHSA-g3hv-75wg-m249 for web/ (the gate fails an obsolete entry on its own). That needs releases of @eslint/config-array, @eslint/eslintrc, @typescript-eslint/typescript-estree and eslint-plugin-react / -import / -jsx-a11y (or eslint-config-next dropping them) that accept minimatch >= 11.0.1. Re-check upstream before 2026-12-15; the exception is not renewed automatically and the gate fails closed from 2026-12-16 00:00 UTC.",
+      "directRoots": ["eslint", "eslint-config-next"],
+      "nodes": [
+        "node_modules/minimatch",
+        "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"
+      ],
+      "affectedPaths": [
+        "eslint > @eslint/config-array > minimatch@3.1.5",
+        "eslint > @eslint/eslintrc > minimatch@3.1.5",
+        "eslint-config-next > eslint-plugin-import > minimatch@3.1.5",
+        "eslint-config-next > eslint-plugin-jsx-a11y > minimatch@3.1.5",
+        "eslint-config-next > eslint-plugin-react > minimatch@3.1.5",
+        "eslint-config-next > typescript-eslint > @typescript-eslint/typescript-estree > minimatch@10.2.6"
+      ],
+      "allowedPackages": [
+        "minimatch",
+        "eslint",
+        "eslint-config-next",
+        "@eslint-community/eslint-utils",
+        "@eslint/config-array",
+        "@eslint/eslintrc",
+        "@next/eslint-plugin-next",
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser",
+        "@typescript-eslint/type-utils",
+        "@typescript-eslint/typescript-estree",
+        "@typescript-eslint/utils",
+        "eslint-plugin-import",
+        "eslint-plugin-jsx-a11y",
+        "eslint-plugin-react",
+        "typescript-eslint"
+      ]
+    }
+  ]
+}

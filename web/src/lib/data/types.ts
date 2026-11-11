@@ -48,13 +48,38 @@ export interface NewsEntry {
   category: NewsCategory;
   importance: number;
   featured: boolean;
+  /** News V2 thread context. Absent on rows from an older database/fixture; consumers must treat absence as "single post". */
+  officialUpdatedAt?: string | null;
+  threadPublishedAt?: string | null;
+  updateCount?: number;
+  threadOrigin?: NewsThreadOrigin | null;
+  entryKind?: NewsEntryKind | null;
+  updates?: NewsThreadUpdate[];
 }
+
+export type NewsThreadOrigin = "official" | "community";
+export type NewsEntryKind = "article" | "announcement" | "official_update" | "staff_reply";
+
+/** One verified official post inside a thread (detail page only). */
+export interface NewsThreadUpdate {
+  slug: string;
+  postNumber: number | null;
+  canonicalUrl: string;
+  publishedAt: string;
+  officialUpdatedAt: string;
+  author: string | null;
+  entryKind: NewsEntryKind;
+}
+
+export type NewsRegionQuery = "us" | "eu" | "global";
 
 export interface NewsQuery {
   category: NewsCategory | null;
   query: string;
   page: number;
   pageSize: number;
+  /** Database-side region filter (exact pagination/search consistency). Omitted = all regions. */
+  region?: NewsRegionQuery | null;
 }
 
 export interface NewsPage { rows: NewsEntry[]; total: number }

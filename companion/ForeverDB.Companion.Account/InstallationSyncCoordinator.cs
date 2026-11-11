@@ -122,24 +122,16 @@ public sealed class InstallationSyncCoordinator
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            for (var attempt = 0; ; attempt++)
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, CurrentGenerationToken());
+            try
             {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, CurrentGenerationToken());
-                var progress = new Progress();
-                try
-                {
-                    return await SyncLockedAsync(installationId, snapshotJson, snapshotUpdatedAt, force, progress, linked.Token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!ct.IsCancellationRequested && (ex is OperationCanceledException || ex is IdentityMovedException))
-                {
-                    // The identity changed. If nothing was uploaded yet (it moved while ownership was being resolved,
-                    // e.g. the server just revealed a dead session), evaluate once more under the new identity;
-                    // otherwise nothing may be reported for the old identity.
-                    if (progress.IngestSent || attempt >= 1)
-                    {
-                        return Stale();
-                    }
-                }
+                return await SyncLockedAsync(installationId, snapshotJson, snapshotUpdatedAt, force, linked.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && (ex is OperationCanceledException || ex is IdentityMovedException))
+            {
+                // A snapshot scheduled under one identity must never be retried under the next identity.
+                // Even when the ingest request was not sent, account changes are local-only actions.
+                return Stale();
             }
         }
         finally
@@ -148,16 +140,11 @@ public sealed class InstallationSyncCoordinator
         }
     }
 
-    private sealed class Progress
-    {
-        public bool IngestSent;
-    }
-
     private sealed class IdentityMovedException : Exception
     {
     }
 
-    private async Task<SyncAttempt> SyncLockedAsync(string id, string json, long updatedAt, bool force, Progress progress, CancellationToken ct)
+    private async Task<SyncAttempt> SyncLockedAsync(string id, string json, long updatedAt, bool force, CancellationToken ct)
     {
         var generation = _manager.Generation;
         var route = await _router.ResolveAsync(id, forceRefresh: false, ct).ConfigureAwait(false);
@@ -192,7 +179,6 @@ public sealed class InstallationSyncCoordinator
             return SyncAttempt.Blocked(MapTokenFault(token), route.Ownership);
         }
 
-        progress.IngestSent = true;
         var result = await _rpc.IngestAsync(token.AccessToken, json, ct).ConfigureAwait(false);
 
         if (!result.Ok && result.Failure == RpcFailure.Unauthorized && _manager.Generation == generation)
