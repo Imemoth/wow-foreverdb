@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace ForeverDB.Companion.Services;
 
@@ -20,6 +21,14 @@ public sealed class AtlasMetadataComparison
     public int SourceArtCount { get; init; }
     public int SourceRegionCount { get; init; }
     public int SourceTileCount { get; init; }
+    public IReadOnlyList<long> ChangedArtIds { get; init; } =
+        Array.Empty<long>();
+    public IReadOnlyList<long> MissingArtIds { get; init; } =
+        Array.Empty<long>();
+    public IReadOnlyList<long> AdditionalArtIds { get; init; } =
+        Array.Empty<long>();
+    public IReadOnlyDictionary<long, IReadOnlyList<FullRevealRegion>> CandidateAtlas { get; init; } =
+        new Dictionary<long, IReadOnlyList<FullRevealRegion>>();
     public string Reason { get; init; } = "";
 }
 
@@ -249,27 +258,69 @@ public static class AtlasMetadataVerifier
             }
 
             var verified = new List<long>();
+            var changed = new List<long>();
+            var missing = new List<long>();
 
             foreach (var original in atlas)
             {
-                if (current.TryGetValue(original.Key, out var candidate) &&
-                    EqualRegions(original.Value, candidate))
+                if (!current.TryGetValue(original.Key, out var candidate))
+                {
+                    missing.Add(original.Key);
+                }
+                else if (EqualRegions(original.Value, candidate))
                 {
                     verified.Add(original.Key);
                 }
+                else
+                {
+                    changed.Add(original.Key);
+                }
+            }
+
+            var additional = current.Keys
+                .Except(atlas.Keys)
+                .OrderBy(id => id)
+                .ToArray();
+            var changedIds = changed.OrderBy(id => id).ToArray();
+            var missingIds = missing.OrderBy(id => id).ToArray();
+            var verifiedIds = verified.OrderBy(id => id).ToArray();
+            var coverage = new StringBuilder()
+                .Append("Verified ")
+                .Append(verifiedIds.Length)
+                .Append('/')
+                .Append(atlas.Count)
+                .Append(" embedded map arts against the exact-build DB2 tables.")
+                .ToString();
+            var differences = new List<string>();
+            if (changedIds.Length > 0)
+            {
+                differences.Add("changed art IDs: " + string.Join(", ", changedIds));
+            }
+            if (missingIds.Length > 0)
+            {
+                differences.Add("missing art IDs: " + string.Join(", ", missingIds));
+            }
+            if (additional.Length > 0)
+            {
+                differences.Add("new art IDs: " + string.Join(", ", additional));
             }
 
             return new AtlasMetadataComparison
             {
                 SourceValid = true,
-                VerifiedArtIds = verified.OrderBy(id => id).ToArray(),
+                VerifiedArtIds = verifiedIds,
                 SourceArtCount = current.Count,
                 SourceRegionCount = current.Sum(entry => entry.Value.Count),
                 SourceTileCount = tileCount,
-                Reason = verified.Count == 0
-                    ? "No existing map art matches the installed build's DB2 data."
-                    : $"Verified {verified.Count}/{atlas.Count} embedded map arts " +
-                      "against the exact-build DB2 tables."
+                ChangedArtIds = changedIds,
+                MissingArtIds = missingIds,
+                AdditionalArtIds = additional,
+                CandidateAtlas = current.ToDictionary(
+                    entry => entry.Key,
+                    entry => (IReadOnlyList<FullRevealRegion>)SortRegions(entry.Value)),
+                Reason = differences.Count == 0
+                    ? coverage
+                    : coverage + " " + string.Join("; ", differences) + "."
             };
         }
         catch (Exception ex) when (
@@ -284,6 +335,54 @@ public static class AtlasMetadataVerifier
             };
         }
     }
+
+    /// <summary>
+    /// Creates a review candidate containing only changed and newly added
+    /// art entries. The caller must only invoke this for structurally valid
+    /// exact-build exports; this output is preparation, not runtime approval.
+    /// </summary>
+    public static string CreateUpdateCandidateJson(
+        string sourceBuild,
+        AtlasMetadataComparison comparison)
+    {
+        if (!comparison.SourceValid ||
+            string.IsNullOrWhiteSpace(sourceBuild))
+        {
+            throw new InvalidDataException(
+                "Cannot generate an atlas update candidate from unvalidated metadata.");
+        }
+
+        var affected = comparison.ChangedArtIds
+            .Concat(comparison.AdditionalArtIds)
+            .Distinct()
+            .OrderBy(id => id)
+            .Where(comparison.CandidateAtlas.ContainsKey)
+            .ToDictionary(
+                id => id.ToString(CultureInfo.InvariantCulture),
+                id => comparison.CandidateAtlas[id]
+                    .Select(region => new CandidateRegion(
+                        region.Width,
+                        region.Height,
+                        region.OffsetX,
+                        region.OffsetY,
+                        region.FileDataIds.ToArray()))
+                    .ToArray());
+
+        return JsonSerializer.Serialize(
+            new CandidateManifest(sourceBuild, affected),
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private sealed record CandidateManifest(
+        string sourceBuild,
+        IReadOnlyDictionary<string, CandidateRegion[]> art);
+
+    private sealed record CandidateRegion(
+        int w,
+        int h,
+        int x,
+        int y,
+        int[] ids);
 
     private static bool EqualRegions(
         IReadOnlyList<FullRevealRegion> left,

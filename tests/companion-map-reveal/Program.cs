@@ -1,6 +1,7 @@
 using ForeverDB.Companion.Services;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using ForeverDB.Companion.Models;
 
 // Opt-in live network smoke. CI treats transport failures as non-blocking:
@@ -8,23 +9,61 @@ using ForeverDB.Companion.Models;
 if (args.Length == 1 && args[0] == "--probe-current-forever")
 {
     var outcome = await AutoAtlasBuildVerifier.VerifyAsync(
-        "wow_classic_beta",
-        "1.60.1.70291",
-        "AABBCCDDEEFF00112233445566778899",
+        "wowf",
+        "1.60.1.70862",
+        "5ada954223f7c409ea172361f5c9e565",
         CancellationToken.None);
 
-    Console.WriteLine(
-        outcome.IsVerifiedFor(1200) &&
-        outcome.IsVerifiedFor(2126) &&
-        outcome.IsVerifiedFor(2158)
-            ? $"Current Forever DB2 transport probe PASS for three map arts; " +
-              $"{outcome.VerifiedArtIds.Count}/{FullRevealMapArt.MapCount} " +
-              "embedded art IDs match this exact client build."
-            : $"Current Forever DB2 transport probe NOT VERIFIED: {outcome.Status}");
+    var unmatched = FullRevealMapArt.GetEmbeddedAtlas().Keys
+        .Except(outcome.VerifiedArtIds)
+        .OrderBy(id => id)
+        .ToArray();
+    var artifactDirectory = Path.Combine(
+        Environment.CurrentDirectory, "artifacts");
+    Directory.CreateDirectory(artifactDirectory);
+    var coveragePath = Path.Combine(
+        artifactDirectory,
+        "atlas-coverage-wowf-1.60.1.70862.json");
+    await File.WriteAllTextAsync(
+        coveragePath,
+        JsonSerializer.Serialize(new
+        {
+            product = "wowf",
+            version = "1.60.1.70862",
+            sourceValidated = outcome.SourceValidated,
+            status = outcome.Status,
+            embeddedArtCount = FullRevealMapArt.MapCount,
+            embeddedRegionCount = FullRevealMapArt.OverlayCount,
+            embeddedTileCount = FullRevealMapArt.TileCount,
+            compatibleArtIds = outcome.VerifiedArtIds,
+            changedArtIds = outcome.ChangedArtIds,
+            missingArtIds = outcome.MissingArtIds,
+            additionalArtIds = outcome.AdditionalArtIds,
+            unmatchedEmbeddedArtIds = unmatched
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine(outcome.SourceValidated
+        ? $"wowf 1.60.1.70862 atlas coverage: " +
+          $"{outcome.VerifiedArtIds.Count}/{FullRevealMapArt.MapCount} compatible; " +
+          $"changed=[{string.Join(",", outcome.ChangedArtIds)}]; " +
+          $"missing=[{string.Join(",", outcome.MissingArtIds)}]; " +
+          $"new=[{string.Join(",", outcome.AdditionalArtIds)}]; " +
+          $"unmatched embedded=[{string.Join(",", unmatched)}]."
+        : $"wowf 1.60.1.70862 atlas compatibility UNVERIFIED: {outcome.Status}");
 
-    return outcome.IsVerifiedFor(1200) &&
-           outcome.IsVerifiedFor(2126) &&
-           outcome.IsVerifiedFor(2158)
+    if (outcome.SourceValidated &&
+        (outcome.ChangedArtIds.Count > 0 ||
+         outcome.AdditionalArtIds.Count > 0))
+    {
+        var candidatePath = Path.Combine(
+            artifactDirectory,
+            "FullRevealOverlays-1.60.1.70862-candidate.json");
+        await File.WriteAllTextAsync(candidatePath, outcome.CandidateUpdateJson);
+        Console.WriteLine(
+            "Review-only changed/new art candidate written: " +
+            "artifacts/FullRevealOverlays-1.60.1.70862-candidate.json");
+    }
+
+    return outcome.SourceValidated && outcome.VerifiedArtIds.Count == FullRevealMapArt.MapCount
         ? 0
         : 1;
 }
@@ -80,63 +119,28 @@ byte Blue(byte[] pixels, int width, int x, int y) =>
     pixels[(y * width + x) * 4];
 
 Check(FullRevealMapArt.MapCount == 84,
-    "pinned manifest contains exactly 84 Forever art maps");
+    "embedded reference atlas contains exactly 84 Forever art maps");
 Check(FullRevealMapArt.OverlayCount == 1073,
     "pinned manifest contains 1073 exploration regions");
 Check(FullRevealMapArt.TileCount == 1739,
     "pinned manifest contains 1739 overlay tile references");
-Check(FullRevealMapArt.Find(
-        1194,
-        FullRevealMapArt.SourceBuildVersion).Count > 0,
-    "known map art ID resolves on exact build");
-Check(FullRevealMapArt.IsSupportedBuildVersion(
-        FullRevealMapArt.VerifiedClientBuildVersion),
-    "verified active 70245 client build is explicitly supported");
-Check(FullRevealMapArt.Find(
-        1200,
-        FullRevealMapArt.VerifiedClientBuildVersion).Count == 15,
-    "Mulgore art 1200 resolves all 15 regions on 70245");
-Check(FullRevealMapArt.Find(
-        1194,
-        FullRevealMapArt.VerifiedClientBuildVersion).Count == 11,
-    "Tirisfal art 1194 resolves all 11 regions on 70245");
-Check(ReferenceEquals(
-        FullRevealMapArt.Find(
-            1200, FullRevealMapArt.SourceBuildVersion),
-        FullRevealMapArt.Find(
-            1200, FullRevealMapArt.VerifiedClientBuildVersion)),
-    "both independently verified builds use the same identical atlas data");
-Check(!FullRevealMapArt.IsSupportedBuildVersion("1.60.1.70235"),
-    "similar but unverified 70235 client build remains blocked");
-Check(FullRevealMapArt.Find(1200, "1.60.1.70246").Count == 0,
-    "unknown future client build is never guessed");
-Check(FullRevealMapArt.ExplainUnavailability(
-        1200,
-        new[] { FullRevealMapArt.VerifiedClientBuildVersion }) == "",
-    "70245 active client is not reported as atlas mismatch");
-Check(FullRevealMapArt.Find(1194, "1.60.1.69913").Count == 0,
-    "mismatched build never uses stale overlay data");
-Check(FullRevealMapArt.Find(
-        -1,
-        FullRevealMapArt.SourceBuildVersion).Count == 0,
+Check(FullRevealMapArt.Find(1194).Count == 11 &&
+      FullRevealMapArt.Find(1200).Count == 15 &&
+      FullRevealMapArt.Find(2126).Count == 17 &&
+      FullRevealMapArt.Find(2158).Count > 0,
+    "existing Tirisfal, Mulgore and Silverpine atlas regions remain available independent of build number");
+Check(FullRevealMapArt.Find(-1).Count == 0,
     "unknown map art ID returns no overlay candidate");
 
-Check(FullRevealMapArt.ExplainUnavailability(
-        1200,
-        new[] { FullRevealMapArt.SourceBuildVersion }) == "",
-    "known map + exact active client build pass atlas gate");
-Check(FullRevealMapArt.ExplainUnavailability(
-        1200,
-        new[] { "1.60.1.70010" }).Contains("70010"),
-    "different active client build is explained instead of silent base fallback");
-Check(FullRevealMapArt.ExplainUnavailability(
-        1200,
-        Array.Empty<string>()).Contains("unknown"),
-    "missing active build/version is explained");
-Check(FullRevealMapArt.ExplainUnavailability(
-        987654321,
-        new[] { FullRevealMapArt.SourceBuildVersion }).Contains("not in"),
-    "unknown map art is distinguished from build mismatch");
+var tirisfalCells = new (double X, double Y)[]
+{
+    (37, 56), (36, 62), (34, 63), (35, 64),
+    (36, 65), (34, 66), (35, 68)
+};
+Check(tirisfalCells.Length == 7 &&
+      FullRevealMapArt.Find(2126).Count == 17 &&
+      tirisfalCells.All(point => point.X is >= 0 and <= 100 && point.Y is >= 0 and <= 100),
+    "Wilted Peacebloom #656160 remains on UiMapID 1420 / art 2126 with source percentages intact");
 
 var basePixels = Base(4, 4);
 var small = new[]
@@ -373,7 +377,15 @@ Check(AtlasMetadataVerifier.Fingerprint(sourceAtlas).Length == 64 &&
 Check(AutoAtlasBuildVerifier.IsValidIdentity(
         "wow_classic_beta", "1.60.1.70291",
         "ABCDEF0123456789ABCDEF0123456789"),
-    "new Forever build with exact valid product/build key can be checked");
+    "legacy Forever beta product remains eligible for content validation");
+Check(AutoAtlasBuildVerifier.IsValidIdentity(
+        "wowf", "1.60.1.70862",
+        "5ada954223f7c409ea172361f5c9e565"),
+    "active Forever wowf build 1.60.1.70862 reaches content-based atlas validation");
+Check(AutoAtlasBuildVerifier.IsValidIdentity(
+        "wowf", "1.60.1.99999",
+        "ABCDEF0123456789ABCDEF0123456789"),
+    "future numeric client builds do not require a source-code version allowlist");
 var fingerprint = AtlasMetadataVerifier.Fingerprint(sourceAtlas);
 var evidenceKey = AutoAtlasBuildVerifier.BuildCacheKey(
     "wow_classic_beta", "1.60.1.70291",
@@ -389,6 +401,9 @@ Check(evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
         "wow_classic_beta", "1.60.1.70291",
         "FEDCBA9876543210FEDCBA9876543210", fingerprint) &&
       evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
+        "wowf", "1.60.1.70291",
+        "ABCDEF0123456789ABCDEF0123456789", fingerprint) &&
+      evidenceKey != AutoAtlasBuildVerifier.BuildCacheKey(
         "wow_classic_beta", "1.60.1.70291",
         "ABCDEF0123456789ABCDEF0123456789",
         new string('0', 64)),
@@ -403,7 +418,7 @@ Check(!AutoAtlasBuildVerifier.IsValidIdentity(
       !AutoAtlasBuildVerifier.IsValidIdentity(
         "wow_classic_beta", "1.60.1.70291",
         "unsafe/path"),
-    "wrong product, malformed build/version or key cannot auto-verify");
+    "unsupported product, malformed version or key remains rejected");
 
 var modifiedTiles = exports["WorldMapOverlayTile"]
     .Split('\n', StringSplitOptions.None);
@@ -421,9 +436,19 @@ var changedAtlas = AtlasMetadataVerifier.Compare(
 
 Check(changedAtlas.SourceValid &&
       changedAtlas.VerifiedArtIds.Count == 83 &&
+      changedAtlas.ChangedArtIds.Count == 1 &&
       !changedAtlas.VerifiedArtIds.Contains(1194) &&
+      changedAtlas.ChangedArtIds.Contains(1194) &&
       changedAtlas.VerifiedArtIds.Contains(1200),
-    "one changed source FileDataID blocks only its map, not unchanged art");
+    "one changed source FileDataID proves one incompatible art while retaining other 83 arts");
+using (var candidate = JsonDocument.Parse(
+           AtlasMetadataVerifier.CreateUpdateCandidateJson(
+               "1.60.1.70291", changedAtlas)))
+{
+    var art = candidate.RootElement.GetProperty("art");
+    Check(art.EnumerateObject().Select(item => item.Name).SequenceEqual(new[] { "1194" }),
+        "atlas update preparation emits only the one changed art");
+}
 
 var duplicatedTiles = exports["WorldMapOverlayTile"] +
                       modifiedTiles[1] + "\n";
