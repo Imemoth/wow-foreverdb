@@ -59,6 +59,7 @@ Scope: the Worker in `ops-bot/`, its D1 database, the Discord application, the h
 - **Reporting endpoint** is undeployed. Its threat model (secret handling in the Edge Function, HMAC verification, database role) must be reviewed with the owner before any production step ([supabase-reporting-contract.md](supabase-reporting-contract.md)).
 - **Clock skew** beyond 5 minutes between Discord and the Worker would reject valid interactions (fail closed); Cloudflare time is NTP-synchronised.
 - **`node:sqlite` is experimental**; it is a test-only dependency and does not ship in the Worker.
+- **Option G (gated Data API RPC, not applied):** removes the direct database login, so a leaked credential is no longer a SQL session with the platform's `PUBLIC` grants (pg_net). Residual risks, all measured or bounded in [reporting-gated-rpc.md](reporting-gated-rpc.md): the RPC is callable by anyone with the public key (refusals cost about 0.24 s of database CPU per 1,000 requests and did not starve a legitimate caller at 128 concurrent flooders, but hosted pool pressure is not measurable outside production); a captured request signature replays a read-only report for at most 60 s; the gate key lives in one Edge secret and in the database, rotated or revoked with one SQL call; a verbose `log_statement=all` server logs signatures (never the key), the documented hosted default does not.
 
 ## Code-scanning findings and resolutions (PR #174 security gate)
 

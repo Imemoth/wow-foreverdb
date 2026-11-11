@@ -14,6 +14,12 @@ on:
       - 'database/public-read/tests/ops_health_report.sql'
       - 'scripts/ops-health-sql-tests.sh'
       - 'supabase/functions/azerdex-ops-health/**'
+      # Option G: the HMAC-gated Data API RPC that replaces the direct database login (migrations, verifier, harness, PostgREST pin).
+      - 'database/ops/002*'
+      - 'database/ops/verify_ops_health_gated_rpc.sql'
+      - 'scripts/ops-health-gated-rpc-tests.sh'
+      - 'scripts/postgrest-pin.env'
+      - 'supabase/config.toml'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +33,7 @@ jobs:
   ops-bot:
     name: Ops bot (typecheck, tests, audit)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     defaults: { run: { working-directory: ops-bot } }
     # A throwaway PostgreSQL for the Gate C end-to-end test (synthetic data, rolled-back transactions). Nothing here touches Supabase.
     services:
@@ -67,6 +73,11 @@ jobs:
       - name: Gate C SQL on a disposable PostgreSQL (0019 projection, least-privilege role, unchanged jobs 3-7 and G2 functions, rollback)
         working-directory: .
         run: ./scripts/ops-health-sql-tests.sh
+      - name: Option G gated RPC on its OWN throwaway PostgreSQL (0020 and rollback, exact effective privileges, refusal matrix, bounded key overlap, real PINNED PostgREST over HTTP, abuse and load, secret scan of all logs, 0021)
+        working-directory: .
+        env:
+          PGPASSWORD: ''
+        run: ./scripts/ops-health-gated-rpc-tests.sh
       - name: Unit, contract, integration and security tests (D1 SQL runs on SQLite via node:sqlite; Gate C end to end runs against the PostgreSQL above)
         run: npm test
       - name: No credential-shaped strings, and nothing deployable at the top level of wrangler.toml
