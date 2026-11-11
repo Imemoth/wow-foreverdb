@@ -7,7 +7,7 @@ No secret, key, signature or database URL appears in this document or was shown 
 
 | Item | Result |
 | --- | --- |
-| Migration `0020_ops_health_gated_rpc.sql` (sha256 `80cdc316…8b5`) | Applied by the owner in the SQL editor at about 09:22. Three function bodies carry CRLF line endings from the paste (cosmetic, proven by md5). No migration-history row exists (SQL editor). |
+| Migration `0020_ops_health_gated_rpc.sql` (sha256 `80cdc316…8b5`) | Applied by the owner in the SQL editor at about 09:22. Three function bodies carry CRLF line endings from the paste (cosmetic, proven by md5). The SQL editor wrote no migration-history row at that time; it was recorded afterwards (see "Migration history" below). |
 | Gate key | Generated inside the database by `ops_report.rotate_gate_key()`; owner entered it as `OPS_HEALTH_GATE_KEY`. One `current` key valid; `previous` slot expired (valid=false). |
 | Edge secrets | `OPS_HEALTH_GATE_KEY`, `OPS_HEALTH_APIKEY` set by the owner. `OPS_HEALTH_DATABASE_URL` still set (rollback). |
 | Edge Function `azerdex-ops-health` | v10, bundle sha256 `d6495cb58a527fa68ea8f10630f014f9a9c65129e87e76c479f4f0defc8d1b1d`, `verify_jwt=false`, byte-identical to `release`. |
