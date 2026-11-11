@@ -1,4 +1,5 @@
-import { buildNewsCards, threadUpdates, type NewsEntrySource } from "@/lib/news/cards";
+import { type NewsEntrySource } from "@/lib/news/cards";
+import { buildStoryCards, matchStories, storyDetail, type StoryOverride } from "@/lib/news/stories";
 import "server-only";
 import { aggregateSourceMapPoints, aggregateZoneMapPoints } from "./zone-map-points";
 import defaultSample from "./fixture/public-projection.sample.json";
@@ -117,6 +118,100 @@ const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
       category: "bluepost", importance: 10, featured: false,
     };
   }),
+  // ---- Global story grouping fixtures (migration 0013). Blizzard posts one topic per region; the same announcement must be ONE card.
+  {
+    id: 9101, slug: "us-gamepad-story", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9101", sourceTopicId: "topic:9101",
+    sourcePostNumber: 1, threadKey: "us:topic:9101", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/explore-forever-gamepad/9101/1",
+    title: "Explore WoW: Forever with a Gamepad", author: "Blizzard Entertainment", region: "us", publishedAt: "2026-10-25T20:00:09.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-25T20:10:00.000Z", excerpt: "Prefer a gamepad? Get to know another way to play World of Warcraft: Forever, from moving and casting spells to adjusting your settings.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9102, slug: "eu-gamepad-story", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9102", sourceTopicId: "topic:9102",
+    sourcePostNumber: 1, threadKey: "eu:topic:9102", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/explore-forever-gamepad/9102/1",
+    title: "Explore WoW: Forever with a Gamepad", author: "Blizzard Entertainment", region: "eu", publishedAt: "2026-10-25T20:00:07.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-25T20:10:00.000Z", excerpt: "Prefer a gamepad? Get to know another way to play World of Warcraft: Forever, from moving and casting spells to adjusting your settings.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9103, slug: "us-gamepad-story-update", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:91030", sourceTopicId: "topic:9101",
+    sourcePostNumber: 2, threadKey: "us:topic:9101", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/explore-forever-gamepad/9101/2",
+    title: "Explore WoW: Forever with a Gamepad", author: "Kaivax", region: "us", publishedAt: "2026-10-26T18:00:00.000Z", modifiedAt: null, officialUpdatedAt: "2026-10-26T18:00:00.000Z",
+    ingestedAt: "2026-10-26T18:10:00.000Z", excerpt: "US-only addendum: the zebrafish gamepad calibration setting was renamed in the US client of World of Warcraft: Forever.",
+    category: "bluepost", importance: 5, featured: false, authorUserId: 3390, authorGroup: "community-manager", threadOrigin: "official",
+  },
+  {
+    id: 9104, slug: "us-beta-celebration", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9104", sourceTopicId: "topic:9104",
+    sourcePostNumber: 1, threadKey: "us:topic:9104", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/beta-celebration/9104/1",
+    title: "Beta Celebration Underway", author: "Blizzard Entertainment", region: "us", publishedAt: "2026-10-24T17:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-24T17:10:00.000Z", excerpt: "Join the celebration on 10/24 at 5pm Eastern time to unlock the Forever beta rewards for everyone.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9105, slug: "eu-beta-celebration", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9105", sourceTopicId: "topic:9105",
+    sourcePostNumber: 1, threadKey: "eu:topic:9105", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/beta-celebration/9105/1",
+    title: "Beta Celebration Underway", author: "Blizzard Entertainment", region: "eu", publishedAt: "2026-10-24T17:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-24T17:10:00.000Z", excerpt: "Join the celebration on 24/10 at 22:00 BST to unlock the Forever beta rewards for everyone.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9106, slug: "us-only-maintenance", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9106", sourceTopicId: "topic:9106",
+    sourcePostNumber: 1, threadKey: "us:topic:9106", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/us-maintenance/9106/1",
+    title: "US Only Maintenance Notice for Forever Realms", author: "Blizzard Entertainment", region: "us", publishedAt: "2026-10-23T09:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-23T09:10:00.000Z", excerpt: "Scheduled maintenance for the US Forever realms starts at 9am Pacific time and lasts about two hours.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9107, slug: "eu-only-merge", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9107", sourceTopicId: "topic:9107",
+    sourcePostNumber: 1, threadKey: "eu:topic:9107", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/eu-merge/9107/1",
+    title: "EU Only Server Merge Announcement for Forever", author: "Blizzard Entertainment", region: "eu", publishedAt: "2026-10-22T10:00:00.000Z", modifiedAt: null,
+    ingestedAt: "2026-10-22T10:10:00.000Z", excerpt: "Two European Forever realms will be merged next week; character names are protected during the merge.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  // ---- Owner-reviewed decisions (2026-11-04), mirrored with fixture topic ids: ALLOW Development Notes (titles differ only by date wording),
+  // ALLOW Podcast Episode 5 and 6 (no excerpt, equivalence proven against the live sources), DENY Beta Celebration (region-specific times).
+  {
+    id: 9108, slug: "us-reviewed-9108", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9108", sourceTopicId: "topic:9108",
+    sourcePostNumber: 1, threadKey: "us:topic:9108", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9108/1",
+    title: "WoW Forever Beta Development Notes – Updated November 2", author: "Kaivax", region: "us", publishedAt: "2026-09-24T22:23:24.849Z", modifiedAt: null,
+    ingestedAt: "2026-09-24T22:23:24.849Z", excerpt: "Kaivax's running notes on the WoW Forever beta: what changed, what is being investigated and what is coming next, kept up to date in this thread.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9109, slug: "eu-reviewed-9109", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9109", sourceTopicId: "topic:9109",
+    sourcePostNumber: 1, threadKey: "eu:topic:9109", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9109/1",
+    title: "WoW Forever Beta Development Notes – Updated 3 November", author: "Kaivax", region: "eu", publishedAt: "2026-09-24T22:37:36.828Z", modifiedAt: null,
+    ingestedAt: "2026-09-24T22:37:36.828Z", excerpt: "Kaivax's running notes on the WoW Forever beta: what changed, what is being investigated and what is coming next, kept up to date in this thread.",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9110, slug: "us-reviewed-9110", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9110", sourceTopicId: "topic:9110",
+    sourcePostNumber: 1, threadKey: "us:topic:9110", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9110/1",
+    title: "The WoW: Forever Podcast: Episode 5 - End of Beta Special", author: "Kaivax", region: "us", publishedAt: "2026-10-22T16:21:16.245Z", modifiedAt: null,
+    ingestedAt: "2026-10-22T16:21:16.245Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9111, slug: "eu-reviewed-9111", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9111", sourceTopicId: "topic:9111",
+    sourcePostNumber: 1, threadKey: "eu:topic:9111", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9111/1",
+    title: "The WoW: Forever Podcast: Episode 5 - End of Beta Special", author: "Kaivax", region: "eu", publishedAt: "2026-10-22T16:22:03.465Z", modifiedAt: null,
+    ingestedAt: "2026-10-22T16:22:03.465Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9112, slug: "us-reviewed-9112", sourceType: "bluepost", sourceKey: "blizzard-bluepost-us", sourceEntryId: "post:9112", sourceTopicId: "topic:9112",
+    sourcePostNumber: 1, threadKey: "us:topic:9112", canonicalUrl: "https://us.forums.blizzard.com/en/wow/t/reviewed/9112/1",
+    title: "The WoW: Forever Podcast: Episode 6 - All About Tech", author: "Kaivax", region: "us", publishedAt: "2026-10-29T16:17:57.194Z", modifiedAt: null,
+    ingestedAt: "2026-10-29T16:17:57.194Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
+  {
+    id: 9113, slug: "eu-reviewed-9113", sourceType: "bluepost", sourceKey: "blizzard-bluepost-eu", sourceEntryId: "post:9113", sourceTopicId: "topic:9113",
+    sourcePostNumber: 1, threadKey: "eu:topic:9113", canonicalUrl: "https://eu.forums.blizzard.com/en/wow/t/reviewed/9113/1",
+    title: "The WoW: Forever Podcast: Episode 6 - All About Tech", author: "Kaivax", region: "eu", publishedAt: "2026-10-29T16:18:25.305Z", modifiedAt: null,
+    ingestedAt: "2026-10-29T16:18:25.305Z", excerpt: "",
+    category: "bluepost", importance: 5, featured: false, threadOrigin: "official",
+  },
   {
     id: 9015, slug: "official-news-fixture", sourceType: "official_news", sourceKey: "blizzard-news-us",
     sourceEntryId: "article:9015", sourceTopicId: null, sourcePostNumber: null, threadKey: null,
@@ -181,6 +276,14 @@ const NEWS_FIXTURE_ENTRIES: FixtureNewsEntry[] = [
     author: "Kaivax", region: "eu", publishedAt: "2026-10-25T00:00:00.000Z", modifiedAt: null,
     ingestedAt: "2026-10-25T00:01:00.000Z", excerpt: "A player whose display name is Kaivax.", category: "bluepost", importance: 100, featured: true,
   },
+];
+
+/** Reviewed story decisions for the synthetic fixtures (same shape as pub.news_story_overrides; production decisions: reviewed-story-decisions.ts). */
+export const NEWS_FIXTURE_OVERRIDES: StoryOverride[] = [
+  { threadA: "eu:topic:9109", threadB: "us:topic:9108", decision: "allow" },
+  { threadA: "eu:topic:9111", threadB: "us:topic:9110", decision: "allow" },
+  { threadA: "eu:topic:9113", threadB: "us:topic:9112", decision: "allow" },
+  { threadA: "eu:topic:9105", threadB: "us:topic:9104", decision: "deny" },
 ];
 
 export class FixtureAdapter implements PublicDataAdapter {
@@ -358,18 +461,18 @@ export class FixtureAdapter implements PublicDataAdapter {
   }
 
   async newsList(query: NewsQuery): Promise<NewsPage> {
-    const rows = buildNewsCards(NEWS_FIXTURE_ENTRIES, { category: query.category, query: query.query, region: query.region });
+    const rows = buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, { category: query.category, query: query.query, region: query.region });
     const start = (query.page - 1) * query.pageSize;
     const pageRows = rows.slice(start, start + query.pageSize);
     return { rows: pageRows, total: pageRows.length ? rows.length : 0 };
   }
 
   async newsFeatured(limit: number): Promise<NewsEntry[]> {
-    return buildNewsCards(NEWS_FIXTURE_ENTRIES, { featuredFirst: true }).slice(0, Math.min(Math.max(limit, 1), 12));
+    return buildStoryCards(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, { featuredFirst: true }).slice(0, Math.min(Math.max(limit, 1), 12));
   }
 
   async newsEntry(slug: string): Promise<NewsEntry | null> {
-    return threadUpdates(NEWS_FIXTURE_ENTRIES, slug);
+    return storyDetail(NEWS_FIXTURE_ENTRIES, matchStories(NEWS_FIXTURE_ENTRIES, NEWS_FIXTURE_OVERRIDES).links, slug);
   }
 
   async sitemap(entity: "item" | "source" | "zone", offset: number, limit: number): Promise<SitemapRow[]> {
