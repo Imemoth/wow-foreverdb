@@ -2,6 +2,7 @@ local _, FDB = ...
 
 local poolFrame
 local tooltipElapsed = 0
+local FISHING_CORRELATION_WINDOW_SECONDS = 5
 
 local POOL_WORDS = {
     "school",
@@ -37,6 +38,97 @@ local function isFishingSpell(spellId)
     end
 
     return getSpellName(spellId) == "Fishing"
+end
+
+local function fishingSpellFromEvent(...)
+    for index = 1, select("#", ...) do
+        local value = select(index, ...)
+        if type(value) == "number" and isFishingSpell(value) then
+            return true
+        elseif type(value) == "string" and value == "Fishing" then
+            return true
+        end
+    end
+    return false
+end
+
+local function getFishingCastGuid(value)
+    if type(value) ~= "string" then return nil end
+    if issecretvalue then
+        local ok, secret = pcall(issecretvalue, value)
+        if not ok or secret then return nil end
+    end
+    -- Older client event tuples can place the spell name in the argument
+    -- position used by newer CastGUID-based APIs. Only retain a real token.
+    local ok, isCastGuid = pcall(string.match, value, "^Cast%-")
+    return ok and isCastGuid and value or nil
+end
+
+local function getFishingInteractionZone()
+    if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetMapInfo
+        and C_Map.GetPlayerMapPosition) then
+        return nil
+    end
+
+    local ok, mapId = pcall(C_Map.GetBestMapForUnit, "player")
+    if not ok or type(mapId) ~= "number" or mapId <= 0 then return nil end
+
+    local infoOk, info = pcall(C_Map.GetMapInfo, mapId)
+    if not infoOk or type(info) ~= "table"
+        or tonumber(info.mapID) ~= mapId
+        or type(info.name) ~= "string" or info.name == ""
+        or type(info.mapType) ~= "number"
+        or type(info.parentMapID) ~= "number" or info.parentMapID <= 0 then
+        return nil
+    end
+
+    local zoneType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+    if info.mapType ~= zoneType then return nil end
+    local parentOk, parent = pcall(C_Map.GetMapInfo, info.parentMapID)
+    if not parentOk or type(parent) ~= "table"
+        or tonumber(parent.mapID) ~= info.parentMapID
+        or type(parent.name) ~= "string" or parent.name == "" then
+        return nil
+    end
+
+    local zoneOk, zoneName = pcall(GetZoneText)
+    if not zoneOk or zoneName ~= info.name then return nil end
+
+    -- This validates that the map is usable at the interaction, but the
+    -- player's coordinates are deliberately neither retained nor attributed.
+    local positionOk, position = pcall(C_Map.GetPlayerMapPosition, mapId, "player")
+    if not positionOk or not position then return nil end
+    local x, y
+    local getterOk, getter = pcall(function() return position.GetXY end)
+    if getterOk and type(getter) == "function" then
+        positionOk, x, y = pcall(getter, position)
+    else
+        positionOk, x, y = pcall(function() return position.x, position.y end)
+    end
+    if not positionOk or type(x) ~= "number" or type(y) ~= "number"
+        or x < 0 or x > 1 or y < 0 or y > 1 then
+        return nil
+    end
+
+    return { mapId = mapId, zoneName = zoneName }
+end
+
+function FDB:GetPendingFishingCorrelation()
+    local pending = self.PendingFishingCorrelation
+    if not pending then return nil end
+    local now = GetTime and GetTime() or pending.stoppedAt or pending.startedAt
+    if pending.state ~= "completed"
+        or not pending.zone
+        or not pending.stoppedAt
+        or now - pending.stoppedAt > FISHING_CORRELATION_WINDOW_SECONDS then
+        self.PendingFishingCorrelation = nil
+        return nil
+    end
+    return pending
+end
+
+function FDB:ConsumePendingFishingCorrelation()
+    self.PendingFishingCorrelation = nil
 end
 
 local function isSecretValue(value)
@@ -278,16 +370,97 @@ function FDB:InitializeFishingPoolTracker()
 
     poolFrame = CreateFrame("Frame")
     poolFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    poolFrame:RegisterEvent("UNIT_SPELLCAST_START")
+    poolFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+    poolFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+    poolFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
+    poolFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
 
     poolFrame:SetScript(
         "OnEvent",
-        function(_, _, unitTarget, _, spellId)
-            if unitTarget ~= "player"
-                or not isFishingSpell(spellId) then
+        function(_, event, unitTarget, castGuid, spellId, ...)
+            if unitTarget ~= "player" then
                 return
             end
 
-            FDB:ArmFishingPoolForCast()
+            local fishingSpell = fishingSpellFromEvent(castGuid, spellId, ...)
+            local eventCastGuid = getFishingCastGuid(castGuid)
+            local pending = FDB.PendingFishingCorrelation
+
+            if event == "UNIT_SPELLCAST_CHANNEL_START" then
+                if not fishingSpell then
+                    FDB.PendingFishingCorrelation = nil
+                    return
+                end
+
+                -- A second distinct operation before the first catch makes
+                -- the association ambiguous. Do not choose either cast.
+                if pending then
+                    if pending.castGuid and eventCastGuid == pending.castGuid
+                        and pending.state == "casting" then
+                        return -- duplicate start event for this same cast
+                    end
+                    FDB.PendingFishingCorrelation = nil
+                    return
+                end
+
+                FDB.PendingFishingCorrelation = {
+                    state = "casting",
+                    castGuid = eventCastGuid,
+                    startedAt = GetTime and GetTime() or 0,
+                    zone = getFishingInteractionZone(),
+                }
+                return
+            end
+
+            if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+                if pending and pending.state == "completed"
+                    and pending.castGuid and pending.castGuid == eventCastGuid then
+                    return -- duplicate stop notification for the same channel
+                end
+                if not fishingSpell
+                    and (not pending or not pending.castGuid
+                        or pending.castGuid ~= eventCastGuid) then
+                    FDB.PendingFishingCorrelation = nil
+                    return
+                end
+                if not pending or pending.state ~= "casting"
+                    or (pending.castGuid and eventCastGuid ~= pending.castGuid)
+                    or (not pending.castGuid and eventCastGuid ~= nil) then
+                    FDB.PendingFishingCorrelation = nil
+                    return
+                end
+                pending.stoppedAt = GetTime and GetTime() or 0
+                if pending.stoppedAt < pending.startedAt then
+                    FDB.PendingFishingCorrelation = nil
+                    return
+                end
+                pending.state = "completed"
+                local stoppedZone = getFishingInteractionZone()
+                if not pending.zone or not stoppedZone
+                    or pending.zone.mapId ~= stoppedZone.mapId
+                    or pending.zone.zoneName ~= stoppedZone.zoneName then
+                    pending.zone = nil
+                end
+                return
+            end
+
+            if event == "UNIT_SPELLCAST_FAILED"
+                or event == "UNIT_SPELLCAST_INTERRUPTED" then
+                if fishingSpell then FDB.PendingFishingCorrelation = nil end
+                return
+            end
+
+            if event == "UNIT_SPELLCAST_START" and not fishingSpell then
+                -- Any intervening player cast can make a later loot window
+                -- unrelated to the completed fishing channel.
+                FDB.PendingFishingCorrelation = nil
+                return
+            end
+
+            if event == "UNIT_SPELLCAST_SUCCEEDED" and fishingSpell then
+                FDB:ArmFishingPoolForCast()
+            end
         end
     )
 

@@ -25,6 +25,7 @@ local function setup(api)
         parentMapId = 1,
         zoneName = "Test Zone",
         mapName = "Test Zone",
+        sourceName = "Test Herb Node",
     }
     local FDB = {}
     print = function(...)
@@ -61,8 +62,8 @@ local function setup(api)
     UnitGUID = function(unit)
         return (unit == "npc" or unit == "target") and state.guid or nil
     end
-    UnitName = function() return "Test Herb Node" end
-    UnitNameFromGUID = function() return "Test Herb Node" end
+    UnitName = function() return state.sourceName end
+    UnitNameFromGUID = function() return state.sourceName end
     GetZoneText = function() return state.zoneName end
     GetSubZoneText = function() return "Test Subzone" end
     C_Map = {
@@ -78,7 +79,9 @@ local function setup(api)
         end,
         GetPlayerMapPosition = function() return { x = 0.421, y = 0.337 } end,
     }
-    C_Spell = { GetSpellName = function() return "Localized gathering spell" end }
+    C_Spell = { GetSpellName = function(spellId)
+        return spellId == 7620 and "Fishing" or "Localized gathering spell"
+    end }
     GetCursorInfo = function()
         return "spell", nil, nil, state.cursorSpellId
     end
@@ -123,12 +126,13 @@ local function setup(api)
         return nil, item.name or "Test Output", item.qty, nil, nil, nil, false, nil
     end
     for _, file in ipairs({ "Core", "Database", "Exporter", "GeoDiagnostics", "LocationTracker",
-        "GatheringTracker", "SkinningTracker", "DisenchantTracker", "LootTracker" }) do
+        "GatheringTracker", "SkinningTracker", "FishingPoolTracker", "DisenchantTracker", "LootTracker" }) do
         assert(loadfile("addon/ForeverDB/" .. file .. ".lua"))("ForeverDB", FDB)
     end
     FDB:InitializeDatabase()
     FDB:InitializeGatheringTracker()
     FDB:InitializeSkinningTracker()
+    FDB:InitializeFishingPoolTracker()
     FDB:InitializeDisenchantTracker()
     FDB:InitializeLootTracker()
     function state:startDisenchant()
@@ -412,6 +416,168 @@ test("synthetic observations without eligible interaction-zone evidence remain U
         equal(bucket.items["700"].quantity, 2)
         equal(bucket.locations, nil)
         contains(ForeverDB_Export, "Z|unknown|" .. case[2] .. "|" .. case[3])
+    end
+end)
+
+local function beginFishingCatch(state, castGuid)
+    state.guid = nil
+    state.sourceName = "Fishing Bobber"
+    state:event("UNIT_SPELLCAST_CHANNEL_START", "player", castGuid, 7620)
+    state:event("UNIT_SPELLCAST_CHANNEL_START", "player", castGuid, 7620) -- duplicate callback
+    state.now = state.now + 2
+    state:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", castGuid, 7620)
+    state:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", castGuid, 7620) -- duplicate callback
+    state.lootSources = { "GameObject-0-0-0-0-999-0001" }
+    state.slots = { { id = 159, qty = 1, name = "Old Skull" } }
+end
+
+test("completed ordinary fishing channel correlates one bobber catch to zone only", function()
+    local f, s = setup()
+    s.mapId = 1420
+    s.zoneName = "Tirisfal Glades"
+    s.mapName = "Tirisfal Glades"
+    beginFishingCatch(s, "Cast-0-1-2-3-7620-000001")
+    s:event("LOOT_OPENED")
+    s:event("LOOT_READY")
+    s:event("LOOT_READY")
+
+    local global = f.DB.sources["fishing:1420"].buckets.fishing
+    local zone = f.DB.geographicStats.correlatedInteractionZone.zones["1420|Tirisfal Glades"]
+    local bucket = zone.sources["fishing:1420"].buckets.fishing
+    equal(global.observations, 1)
+    equal(global.items["159"].quantity, 1)
+    equal(bucket.observations, 1)
+    equal(bucket.items["159"].quantity, 1)
+    equal(bucket.locations, nil)
+    equal(f.DB.geographicStats.unknown.sources["fishing:1420"], nil)
+    contains(ForeverDB_Export,
+        "Z|correlated_interaction_zone|1420|Tirisfal Glades|fishing|1420|0|fishing|1|cast_loot_correlation")
+    equal(f.PendingFishingCorrelation, nil)
+end)
+
+test("legacy fishing channel tuple without a CastGUID correlates only its unique operation", function()
+    local f, s = setup()
+    s.mapId = 1420; s.zoneName = "Tirisfal Glades"; s.mapName = "Tirisfal Glades"
+    s.sourceName = "Fishing Bobber"
+    s:event("UNIT_SPELLCAST_CHANNEL_START", "player", "Fishing", nil, nil, 7620)
+    s.now = s.now + 2
+    s:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", "Fishing", nil, nil, 7620)
+    s.lootSources = { "GameObject-0-0-0-0-999-0002" }
+    s.slots = { { id = 159, qty = 1, name = "Old Skull" } }
+    s:event("LOOT_OPENED"); s:event("LOOT_READY")
+    local bucket = f.DB.geographicStats.correlatedInteractionZone.zones["1420|Tirisfal Glades"]
+        .sources["fishing:1420"].buckets.fishing
+    equal(bucket.observations, 1)
+    equal(bucket.locations, nil)
+end)
+
+test("zero-drop fishing retains one Unknown observation with no invented items", function()
+    local f, s = setup()
+    s.mapId = 1420; s.zoneName = "Tirisfal Glades"; s.mapName = "Tirisfal Glades"
+    s.guid = "GameObject-0-0-0-0-999-0003"
+    s.sourceName = "Fishing Bobber"
+    s.slots = {}
+    s:event("UNIT_SPELLCAST_CHANNEL_START", "player", "Cast-0-1-2-3-7620-000004", 7620)
+    s.now = s.now + 2
+    s:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", "Cast-0-1-2-3-7620-000004", 7620)
+    s:event("LOOT_OPENED"); s:event("LOOT_READY")
+    local global = f.DB.sources["fishing:1420"].buckets.fishing
+    local unknown = f.DB.geographicStats.unknown.sources["fishing:1420"].buckets.fishing
+    equal(global.observations, 1)
+    equal(next(global.items), nil)
+    equal(unknown.observations, 1)
+    equal(next(unknown.items), nil)
+    equal(next(f.DB.geographicStats.correlatedInteractionZone.zones), nil)
+end)
+
+test("fishing-pool source remains separate from ordinary channel correlation", function()
+    local f, s = setup()
+    s.mapId = 1420; s.zoneName = "Tirisfal Glades"; s.mapName = "Tirisfal Glades"
+    s.guid = nil; s.sourceName = "Fishing Bobber"
+    s:event("UNIT_SPELLCAST_CHANNEL_START", "player", "Cast-0-1-2-3-7620-000005", 7620)
+    s.now = s.now + 2
+    s:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", "Cast-0-1-2-3-7620-000005", 7620)
+    f.ActiveFishingPool = {
+        name = "Fishing Pool", sourceId = -123, at = s.now,
+        location = { mapId = 1420, zoneName = "Tirisfal Glades", x = 42, y = 33 },
+    }
+    s.lootSources = { "GameObject-0-0-0-0-999-0005" }
+    s.slots = { { id = 159, qty = 1, name = "Old Skull" } }
+    s:event("LOOT_OPENED"); s:event("LOOT_READY")
+    equal(f.DB.sources["gameobject:-123"].buckets.fishing_pool.observations, 1)
+    equal(f.DB.sources["fishing:1420"], nil)
+    equal(next(f.DB.geographicStats.correlatedInteractionZone.zones), nil)
+end)
+
+test("fishing correlation fails closed for interruption, delay, map change and unrelated loot", function()
+    local cases = {
+        { name = "interrupted channel", interrupt = true },
+        { name = "delayed loot", delay = 6 },
+        { name = "map transition", mapChange = true },
+        { name = "loot opened before channel stop", openBeforeStop = true },
+        { name = "unrelated loot source", unrelated = true },
+        { name = "ambiguous source GUIDs", ambiguous = true },
+        { name = "overlapping fishing operation", overlap = true },
+    }
+    for _, case in ipairs(cases) do
+        local f, s = setup()
+        s.mapId = 1420; s.zoneName = "Tirisfal Glades"; s.mapName = "Tirisfal Glades"
+        local lootAlreadyOpened = false
+        if case.openBeforeStop then
+            s.guid = nil; s.sourceName = "Fishing Bobber"
+            s:event("UNIT_SPELLCAST_CHANNEL_START", "player", "Cast-0-1-2-3-7620-000002", 7620)
+            s.now = s.now + 1
+            s:event("LOOT_OPENED")
+            lootAlreadyOpened = true
+            s.now = s.now + 1
+            s:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", "Cast-0-1-2-3-7620-000002", 7620)
+            s.lootSources = { "GameObject-0-0-0-0-999-0001" }
+            s.slots = { { id = 159, qty = 1, name = "Old Skull" } }
+        else
+            beginFishingCatch(s, "Cast-0-1-2-3-7620-000002")
+        end
+        if case.overlap then
+            s:event("UNIT_SPELLCAST_CHANNEL_START", "player", "Cast-0-1-2-3-7620-000003", 7620)
+            s:event("UNIT_SPELLCAST_CHANNEL_STOP", "player", "Cast-0-1-2-3-7620-000003", 7620)
+        end
+        if case.interrupt then
+            s:event("UNIT_SPELLCAST_INTERRUPTED", "player", "Cast-0-1-2-3-7620-000002", 7620)
+        end
+        if case.delay then s.now = s.now + case.delay end
+        if case.mapChange then
+            s.mapId = 1430; s.zoneName = "Silverpine Forest"; s.mapName = "Silverpine Forest"
+        end
+        if case.unrelated then
+            s.sourceName = "Unrelated Object"
+            s.lootSources = { "GameObject-0-0-0-0-998-0001" }
+        elseif case.ambiguous then
+            s.slots = { { id = 159, qty = 1 }, { id = 159, qty = 1 } }
+            s.lootSources = {
+                "GameObject-0-0-0-0-999-0001",
+                "GameObject-0-0-0-0-999-0002",
+            }
+        end
+        if not lootAlreadyOpened then s:event("LOOT_OPENED") end
+        s:event("LOOT_READY")
+        local correlatedZone = f.DB.geographicStats.correlatedInteractionZone.zones["1420|Tirisfal Glades"]
+        assert(not correlatedZone or not correlatedZone.sources["fishing:1420"],
+            case.name .. " must not correlate a non-qualifying fishing catch")
+        if case.ambiguous then
+            equal(f.PendingFishingCorrelation, nil)
+            assert(f:GetDatabaseStats().unresolvedLootWindows >= 1,
+                case.name .. " should remain unresolved")
+            equal(next(f.DB.sources), nil)
+        elseif case.unrelated then
+            equal(f.DB.sources["gameobject:998"].buckets.gameobject.observations, 1)
+            equal(f.PendingFishingCorrelation, nil)
+        else
+            local sourceKey = case.mapChange and "fishing:1430" or "fishing:1420"
+            local global = f.DB.sources[sourceKey].buckets.fishing
+            equal(global.observations, 1)
+            equal(global.items["159"].quantity, 1)
+            equal(f.DB.geographicStats.unknown.sources[sourceKey].buckets.fishing.observations, 1)
+        end
+        equal(f.PendingFishingCorrelation, nil)
     end
 end)
 

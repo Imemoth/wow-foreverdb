@@ -6,6 +6,7 @@ local lootWindowOpenedAt
 local recentGatheringSources = {}
 local GATHERING_INSTANCE_DEDUP_SECONDS = 600
 local CORRELATED_GATHERING_LOOT_WINDOW_SECONDS = 4
+local CORRELATED_FISHING_LOOT_WINDOW_SECONDS = 5
 
 local CHEST_WORDS = {
     "chest",
@@ -220,6 +221,30 @@ local function sameInteractionZone(first, second)
     return first ~= nil and second ~= nil
         and first.mapId == second.mapId
         and first.zoneName == second.zoneName
+end
+
+local function resolveFishingInteractionZone(directSource, ambiguousSource,
+    before, after, pending, captureStartedAt, openedAt)
+    local capturedAt = GetTime and GetTime() or captureStartedAt
+    if not directSource or ambiguousSource or not pending
+        or pending.state ~= "completed"
+        or not pending.zone
+        or not sameInteractionZone(before, after)
+        or not sameInteractionZone(pending.zone, before)
+        or not capturedAt or not openedAt
+        or openedAt < pending.stoppedAt
+        or capturedAt < openedAt
+        or capturedAt - pending.stoppedAt > CORRELATED_FISHING_LOOT_WINDOW_SECONDS
+        or openedAt - pending.stoppedAt > CORRELATED_FISHING_LOOT_WINDOW_SECONDS then
+        return nil
+    end
+
+    return {
+        class = "correlated_interaction_zone",
+        mapId = before.mapId,
+        zoneName = before.zoneName,
+        evidence = "cast_loot_correlation",
+    }
 end
 
 local function resolveLootInteractionZone(sourceGuid, directSource, ambiguousSource,
@@ -473,6 +498,9 @@ function FDB:CaptureLootWindow()
     local pending
     local originalSourceType
     local originalSourceId
+    local fishingCorrelationCandidate = false
+    local pendingFishing = self.GetPendingFishingCorrelation
+        and self:GetPendingFishingCorrelation()
     local captureStartedAt = GetTime and GetTime() or 0
     local pendingBefore = self.PendingGathering
     local stalePending = pendingBefore ~= nil
@@ -502,6 +530,9 @@ function FDB:CaptureLootWindow()
             self:ParseSourceGuid(sourceGuid)
 
         if not sourceType or not sourceId then
+            if self.ConsumePendingFishingCorrelation then
+                self:ConsumePendingFishingCorrelation()
+            end
             self:RegisterUnresolvedLootWindow()
             self:Debug(
                 "loot unresolved; slots:",
@@ -538,6 +569,7 @@ function FDB:CaptureLootWindow()
                 pool.location
                 or self:GetProjectedInteractionLocation(15)
         elseif kind == "fishing" then
+            fishingCorrelationCandidate = sourceType == "gameobject"
             sourceType, sourceId, sourceName =
                 getFishingZoneSource()
         end
@@ -588,6 +620,12 @@ function FDB:CaptureLootWindow()
             interactionZoneBefore, interactionZoneAfter,
             pending, captureStartedAt, stalePending, lootWindowOpenedAt
         )
+    elseif fishingCorrelationCandidate and kind == "fishing" then
+        interactionAttribution = resolveFishingInteractionZone(
+            directSource, ambiguousSource,
+            interactionZoneBefore, interactionZoneAfter,
+            pendingFishing, captureStartedAt, lootWindowOpenedAt
+        )
     end
 
     self:RecordObservation(
@@ -627,6 +665,11 @@ function FDB:CaptureLootWindow()
 
     markGatheringSourceCaptured(sourceGuid, kind)
     self:ConsumePendingGatheringKind(kind)
+    if self.ConsumePendingFishingCorrelation then
+        -- One completed cast can explain at most one loot window. Consume it
+        -- even when the window was unrelated or ambiguous.
+        self:ConsumePendingFishingCorrelation()
+    end
 
     if kind == "fishing_pool"
         and self.ConsumeActiveFishingPool then
