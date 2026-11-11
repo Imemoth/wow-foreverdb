@@ -156,13 +156,25 @@ source GUID from the loot API; an event-time player map ID that resolves to
 matching valid zone map metadata and a valid parent; a non-empty zone identity
 consistent with that map; a valid normalized coordinate map (used only to
 validate map availability, never retained as the source point); no map/zone
-transition during the synchronous capture; and, for an action that needs
+transition during synchronous capture; and, for an action that needs
 additional correlation, a matching source and still-valid interaction window.
+Ordinary fishing specifically requires a unique pending
+`UNIT_SPELLCAST_CHANNEL_START` → matching `UNIT_SPELLCAST_CHANNEL_STOP`
+operation, one direct bobber GUID from the loot API, and the same validated
+zone at channel start, channel stop, loot open, and capture. CastGUID values
+must match when both channel events expose them; when both omit CastGUID, only
+the unique pending fishing operation is eligible. Loot must open and be
+captured within five seconds after channel stop. Interrupted, overlapping,
+stale, delayed, or unrelated operations remain `Unknown`. Fishing-pool
+hover/source attribution is separate and cannot be inferred from ordinary
+fishing. Neither path claims source coordinates without an independent,
+verified source-position API.
+
 Missing map metadata, a mismatched pending source, a stale interaction, or
-inconsistent map/zone readings fail closed to `Unknown`. If distinct source GUIDs in one
-loot window cannot be uniquely linked to the observed items, do not record a
-source observation; increment the existing unresolved-loot diagnostic rather
-than guessing or double-counting.
+inconsistent map/zone readings fail closed to `Unknown`. If distinct source
+GUIDs in one loot window cannot be uniquely linked to the observed items, do
+not record a source observation; increment the existing unresolved-loot
+diagnostic rather than guessing or double-counting.
 An ID such as 1420 is not sufficient by itself: map IDs can have distinct
 zone labels/aliases, so the map ID and validated zone identity are considered
 together. The registry must preserve the evidence class and must not promote
