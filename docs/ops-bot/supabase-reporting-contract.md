@@ -69,6 +69,14 @@ Rules: `.strict()` (unknown fields are rejected), `sources` 1 to 16 entries, cod
 
 `ops-bot/test/gate-c-handler.test.ts` (authentication matrix, allow-list, failure mapping, caching, bounded execution, compatibility with the bot's real signing function, provider and zod contract) and `gate-c-e2e.test.ts` (bot provider -> endpoint core -> the real SQL function as the restricted role -> the bot's evaluation and incident engine) cover the HTTP and bot side. Mutation checks (removing the `PUBLIC` revoke, the allow-list, adding a table grant, making the function volatile, touching an existing object, leaving the role behind after the rollback, granting the role `pub` access) each fail the suite. **Not validated here:** real `pg_cron` / `pg_net` behaviour, the Supabase pooler, and the deployed Edge runtime; the post-deployment check below covers the last two, and the first is covered by the G2 functions already running in production.
 
+## Option G: the HMAC-gated Data API RPC (implemented in a separate PR, NOT applied)
+
+Option G replaces the direct database login in the Edge Function by a gated call to `public.ops_health_report()` through the Data API as plain `anon`
+(migrations `0020_ops_health_gated_rpc.sql`, its rollback and `0021_drop_ops_reporter_login.sql`, `report-source.ts`, a read-only verifier and a PostgREST HTTP test suite). It keeps this
+document's response contract and the external HMAC contract (`handler.ts` is unchanged) and removes the reporter's inherited `PUBLIC` privileges (pg_net) from the picture.
+Everything about it (decision record, exact privileges, abuse measurements, migration, rotation, rollback) is in [reporting-gated-rpc.md](reporting-gated-rpc.md). Until the owner
+takes its production decision, the procedure below remains the one in force.
+
 ## Operator procedure (NOT executed by this repository; each step needs the owner's GO)
 
 1. **Record the baseline** (read-only): the md5 of `cron.job` rows 3 to 7 and of the G2 function bodies, using the fingerprint queries in `scripts/ops-health-sql-tests.sh` (`fp()`), and keep them with the owner's evidence.
