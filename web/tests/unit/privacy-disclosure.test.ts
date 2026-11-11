@@ -34,6 +34,8 @@ describe("privacy page: the disclosure matches the implementation", () => {
     const { session, csrf } = cookieNames(true);
     expect(t).toContain(session);
     expect(t).toContain(csrf);
+    expect(t).toContain("__Secure-fdb_admin");
+    expect(t).toContain("__Secure-fdb_admin_csrf");
     expect(SESSION_COOKIE_MAX_AGE_SEC).toBe(14 * 86400);
     expect(SESSION_ABSOLUTE_MAX_SEC).toBe(30 * 86400);
     expect(RECOVERY_SESSION_MAX_SEC).toBe(15 * 60);
@@ -53,7 +55,7 @@ describe("privacy page: the disclosure matches the implementation", () => {
   });
 
   it("every cookie the application sets is listed (no undisclosed cookie)", () => {
-    const setters = ["src/proxy.ts", "src/app/api/v1/challenge/route.ts", "src/lib/account/session.ts", "src/app/account/api/csrf/route.ts"];
+    const setters = ["src/proxy.ts", "src/app/api/v1/challenge/route.ts", "src/lib/account/session.ts", "src/app/account/api/csrf/route.ts", "src/lib/admin/session.ts", "src/app/admin/api/csrf/route.ts"];
     expect(setters.every((p) => /cookies\.set|setCookie|Set-Cookie/.test(src(p)))).toBe(true);
     // Anything else under src that sets a cookie would be a new, undisclosed one.
     const walk = (dir: string): string[] =>
@@ -67,8 +69,10 @@ describe("privacy page: the disclosure matches the implementation", () => {
       .sort();
     expect(files).toEqual([
       "src/app/account/api/csrf/route.ts",
+      "src/app/admin/api/csrf/route.ts",
       "src/app/api/v1/challenge/route.ts",
       "src/lib/account/session.ts",
+      "src/lib/admin/session.ts",
       "src/proxy.ts",
     ]);
   });

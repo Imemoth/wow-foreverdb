@@ -148,6 +148,12 @@ export function PrivacyContent({ speedInsights }: { speedInsights: boolean }) {
           after 1 hour.
         </li>
       </ul>
+      <h3>Admin authentication (only in separately enabled environments)</h3>
+      <ul>
+        <li><code>__Secure-fdb_admin</code>: encrypted, HTTP-only, secure Admin access-token session, sent only to <code>/admin</code>,
+          expires no later than the Auth token or 30 minutes, and contains no refresh token.</li>
+        <li><code>__Secure-fdb_admin_csrf</code>: HTTP-only anti-forgery token scoped to <code>/admin</code>, expires after 1 hour.</li>
+      </ul>
       <h3>Browser storage</h3>
       <p>
         <code>azerdex-consent</code> (local storage): remembers your analytics choice, the date you made it and the version of this

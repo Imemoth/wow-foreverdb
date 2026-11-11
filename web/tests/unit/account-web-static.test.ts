@@ -27,6 +27,9 @@ const code = (p: string) => read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^
 describe("account web zone (static)", () => {
   it("has the expected shape", () => {
     expect(routes.map(rel).sort()).toEqual([
+      "app/account/api/admin/handoff/complete/route.ts", "app/account/api/admin/handoff/start/route.ts",
+      "app/account/api/admin/mfa/challenge/route.ts", "app/account/api/admin/mfa/enroll/route.ts",
+      "app/account/api/admin/mfa/factors/route.ts", "app/account/api/admin/mfa/verify/route.ts",
       "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts", "app/account/api/devices/revoke/route.ts", "app/account/api/devices/route.ts",
       "app/account/api/enrollment/download/route.ts", "app/account/api/enrollment/revoke/route.ts", "app/account/api/forgot-password/route.ts",
       "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",
