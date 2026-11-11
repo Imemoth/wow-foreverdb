@@ -17,7 +17,9 @@ docker network create --internal "$net_name" >/dev/null
 docker run --rm -d --name "$pg_name" --network "$net_name" \
   -e POSTGRES_PASSWORD=local-test-only postgres:17 >/dev/null
 for _ in $(seq 1 60); do
-  if docker exec "$pg_name" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  # The image entrypoint briefly runs a socket-only init server before starting
+  # PostgreSQL normally. Require TCP readiness so createdb cannot race that server.
+  if docker exec "$pg_name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
   sleep 1
 done
 docker exec "$pg_name" createdb -U postgres "$db_name"
