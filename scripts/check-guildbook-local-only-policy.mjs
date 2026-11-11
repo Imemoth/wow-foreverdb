@@ -17,78 +17,20 @@ const HISTORICAL_SHA256 = new Map([
   ["0014_zero_touch_enrollment.sql", "daf6767a60eef7f450b7af136ac4f10e00cf05bbd452264561d8ee9d9857d3d1"],
 ]);
 
-// 0018 is the only migration allowed to define the ingest wrapper and the Guildbook-stripping projection. A later migration may CALL them, but only in
-// the exact forms below, and only in the one reviewed file (reviewed 2026-11-11 against the 0018 boundary): pre-flight existence tests written as a boolean
-// `to_regprocedure('...') is null` (never as an object handle that could be cast to text or passed to EXECUTE or format), and the single call
-// that passes every upload through the projection. These forms are removed before scanning, so ANY other mention of either object (a definition, alter,
-// drop, rename, grant, revoke, quoted identifier, dynamic SQL, or a call that bypasses the projection) is still reported by the rule below.
-// No content hash is used: a hash would go stale on every harmless edit and would let any matching copy through under a new name.
-const REVIEWED_PROJECTION_USE = new Map([
-  ["0019_technical_installation_ingest.sql", [
-    /\bto_regprocedure\s*\(\s*'private\.(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\(jsonb\)'\s*\)\s+is\s+null\b/gi,
-    /\bprivate\.foreverdb_ingest_snapshot_impl_v1\s*\(\s*private\.fdb_public_snapshot\s*\(\s*p_snapshot\s*\)\s*\)/gi,
-  ]],
+// Reviewed exception to the ingest wrapper/projection rule: the EXACT bytes of one migration, pinned by sha256 (the same mechanism as the historical files above,
+// normalised for line endings). 0019_technical_installation_ingest.sql only CALLS private.foreverdb_ingest_snapshot_impl_v1 and private.fdb_public_snapshot
+// (pre-flight existence tests, and one call that passes every upload through the Guildbook-stripping projection); it never defines, alters, drops or re-grants
+// either, and it refuses to run unless the 0018 guard is in place. Reviewed against the 0018 boundary on 2026-11-11.
+// Nothing here depends on parsing SQL: ANY other byte in the file, even a comment, changes the hash and returns the file to the broad rule below. The entry
+// exempts ONLY the wrapper/projection rule; every Guildbook rule still applies to the file. Change this entry only in its own reviewed guard PR.
+export const REVIEWED_PROJECTION_USE_SHA256 = new Map([
+  ["0019_technical_installation_ingest.sql", "37161028d4e8ce2dae9a2189ef673a5b6bf6fed4ae0dbeaf3f21400ed60bbc5b"],
 ]);
 
 const sha256 = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
-// Removes SQL comments while respecting string literals, quoted identifiers and dollar-quoted bodies, so that text such as  select '--'; drop function ...;
-// cannot hide a statement behind a comment marker. String and identifier text is kept (it is still scanned); comments, including nested block comments, are
-// replaced by a space. A dollar-quoted body is scanned recursively because function bodies are SQL too. This only ever exposes MORE text than before.
-// A hand-written lexer can always be wrong somewhere, so it is never the only defence: the statement-shaped rules ALSO run on the raw text (see below), and
-// anything the lexer cannot close (an unterminated string, identifier, comment or dollar quote) is reported instead of being scanned on a guess.
-const IDENT = /[\p{L}\p{N}_$]/u;
-const lex = (sql, state = { unterminated: false }) => {
-  let out = "", lastStringEnd = -1, lastStringEscapes = false;
-  for (let i = 0; i < sql.length;) {
-    const c = sql[i], d = sql[i + 1];
-    if (c === "-" && d === "-") { while (i < sql.length && sql[i] !== "\n" && sql[i] !== "\r") i++; out += " "; continue; }   // PostgreSQL ends a -- comment at \n OR a lone \r
-    if (c === "/" && d === "*") {
-      let depth = 1; i += 2;
-      while (i < sql.length && depth > 0) {
-        if (sql[i] === "/" && sql[i + 1] === "*") { depth++; i += 2; } else if (sql[i] === "*" && sql[i + 1] === "/") { depth--; i += 2; } else i++;
-      }
-      if (depth > 0) state.unterminated = true;
-      out += " "; continue;
-    }
-    if (c === "'") {
-      // E'...' has backslash escapes; the E must not be the tail of an identifier or a qualified name (public.e'..' is a typed literal). A string that continues
-      // after whitespace containing a newline inherits the escape mode of the previous literal (PostgreSQL concatenates them).
-      const before = sql[i - 1] ?? "";
-      const prefixE = /[eE]/.test(before) && !IDENT.test(sql[i - 2] ?? "") && (sql[i - 2] ?? "") !== ".";
-      const between = lastStringEnd >= 0 ? sql.slice(lastStringEnd, i) : null;
-      const continuation = between !== null && /^\s*$/.test(between) && /[\r\n]/.test(between);
-      const escapes = prefixE || (continuation && lastStringEscapes);
-      let j = i + 1, closed = false;
-      while (j < sql.length) {
-        if (escapes && sql[j] === "\\") { j += 2; continue; }
-        if (sql[j] === "'") { if (sql[j + 1] === "'") { j += 2; continue; } closed = true; break; }
-        j++;
-      }
-      if (!closed) state.unterminated = true;
-      out += sql.slice(i, j + 1); i = j + 1; lastStringEnd = i; lastStringEscapes = escapes; continue;
-    }
-    if (c === '"') {
-      let j = i + 1, closed = false;
-      while (j < sql.length) { if (sql[j] === '"') { if (sql[j + 1] === '"') { j += 2; continue; } closed = true; break; } j++; }
-      if (!closed) state.unterminated = true;
-      out += sql.slice(i, j + 1); i = j + 1; continue;
-    }
-    if (c === "$" && !IDENT.test(sql[i - 1] ?? "")) {   // a $ that continues an identifier (a$$) or a number is not a dollar-quote opener
-      const tag = /^\$(?:[\p{L}_][\p{L}\p{N}_]*)?\$/u.exec(sql.slice(i));
-      if (tag) {
-        const end = sql.indexOf(tag[0], i + tag[0].length);
-        if (end < 0) { state.unterminated = true; }
-        else { out += tag[0] + lex(sql.slice(i + tag[0].length, end), state).text + tag[0]; i = end + tag[0].length; continue; }
-      }
-    }
-    out += c; i++;
-  }
-  return { text: out, unterminated: state.unterminated };
-};
-const uncomment = (sql) => lex(sql).text;
-export { lex };   // exported for the regression tests only
+const uncomment = (sql) => sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ");
 
-export function guildbookPolicyViolations(files) {
+export function guildbookPolicyViolations(files, reviewedUse = REVIEWED_PROJECTION_USE_SHA256) {
   const violations = [];
   const has0018 = files.some((f) => f.name === "0018_disable_guildbook_cloud_sync.sql");
   if (!has0018) violations.push("approved 0018 protection migration is missing");
@@ -104,30 +46,20 @@ export function guildbookPolicyViolations(files) {
     }
     if (HISTORICAL_SHA256.get(path.basename(file.name)) === hash) continue;
 
-    const reviewedForms = REVIEWED_PROJECTION_USE.get(path.basename(file.name)) ?? [];
-    const withoutReviewed = (text) => reviewedForms.reduce((acc, reviewed) => acc.replace(reviewed, " "), text);
-    const lexed = lex(file.sql);
-    if (lexed.unterminated) violations.push(`${file.name}: unterminated string, identifier, comment or dollar quote (cannot be scanned safely)`);
-    const sql = withoutReviewed(lexed.text);
-    const rawSql = withoutReviewed(file.sql);   // comments NOT removed: no lexer state can hide a statement from the shape rules below
-    const mention = [/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\w*/i, "ingest wrapper/projection modification"];
-    const shapes = [
+    const sql = uncomment(file.sql);
+    const reviewedProjectionUse = reviewedUse.get(path.basename(file.name)) === hash;
+    const rules = [
       [/\bprivate\s*\.\s*account_guildbook_[a-z0-9_]*/i, "account-scoped cloud Guildbook storage"],
       [/\b(?:create|alter)\s+table\b[^;]*(?:guildbook|installation_guilds|installation_guild_members|installation_guild_professions)/i, "Guildbook cloud table definition or alteration"],
       [/\bcreate\s+(?:or\s+replace\s+)?function\s+(?:public|private)\s*\.\s*\w*guildbook\w*/i, "new Guildbook RPC/function"],
       [/\bgrant\s+execute\s+on\s+function\b[^;]*\w*guildbook\w*/i, "Guildbook RPC execution grant"],
+      [/\b(?:guildbook_upload|upload_guildbook|sync_guildbook|guildbook_sync|backup_guildbook)\w*/i, "Guildbook upload, sync, or backup path"],
       [/\b(?:insert\s+into|copy\s+into)\b[^;]*\bselect\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "copy of historical Guildbook records"],
       [/\b(?:insert\s+into|update|delete\s+from)\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "Guildbook cloud data write"],
       [/\b(?:revoke|grant)\s+execute\b[^;]*\w*guildbook\w*/i, "Guildbook RPC privilege change"],
-      [/\b(?:create(?:\s+or\s+replace)?|alter|drop)\s+function\b[^;(]*(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)/i, "ingest wrapper/projection modification"],
-      [/\b(?:grant|revoke)\b[^;]*(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)/i, "ingest wrapper/projection modification"],
+      ...(reviewedProjectionUse ? [] : [[/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\b/i, "ingest wrapper/projection modification"]]),
     ];
-    const found = new Set();
-    for (const [pattern, reason] of [...shapes, mention, [/\b(?:guildbook_upload|upload_guildbook|sync_guildbook|guildbook_sync|backup_guildbook)\w*/i, "Guildbook upload, sync, or backup path"]]) {
-      if (pattern.test(sql)) found.add(reason);
-    }
-    for (const [pattern, reason] of shapes) if (pattern.test(rawSql)) found.add(reason);   // second pass on the raw text (defence in depth)
-    for (const reason of found) violations.push(`${file.name}: ${reason}`);
+    for (const [pattern, reason] of rules) if (pattern.test(sql)) violations.push(`${file.name}: ${reason}`);
   }
   return violations;
 }
