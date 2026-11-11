@@ -27,7 +27,10 @@ env:
 jobs:
   account-web-auth:
     name: Account web auth (real GoTrue)
-    runs-on: ubuntu-latest
+    # Playwright's OS/browser dependencies are present on this stable runner image.
+    # Install only the lockfile-matched browser; --with-deps invokes apt and
+    # currently fails when Ubuntu mirrors have transient DNS outages.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
@@ -100,7 +103,7 @@ jobs:
           npm run build
           npm run check:bundle-secrets
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Real-GoTrue acceptance (registration, confirmation, login, logout, recovery, sessions, CSRF, redirects, Turnstile, cookies, headers, leakage, public regression, fail-closed modes, browser UI, accessibility, client bundle)
         env:
           ACCOUNT_STACK_ENV_FILE: ${{ github.workspace }}/.stack/env
