@@ -1,0 +1,34 @@
+name: ADM-01B-2 server authorization
+
+on:
+  pull_request:
+    paths:
+      - 'database/migrations/0021_admin_private_evaluator.sql'
+      - 'database/rollback/0021_admin_private_evaluator_rollback.sql'
+      - 'database/tests/admin_authorization/**'
+      - '.github/workflows/admin-authorization.yml'
+
+jobs:
+  admin-authorization-sql:
+    name: ADM-01B-2 evaluator denial and revocation races
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run disposable PostgreSQL security suite
+        env:
+          FDB_ADMIN_PG_IMAGE: postgres:${{ matrix.postgres }}
+        run: bash database/tests/admin_authorization/run-docker.sh
+
+  admin-authorization-gotrue:
+    name: ADM-01B-2 real GoTrue/Auth schema compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rehearse 0020 and 0021 on disposable GoTrue Auth schema
+        env:
+          FDB_ADMIN_EVALUATOR: '1'
+        run: bash database/tests/admin_private/run-target-gotrue.sh

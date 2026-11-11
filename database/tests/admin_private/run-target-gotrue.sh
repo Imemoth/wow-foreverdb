@@ -79,6 +79,28 @@ migration_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
     and exists (select 1 from pg_constraint where conrelid='admin_private.staff_subjects'::regclass
                 and confrelid='auth.users'::regclass and confdeltype='r')")
 [ "$migration_ok" = t ] || { echo "GoTrue/Auth migration security assertions failed" >&2; exit 1; }
+if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
+  docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+    psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+    < "$repo/database/migrations/0021_admin_private_evaluator.sql"
+  evaluator_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+    -c "select pg_get_userbyid(proowner)='admin_executor' and prosecdef
+      and not has_function_privilege('authenticated',oid,'EXECUTE')
+      and not has_function_privilege('anon',oid,'EXECUTE')
+      and (select version_id from admin_private.active_policy)=0
+      and (select count(*) from admin_private.staff_subjects)=0
+      from pg_proc where oid='admin_private.authorize_action(text,text,text,text)'::regprocedure")
+  [ "$evaluator_ok" = t ] || { echo "real-GoTrue evaluator boundary failed" >&2; exit 1; }
+  auth_probe=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+    -c "set role admin_executor;
+        select admin_private.live_auth_session(
+          '00000000-0000-0000-0000-000000000101',
+          '00000000-0000-0000-0000-000000000201')")
+  [ "${auth_probe##*$'\n'}" = f ] || { echo "real-GoTrue private Auth helper did not fail closed" >&2; exit 1; }
+  docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+    psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+    < "$repo/database/rollback/0021_admin_private_evaluator_rollback.sql"
+fi
 docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
   psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
   < "$repo/database/rollback/0020_admin_private_authorization_rollback.sql"
