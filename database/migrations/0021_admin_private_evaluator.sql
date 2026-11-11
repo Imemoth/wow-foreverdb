@@ -255,17 +255,9 @@ $fn$;
 revoke all on function admin_private.authorize_action(text,text,text,text)
     from public, anon, authenticated, service_role, authenticator;
 grant create on schema admin_private to admin_executor;
-do $membership$
-begin
-    execute format('grant admin_executor to %I', current_user);
-end
-$membership$;
+grant admin_executor to current_user;
 alter function admin_private.authorize_action(text,text,text,text) owner to admin_executor;
-do $membership$
-begin
-    execute format('revoke admin_executor from %I', current_user);
-end
-$membership$;
+revoke admin_executor from current_user;
 revoke create on schema admin_private from admin_executor;
 
 commit;
