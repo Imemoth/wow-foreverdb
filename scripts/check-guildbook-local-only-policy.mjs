@@ -17,6 +17,18 @@ const HISTORICAL_SHA256 = new Map([
   ["0014_zero_touch_enrollment.sql", "daf6767a60eef7f450b7af136ac4f10e00cf05bbd452264561d8ee9d9857d3d1"],
 ]);
 
+// 0018 is the only migration allowed to define the ingest wrapper and the Guildbook-stripping projection. A later migration may CALL them, but only in
+// the exact forms below, and only in the one reviewed file (reviewed 2026-11-11 against the 0018 boundary): pre-flight existence checks, and the single call
+// that passes every upload through the projection. These forms are removed before scanning, so ANY other mention of either object (a definition, alter,
+// drop, rename, grant, revoke, quoted identifier, dynamic SQL, or a call that bypasses the projection) is still reported by the rule below.
+// No content hash is used: a hash would go stale on every harmless edit and would let any matching copy through under a new name.
+const REVIEWED_PROJECTION_USE = new Map([
+  ["0019_technical_installation_ingest.sql", [
+    /\bto_regprocedure\s*\(\s*'private\.(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\(jsonb\)'\s*\)/gi,
+    /\bprivate\.foreverdb_ingest_snapshot_impl_v1\s*\(\s*private\.fdb_public_snapshot\s*\(\s*p_snapshot\s*\)\s*\)/gi,
+  ]],
+]);
+
 const sha256 = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
 const uncomment = (sql) => sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ");
 
@@ -36,7 +48,8 @@ export function guildbookPolicyViolations(files) {
     }
     if (HISTORICAL_SHA256.get(path.basename(file.name)) === hash) continue;
 
-    const sql = uncomment(file.sql);
+    let sql = uncomment(file.sql);
+    for (const reviewed of REVIEWED_PROJECTION_USE.get(path.basename(file.name)) ?? []) sql = sql.replace(reviewed, " ");
     const rules = [
       [/\bprivate\s*\.\s*account_guildbook_[a-z0-9_]*/i, "account-scoped cloud Guildbook storage"],
       [/\b(?:create|alter)\s+table\b[^;]*(?:guildbook|installation_guilds|installation_guild_members|installation_guild_professions)/i, "Guildbook cloud table definition or alteration"],
