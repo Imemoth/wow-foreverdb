@@ -1,6 +1,6 @@
 # ADM-01A — Admin security architecture and ADM-01B contract
 
-**Status: OWNER-APPROVED identity architecture; remaining technical design PROPOSED, 2026-11-10.** [ADR-020](adr-020-admin-platform-adm-00.md) is **OWNER APPROVED at product-policy level**. The shared-identity decision below is also **OWNER APPROVED**. Schema, SQL/RLS, MFA implementation, Owner bootstrap/recovery and audit mechanisms remain proposals for independent review. Approval is recorded by named reviewers on this Draft PR or in a linked decision record; a green check or merge is not approval. No code, migration, account assignment, secret or environment change is authorized here.
+**Status: OWNER-APPROVED identity architecture and review workflow; remaining technical design PROPOSED.** [ADR-020](adr-020-admin-platform-adm-00.md) is **OWNER APPROVED at product-policy level**. The shared-identity decision below is also **OWNER APPROVED**. The owner-directed [risk-based review workflow](#owner-directed-risk-based-review-workflow) was added on 2026-11-11. Schema, SQL/RLS, MFA implementation, Owner bootstrap/recovery and audit mechanisms remain proposals for review. A green check, AI review or merge does not approve those designs or authorize production use. This plan itself creates no code, migration, account assignment, secret or environment change.
 
 ## Boundary and evidence
 
@@ -117,7 +117,7 @@ Scope: commit an additive migration **file** for the unexposed admin_private aut
 
 **Out of scope for ADM-01B-1:** managed Auth-table grants, public privileged RPCs, a live permission evaluator, role/grant write endpoints, staff assignments, Admin cookies or UI, TOTP flows, Owner bootstrap/recovery, audit export, CMS delivery, secrets and environment settings. Its empty authorization store must grant no Admin access. Its source can be developed after security/data reviewers accept the section 1 schema/grant design; passing CI alone cannot authorize merge or activation.
 
-Subsequent reviewable slices, each with its own relevant design review before coding and independent implementation review before merge:
+Subsequent reviewable slices each receive relevant design review before coding and the risk-based implementation review below before merge:
 
 1. **ADM-01B-2 — server-side authorization:** central evaluator, narrow guarded RPC/action wrappers, live-session checks, no-cache reads, lock-order revocation and transactional audit. Use only disposable users and protected test resources; pass hostile direct-RPC and two-connection race tests. Review audit failure behavior and grants before merge.
 2. **ADM-01B-3 — Admin session and TOTP/MFA:** closed Account Auth operations, CSRF-protected one-use handoff, /admin cookie, AAL2 and server-side 15-minute proof. Build and test with disposable identities in isolated non-production Auth. This slice creates the implementation needed to measure first and repeated TOTP verification against a target-configured staging project. A missing hosted compatibility result does not stop development; it stops **staging acceptance and production activation**.
@@ -133,12 +133,24 @@ Security acceptance tests must prove: ordinary/anonymous/deleted users, forged m
 
 The following **stage definitions** prevent a later acceptance test from silently becoming a development-start block:
 
+### Owner-directed risk-based review workflow
+
+**OWNER APPROVED review process (2026-11-11):** The Admin Platform development team is the Product Owner, Claude and Codex; it has no standing independent human security/data reviewer. For each scoped change, a developer AI implements the work. A separate AI reviewer who did not author that change reviews the actual diff; executable negative/regression tests provide technical evidence. The Product Owner reviews functional scope and explicitly accepts residual risk for sensitive changes. Tie every approval to the exact PR HEAD and its CI results. Do not repeat an unchanged AI review without a new defect, material change or specific unresolved risk.
+
+AI review and Product Owner risk acceptance are evidence and decisions, **not independent professional security certification**. Escalate to an external security specialist only when a specific risk or required assurance justifies it; define the exact verification task, disposable or approved staging environment, and acceptance criteria first. Production migration, privileged activation, secrets, Owner bootstrap and deployment each retain separate explicit authorization gates. The safeguards and tests in this plan remain mandatory.
+
+**PR #191 exception remains unapproved:** This workflow does not itself replace that PR's existing independent-human-review merge requirement. The Product Owner must explicitly approve the exception for #191, identifying its exact HEAD, CI results, reviewed findings and accepted residual risk. Until then, neither AI review nor this policy authorizes its merge. This exception rule does not authorize applying its migration to a hosted environment.
+
+References to security/data review in the decision register below mean the risk-based evidence and owner decision just defined, with an external specialist added when the specific assurance task requires one. They do not silently approve an OPEN technical design or change a later staging or production gate.
+
+This review workflow does not change action-specific separation of duties: independent highlighted-article approval, two-person staff elevation, last-Owner protection, Owner-authority security sign-off and the proposed recovery-operator quorum remain their own controls and gates.
+
 | Stage | What must be true | Permitted result |
 | --- | --- | --- |
-| Development start for a slice | The applicable design in this plan has named security/data/product review; the work runs in an isolated non-production environment with disposable data. No target-configured Companion MFA result is required to start any ADM-01B slice. | Write code and migration files; run disposable tests. No real roles or privileged production access. |
-| Security implementation review | Review the actual SQL, RLS, function grants, code, threat cases, tests and rollback for that slice. Resolve blocking findings before merge or any shared-environment application. | A reviewed slice may merge only under its separate PR approval. Review does not activate staff access. |
+| Development start for a slice | Review the applicable design and its specific open risks under the owner-directed workflow. Work runs in an isolated non-production environment with disposable data. No target-configured Companion MFA result is required to start any ADM-01B slice. | Write code and migration files; run disposable tests. No real roles or privileged production access. |
+| Security implementation review | Review the actual SQL, RLS, function grants, code, threat cases, tests and rollback with independent AI evidence and executable negative/regression tests. Resolve blocking findings; bind CI and any sensitive-change owner risk acceptance to the exact PR HEAD. Repeat review only for a new defect, material change or specific unresolved risk. | Merge requires its separate PR decision and any still-applicable reviewer/owner approval. Review does not activate staff access. |
 | Admin MFA staging acceptance | After ADM-01B-3 exists, test target Auth version/settings, first and repeated TOTP verification, registered Companion session/refresh/endpoint, registered reauthentication and installation ownership, anonymous identity and Guildbook isolation. Rehearse other security controls on disposable staff data. | Record measured valid / reauthentication / failure outcome and approved mitigation. Staging acceptance remains NO-GO while unmeasured or unresolved. |
-| Production activation | Independently approve the complete security/privacy evidence, first-Owner identity and private runbook, Companion impact/mitigation, release and rollback. | Only a separate owner/security/release GO may apply migrations, assign a real Owner or enable privileged Admin functionality in production. |
+| Production activation | Review complete security/privacy evidence, first-Owner identity and private runbook, Companion impact/mitigation, release and rollback; obtain scoped external specialist assurance if a specific risk requires it. | Only a separate explicit owner/security/release GO may apply migrations, assign a real Owner or enable privileged Admin functionality in production. |
 
 ADR-020 policy and Option A identity are owner approved. Every technical choice below remains a **recommendation pending the named review**. Alternatives and trade-offs remain visible; stage conditions are independent.
 
