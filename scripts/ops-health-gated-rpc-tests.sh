@@ -12,6 +12,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 FAILED=0
+export NO_COLOR=1 FORCE_COLOR=0      # plain test output: the pass counts below are matched as text
+passcount() { sed 's/\x1b\[[0-9;]*m//g' "$1" | command grep -E "Tests +[0-9]+ passed" | head -1 | sed 's/^ *//'; }
 # `grep -q` exits at the first match; under `set -o pipefail` the producer then gets SIGPIPE and a SUCCESSFUL match can read as a failure, intermittently.
 # This wrapper makes every quiet grep read all of its input, so pipelines are deterministic.
 grep() {
@@ -283,7 +285,7 @@ echo "stage 4 done"
 # ---------- 5. vitest: the real bot provider -> handler -> gated source -> SQL (psql shim), plus unit tests of the source
 export OPS_HEALTH_GATE_E2E_DB=$DB OPS_HEALTH_GATE_E2E_KEY="$KEY"
 ( cd ops-bot && npx vitest run test/gate-g-source.test.ts test/gate-g-e2e.test.ts ) >"$WORK/vitest-e2e.out" 2>&1 || { tail -40 "$WORK/vitest-e2e.out"; fail "vitest source / e2e"; }
-grep -E "Tests +[0-9]+ passed" "$WORK/vitest-e2e.out" | sed 's/^/INFO: e2e: /' || true
+echo "INFO: e2e: $(passcount "$WORK/vitest-e2e.out")"
 pass "stage 5: unit tests of the gated source and the end-to-end chain (bot provider -> handler -> source -> real SQL gate) passed"
 unset OPS_HEALTH_GATE_E2E_KEY
 
@@ -310,7 +312,8 @@ if [ "${SKIP_POSTGREST:-0}" = 1 ]; then echo "SKIPPED: stage 6 (SKIP_POSTGREST=1
   ( cd ops-bot && npx vitest run --no-file-parallelism test/gate-g-http.test.ts test/gate-g-load.test.ts ) >"$WORK/vitest-http.out" 2>&1 || { tail -60 "$WORK/vitest-http.out"; fail "PostgREST HTTP tests"; }
   [ -s "$WORK/metrics" ] || fail "the load test recorded no metrics"
   sed 's/^/INFO: load: /' "$WORK/metrics"
-  grep -E "Tests +[0-9]+ passed" "$WORK/vitest-http.out" >/dev/null || fail "PostgREST HTTP tests did not report a pass count"
+  [ -n "$(passcount "$WORK/vitest-http.out")" ] || fail "PostgREST HTTP tests did not report a pass count"
+  echo "INFO: http+load: $(passcount "$WORK/vitest-http.out")"
   pass "stage 6: real PostgREST HTTP contract, role isolation, negative cases, abuse and load tests passed"
   # stage 6b: the SAME HTTP suite again under the HOSTED logging profile (Supabase documents log_statement=ddl, log_min_error_statement=error, log_duration=off,
   # log_min_duration_statement=-1). Every refusal is an ERROR, so this shows whether a refused request's statement or signature is written to the log. Only the NEW log
