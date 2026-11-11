@@ -6,7 +6,7 @@ Status: **proposed documentation of the current practice, 2026-11-11.** It chang
 
 | Branch | Role | Notes |
 | --- | --- | --- |
-| `release` | **Production.** Vercel production deployments track it; Supabase and Edge Function releases are made from it. | Protected. Everything that must reach production is merged here by a reviewed PR. |
+| `release` | **Production.** Recent Vercel production deployment records show `release` (the project's Production Branch setting itself is still to be confirmed, see `release-gates.md`); Supabase and Edge Function releases are made from it. | Protected. Everything that must reach production is merged here by a reviewed PR. |
 | `main` | **Default, integration and admin branch.** Dependabot target, home of the admin (ADM) work and governance docs. | Protected. Nothing on `main` reaches production until it is promoted to `release` by a reviewed PR. |
 
 There is no automatic synchronisation in either direction. As of 2026-11-11 the branches have diverged on purpose: `main` has the admin documents and the ADM-01B-1 migration (PR #191); `release` has the Ops Bot, the Supabase health report and Option G, and the 2026-11 dependency refreshes.
