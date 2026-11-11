@@ -146,6 +146,27 @@ local function test(name, run)
     consolePrint("PASS (simulated): " .. name)
 end
 
+test("addon source never mutates Blizzard StaticPopup globals", function()
+    local toc = assert(io.open("addon/ForeverDB/ForeverDB.toc", "r"))
+    local tocText = toc:read("*a")
+    toc:close()
+
+    local scannedFiles = 0
+    for line in tocText:gmatch("[^\r\n]+") do
+        local luaFile = line:match("^%s*([^#].-%.lua)%s*$")
+        if luaFile then
+            local handle = assert(io.open("addon/ForeverDB/" .. luaFile, "r"))
+            local source = handle:read("*a")
+            handle:close()
+            scannedFiles = scannedFiles + 1
+            for _, identifier in ipairs({ "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide" }) do
+                assert(not source:find(identifier, 1, true), luaFile .. " references " .. identifier)
+            end
+        end
+    end
+    assert(scannedFiles > 0, "no addon Lua files were read from the toc")
+end)
+
 test("herbalism identity, item aggregation, status/last and export", function()
     local f, s = setup()
     s.guid = "GameObject-0-0-0-0-1618-0001"
@@ -297,13 +318,22 @@ test("fork archives history locally and starts a new installation with zero coun
 end)
 
 test("installation fork requires the explicit slash-command confirmation", function()
+    local previousDialogs = StaticPopupDialogs
+    local previousShow = StaticPopup_Show
+    local dialogSentinel = { untouched = true }
+    StaticPopupDialogs = dialogSentinel
+    local showCalls = 0
+    StaticPopup_Show = function() showCalls = showCalls + 1 end
     local f, s = setup()
     f:RecordObservation("mob", "creature", 987, "Historical Creature", {
         [654] = { name = "Historical Item", quantity = 2 },
     }, 12, nil)
     local oldId = f.DB.installationId
-    local shown
-    StaticPopup_Show = function(dialog) shown = dialog end
+    local capturedConfirmation
+    f.ShowLocalConfirmation = function(_, message, acceptLabel, cancelLabel, onAccept, onCancel)
+        capturedConfirmation = { message = message, acceptLabel = acceptLabel, cancelLabel = cancelLabel,
+            onAccept = onAccept, onCancel = onCancel }
+    end
     for _, name in ipairs({
         "InitializeDatabase", "InitializeSessionTracker", "InitializeSessionUI",
         "InitializeGuildApiProbe", "InitializeQuestApiProbe", "InitializeQuestKillTracker",
@@ -319,12 +349,23 @@ test("installation fork requires the explicit slash-command confirmation", funct
     equal(f.DB.snapshotRevision, revisionBeforeDiagnostics)
     equal(ForeverDB_Export, exportBeforeDiagnostics)
     SlashCmdList.FOREVERDB("fork")
-    equal(shown, "FOREVERDB_CONFIRM_INSTALLATION_FORK")
+    assert(capturedConfirmation, "fork must use the local confirmation UI")
+    contains(capturedConfirmation.message, "fresh ForeverDB installation")
+    equal(capturedConfirmation.acceptLabel, "Start fresh")
+    equal(capturedConfirmation.cancelLabel, "Cancel")
     equal(f.DB.installationId, oldId)
     equal(ForeverDB_ForkArchive[oldId], nil)
-    StaticPopupDialogs[shown].OnAccept()
+    equal(showCalls, 0)
+    equal(StaticPopupDialogs, dialogSentinel)
+    capturedConfirmation.onCancel()
+    equal(f.DB.installationId, oldId)
+    equal(ForeverDB_ForkArchive[oldId], nil)
+    SlashCmdList.FOREVERDB("fork")
+    capturedConfirmation.onAccept()
     assert(f.DB.installationId ~= oldId, "accepting confirmation starts a fresh identity")
     equal(ForeverDB_ForkArchive[oldId].snapshot.installationId, oldId)
+    StaticPopupDialogs = previousDialogs
+    StaticPopup_Show = previousShow
 end)
 
 test("restored counters without their installation ID are held until an empty fork", function()

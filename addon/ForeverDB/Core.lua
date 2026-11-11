@@ -87,9 +87,7 @@ local function registerSlashCommands()
         elseif command == "geodiag" then
             FDB:PrintGeographyDiagnostics()
         elseif command == "fork" then
-            if StaticPopup_Show then
-                StaticPopup_Show("FOREVERDB_CONFIRM_INSTALLATION_FORK")
-            else
+            if not FDB:ShowInstallationForkConfirmation() then
                 print(PREFIX, "installation fork confirmation is unavailable")
             end
         elseif command:match("^item%s+") then
@@ -149,20 +147,17 @@ local function registerSlashCommands()
     end
 end
 
-StaticPopupDialogs = StaticPopupDialogs or {}
-StaticPopupDialogs.FOREVERDB_CONFIRM_INSTALLATION_FORK = {
-    text = "Start a fresh ForeverDB installation? Existing local observation history will be archived on this character and will not be re-uploaded. Guildbook data will be cleared from the active installation.",
-    button1 = YES,
-    button2 = NO,
-    OnAccept = function()
-        local ok = FDB:ForkInstallation()
-        if ok then print(PREFIX, "started a fresh installation; previous history is archived locally") end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
+function FDB:ShowInstallationForkConfirmation()
+    if not self.ShowLocalConfirmation then return false end
+    return self:ShowLocalConfirmation(
+        "Start a fresh ForeverDB installation? Existing local observation history will be archived on this character and will not be re-uploaded. Guildbook data will be cleared from the active installation.",
+        "Start fresh", "Cancel",
+        function()
+            local ok = FDB:ForkInstallation()
+            if ok then print(PREFIX, "started a fresh installation; previous history is archived locally") end
+        end,
+        function() end)
+end
 
 local frame = CreateFrame("Frame")
 FDB.EventFrame = frame
