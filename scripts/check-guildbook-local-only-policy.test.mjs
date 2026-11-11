@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { guildbookPolicyViolations, loadMigrationFiles } from "./check-guildbook-local-only-policy.mjs";
+import { guildbookPolicyViolations, lex, loadMigrationFiles } from "./check-guildbook-local-only-policy.mjs";
 
 const current = loadMigrationFiles();
 const approved = current.find((file) => file.name === "0018_disable_guildbook_cloud_sync.sql");
@@ -147,6 +147,50 @@ describe("guildbook-local-only-policy", () => {
   it("still ignores real comments and strings that merely contain comment markers (positive)", () => {
     assert.deepEqual(guildbookPolicyViolations([approved, { name: "0017_collector.sql", sql: "/* outer /* private.fdb_public_snapshot */ still comment */ select 'a--b' as x;\n-- private.fdb_public_snapshot is defined in 0018" }]), []);
     assert.deepEqual(guildbookPolicyViolations([approved, { name: REVIEWED, sql: "create function public.f() returns int language plpgsql as $$ begin -- note: private.fdb_public_snapshot is defined in 0018\n return 1; end $$;" }]), []);
+  });
+
+  // Statements that PostgreSQL really executes (confirmed with psql by the second independent review) but that a lexer desync would hide. Each is checked
+  // twice: the lexer itself must keep the hidden statement visible, and the guard as a whole must reject it (the raw-text pass is a second, independent layer).
+  const hiddenByDesync = {
+    "a lone carriage return ends a -- comment": "select 1; -- hi\rdrop function private.fdb_public_snapshot(jsonb);",
+    "a $ inside an identifier is not a dollar quote": "select 1 as a$$ ; select 'z$$ -- '; drop function private.fdb_public_snapshot(jsonb);",
+    "a $tag$ inside an identifier is not a dollar quote": "select 1 as a$x$ ; select 'z$x$ -- '; drop function private.fdb_public_snapshot(jsonb);",
+    "an E-string continuation keeps escape mode": "select E'a'\n'\\'/*'; drop function private.fdb_public_snapshot(jsonb); -- */",
+    "an E-string continuation hiding a Guildbook table": "select E'a'\n'\\'/*'; create table private.account_guildbook_members(i text); -- */",
+    "a non-ASCII letter before E is part of an identifier": "create domain \u00e9e as text; select \u00e9E'a\\' ; select 'b -- '; drop function private.fdb_public_snapshot(jsonb);",
+  };
+
+  it("the lexer keeps statements visible that a desync would hide (negative, second review)", () => {
+    for (const [label, sql] of Object.entries(hiddenByDesync)) {
+      const text = lex(sql).text;
+      assert(/drop function private\.fdb_public_snapshot|create table private\.account_guildbook_members/.test(text), label);
+    }
+  });
+
+  it("the guard rejects every desync-hidden statement, under any file name (negative, second review)", () => {
+    for (const [label, sql] of Object.entries(hiddenByDesync)) {
+      for (const name of ["0020_x.sql", REVIEWED]) assert(guildbookPolicyViolations([approved, { name, sql }]).length > 0, `${label} (${name})`);
+    }
+  });
+
+  it("the raw-text layer is independent of the lexer: a dangerous statement written inside a comment is rejected too (negative)", () => {
+    for (const sql of [
+      "-- drop function private.fdb_public_snapshot(jsonb);\nselect 1;",
+      "/* grant execute on function private.foreverdb_ingest_snapshot_impl_v1(jsonb) to anon; */ select 1;",
+      "-- create table private.account_guildbook_members (a int);\nselect 1;",
+    ]) assert(guildbookPolicyViolations([approved, { name: "0020_x.sql", sql }]).length > 0, sql);
+  });
+
+  it("fails closed on anything the lexer cannot close (negative)", () => {
+    for (const sql of ["select 'never closed;", "select 1; /* never closed", 'select "never closed;', "select $$ never closed;", "select $tag$ never closed $other$;"]) {
+      assert(guildbookPolicyViolations([approved, { name: "0020_x.sql", sql }]).some((v) => v.includes("unterminated")), sql);
+    }
+  });
+
+  it("does not misread legitimate SQL as hidden or unterminated (positive)", () => {
+    const sql = "select 1 as a1$b, $1, 'it''s', E'it\\'s', \"quoted \"\" ident\", $f$ body 'x' -- c\n $f$; -- trailing comment\r\n/* block */ select 2;";
+    assert.deepEqual(guildbookPolicyViolations([approved, { name: "0017_collector.sql", sql }]), []);
+    assert.equal(lex(sql).unterminated, false);
   });
 
   it("keeps the broad rule for every other migration, including a copy of the reviewed text (negative)", () => {

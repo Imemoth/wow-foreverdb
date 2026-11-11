@@ -34,44 +34,59 @@ const sha256 = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")
 // Removes SQL comments while respecting string literals, quoted identifiers and dollar-quoted bodies, so that text such as  select '--'; drop function ...;
 // cannot hide a statement behind a comment marker. String and identifier text is kept (it is still scanned); comments, including nested block comments, are
 // replaced by a space. A dollar-quoted body is scanned recursively because function bodies are SQL too. This only ever exposes MORE text than before.
-const uncomment = (sql) => {
-  let out = "";
+// A hand-written lexer can always be wrong somewhere, so it is never the only defence: the statement-shaped rules ALSO run on the raw text (see below), and
+// anything the lexer cannot close (an unterminated string, identifier, comment or dollar quote) is reported instead of being scanned on a guess.
+const IDENT = /[\p{L}\p{N}_$]/u;
+const lex = (sql, state = { unterminated: false }) => {
+  let out = "", lastStringEnd = -1, lastStringEscapes = false;
   for (let i = 0; i < sql.length;) {
     const c = sql[i], d = sql[i + 1];
-    if (c === "-" && d === "-") { while (i < sql.length && sql[i] !== "\n") i++; out += " "; continue; }
+    if (c === "-" && d === "-") { while (i < sql.length && sql[i] !== "\n" && sql[i] !== "\r") i++; out += " "; continue; }   // PostgreSQL ends a -- comment at \n OR a lone \r
     if (c === "/" && d === "*") {
       let depth = 1; i += 2;
       while (i < sql.length && depth > 0) {
         if (sql[i] === "/" && sql[i + 1] === "*") { depth++; i += 2; } else if (sql[i] === "*" && sql[i + 1] === "/") { depth--; i += 2; } else i++;
       }
+      if (depth > 0) state.unterminated = true;
       out += " "; continue;
     }
     if (c === "'") {
-      const escapes = /[eE]/.test(sql[i - 1] ?? "") && !/[\w$]/.test(sql[i - 2] ?? "");
-      let j = i + 1;
+      // E'...' has backslash escapes; the E must not be the tail of an identifier or a qualified name (public.e'..' is a typed literal). A string that continues
+      // after whitespace containing a newline inherits the escape mode of the previous literal (PostgreSQL concatenates them).
+      const before = sql[i - 1] ?? "";
+      const prefixE = /[eE]/.test(before) && !IDENT.test(sql[i - 2] ?? "") && (sql[i - 2] ?? "") !== ".";
+      const between = lastStringEnd >= 0 ? sql.slice(lastStringEnd, i) : null;
+      const continuation = between !== null && /^\s*$/.test(between) && /[\r\n]/.test(between);
+      const escapes = prefixE || (continuation && lastStringEscapes);
+      let j = i + 1, closed = false;
       while (j < sql.length) {
         if (escapes && sql[j] === "\\") { j += 2; continue; }
-        if (sql[j] === "'") { if (sql[j + 1] === "'") { j += 2; continue; } break; }
+        if (sql[j] === "'") { if (sql[j + 1] === "'") { j += 2; continue; } closed = true; break; }
         j++;
       }
-      out += sql.slice(i, j + 1); i = j + 1; continue;
+      if (!closed) state.unterminated = true;
+      out += sql.slice(i, j + 1); i = j + 1; lastStringEnd = i; lastStringEscapes = escapes; continue;
     }
     if (c === '"') {
-      let j = i + 1;
-      while (j < sql.length) { if (sql[j] === '"') { if (sql[j + 1] === '"') { j += 2; continue; } break; } j++; }
+      let j = i + 1, closed = false;
+      while (j < sql.length) { if (sql[j] === '"') { if (sql[j + 1] === '"') { j += 2; continue; } closed = true; break; } j++; }
+      if (!closed) state.unterminated = true;
       out += sql.slice(i, j + 1); i = j + 1; continue;
     }
-    if (c === "$") {
-      const tag = /^\$[A-Za-z_\u0080-\uffff]?[A-Za-z0-9_\u0080-\uffff]*\$/.exec(sql.slice(i));
+    if (c === "$" && !IDENT.test(sql[i - 1] ?? "")) {   // a $ that continues an identifier (a$$) or a number is not a dollar-quote opener
+      const tag = /^\$(?:[\p{L}_][\p{L}\p{N}_]*)?\$/u.exec(sql.slice(i));
       if (tag) {
         const end = sql.indexOf(tag[0], i + tag[0].length);
-        if (end >= 0) { out += tag[0] + uncomment(sql.slice(i + tag[0].length, end)) + tag[0]; i = end + tag[0].length; continue; }
+        if (end < 0) { state.unterminated = true; }
+        else { out += tag[0] + lex(sql.slice(i + tag[0].length, end), state).text + tag[0]; i = end + tag[0].length; continue; }
       }
     }
     out += c; i++;
   }
-  return out;
+  return { text: out, unterminated: state.unterminated };
 };
+const uncomment = (sql) => lex(sql).text;
+export { lex };   // exported for the regression tests only
 
 export function guildbookPolicyViolations(files) {
   const violations = [];
@@ -89,20 +104,30 @@ export function guildbookPolicyViolations(files) {
     }
     if (HISTORICAL_SHA256.get(path.basename(file.name)) === hash) continue;
 
-    let sql = uncomment(file.sql);
-    for (const reviewed of REVIEWED_PROJECTION_USE.get(path.basename(file.name)) ?? []) sql = sql.replace(reviewed, " ");
-    const rules = [
+    const reviewedForms = REVIEWED_PROJECTION_USE.get(path.basename(file.name)) ?? [];
+    const withoutReviewed = (text) => reviewedForms.reduce((acc, reviewed) => acc.replace(reviewed, " "), text);
+    const lexed = lex(file.sql);
+    if (lexed.unterminated) violations.push(`${file.name}: unterminated string, identifier, comment or dollar quote (cannot be scanned safely)`);
+    const sql = withoutReviewed(lexed.text);
+    const rawSql = withoutReviewed(file.sql);   // comments NOT removed: no lexer state can hide a statement from the shape rules below
+    const mention = [/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\w*/i, "ingest wrapper/projection modification"];
+    const shapes = [
       [/\bprivate\s*\.\s*account_guildbook_[a-z0-9_]*/i, "account-scoped cloud Guildbook storage"],
       [/\b(?:create|alter)\s+table\b[^;]*(?:guildbook|installation_guilds|installation_guild_members|installation_guild_professions)/i, "Guildbook cloud table definition or alteration"],
       [/\bcreate\s+(?:or\s+replace\s+)?function\s+(?:public|private)\s*\.\s*\w*guildbook\w*/i, "new Guildbook RPC/function"],
       [/\bgrant\s+execute\s+on\s+function\b[^;]*\w*guildbook\w*/i, "Guildbook RPC execution grant"],
-      [/\b(?:guildbook_upload|upload_guildbook|sync_guildbook|guildbook_sync|backup_guildbook)\w*/i, "Guildbook upload, sync, or backup path"],
       [/\b(?:insert\s+into|copy\s+into)\b[^;]*\bselect\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "copy of historical Guildbook records"],
       [/\b(?:insert\s+into|update|delete\s+from)\b[^;]*(?:installation_guild|account_guildbook|guildbook)/i, "Guildbook cloud data write"],
       [/\b(?:revoke|grant)\s+execute\b[^;]*\w*guildbook\w*/i, "Guildbook RPC privilege change"],
-      [/\b(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)\w*/i, "ingest wrapper/projection modification"],
+      [/\b(?:create(?:\s+or\s+replace)?|alter|drop)\s+function\b[^;(]*(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)/i, "ingest wrapper/projection modification"],
+      [/\b(?:grant|revoke)\b[^;]*(?:foreverdb_ingest_snapshot_impl_v1|fdb_public_snapshot)/i, "ingest wrapper/projection modification"],
     ];
-    for (const [pattern, reason] of rules) if (pattern.test(sql)) violations.push(`${file.name}: ${reason}`);
+    const found = new Set();
+    for (const [pattern, reason] of [...shapes, mention, [/\b(?:guildbook_upload|upload_guildbook|sync_guildbook|guildbook_sync|backup_guildbook)\w*/i, "Guildbook upload, sync, or backup path"]]) {
+      if (pattern.test(sql)) found.add(reason);
+    }
+    for (const [pattern, reason] of shapes) if (pattern.test(rawSql)) found.add(reason);   // second pass on the raw text (defence in depth)
+    for (const reason of found) violations.push(`${file.name}: ${reason}`);
   }
   return violations;
 }
