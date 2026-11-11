@@ -46,3 +46,35 @@ Conditions to close the period (all required, evidence recorded here):
 5. Owner confirms. Then, in order: unset `OPS_HEALTH_DATABASE_URL` and re-run acceptance, then apply `0021` (docs/ops-bot/reporting-gated-rpc.md section 7). Rollback until then: section 9.
 
 Note: until the Ops bot's production polling is enabled, the only production traffic through the gate is the owner's acceptance run and manual checks, so the 24 h and 48 h acceptance re-runs are what give evidence of the gate itself.
+
+## Verification procedure for the 24 h and 48 h checkpoints
+
+Checkpoints: **T+24 h = 2026-11-12 10:17 UTC** and **T+48 h = 2026-11-13 10:17 UTC**. All steps are read-only except the owner's external check, which only makes five requests. Nothing here needs a secret in the transcript.
+
+**A. Owner (own shell, hidden secret):** `cd ops-bot && HEALTH_API_URL=https://chcoypkjzxfznsqmmbrq.supabase.co/functions/v1/azerdex-ops-health HEALTH_API_SECRET=... npx tsx scripts/check-health-endpoint.ts`. Expect 9 PASS and `READY`; the clock must be synchronised (a skew over 120 s gives a 401).
+
+**B. Assistant, database (run as `postgres` through the SQL tool; no key material is read):**
+
+1. The release verifier `database/ops/verify_ops_health_gated_rpc.sql` (comment lines and the trailing `;` removed for the SQL tool): zero `FAIL`, gate state `open`, the five `INFO fingerprint` lines equal to the baseline above, the reporter login `present` until 0021.
+2. `select slot, valid from ops_report.gate_status()` returns one valid `current` and no valid `previous`.
+3. Jobs and G2/G6 since the start:
+
+```sql
+select
+  (select md5(string_agg(jobid||'|'||jobname||'|'||schedule||'|'||command||'|'||active, '~' order by jobid)) from cron.job where jobid between 3 and 7) as jobs3_7_md5,          -- unchanged, equals the cron fingerprint input for jobs 3-7
+  (select count(*) from cron.job_run_details where jobid between 3 and 7 and start_time >= timestamptz '2026-11-11 10:17:00+00') as runs_since_start,
+  (select count(*) from cron.job_run_details where jobid between 3 and 7 and start_time >= timestamptz '2026-11-11 10:17:00+00' and status <> 'succeeded') as failed_runs,
+  (select ops_report.health()->>'overall') as g2_overall,                                   -- ok
+  (select jsonb_array_length(ops_report.health()->'sources')) as sources,                   -- 3
+  (select ops_report.health()->'g6'->>'lastRunStatus') as g6_last,                          -- succeeded
+  (select count(*) from supabase_migrations.schema_migrations where name = 'ops_0020_gated_rpc') as history_row;  -- 1
+```
+
+**C. Assistant, platform:** `list_edge_functions` (collector v12 `9193cdfa…` unchanged, `azerdex-ops-health` bundle `d6495cb5…`, no new version unless approved); logs since the start with the log tool:
+
+- `function_edge_logs` of function `8069892a-b46e-41da-a2f8-2283c3d35379`: only 200, plus 401/405 from deliberate probes; no 5xx.
+- `function_logs`: no `error` rows other than `"errorClass":null`; collector runs continue.
+- Secret scan over all sources: no match for `x-azerdex-gate`, `OPS_HEALTH_GATE_KEY`, `OPS_HEALTH_APIKEY`, `rotate_gate_key` outside the 0020 DDL statement and deliberate probes, and no 64-hex string other than the collector's `projection_built` `sha256` field.
+- `postgres_logs`: no `PT401`/`FATAL`/`panic`.
+
+**GO/NO-GO for 0021 (decided at T+48 h):** GO only if both checkpoints pass every item above, the owner confirms, and `OPS_HEALTH_DATABASE_URL` is then unset and the external check is re-run to `READY` before 0021 is applied. Any failure, unexpected change or unexplained 5xx is NO-GO: the observation restarts after the cause is fixed, or the rollback in `reporting-gated-rpc.md` section 9 runs if the gate is at fault.
