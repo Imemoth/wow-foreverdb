@@ -1,6 +1,6 @@
 # News global story grouping (EU/US) — architecture, evidence and rollout
 
-Status: **Draft, not applied, not deployed.** Migration `0013` and the link run each need the owner's explicit approval. Independent of G5, migration 0012 and the dependency-audit decision.
+Status (2026-11-11): **migration `0013` and the four reviewed overrides are applied in production (since 2026-11-05); no story link exists yet (`pub.news_story_members` has 0 rows), so nothing changes for readers; the website code in this PR is not deployed.** The link write `news_link_stories(true)` needs the owner's separate explicit approval (current-data dry-run and risks: section 11). Independent of G5, migration 0012 and the dependency-audit decision.
 
 ## 1. Problem
 
@@ -61,7 +61,7 @@ A group of threads joined by passing pairs must be a **clique** (every pair pass
 | **ALLOW** Podcast Episode 6 - All About Tech | `eu:topic:638462` (post:6462927) | `us:topic:2395799` (post:30671248) | identical title and author, 28 s apart, empty excerpts; equivalence verified against the live sources |
 | **DENY** Beta Celebration is Underway | `eu:topic:637055` (post:6447060) | `us:topic:2389633` (post:30578134) | region-specific event times; excerpts differ (similarity 0.885); both regional cards are preserved |
 
-`database/public-read/ops/news_v2_story_overrides_review.sql` (NOT applied) inserts exactly these four rows, fail-closed on the reviewed post ids / authors / excerpt relations and on an existing override, and never writes a link; `ops/news_v2_story_overrides_rollback.sql` deletes only those rows. Gate order: **0013 approved → story overrides approved → `news_link_stories(true)` approved → website deployment approved.**
+`database/public-read/ops/news_v2_story_overrides_review.sql` (its four rows are present in production, see section 11) inserts exactly these four rows, fail-closed on the reviewed post ids / authors / excerpt relations and on an existing override, and never writes a link; `ops/news_v2_story_overrides_rollback.sql` deletes only those rows. Gate order: **0013 approved → story overrides approved → `news_link_stories(true)` approved → website deployment approved.**
 
 **Production inventory recomputed 2026-11-05 (read-only matcher run on the live openers, 59 = US 31 + EU 28):** automatic rule only → 16 stories (36 threads), 3 review pairs (Podcast 5, Podcast 6, Beta Celebration), 0 ambiguous, **39 Blue Post cards**. With the four owner decisions → **19 stories (42 threads), 0 ambiguous, 36 Blue Post cards**; Beta Celebration stays two regional cards. (The earlier snapshot had 55 openers / 13 stories; the normal collector has ingested four more openers since, including the US Development Notes thread.) The inventory is recomputed once more immediately before the rollout proposal.
 
@@ -91,10 +91,10 @@ Tables: RLS on, **no policies, all privileges revoked** from `PUBLIC, anon, auth
 
 ## 8. Migration, rollout and rollback
 
-* **Number:** `0013` (the ledger ends at `news_collector_v2`; `0012` is taken by the open Draft PR #162; the number is re-checked before applying).
+* **Number:** `0013`, **applied in production on 2026-11-05 05:25 UTC** as ledger entry `20261105052509 news_global_story_grouping` (`0012` is `news_revision_due_tolerance`, long merged). The applied text is this file without comments (see section 11).
 * **Rollout order (each a separate owner approval):**
-  1. apply migration `0013` (additive, idempotent, no data, no behaviour change: no links ⇒ identical cards);
-  2. dry-run `select pub_admin.news_link_stories(false)` — expect the 13 stories / 30 threads / 3 review pairs above; then the **data write** `news_link_stories(true)` (inserts 30 link rows only; fingerprint of every source table unchanged; idempotent);
+  1. ~~apply migration `0013`~~ **done 2026-11-05** (additive, idempotent, no data, no behaviour change: no links ⇒ identical cards);
+  2. dry-run `select pub_admin.news_link_stories(false)` — current-data result in section 11 (the 2026-11-04 expectation of 13 stories / 30 threads / 3 review pairs is superseded); then the **data write** `news_link_stories(true)` (inserts the planned link rows only, 45 on 2026-11-11; fingerprint of every source table unchanged; idempotent);
   3. deploy the website (safe before or after step 1 thanks to the fallback);
   4. optional, later: a cron job that runs `news_link_stories(true)` a few minutes after the collector so new announcements are grouped automatically (until then a new cross-region announcement shows as two cards until the next link run).
 * **Rollback:** `ops/news_v2_0013_rollback.sql` — drops only the story functions/tables (refuses while overrides exist; fingerprint check of source tables; V2 readers verified afterwards). Website: promote the previous deployment (no DB dependency; fallback keeps working either way). Tested on PostgreSQL 16 and 17.
@@ -110,3 +110,23 @@ Tables: RLS on, **no policies, all privileges revoked** from `PUBLIC, anon, auth
 ## 10. Tests
 
 SQL `tests/news_v2_story_grouping.sql` (fixtures for every acceptance case; PostgreSQL 16 + 17) · unit `news-stories.test.ts` (rule, cards, filters, totals/pagination, search, URLs, immutability, RSS GUID stability, sitemap, **production-shaped inventory: 13 stories / 30 threads / 3 review / 55 → 38**) · Playwright `news-stories.spec.ts` (global/US/EU cards, labels, near-miss separation, search, detail sources, canonical, JSON-LD, old URLs, RSS) · existing News V2 SQL/unit/E2E suites unchanged and green.
+
+## 11. Production state and current-data dry-run (read-only, 2026-11-11)
+
+Evidence only; nothing was written. All queries were read-only on the production project.
+
+**State.** Migration `0013` is applied (ledger `20261105052509 news_global_story_grouping`, 19,339 bytes). The file in this PR is 22,657 bytes; with `--` comments removed and whitespace collapsed both texts are identical (14,792 characters, md5 `94f7303661bae4ce699f1a3e7ea7d3b5`), so the difference is comments only and the file stays the source of truth. `pub_admin.news_link_stories`, `web_api.news_stories` and `web_api.news_story_entry` exist. `pub.news_story_overrides` holds the 4 reviewed rows (3 ALLOW, 1 DENY); `pub.news_story_members` holds **0** rows (confirmed again after the dry-run).
+
+**Website fallback.** `postgres-adapter.ts` maps SQLSTATE `42883` (undefined function) to a fallback to `news_cards`, and the SQL suite asserts that with no links `news_stories` equals `news_cards`; production is exactly in that state (functions present, 0 links), so this PR changes nothing visible until the link write. Verified by code and by the CI suites (SQL on PostgreSQL 16 and 17, unit, Playwright); the production read functions are not callable by the SQL tool role (by design), so no production read of them was made.
+
+**Dry-run `select pub_admin.news_link_stories(false)`** (`applied: false`, rule `exact_content_v1`): 73 eligible threads (55 on 2026-11-04), **20 stories covering 45 threads to link**, 4 review pairs, **0 ambiguous**. Cards would go 73 to 48. The 13 stories confirmed on 2026-11-04 are all present except the Roleplay-PvP pair (below); new since then: the Dev Notes pair (ALLOW override), Podcast Episode 5 and 6 (ALLOW overrides), "Now Live!", "Pouch of Violet Dust", "Issues Resolved for Invite-a-Friend Players", "Watch Forging Forever" (EU + two US cross-posts) and "Prepare for Forever..." (two US cross-posts only).
+
+| Review pair (stays separate) | Reason |
+| --- | --- |
+| Roleplay-PvP Ruleset, `eu:topic:637031` / `us:topic:2389502` | `content_differs_or_excerpt_too_short`. **Changed since 2026-11-04** (then a confirmed story): the EU opener's stored excerpt is now 307 characters ending in a literal `&hellip;` entity, the US one 420 characters ending in `…`. An excerpt-extraction difference in the stored data, not a matching defect; the safe outcome is two cards. |
+| Beta Celebration, `eu:topic:637055` / `us:topic:2389633` | `denied_by_override` (reviewed DENY) and content differs. Expected. |
+| Prepare for Forever..., `eu:topic:641161` / `us:topic:2408668` and `us:topic:2408677` | content differs; the two US cross-posts are linked, the EU thread stays a separate card. |
+
+**Risks before any write.** (1) The data moved since the reviewed inventory (73 vs 55 threads), so the 2026-11-04 owner review does not cover the 7 new stories; they need a look. (2) The Roleplay-PvP pair would stay split; a reviewed ALLOW override (or re-ingesting that EU thread) would merge it; not proposed here. (3) The EU excerpt entity (`&hellip;`) suggests collector excerpt normalisation is not identical across regions; worth a separate look, not a blocker. (4) The write is idempotent (`on conflict (thread_key) do nothing`) and reversible by deleting the link rows (source tables are untouched); the rollback script refuses while overrides exist.
+
+**Approval boundary.** `news_link_stories(true)` is not authorised by this document or this PR.
