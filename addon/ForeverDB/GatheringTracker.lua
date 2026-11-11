@@ -86,8 +86,10 @@ end
 
 local function onSent(unit, ...)
     if unit ~= "player" then return end
-    -- Only one gathering interaction can be active. Any new player cast,
-    -- including an unrelated one, invalidates the previous correlation window.
+    local overlap = activeCast ~= nil or FDB.PendingGathering ~= nil
+    -- Any new player cast invalidates the earlier correlation window. If the
+    -- new cast is itself gathering, keep only a blocked marker so its success
+    -- can retain legacy classification without inheriting ambiguous identity.
     clearPending()
 
     local args = pack(unit, ...)
@@ -101,6 +103,7 @@ local function onSent(unit, ...)
         sentAt = currentTime(),
         sentLocation = location(),
         sourceGuid = validSourceGuid(sourceGuid()),
+        blocked = overlap,
     }
 end
 
@@ -119,6 +122,7 @@ local function onSucceeded(unit, ...)
     local succeededCastGuid = castGuidFrom(args, spellIndex)
     local sent = activeCast
     local matchedSent = sent ~= nil
+        and not sent.blocked
         and sent.kind == kind
         and sent.spellId == spellId
         and now >= (sent.sentAt or now)

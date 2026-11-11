@@ -563,6 +563,7 @@ test("failed, interrupted, unrelated and overlapping casts cannot earn correlate
         { name = "interrupted", event = "UNIT_SPELLCAST_INTERRUPTED" },
         { name = "unrelated cast", unrelated = true },
         { name = "overlap", overlap = true },
+        { name = "overlap without CastGUID", overlapNoGuid = true },
     }
     for _, case in ipairs(cases) do
         local f, s = setup()
@@ -573,6 +574,10 @@ test("failed, interrupted, unrelated and overlapping casts cannot earn correlate
         elseif case.unrelated then
             s:event("UNIT_SPELLCAST_SENT", "player", "Unrelated", "Cast-0-1-2-3-9999-000004", 9999)
             s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000004", 2575)
+        elseif case.overlapNoGuid then
+            s:event("UNIT_SPELLCAST_SENT", "player", "Mining", 2575)
+            s:event("UNIT_SPELLCAST_SENT", "player", "Mining", 2575)
+            s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Mining", 2575)
         else
             s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000005", 2575)
             s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000004", 2575)
