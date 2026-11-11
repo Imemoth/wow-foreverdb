@@ -40,7 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...CLASSES.map((c) => ({ url: u(classPath(c.id)) })),
     ...RACE_GUIDES.map((g) => ({ url: u(racePath(g.slug)) })),
     ...Object.keys(SPEC_GUIDES).map((key) => { const [cls, spec] = key.split("/") as [string, string]; return { url: u(specPath(cls, spec)) }; }),
-    ...news.map((entry) => ({ url: u(`/news/entry/${entry.slug}`), lastModified: entry.officialUpdatedAt ?? entry.modifiedAt ?? entry.publishedAt })),
+    ...[...new Map(news.map((entry) => [entry.canonicalSlug ?? entry.slug, entry])).entries()].map(([slug, entry]) => ({ url: u(`/news/entry/${slug}`), lastModified: entry.officialUpdatedAt ?? entry.modifiedAt ?? entry.publishedAt })),
     ...visibleArticles().filter((a) => a.status === "published" && !a.sample).map((a) => ({ url: u(articlePath(a)), lastModified: a.updatedAt ?? a.publishedAt })),
     ...items.map((r) => ({ url: u(itemPath(r.itemId!)), lastModified: r.updatedAt ?? undefined })),
     ...sources.map((r) => ({ url: u(sourcePath(r.sourceType!, r.sourceId!).split("#")[0]!), lastModified: r.updatedAt ?? undefined })),
