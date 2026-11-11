@@ -23,5 +23,5 @@ verify_jwt = false
 [functions.azerdex-ops-health]
 # Called by the AzerDex Operations Bot (a Cloudflare Worker), not a Supabase user: no user JWT exists. Authentication is an HMAC-SHA256 request
 # signature over timestamp + method + path (x-azerdex-ops-signature, constant-time compared, +-120 s window, fail-closed when the secret is unset).
-# Read-only: it can only run ops_report.health() through a dedicated database role. Never copy this setting to another function.
+# Read-only: it holds no database credential; it can only call the HMAC-gated RPC public.ops_health_report() through the Data API as `anon` (database/ops/0020). Never copy this setting to another function.
 verify_jwt = false
