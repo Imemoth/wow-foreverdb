@@ -9,10 +9,17 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.7.2-alpha**
-- SavedVariables schema: **10**
+- Addon: **0.7.3-alpha**
+- SavedVariables schema: **11**
 - Export schema: **9**
 - Companion: **0.9.12-alpha**
+
+## 0.7.3-alpha — 2026-11-11 (Geo A gathering correlation, Draft PR #189)
+
+- Added the local gathering SENT → SUCCEEDED → loot correlation state machine for mining and herbalism, keeping CastGUID separate from GameObject GUID and requiring a unique source, stable validated zone, and four-second success-to-loot bound.
+- Added the distinct `correlated_interaction_zone` aggregate/export tier. It supports zone totals only, never source coordinates; ambiguous, stale, mismatched, failed, interrupted, overlapping, or map-changing interactions fail closed.
+- Preserved global/legacy counters, existing historical observations, zero-drop source handling, duplicate suppression, installation identity and Companion export schema 9. Bumped SavedVariables schema to 11 without backfill.
+- Actual event order and timing on WoW Forever 1.60.1.70862 remain owner gameplay acceptance items; see [Geo A Phase 0 findings](docs/geo-a-phase-0-findings.md).
 
 ## 0.7.2-alpha — 2026-11-10 (Geo A, Draft PR #189)
 
