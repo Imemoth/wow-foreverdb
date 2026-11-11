@@ -8,12 +8,8 @@ import type { AccountAuthConfig } from "./config";
  * THE single database RPC client of the website's account boundary (the PostgREST counterpart of auth-client.ts). It is the
  * only module that builds `/rest/v1/...` URLs (a static test enforces that), and it is closed in every dimension:
  *
- *   - only the functions of the reviewed `ACCOUNT_RPCS` registry (and the five ACCOUNT functions of the separate zero-touch
- *     `ENROLLMENT_RPCS` registry, migration 0014) that make sense for a registered WEB account can be named
- *     (`WEB_RPCS`): `fdb_account_claim_start` (the Companion's anonymous owner starts claims, never the website) and
- *     `fdb_installation_link_status` (a Companion call) are not reachable from here, and there is no generic entry point. The
- *     Guildbook is Companion-local: no Guildbook function is reachable from the website (they stay in the registry only to pin
- *     migration 0012 for the conformance linter);
+ *   - no ownership claim, installation list or Guildbook function is reachable from the website. The only account RPCs reachable
+ *     here are the separate revocable-device management functions from migration 0014;
  *   - the target is derived from the validated Account Auth configuration (`cfg.authOrigin`), the path is `/rest/v1/rpc/<name>`
  *     and the method is always POST: no table, schema, view or filter access exists, and no caller-controlled header, query
  *     string or `Prefer` value is ever sent (so a transaction can never be rolled back or limited by a caller);
@@ -24,10 +20,7 @@ import type { AccountAuthConfig } from "./config";
  *   - nothing is logged here, and database error text is never returned (only a machine verdict).
  */
 
-export const WEB_RPCS = [
-  "fdb_account_claim_redeem",
-  "fdb_account_installations",
-] as const satisfies readonly AccountRpcName[];
+export const WEB_RPCS = [] as const satisfies readonly AccountRpcName[];
 export type WebRpcName = (typeof WEB_RPCS)[number];
 
 /**
@@ -51,7 +44,6 @@ const REGISTRY = { ...ACCOUNT_RPCS, ...ENROLLMENT_RPCS };
  * exist while its secret is lost: the user simply downloads another (never an automatic retry).
  */
 const MUTATING: ReadonlySet<string> = new Set([
-  "fdb_account_claim_redeem",
   "fdb_account_enrollment_ticket_issue",
   "fdb_account_enrollment_ticket_revoke",
   "fdb_account_device_revoke",

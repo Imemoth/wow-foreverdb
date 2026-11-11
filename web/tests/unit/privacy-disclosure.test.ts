@@ -141,12 +141,16 @@ describe("privacy page: the disclosure matches the implementation", () => {
     expect(t).toMatch(/Standard Contractual Clauses/);
     expect(t).toMatch(/Browsing the public database, news and guides: no account/);
     expect(t).toMatch(/Creating an account: an email address and a password are required/);
+    expect(t).toMatch(/Public observation sync from the Companion: can be used without a website account/);
+    expect(t).toMatch(/A website account is required only to activate and manage a registered device/);
+    expect(t).not.toMatch(/Linking a Companion installation: requires an account/);
+    expect(t).not.toMatch(/Companion-linking pages/);
     expect(t).not.toMatch(/never processed|no personal data/i);
   });
 
   it("does not ask for a consent checkbox on account flows (their basis is the service requested)", () => {
     expect(text(false)).toMatch(/No consent box is needed for an account/);
-    for (const f of ["RegisterForm", "LoginForm", "ForgotForm", "ResetForm", "LinkForm"]) {
+    for (const f of ["RegisterForm", "LoginForm", "ForgotForm", "ResetForm"]) {
       expect(src(`src/app/account/_components/${f}.tsx`), f).not.toMatch(/privacy|gdpr|consent/i);
     }
   });

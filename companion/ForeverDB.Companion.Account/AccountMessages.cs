@@ -77,12 +77,12 @@ public static class AccountMessages
         BlockReason.NoCredential => "Not signed in: choose a sign-in or anonymous mode on the Account tab.",
         BlockReason.ReauthRequired => "Sign in again on the Account tab to sync this account's installations.",
         BlockReason.AnonymousIdentityLost => "The anonymous identity for this installation is lost; see the Account tab.",
-        BlockReason.TransferredSignInRequired => "Ownership moved to a ForeverDB account. Sign in to that account to keep syncing.",
+        BlockReason.TransferredSignInRequired => "A technical upload credential is unavailable for this installation.",
         BlockReason.OwnedByDifferentAccount => "This installation belongs to a different ForeverDB account than the one signed in.",
-        BlockReason.OwnerSelectionRequired => "Owner not established yet. Choose who should own this installation on the Account tab.",
-        BlockReason.OwnershipConflict => "Ownership could not be verified consistently; sync is paused.",
-        BlockReason.OwnershipUnavailable => "Ownership could not be verified right now; sync is paused and will be retried.",
-        BlockReason.OwnerMismatch => "The server says this installation belongs to someone else. Nothing was uploaded.",
+        BlockReason.OwnerSelectionRequired => "No technical upload credential is available for this installation.",
+        BlockReason.OwnershipConflict => "The server could not validate this installation's technical credential.",
+        BlockReason.OwnershipUnavailable => "The server could not validate the technical credential right now; sync will be retried.",
+        BlockReason.OwnerMismatch => "The server did not accept a technical credential for this installation.",
         BlockReason.Unauthorized => "The server did not accept the sign-in; try again.",
         BlockReason.Forbidden => "The server refused this identity for sync.",
         BlockReason.RateLimited => "Sync is rate limited; it will be retried.",
@@ -185,16 +185,15 @@ public static class AccountMessages
 
     public static string Describe(InstallationOwnership ownership) => ownership switch
     {
-        InstallationOwnership.Unchecked => "Not checked yet",
-        InstallationOwnership.OwnedByRegisteredAccount => "Owned by your account",
-        InstallationOwnership.OwnedByAnonymousIdentity => "Owned by the anonymous identity",
-        InstallationOwnership.TransferredSignInRequired => "Moved to an account: sign in",
-        InstallationOwnership.OwnedByDifferentAccount => "Owned by a different account",
-        InstallationOwnership.OwnerSelectionRequired => "Owner not established",
-        InstallationOwnership.ReauthRequired => "Sign-in required",
-        InstallationOwnership.NoCredential => "Not signed in",
-        InstallationOwnership.Unavailable => "Could not be verified",
-        InstallationOwnership.Conflict => "Conflicting ownership",
+        InstallationOwnership.VerifiedTechnicalIdentity => "Technical upload identity validated",
+        InstallationOwnership.Unchecked => "Technical upload identity not checked",
+        InstallationOwnership.OwnedByRegisteredAccount or InstallationOwnership.OwnedByAnonymousIdentity => "Technical upload identity validated",
+        InstallationOwnership.TransferredSignInRequired or InstallationOwnership.OwnedByDifferentAccount => "Technical upload credential unavailable",
+        InstallationOwnership.OwnerSelectionRequired => "No technical upload credential available",
+        InstallationOwnership.ReauthRequired => "Technical upload credential needs sign-in",
+        InstallationOwnership.NoCredential => "Technical upload credential unavailable",
+        InstallationOwnership.Unavailable => "Technical upload credential could not be verified",
+        InstallationOwnership.Conflict => "Technical upload credential conflict",
         _ => ""
     };
 
@@ -303,7 +302,7 @@ public static class AccountMessages
         LinkCheckOutcome.OwnedByRegisteredAccount => "This installation belongs to your account.",
         LinkCheckOutcome.TransferredSignInRequired => "The server confirms this installation moved to a ForeverDB account. Sign in to that account to keep syncing.",
         LinkCheckOutcome.OwnedByDifferentAccount => "This installation belongs to a different account than the one signed in.",
-        LinkCheckOutcome.Unknown => "Ownership is not established for this installation.",
+        LinkCheckOutcome.Unknown => "No technical upload credential is registered for this installation.",
         _ => "Could not check right now."
     };
 }

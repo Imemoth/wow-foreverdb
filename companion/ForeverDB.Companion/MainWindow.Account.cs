@@ -9,30 +9,13 @@ using ForeverDB.Companion.Services;
 
 namespace ForeverDB.Companion;
 
-// Account System V1: the ACCOUNT tab. All identity, ownership and claim rules live in
+// Account System V1: the ACCOUNT tab. Human account identity and private account controls live in
 // ForeverDB.Companion.Account; this file only presents them. It never shows or stores tokens, passwords or
 // raw server responses.
 public partial class MainWindow
 {
-    private DispatcherTimer? _claimTimer;
-    private DispatcherTimer? _clipboardTimer;
-    private ClaimOffer? _shownOffer;
-    private string? _clipboardCode;
     private bool _signInRequested;
     private bool _accountBusy;
-
-    internal sealed class InstallationRow
-    {
-        public string InstallationId { get; init; } = "";
-        public string OwnershipText { get; init; } = "";
-        public string DetailText { get; init; } = "";
-        public string ClaimActionText { get; init; } = "Link to my account…";
-        public Visibility DetailVisibility { get; init; } = Visibility.Collapsed;
-        public Visibility ClaimVisibility { get; init; } = Visibility.Collapsed;
-        public Visibility CheckVisibility { get; init; } = Visibility.Collapsed;
-        public Visibility ChooseAccountVisibility { get; init; } = Visibility.Collapsed;
-        public Visibility ChooseAnonymousVisibility { get; init; } = Visibility.Collapsed;
-    }
 
     private void AttachAccountHandlers(AccountRuntime account)
     {
@@ -164,7 +147,6 @@ public partial class MainWindow
     private async void OnAccountIdentityChanged()
     {
         // Account-scoped views die with the identity: a displayed code and any message about the previous one.
-        HideClaimCard();
         AccountMessageText.Visibility = Visibility.Collapsed;
         RefreshAccountUi();
         RefreshGuildbookUi();
@@ -231,8 +213,6 @@ public partial class MainWindow
             AccountLostPanel.Visibility = Visibility.Collapsed;
             AccountLegacyPanel.Visibility = Visibility.Collapsed;
             AccountPendingPanel.Visibility = Visibility.Collapsed;
-            AccountInstallationsList.ItemsSource = null;
-            AccountInstallationsEmptyText.Visibility = Visibility.Visible;
             return;
         }
 
@@ -248,14 +228,10 @@ public partial class MainWindow
         AccountDetailText.Text =
             AccountMessages.Detail(status);
         var environmentDescription = AccountFeatureGate.DescribeEffectiveEnvironment(account.Gate, account.Endpoint);
-        var claimPilot = account.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
         var privatePilot = account.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
-        AccountEnvironmentText.Text =
-            claimPilot
-                ? $"{environmentDescription}. Owner-only claim pilot: only one selected installation can request a link code. Uploads, owner selection and anonymous creation remain disabled."
-                : privatePilot
-                ? $"{environmentDescription}. Owner-only private-project pilot: registered sign-in and search only. Sync, claim codes, owner selection and new anonymous identities are disabled. The original production identity is isolated."
-                : environmentDescription;
+        AccountEnvironmentText.Text = privatePilot
+            ? $"{environmentDescription}. Private account pilot; public observation sync uses a separate technical identity."
+            : $"{environmentDescription}. Public observation sync uses a separate technical identity.";
 
         var loggedOut = status.State == SessionState.LoggedOut;
         var lost = status.State == SessionState.AnonymousIdentityLost;
@@ -312,15 +288,15 @@ public partial class MainWindow
                 : Visibility.Collapsed;
 
         AccountLegacyPanel.Visibility =
-            status.HasLegacyOwner && enabled && !claimPilot
+            status.HasLegacyOwner && enabled && !privatePilot
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         AccountLegacyText.Text =
             status.LegacyFault == SessionFault.AuthRejected
-                ? "This computer's original anonymous identity is no longer accepted by the server."
+                ? "This computer's technical upload credential is no longer accepted by the server."
                 : status.LegacyFault == SessionFault.LocalCredentialCorrupt
-                    ? "This computer's original anonymous identity is damaged and cannot be read."
-                    : "This computer's original anonymous identity is kept so installations it owns keep syncing.";
+                    ? "This computer's technical upload credential is damaged and cannot be read."
+                    : "This computer's technical upload credential is stored locally and protected by Windows.";
 
         AccountPendingPanel.Visibility =
             status.PendingRevocation
@@ -340,95 +316,11 @@ public partial class MainWindow
                 ? Visibility.Collapsed
                 : Visibility.Visible;
 
-        var rows = account.Sync.Installations
-            .Select(
-                record =>
-                    BuildInstallationRow(
-                        record,
-                        status))
-            .ToList();
-
-        AccountInstallationsList.ItemsSource = rows;
-        AccountInstallationsEmptyText.Visibility =
-            rows.Count == 0
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-
         var buttonsEnabled = !_accountBusy;
         AccountSignInButton.IsEnabled = buttonsEnabled;
         AccountSignOutButton.IsEnabled = buttonsEnabled;
         AccountSwitchButton.IsEnabled = buttonsEnabled;
         AccountReturnAnonymousButton.IsEnabled = buttonsEnabled;
-    }
-
-    private InstallationRow BuildInstallationRow(
-        InstallationRecord record,
-        AccountStatus status)
-    {
-        var enabled = status.AccountsEnabled;
-        var claimPilot = _account?.Gate.Environment == AccountEnvironment.PrivateClaimPilot;
-        var permittedClaim = claimPilot &&
-            string.Equals(record.InstallationId, _account?.Gate.ScopedClaimInstallationId, StringComparison.Ordinal);
-        var privatePilot = _account?.Gate.Environment is AccountEnvironment.PrivatePilot or AccountEnvironment.PrivateClaimPilot;
-        var ownership = record.Ownership;
-
-        var detail =
-            record.LastBlock != BlockReason.None
-                ? AccountMessages.Describe(record.LastBlock)
-                : record.LastSyncedAt is { } at
-                    ? $"Last synced {at.ToLocalTime():g}"
-                    : "";
-
-        var ownershipText = enabled
-            ? AccountMessages.Describe(ownership)
-            : "Anonymous sync (account features off)";
-
-        if (record.ClaimPending)
-        {
-            ownershipText += " · link code shown";
-        }
-
-        var anonymousOwned =
-            ownership == InstallationOwnership.OwnedByAnonymousIdentity;
-        var selection =
-            ownership == InstallationOwnership.OwnerSelectionRequired;
-        var anonymousAvailable =
-            status.State is SessionState.Anonymous or SessionState.AnonymousClaiming ||
-            (status.HasLegacyOwner && status.LegacyFault == SessionFault.None);
-
-        return new InstallationRow
-        {
-            InstallationId = record.InstallationId,
-            OwnershipText = ownershipText,
-            DetailText = detail,
-            DetailVisibility =
-                detail.Length == 0
-                    ? Visibility.Collapsed
-                    : Visibility.Visible,
-            ClaimActionText = status.State == SessionState.Registered
-                ? "Connect this installation"
-                : "Create link code…",
-            ClaimVisibility =
-                enabled && (!privatePilot || permittedClaim) && anonymousOwned
-                    ? Visibility.Visible
-                    : Visibility.Collapsed,
-            CheckVisibility =
-                enabled &&
-                (!privatePilot || permittedClaim) &&
-                (record.ClaimPending ||
-                 ownership == InstallationOwnership.Unchecked ||
-                 ownership == InstallationOwnership.TransferredSignInRequired)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed,
-            ChooseAccountVisibility =
-                enabled && !privatePilot && selection && status.State == SessionState.Registered
-                    ? Visibility.Visible
-                    : Visibility.Collapsed,
-            ChooseAnonymousVisibility =
-                enabled && !privatePilot && selection && anonymousAvailable
-                    ? Visibility.Visible
-                    : Visibility.Collapsed
-        };
     }
 
     private void ShowAccountMessage(string text)
@@ -658,7 +550,6 @@ public partial class MainWindow
 
         try
         {
-            _syncService?.CancelRegisteredDeviceUploads();
             var outcome = await account.Sessions.SignOutRegisteredAsync();
             ShowAccountMessage(
                 AccountMessages.Describe(outcome));
@@ -684,7 +575,6 @@ public partial class MainWindow
         SetAccountBusy(true);
         try
         {
-            _syncService?.CancelRegisteredDeviceUploads();
             var outcome = await account.Sessions.SignOutRegisteredAsync();
             if (outcome is SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending)
             {
@@ -733,7 +623,6 @@ public partial class MainWindow
         SetAccountBusy(true);
         try
         {
-            _syncService?.CancelRegisteredDeviceUploads();
             var signedOut = await account.Sessions.SignOutRegisteredAsync();
             if (signedOut is not (SignOutOutcome.Confirmed or SignOutOutcome.LocalOnlyRevocationPending))
             {
@@ -916,343 +805,4 @@ public partial class MainWindow
         RoutedEventArgs e) =>
         OpenAccountWebPage("forgot-password");
 
-    // ---------------------------------------------------------------------------------------------
-    // Installations: ownership choice, link status, claim code
-    // ---------------------------------------------------------------------------------------------
-
-    private static string? RowId(
-        object sender) =>
-        ((sender as FrameworkElement)?.DataContext as InstallationRow)
-        ?.InstallationId;
-
-    private async void InstallationChooseAccount_Click(
-        object sender,
-        RoutedEventArgs e) =>
-        await ChooseOwnerAsync(
-            RowId(sender),
-            OwnerChoice.RegisteredAccount);
-
-    private async void InstallationChooseAnonymous_Click(
-        object sender,
-        RoutedEventArgs e) =>
-        await ChooseOwnerAsync(
-            RowId(sender),
-            OwnerChoice.AnonymousIdentity);
-
-    private async Task ChooseOwnerAsync(
-        string? installationId,
-        OwnerChoice choice)
-    {
-        var account = _account;
-        var service = _syncService;
-
-        if (account is null ||
-            service is null ||
-            installationId is null)
-        {
-            return;
-        }
-
-        var confirmed =
-            MessageBox.Show(
-                this,
-                choice == OwnerChoice.RegisteredAccount
-                    ? "This installation has no confirmed owner yet. Syncing it now makes your ForeverDB account its owner."
-                    : "This installation has no confirmed owner yet. Syncing it now makes this computer's anonymous identity its owner.",
-                "Choose the installation owner",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Question,
-                MessageBoxResult.Cancel) == MessageBoxResult.OK;
-
-        if (!confirmed)
-        {
-            return;
-        }
-
-        account.Sync.SelectOwner(
-            installationId,
-            choice);
-
-        var file = service.FileFor(installationId);
-
-        if (file is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await service.SyncFileAsync(
-                file,
-                force: true,
-                trigger: SyncTrigger.Manual);
-        }
-        catch (Exception ex)
-        {
-            RecordSyncError(ex.Message);
-        }
-    }
-
-    private async void InstallationCheck_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        var account = _account;
-        var id = RowId(sender);
-
-        if (account is null ||
-            id is null ||
-            _accountBusy)
-        {
-            return;
-        }
-
-        SetAccountBusy(true);
-        var generation = account.Sessions.Generation;
-
-        try
-        {
-            var outcome = await account.Claims.CheckLinkStatusAsync(
-                id,
-                CancellationToken.None);
-
-            if (account.Sessions.Generation != generation ||
-                _account != account)
-            {
-                return;
-            }
-
-            ShowAccountMessage(
-                AccountMessages.Describe(outcome));
-
-            if (account.Claims.OfferFor(id) is null &&
-                _shownOffer?.InstallationId == id)
-            {
-                HideClaimCard();
-            }
-        }
-        catch (Exception)
-        {
-            ShowAccountMessage("The status could not be checked right now.");
-        }
-        finally
-        {
-            SetAccountBusy(false);
-        }
-    }
-
-    private async void InstallationClaim_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        var account = _account;
-        var id = RowId(sender);
-
-        if (account is null ||
-            id is null ||
-            _accountBusy)
-        {
-            return;
-        }
-
-        var direct = account.Sessions.Status.State == SessionState.Registered && account.Device is not null;
-        var confirmed =
-            MessageBox.Show(
-                this,
-                direct
-                    ? "ForeverDB will prove this installation with its existing anonymous identity, move it to the signed-in account, " +
-                      "and register this computer for revocable manual sync. The installation ID, history and Guildbook data stay the same.\n\nConnect this installation?"
-                    : "A one-time link code will be shown. Anyone who gets the code while it is valid can move this " +
-                      "installation to their ForeverDB account. Show the code only when you are about to use it, and " +
-                      "keep it private.\n\nCreate a link code?",
-                "Link installation to your account",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning,
-                MessageBoxResult.Cancel) == MessageBoxResult.OK;
-
-        if (!confirmed)
-        {
-            return;
-        }
-
-        SetAccountBusy(true);
-        var generation = account.Sessions.Generation;
-
-        try
-        {
-            if (direct)
-            {
-                var linked = await account.Linking.ConnectAsync(id, Environment.MachineName, CancellationToken.None);
-                if (account.Sessions.Generation != generation || _account != account)
-                {
-                    return;
-                }
-
-                HideClaimCard();
-                ShowAccountMessage(AccountMessages.Describe(linked));
-                RefreshDeviceUi();
-                RefreshAccountUi();
-                return;
-            }
-
-            var result = await account.Claims.StartClaimAsync(
-                id,
-                CancellationToken.None);
-
-            if (account.Sessions.Generation != generation ||
-                _account != account)
-            {
-                result.Offer?.Dispose();
-                return;
-            }
-
-            ShowAccountMessage(
-                AccountMessages.Describe(result.Outcome));
-
-            if (result.Offer is not null)
-            {
-                ShowClaimCard(result.Offer);
-            }
-        }
-        catch (Exception)
-        {
-            ShowAccountMessage("The link code could not be requested right now. It is not retried automatically.");
-        }
-        finally
-        {
-            SetAccountBusy(false);
-        }
-    }
-
-    private void ShowClaimCard(
-        ClaimOffer offer)
-    {
-        _shownOffer = offer;
-        AccountClaimInstallationText.Text = offer.InstallationId;
-        AccountClaimCodeText.Text = offer.DisplayCode;
-        AccountClaimCard.Visibility = Visibility.Visible;
-        UpdateClaimCountdown();
-
-        _claimTimer ??= new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(1)
-        };
-
-        _claimTimer.Tick -= ClaimTimer_Tick;
-        _claimTimer.Tick += ClaimTimer_Tick;
-        _claimTimer.Start();
-    }
-
-    private void ClaimTimer_Tick(
-        object? sender,
-        EventArgs e) =>
-        UpdateClaimCountdown();
-
-    private void UpdateClaimCountdown()
-    {
-        var offer = _shownOffer;
-
-        if (offer is null ||
-            offer.IsDisposed)
-        {
-            HideClaimCard();
-            return;
-        }
-
-        if (offer.IsExpired(TimeProvider.System))
-        {
-            _account?.Claims.Dismiss(offer.InstallationId);
-            HideClaimCard();
-            ShowAccountMessage("The link code expired. Request a new one if you still want to link.");
-            return;
-        }
-
-        var left = offer.Remaining(TimeProvider.System);
-        AccountClaimCountdownText.Text =
-            $"Expires in {(int)left.TotalMinutes}:{left.Seconds:00} · single use";
-    }
-
-    private void HideClaimCard()
-    {
-        _claimTimer?.Stop();
-        _shownOffer = null;
-        AccountClaimCodeText.Text = "";
-        AccountClaimCard.Visibility = Visibility.Collapsed;
-    }
-
-    private void AccountCopyClaim_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        var offer = _shownOffer;
-
-        if (offer is null ||
-            offer.IsDisposed)
-        {
-            return;
-        }
-
-        try
-        {
-            // Keep the code out of Windows clipboard history and cloud sync.
-            var data = new DataObject();
-            data.SetText(offer.DisplayCode);
-            data.SetData(
-                "ExcludeClipboardContentFromMonitorProcessing",
-                new MemoryStream(BitConverter.GetBytes(1)));
-            data.SetData(
-                "CanIncludeInClipboardHistory",
-                new MemoryStream(BitConverter.GetBytes(0)));
-            data.SetData(
-                "CanUploadToCloudClipboard",
-                new MemoryStream(BitConverter.GetBytes(0)));
-            Clipboard.SetDataObject(data, true);
-            _clipboardCode = offer.DisplayCode;
-            ShowAccountMessage("Code copied. It is removed from the clipboard after two minutes.");
-
-            _clipboardTimer?.Stop();
-            _clipboardTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(2)
-            };
-            _clipboardTimer.Tick += (_, _) =>
-            {
-                _clipboardTimer?.Stop();
-
-                try
-                {
-                    if (Clipboard.ContainsText() &&
-                        Clipboard.GetText() == _clipboardCode)
-                    {
-                        Clipboard.Clear();
-                    }
-                }
-                catch (Exception)
-                {
-                    // The clipboard may be locked by another program; nothing else to do.
-                }
-
-                _clipboardCode = null;
-            };
-            _clipboardTimer.Start();
-        }
-        catch (Exception)
-        {
-            ShowAccountMessage("The clipboard is busy. Select the code and copy it manually.");
-        }
-    }
-
-    private void AccountDismissClaim_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        var offer = _shownOffer;
-
-        if (offer is not null)
-        {
-            _account?.Claims.Dismiss(offer.InstallationId);
-        }
-
-        HideClaimCard();
-    }
 }

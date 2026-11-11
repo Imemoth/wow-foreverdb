@@ -283,8 +283,6 @@ export const DEFAULT_ACCOUNT_REDIRECT = "/account";
 /** Exact pathnames a callback or login may return to. Everything else falls back to the default. */
 export const ACCOUNT_REDIRECT_ALLOWLIST: readonly string[] = [
   "/account",
-  "/account/link",
-  "/account/installations",
   "/account/devices",
   "/account/security",
 ];

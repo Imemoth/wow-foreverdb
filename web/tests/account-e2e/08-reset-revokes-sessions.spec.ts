@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext, PlaywrightWorkerArgs } from "@playwright/test";
 import type pg from "pg";
 import { cookieOf, json, newClient, post, setCookies, waitForMail } from "../account/helpers";
-import { clientWithSessionCookie, companionWithInstallation, link, loginAgain, startClaim, webUser, type WebUser } from "./world";
+import { clientWithSessionCookie, companionWithInstallation, loginAgain, webUser, type WebUser } from "./world";
 import { admin, auth, fingerprint, ingest, ownerOf, registeredSession, relaxFixtureCeilings, resetBudgets, rpc, sha, snapshot } from "./stack";
 
 /**
@@ -10,6 +10,7 @@ import { admin, auth, fingerprint, ingest, ownerOf, registeredSession, relaxFixt
  * Companion), verified against real GoTrue v2.197.0 + real PostgREST; partial success is recoverable without a second password update.
  */
 type Playwright = PlaywrightWorkerArgs["playwright"];
+const companionOwner = (comp: Awaited<ReturnType<typeof companionWithInstallation>>) => comp.id.uid;
 const CHAOS = process.env.E2E_CHAOS_URL ?? "http://127.0.0.1:54330";
 const chaos = async (mode: string, reset = false) => (await fetch(`${CHAOS}/__chaos`, { method: "POST", body: JSON.stringify({ mode, reset }) })).json() as Promise<{ mode: string; globalLogouts: number }>;
 const ORIGIN_CHAOS = "http://localhost:3211";
@@ -44,7 +45,6 @@ const PRIVATE: [string, Record<string, unknown>][] = [
 test("a successful reset revokes every session of the account (attacker, other browser, registered Companion), keeps unrelated identities and all data, and the new password works", async ({ playwright }) => {
   const victim = await webUser(playwright, "resetV");
   const mine = await companionWithInstallation({ guilds: 2, members: 4, tag: "RV" }); // linked to the victim before the reset
-  expect((await link(victim.c, await startClaim(mine), victim.password)).status()).toBe(200);
   const legacy = await companionWithInstallation({ guilds: 1, members: 2, tag: "LG" }); // an UNRELATED anonymous identity with its own installation
 
   // sessions that exist before the reset: the attacker's (second web login), another browser, the registered Companion
@@ -54,7 +54,7 @@ test("a successful reset revokes every session of the account (attacker, other b
   const companion2 = await registeredSession(victim.email, victim.password);
   expect(await liveSessions(victim.uid)).toBeGreaterThanOrEqual(5);
   for (const [n, a] of PRIVATE) expect((await rpc(companion.token, n, a)).status, `before: ${n}`).toBe(200);
-  expect((await attacker.c.get("/account/api/installations")).status()).toBe(200); // the attacker can read the installation inventory now
+  expect((await attacker.c.get("/account/devices")).status()).toBe(200); // ordinary account device management remains available
   const historyBefore = await fingerprint(db);
   await resetBudgets(db);
   const statsBefore = (await rpc(companion.token, "get_foreverdb_item_stats", { p_item_id: 7001 })).body;
@@ -72,11 +72,11 @@ test("a successful reset revokes every session of the account (attacker, other b
   expect(await liveRefreshTokens(victim.uid)).toBe(0);
   for (const old of [attacker, otherBrowser]) {
     expect((await old.c.get("/account/api/me")).status()).toBe(401); // server-confirmed identity: session_not_found
-    expect((await old.c.get("/account/api/installations")).status()).toBe(401);
+    expect((await old.c.get("/account/api/installations")).status()).toBe(404);
     const stolen = await clientWithSessionCookie(playwright, (await cookieOf(old.c))?.value ?? "x");
     // the retired Guildbook route has no session handling at all: 404 for every caller, a stolen cookie included (it is never an oracle for session validity)
     expect((await post(stolen, "/account/api/guildbook/guilds", { installationId: mine.installationId })).status()).toBe(404);
-    expect((await post(stolen, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: fresh, confirm: true, accountId: victim.uid })).status()).toBe(401);
+    expect((await post(stolen, "/account/api/link", { code: "0123456789ABCDEF0123456789ABCDEF", password: fresh, confirm: true, accountId: victim.uid })).status()).toBe(404);
   }
   // refresh tokens are dead: they cannot mint new access tokens
   for (const s of [companion, companion2]) {
@@ -98,14 +98,13 @@ test("a successful reset revokes every session of the account (attacker, other b
   expect(oldPw.status()).toBe(401);
   const back = await newClient(playwright);
   expect((await post(back, "/account/api/login", { email: victim.email, password: fresh })).status()).toBe(200);
-  const listed = await json<{ installations: { installationId: string }[] }>(await back.get("/account/api/installations"));
-  expect(listed.installations.map((i) => i.installationId)).toEqual([mine.installationId]);
-  expect(await ownerOf(db, mine.installationId)).toBe(victim.uid);
+  expect((await back.get("/account/devices")).status()).toBe(200);
+  expect(await ownerOf(db, mine.installationId)).toBe(mine.id.uid);
   const newCompanion = await registeredSession(victim.email, fresh); // the Companion signs in again with the new password
   expect((await rpc(newCompanion.token, "fdb_account_installations")).status).toBe(200);
   expect(await fingerprint(db)).toEqual(historyBefore); // no observation, location, loot or owner changed
   expect(sha((await rpc(newCompanion.token, "get_foreverdb_item_stats", { p_item_id: 7001 })).body)).toBe(sha(statsBefore));
-  // the separate anonymous legacy identity: same user, same session, still the owner, still able to use its installation
+  // The unrelated anonymous technical identity remains independent of the account reset and can still ingest.
   await relaxFixtureCeilings();
   expect(await ownerOf(db, legacy.installationId)).toBe(legacy.id.uid);
   expect((await rpc(legacy.id.token, "fdb_installation_link_status", { p_installation_id: legacy.installationId })).body).toEqual({ state: "owned" });
@@ -118,21 +117,19 @@ test("a successful reset revokes every session of the account (attacker, other b
   expect((await bystander.c.get("/account/api/me")).status()).toBe(200);
 });
 
-test("KNOWN LIMITATION (documented): an already-issued registered JWT keeps working for the legacy ingest/stats RPCs until it expires, because those functions check only the JWT, not the session row", async ({ playwright }) => {
+test("an unrelated registered session cannot reuse an anonymous installation ID after the ownerless-ingest migration", async ({ playwright }) => {
   const w = await webUser(playwright, "resetLim");
   const comp = await companionWithInstallation({ guilds: 1, members: 2, tag: "LM" });
-  expect((await link(w.c, await startClaim(comp), w.password)).status()).toBe(200);
   const old = await registeredSession(w.email, w.password);
   const { c: rc } = await recoverySession(playwright, w.email);
   expect((await post(rc, "/account/api/reset-password", { password: "limitation passphrase 2026 x" })).status()).toBe(200);
   expect(await liveSessions(w.uid)).toBe(0);
-  // account (guarded) RPCs refuse it ...
-  expect((await rpc(old.token, "fdb_account_installations")).status).toBe(401);
-  // ... the pre-existing, unguarded RPCs still accept the unexpired JWT (the access token's remaining lifetime is the exposure window)
+  const expiredAccountRpc = await rpc(old.token, "fdb_account_installations");
+  expect([expiredAccountRpc.status, expiredAccountRpc.body.code]).toEqual([401, "PT401"]);
   await relaxFixtureCeilings();
-  expect((await rpc(old.token, "get_foreverdb_item_stats", { p_item_id: 7001 })).status).toBe(200);
-  expect((await ingest(old.token, snapshot(comp.installationId, { updatedAt: 6000, guilds: 1, members: 2, tag: "LM" }))).status).toBe(200);
-  expect(await ownerOf(db, comp.installationId)).toBe(w.uid);
+  const forged = await ingest(old.token, snapshot(comp.installationId, { updatedAt: 6000, guilds: 1, members: 2, tag: "LM" }));
+  expect([401, 403], JSON.stringify(forged.body)).toContain(forged.status);
+  expect(await ownerOf(db, comp.installationId)).toBe(companionOwner(comp));
 });
 
 test("partial success 1: password changed but the global logout FAILED -> 202 revocation_incomplete (never a complete reset), the new password already works, and 'finish' revokes without a second password update", async ({ playwright }) => {

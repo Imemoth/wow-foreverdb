@@ -72,6 +72,19 @@ public enum StartAnonymousOutcome
     FeatureDisabled
 }
 
+public enum TechnicalIdentityOutcome
+{
+    Ready,
+    Created,
+    Unavailable,
+    RateLimited,
+    Refused,
+    ExistingIdentityUnavailable,
+    StorageFailure,
+    LockTimeout,
+    FeatureDisabled
+}
+
 /// <summary>
 /// Account System V1 session state machine for the Companion (ownership-claim-protocol.md section 2).
 /// Invariants enforced here and covered by tests:
@@ -653,6 +666,90 @@ public sealed class AccountSessionManager
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 return StartAnonymousOutcome.StorageFailure;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures a DPAPI-protected anonymous Auth credential exists for technical uploads. It never changes a registered primary
+    /// session, replaces a rejected credential, or asks the user to create a website account. This identity is independent of
+    /// account sign-in and is validated by the public ingest RPC against its server-side installation mapping.
+    /// </summary>
+    public async Task<TechnicalIdentityOutcome> EnsureAnonymousUploadIdentityAsync(CancellationToken ct = default)
+    {
+        if (!_allowAnonymousCreation) return TechnicalIdentityOutcome.FeatureDisabled;
+
+        SessionLease lease;
+        try
+        {
+            lease = await _gate.AcquireAsync(_lockTimeout, ct).ConfigureAwait(false);
+        }
+        catch (SessionLockTimeoutException)
+        {
+            return TechnicalIdentityOutcome.LockTimeout;
+        }
+
+        using (lease)
+        {
+            HealStorage();
+            var primary = Overlay(SlotRole.Primary, _vault.Primary.Read());
+            var legacy = Overlay(SlotRole.LegacyOwner, _vault.LegacyOwner.Read());
+
+            if (primary.Status is SlotReadStatus.IoError or SlotReadStatus.Unreadable ||
+                legacy.Status is SlotReadStatus.IoError or SlotReadStatus.Unreadable)
+            {
+                return TechnicalIdentityOutcome.StorageFailure;
+            }
+
+            if (primary.Status == SlotReadStatus.Ok && primary.Marker?.Rejected == true ||
+                legacy.Status == SlotReadStatus.Ok && legacy.Marker?.Rejected == true)
+            {
+                return TechnicalIdentityOutcome.ExistingIdentityUnavailable;
+            }
+
+            if (primary.Status == SlotReadStatus.Ok && primary.ProvisionalKind == SessionKind.Anonymous ||
+                legacy.Status == SlotReadStatus.Ok && legacy.ProvisionalKind == SessionKind.Anonymous)
+            {
+                return TechnicalIdentityOutcome.Ready;
+            }
+
+            var registeredPrimary = primary.Status == SlotReadStatus.Ok &&
+                primary.ProvisionalKind == SessionKind.Registered &&
+                Status.State == SessionState.Registered;
+            if (legacy.Status != SlotReadStatus.Missing ||
+                (primary.Status == SlotReadStatus.Ok && !registeredPrimary))
+            {
+                return TechnicalIdentityOutcome.ExistingIdentityUnavailable;
+            }
+
+            var signup = await _auth.SignUpAnonymouslyAsync(ct).ConfigureAwait(false);
+            if (!signup.Ok)
+            {
+                return signup.Failure switch
+                {
+                    AuthFailureKind.RateLimited => TechnicalIdentityOutcome.RateLimited,
+                    AuthFailureKind.Refused => TechnicalIdentityOutcome.Refused,
+                    _ => TechnicalIdentityOutcome.Unavailable
+                };
+            }
+
+            var created = signup.Value!;
+            if (JwtInspector.TryDecode(created.AccessToken)?.IsAnonymous != true)
+            {
+                return TechnicalIdentityOutcome.Refused;
+            }
+
+            try
+            {
+                var slot = registeredPrimary ? _vault.LegacyOwner : _vault.Primary;
+                slot.Write(created, SlotMarker.For(SessionKind.Anonymous));
+                _faults.Remove(registeredPrimary ? SlotRole.LegacyOwner : SlotRole.Primary);
+                Recompute();
+                return TechnicalIdentityOutcome.Created;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return TechnicalIdentityOutcome.StorageFailure;
             }
         }
     }

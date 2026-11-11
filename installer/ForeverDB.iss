@@ -1,5 +1,5 @@
 #define MyAppName "ForeverDB Companion"
-#define MyAppVersion "0.9.11-alpha"
+#define MyAppVersion "0.9.12-alpha"
 #ifndef MyAppBuild
   #define MyAppBuild "local"
 #endif

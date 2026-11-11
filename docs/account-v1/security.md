@@ -1,5 +1,7 @@
 # Account System V1 — threat model, abuse prevention, negative-test matrix
 
+> **Current architecture note (2026-11-09):** Draft ADR-018 retires user ownership as a precondition for public observation ingestion. The owner/claim rows below describe the historical Account V1 claim protocol and its security controls; they are retained as evidence and compatibility guidance, not as the current public-ingest authorization model. Current upload authorization, fail-closed legacy handling, and security boundaries are documented in [ADR-018](adr-018-ownerless-public-ingestion.md). Guildbook remains Companion-local under migration 0018.
+
 > **2026-10-12 candidate addendum (draft PR #53; OFF):** The new [single-project candidate](single-project-candidate.md) proposes a tightly scoped server-only exception to the original A1/A19 blanket private-project Auth prohibition for an **owner-approved**, protected Preview pilot and a separately approved real production release. Neither compiled flag is enabled. The existing A24 direct-GoTrue threat, account/Companion owner-isolation criteria, lack of hosted/Windows acceptance and public-read-database separation are **unchanged**. The historical V1 findings below describe the original, stricter pre-candidate architecture; do not interpret them as evidence of approval.
 
 

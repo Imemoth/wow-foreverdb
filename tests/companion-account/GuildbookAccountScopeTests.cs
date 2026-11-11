@@ -24,7 +24,9 @@ public sealed class GuildbookAccountScopeTests
         var result = await service.SyncFileAsync(path, force: true, trigger: SyncTrigger.Manual);
 
         Assert.Equal(SyncOutcome.Synced, result!.Outcome);
-        var request = Assert.Single(rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth"));
+        var ingestionRequests = rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth").ToArray();
+        Assert.True(ingestionRequests.Length == 1, $"Unexpected public upload requests: {string.Join(", ", rig.Server.Requests.Select(r => r.Path))}");
+        var request = ingestionRequests[0];
         using var body = JsonDocument.Parse(request.Body);
         Assert.False(body.RootElement.GetProperty("p_snapshot").TryGetProperty("guilds", out _));
         Assert.DoesNotContain(rig.Server.Requests, r => r.Path.Contains("guildbook", StringComparison.OrdinalIgnoreCase));

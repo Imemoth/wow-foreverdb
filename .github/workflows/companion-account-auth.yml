@@ -110,7 +110,7 @@ jobs:
           if (-not (Test-Path "$dir/ForeverDB.Companion.Account.dll")) { throw "account library missing from publish output" }
           $v = (Get-Item "$dir/ForeverDB.Companion.dll").VersionInfo.ProductVersion
           Write-Host "ProductVersion=$v"
-          if (-not $v.StartsWith("0.9.11-alpha+${{ env.COMPANION_BUILD_COMMIT }}")) { throw "unexpected version $v" }
+          if (-not $v.StartsWith("0.9.12-alpha+${{ env.COMPANION_BUILD_COMMIT }}")) { throw "unexpected version $v" }
 
       - name: git diff --check
         shell: pwsh

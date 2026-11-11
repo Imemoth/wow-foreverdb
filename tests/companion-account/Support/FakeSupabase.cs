@@ -18,7 +18,7 @@ public sealed record FakeResponse(int Status, string Body);
 /// <summary>
 /// Deterministic stand-in for Supabase Auth (GoTrue) and the PR C / ingest RPCs. It models the behaviour the
 /// Companion depends on: single-use rotating refresh tokens, per-session liveness, scope=local logout, the
-/// ownership rule of ingest, claim issue/redeem and fdb_installation_link_status.
+/// live technical-identity mapping for ingest, claim issue/redeem and legacy link-status compatibility.
 /// </summary>
 public sealed class FakeSupabase
 {
@@ -43,6 +43,7 @@ public sealed class FakeSupabase
     private readonly Dictionary<string, SessionRec> _sessions = new();
     private readonly Dictionary<string, RefreshRec> _refresh = new();
     private readonly Dictionary<string, string?> _owners = new();
+    private readonly Dictionary<(string Installation, string AuthUid), string> _uploadIdentities = new();
     private readonly Dictionary<string, string> _previousOwners = new();
     private readonly Dictionary<string, ClaimRec> _claims = new();
     private readonly Dictionary<string, TicketRec> _tickets = new();
@@ -115,7 +116,11 @@ public sealed class FakeSupabase
 
     public void SetOwner(string installationId, string? ownerUserId)
     {
-        lock (_gate) { _owners[installationId] = ownerUserId; }
+        lock (_gate)
+        {
+            _owners[installationId] = ownerUserId;
+            if (ownerUserId is not null) _uploadIdentities[(installationId, ownerUserId)] = ownerUserId;
+        }
     }
 
     public string? OwnerOf(string installationId)
@@ -142,6 +147,9 @@ public sealed class FakeSupabase
             var installation = _claims.First(kv => kv.Value == claim).Key;
             _previousOwners[installation] = claim.Uid;
             _owners[installation] = registeredUserId;
+            foreach (var key in _uploadIdentities.Keys.Where(k => k.Installation == installation).ToArray())
+                _uploadIdentities[key] = registeredUserId;
+            _uploadIdentities[(installation, registeredUserId)] = registeredUserId;
             claim.Status = "consumed";
             return true;
         }
@@ -393,6 +401,9 @@ public sealed class FakeSupabase
 
             _previousOwners[pair.Key] = claim.Uid;
             _owners[pair.Key] = account.Id;
+            foreach (var key in _uploadIdentities.Keys.Where(k => k.Installation == pair.Key).ToArray())
+                _uploadIdentities[key] = account.Id;
+            _uploadIdentities[(pair.Key, account.Id)] = account.Id;
             claim.Status = "consumed";
             return Ok(JsonSerializer.Serialize(new Dictionary<string, object?>
             {
@@ -519,12 +530,19 @@ public sealed class FakeSupabase
             try { id = JsonNode.Parse(body)!["p_snapshot"]!["installationId"]!.GetValue<string>(); }
             catch { return new FakeResponse(400, "{\"message\":\"bad snapshot\"}"); }
 
-            if (_owners.TryGetValue(id, out var owner) && owner is not null && owner != user!.Id)
+            var identityKey = (id, user!.Id);
+            if (!_uploadIdentities.TryGetValue(identityKey, out var legacyOwner))
             {
-                return new FakeResponse(400, "{\"code\":\"P0001\",\"message\":\"Installation belongs to another authenticated client\"}");
+                if (_owners.ContainsKey(id) || !user.Anonymous)
+                    return Error(403, "PT403", "Installation technical credential is not registered");
+                _uploadIdentities[identityKey] = user.Id;
+                legacyOwner = user.Id;
             }
 
-            _owners[id] = user!.Id;
+            if (_owners.TryGetValue(id, out var owner) && owner is not null && owner != legacyOwner)
+                return new FakeResponse(400, "{\"code\":\"P0001\",\"message\":\"Installation row identity mismatch\"}");
+
+            _owners[id] = legacyOwner;
             IngestCount++;
             return Ok("{\"ok\":true}");
         }

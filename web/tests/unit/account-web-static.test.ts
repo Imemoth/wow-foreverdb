@@ -29,8 +29,8 @@ describe("account web zone (static)", () => {
     expect(routes.map(rel).sort()).toEqual([
       "app/account/api/confirm/route.ts", "app/account/api/csrf/route.ts", "app/account/api/devices/revoke/route.ts", "app/account/api/devices/route.ts",
       "app/account/api/enrollment/download/route.ts", "app/account/api/enrollment/revoke/route.ts", "app/account/api/forgot-password/route.ts",
-      "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts", "app/account/api/installations/route.ts",
-      "app/account/api/link/route.ts", "app/account/api/login/route.ts",
+      "app/account/api/guildbook/guilds/route.ts", "app/account/api/guildbook/members/route.ts",
+      "app/account/api/login/route.ts",
       "app/account/api/logout/route.ts", "app/account/api/me/route.ts", "app/account/api/register/route.ts", "app/account/api/resend/route.ts",
       "app/account/api/reset-password/revoke/route.ts", "app/account/api/reset-password/route.ts", "app/account/api/session/refresh/route.ts",
     ]);
@@ -101,7 +101,7 @@ describe("account web zone (static)", () => {
 
   it("PR E: the PostgREST client is closed (registry subset, fixed method/path, publishable key + user token, no redirects, bounded, no caller headers)", () => {
     const text = code(join(SRC, "lib/account/rpc-client.ts"));
-    expect(text).toMatch(/export const WEB_RPCS = \[\s*"fdb_account_claim_redeem",\s*"fdb_account_installations",\s*\] as const satisfies/);
+    expect(text).toMatch(/export const WEB_RPCS = \[\s*\] as const satisfies/);
     expect(text).not.toMatch(/fdb_account_claim_start|fdb_installation_link_status/); // Companion-only functions are unreachable from the website
     expect(text).toMatch(/isAccountRpc\(name\)/);
     expect(text).toMatch(/\$\{cfg\.authOrigin\}\/rest\/v1\/rpc\/\$\{name\}/);
@@ -120,46 +120,19 @@ describe("account web zone (static)", () => {
     expect(importsOf(join(SRC, "lib/account/rpc-client.ts")).filter((i) => /lib\/data|security\/identity|^pg$/.test(i))).toEqual([]);
   });
 
-  it("PR E: the link route runs wrapper -> identity -> code shape -> password budget -> fresh password -> identity re-check -> link budget -> RPC, with the ORIGINAL session token", () => {
-    const text = code(join(SRC, "app/account/api/link/route.ts"));
-    const order = [
-      "accountApi({ route: \"link\", mutating: true, body: INPUTS.link }", "authenticate(c)", "normalizeClaimCode(body.code)", "\"reauth\", user.id", "chargeEmail(c.ac.env, c.ac.cfg.csrfSecret, \"login\", user.email)",
-      "confirmPassword(c.ac.cfg, user, body.password)", "recheckIdentity(c.ac.cfg, session)", "\"link\", user.id", "callWebRpc(c.ac.cfg, \"fdb_account_claim_redeem\", { p_code: code }, session.at)",
-    ].map((m) => text.indexOf(m));
-    expect(order.every((i) => i > 0), JSON.stringify(order)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(text).not.toMatch(/writeSession|fromAuthSession|passwordGrant|body\.code[^)]*(log|console)/);
-    // nothing about the code or the password reaches a log call
-    for (const m of text.matchAll(/accountLog\([^)]*\)/g)) expect(m[0]).not.toMatch(/code\b(?!:\s*(null|out\.|fresh))|password|body/);
-  });
-
-  it("PR E: reauth.ts never stores or returns the temporary session, checks the SAME user id and revokes with the pinned local logout", () => {
-    const text = code(join(SRC, "lib/account/reauth.ts"));
-    expect(text).toMatch(/temp\.user\.id\.toLowerCase\(\) === current\.id\.toLowerCase\(\)/);
-    expect(text).toMatch(/auth\.getUser\(cfg, temp\.access_token\)/);
-    expect(text).toMatch(/auth\.logout\(cfg, accessToken\)/);
-    expect(text).not.toMatch(/writeSession|setCookie|NextResponse|jsonResponse|refresh_token|\.rt\b/);
-    expect(text).toMatch(/cleanup: revoked \? "revoked" : "unconfirmed"/);
-  });
-
-  it("PR E: every private handler authenticates through the approved resolver and nothing takes ownership from the request", () => {
-    for (const r of ["link", "installations"]) {
-      const text = code(join(SRC, `app/account/api/${r}/route.ts`));
-      expect(text, r).toMatch(/authenticate\(c(, \{ read: true \})?\)/);
-      expect(text, r).toMatch(/\bsession\.at\b/);
-      expect(text, r).not.toMatch(/process\.env|cookies\(\)|req\.headers\.get\("authorization"\)/i);
+  it("the website RPC registry and routes expose no installation ownership or claim operations", () => {
+    const text = code(join(SRC, "lib/account/rpc-client.ts"));
+    expect(text).toMatch(/export const WEB_RPCS = \[\s*\] as const satisfies/);
+    expect(text).not.toMatch(/fdb_account_claim_redeem|fdb_account_installations/);
+    for (const file of ["app/account/api/link/route.ts", "app/account/api/installations/route.ts", "lib/account/reauth.ts"]) {
+      expect(existsSync(join(SRC, file)), file).toBe(false);
     }
+  });
+
+  it("website private features still authenticate using the approved session resolver", () => {
     const priv = code(join(SRC, "lib/account/private.ts"));
     expect(priv).toMatch(/resolveSession\(c\.ac\.cfg, c\.jar, c\.ac\.https, \{ kind: "user", canWrite: true \}\)/);
-    // the website has no Guildbook request body at all
     expect(code(join(SRC, "lib/account/inputs.ts"))).not.toMatch(/guildbook|GUILDBOOK_PAGE_SIZE/i);
-  });
-
-  it("PR E: the claim code is never placed in a URL, Web Storage, a cookie or a log by the linking UI", () => {
-    const text = code(join(SRC, "app/account/_components/LinkForm.tsx"));
-    expect(text).not.toMatch(/localStorage|sessionStorage|document\.cookie|indexedDB|history\.(push|replace)State|router\.(push|replace)|searchParams|console\./);
-    expect(text).not.toMatch(/\?code=|[?&]claim=/);
-    expect(text).toMatch(/autoComplete="off"/);
   });
 
   it("the session cookie is written and cleared only by session.ts; cookie names live there alone", () => {
@@ -243,12 +216,9 @@ describe("account web zone (static)", () => {
       if (/^app\/account\/guildbook\/|^app\/account\/api\/guildbook\//.test(rel(f))) continue;
       expect(code(f), rel(f)).not.toMatch(/\/account\/guildbook|Open Guildbook|BookIcon/);
     }
-    expect(code(join(SRC, "app/account/installations/page.tsx"))).not.toMatch(/guild/i);
     expect(code(join(SRC, "app/account/_components/HeaderAccountMenu.tsx"))).not.toMatch(/guildbook/i);
-    expect(code(join(SRC, "app/account/_components/LinkForm.tsx"))).not.toMatch(/guildbook/i);
     expect(code(join(SRC, "app/account/page.tsx"))).not.toMatch(/guildbook/i);
-    // the installation list API and page expose no Guildbook figure (the database still returns a legacy `guild_count`; it is not forwarded)
-    expect(code(join(SRC, "app/account/api/installations/route.ts"))).not.toMatch(/guild/i);
+    expect(code(join(SRC, "app/account/_ui/AccountDashboard.tsx"))).not.toMatch(/installations|claim|transfer/i);
   });
 
   it("robots and the sitemap do not advertise account routes", () => {

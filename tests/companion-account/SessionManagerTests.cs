@@ -6,6 +6,33 @@ namespace ForeverDB.Companion.Account.Tests;
 
 public class SessionManagerTests
 {
+    [Fact]
+    public async Task Technical_identity_is_created_automatically_without_human_sign_in()
+    {
+        using var rig = new Rig();
+        await rig.Sessions.InitializeAsync();
+
+        Assert.Equal(TechnicalIdentityOutcome.Created, await rig.Sessions.EnsureAnonymousUploadIdentityAsync());
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+        Assert.Equal(1, rig.Server.SignupCount);
+    }
+
+    [Fact]
+    public async Task Registered_account_keeps_its_primary_session_and_receives_a_separate_technical_identity()
+    {
+        using var rig = new Rig();
+        var (account, _) = rig.SeedRegistered();
+        await rig.Sessions.InitializeAsync();
+        Assert.True((await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Ok);
+
+        Assert.Equal(TechnicalIdentityOutcome.Created, await rig.Sessions.EnsureAnonymousUploadIdentityAsync());
+        Assert.Equal(SessionKind.Registered, (await rig.Sessions.GetAccessTokenAsync(SlotRole.Primary)).Kind);
+        var anonymous = await rig.Sessions.GetAccessTokenAsync(SlotRole.LegacyOwner);
+        Assert.True(anonymous.Ok);
+        Assert.Equal(SessionKind.Anonymous, anonymous.Kind);
+        Assert.NotEqual(account.Id, anonymous.UserId);
+    }
+
     // ---------------------------------------------------------------- upgrade from 0.8.x ----
 
     [Fact]

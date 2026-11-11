@@ -38,7 +38,7 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:BuildCommit=${{ env.COMPANION_BUILD_COMMIT }}
-          -o artifacts/ForeverDB-Companion-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64
+          -o artifacts/ForeverDB-Companion-0.9.12-alpha-${{ env.COMPANION_BUILD_COMMIT }}-win-x64
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -52,5 +52,5 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: ForeverDB-Companion-Setup-0.9.11-alpha-${{ env.COMPANION_BUILD_COMMIT }}
+          name: ForeverDB-Companion-Setup-0.9.12-alpha-${{ env.COMPANION_BUILD_COMMIT }}
           path: artifacts/installer/*.exe

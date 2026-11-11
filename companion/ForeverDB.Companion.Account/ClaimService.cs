@@ -278,16 +278,24 @@ public sealed class ClaimService
             !string.Equals(installationId, _scopedInstallationId, StringComparison.Ordinal))
             return LinkCheckOutcome.Unavailable;
         var hadOffer = OfferFor(installationId) is not null;
-        var route = await _router.ResolveAsync(installationId, forceRefresh: true, ct).ConfigureAwait(false);
+        // Legacy recovery only. The public sync route never consults human ownership or this compatibility RPC.
+        var status = _manager.Status;
+        var role = status.State is SessionState.Anonymous or SessionState.AnonymousClaiming
+            ? SlotRole.Primary
+            : status.HasLegacyOwner ? SlotRole.LegacyOwner : SlotRole.Primary;
+        var token = await _manager.GetAccessTokenAsync(role, ct).ConfigureAwait(false);
+        if (!token.Ok) return LinkCheckOutcome.Unavailable;
+        var link = await _rpc.LinkStatusAsync(token.AccessToken, installationId, ct).ConfigureAwait(false);
+        if (!link.Ok) return LinkCheckOutcome.Unavailable;
 
-        switch (route.Ownership)
+        switch (link.Value)
         {
-            case InstallationOwnership.OwnedByAnonymousIdentity:
-                _coordinator.Update(installationId, r => r with { Ownership = route.Ownership, OwnerRole = route.Role, LastBlock = BlockReason.None });
+            case LinkState.Owned when token.Kind == SessionKind.Anonymous:
+                _coordinator.Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = BlockReason.None });
                 return LinkCheckOutcome.StillOwnedByAnonymousIdentity;
 
-            case InstallationOwnership.OwnedByRegisteredAccount:
-                _coordinator.Update(installationId, r => r with { Ownership = route.Ownership, OwnerRole = route.Role, LastBlock = BlockReason.None });
+            case LinkState.Owned when token.Kind == SessionKind.Registered:
+                _coordinator.Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = BlockReason.None });
                 if (hadOffer)
                 {
                     Dismiss(installationId);
@@ -296,20 +304,14 @@ public sealed class ClaimService
 
                 return LinkCheckOutcome.OwnedByRegisteredAccount;
 
-            case InstallationOwnership.TransferredSignInRequired:
-                _coordinator.Update(installationId, r => r with { Ownership = route.Ownership, OwnerRole = null, LastBlock = route.Block });
-                if (hadOffer)
-                {
-                    Dismiss(installationId);
-                }
+            case LinkState.Transferred:
+                _coordinator.Update(installationId, r => r with { Ownership = InstallationOwnership.Unchecked, OwnerRole = null, LastBlock = BlockReason.None });
+                if (hadOffer) Dismiss(installationId);
+                return hadOffer && status.State == SessionState.Registered
+                    ? LinkCheckOutcome.TransferConfirmed
+                    : LinkCheckOutcome.TransferredSignInRequired;
 
-                return LinkCheckOutcome.TransferredSignInRequired;
-
-            case InstallationOwnership.OwnedByDifferentAccount:
-                _coordinator.Update(installationId, r => r with { Ownership = route.Ownership, OwnerRole = null, LastBlock = route.Block });
-                return LinkCheckOutcome.OwnedByDifferentAccount;
-
-            case InstallationOwnership.OwnerSelectionRequired:
+            case LinkState.Unknown:
                 return LinkCheckOutcome.Unknown;
 
             default:

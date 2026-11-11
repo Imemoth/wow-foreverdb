@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { companionWithInstallation, link, startClaim, webUser } from "./world";
+import { companionWithInstallation, startClaim, webUser } from "./world";
 import { JWT_SECRET, REST_OVERRIDE, STACK_DIR, admin, anonymous, auth, claimsOf, logoutLocal, registeredSession, resetBudgets, restGet, rpc, uniq } from "./stack";
 import type pg from "pg";
 
@@ -10,6 +10,7 @@ import type pg from "pg";
  * semantics, error-code propagation, the effect of `Prefer: tx=rollback` and of `db-tx-end`, schema-cache reload, and the proof
  * that no client-controlled header defeats abuse accounting or reaches private data.
  */
+const companionOwner = (comp: Awaited<ReturnType<typeof companionWithInstallation>>) => comp.id.uid;
 let db: pg.Client;
 test.beforeAll(async () => { db = await admin(); });
 test.afterAll(async () => { await db.end(); });
@@ -176,11 +177,8 @@ test("27. budgets: business failures COMMIT (counters persist), exhaustion is HT
   const refused = await wrong();
   expect([refused.status, refused.body.code]).toEqual([429, "PT429"]);
   expect(await calls()).toBe(10);
-  // the website maps it to 429 for the user (no "invalid code" disguise), with the account's own web session
-  const viaSite = await link(w.c, "FEEDFACEFEEDFACEFEEDFACEFEEDFACE", w.password);
-  expect(viaSite.status()).toBe(429);
-  expect(await viaSite.json()).toEqual({ ok: false, error: "rate_limited" });
-  expect(viaSite.headers()["retry-after"]).toBeTruthy();
+  // The legacy claim API remains a direct compatibility surface, not a website RPC or route.
+  expect([403, 404]).toContain((await w.c.post("/account/api/link", { data: {} })).status());
   // the wrong-code transactions also left audit rows (committed)
   expect((await db.query("select count(*)::int n from private.account_audit where account_uid = $1 and event = 'redeem_rejected'", [w.uid])).rows[0].n).toBeGreaterThanOrEqual(10);
   await resetBudgets(db);
@@ -209,13 +207,12 @@ test("unknown codes never touch a REAL pending claim, and the real code still re
 test("30. private data is unreachable through PostgREST for anon and for every registered account; no schema or profile header opens it", async ({ playwright }) => {
   const a = await webUser(playwright, "tbl");
   const comp = await companionWithInstallation();
-  expect((await link(a.c, await startClaim(comp), a.password)).status()).toBe(200);
   const aTok = (await registeredSession(a.email, a.password)).token;
   const bUser = await webUser(playwright, "tblB");
   const bTok = (await registeredSession(bUser.email, bUser.password)).token;
   const anon = await anonymous();
   const publicPrivateTables = ["installations", "installation_guilds", "installation_guild_members", "installation_guild_professions", "installation_item_stats", "installation_source_stats", "installation_location_stats"];
-  for (const [who, tok] of [["anon key", null], ["anonymous user", anon.token], ["registered A (the OWNER)", aTok], ["registered B", bTok]] as const) {
+  for (const [who, tok] of [["anon key", null], ["anonymous user", anon.token], ["registered A", aTok], ["registered B", bTok]] as const) {
     for (const t of publicPrivateTables) {
       const r = await restGet(tok, `${t}?select=*&limit=1`);
       expect([401, 403, 404], `${who} ${t}`).toContain(r.status);
@@ -238,7 +235,7 @@ test("30. private data is unreachable through PostgREST for anon and for every r
     const r = await fetch(`${process.env.ACCOUNT_STACK_URL}/rest/v1/installations?id=eq.${comp.installationId}`, { method: m, headers: { apikey: process.env.ACCOUNT_STACK_ANON_KEY!, authorization: `Bearer ${aTok}`, "content-type": "application/json" }, body: m === "DELETE" ? undefined : JSON.stringify({ owner_user_id: a.uid }) });
     expect([401, 403, 404, 405]).toContain(r.status);
   }
-  expect((await db.query("select owner_user_id from public.installations where id = $1", [comp.installationId])).rows[0].owner_user_id).toBe(a.uid);
+  expect((await db.query("select owner_user_id from public.installations where id = $1", [comp.installationId])).rows[0].owner_user_id).toBe(companionOwner(comp));
   // the OpenAPI root does not describe the private tables
   const root = await restGet(aTok, "");
   const paths = Object.keys((root.body as { paths?: Record<string, unknown> }).paths ?? {});
@@ -250,8 +247,9 @@ test("30. private data is unreachable through PostgREST for anon and for every r
 test("response format and error assumptions of the website's client hold against the real PostgREST (shapes, content types, error bodies)", async ({ playwright }) => {
   const w = await webUser(playwright, "fmt");
   const comp = await companionWithInstallation({ guilds: 1, members: 2 });
-  expect((await link(w.c, await startClaim(comp), w.password)).status()).toBe(200);
+  const code = await startClaim(comp);
   const s = await registeredSession(w.email, w.password);
+  expect((await rpc(s.token, "fdb_account_claim_redeem", { p_code: code })).body).toMatchObject({ ok: true, installation_id: comp.installationId });
   const list = await rpc(s.token, "fdb_account_installations");
   expect(list.headers["content-type"]).toMatch(/^application\/json/);
   expect(Array.isArray(list.body)).toBe(true); // RETURNS TABLE -> array

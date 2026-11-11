@@ -122,7 +122,9 @@ public sealed class PublicPayloadBoundaryTests
         var result = await service.SyncFileAsync(WriteExport(rig.Directory), force: true, trigger: SyncTrigger.Manual);
 
         Assert.Equal(SyncOutcome.Synced, result!.Outcome);
-        var body = Assert.Single(rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth")).Body;
+        var ingestionRequests = rig.Server.RequestsTo("/rest/v1/rpc/ingest_foreverdb_snapshot_auth").ToArray();
+        Assert.True(ingestionRequests.Length == 1, $"Unexpected public upload requests: {string.Join(", ", rig.Server.Requests.Select(r => r.Path))}");
+        var body = ingestionRequests[0].Body;
         foreach (var canary in Canaries) Assert.DoesNotContain(canary, body, StringComparison.OrdinalIgnoreCase);
         Assert.True(PublicSnapshotGuard.CheckBody(Node(body)).IsPublic);
         Assert.Contains("Wolf", body);                                                // regular observations still upload
