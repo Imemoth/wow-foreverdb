@@ -230,8 +230,9 @@ insert into admin_private.role_permissions (version_id, role_name, permission_ke
 insert into admin_private.active_policy (singleton, version_id, epoch)
 values (true, 0, 0);
 
--- Immutable catalog/version rows cannot be edited in place. New reviewed policy
--- versions must be appended; an active mapping cannot be extended.
+-- Immutable catalog/version rows cannot be edited in place. The active policy
+-- is also frozen at deny-all in this inert slice; a later, reviewed activation
+-- migration must replace this guard. An active mapping cannot be extended.
 create function admin_private.reject_immutable_change()
 returns trigger language plpgsql set search_path = ''
 as $fn$
@@ -262,7 +263,7 @@ create trigger policy_versions_immutable before update or delete
     on admin_private.policy_versions for each row execute function admin_private.reject_immutable_change();
 create trigger role_permissions_immutable before update or delete
     on admin_private.role_permissions for each row execute function admin_private.reject_immutable_change();
-create trigger active_policy_no_delete before delete
+create trigger active_policy_immutable before update or delete
     on admin_private.active_policy for each row execute function admin_private.reject_immutable_change();
 create trigger role_permissions_no_active_insert before insert
     on admin_private.role_permissions for each row execute function admin_private.reject_active_mapping_insert();

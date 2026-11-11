@@ -27,11 +27,13 @@ begin
         ) then
             raise exception 'RLS and FORCE missing on %', v_table;
         end if;
-        if has_table_privilege('anon', format('admin_private.%I', v_table), 'SELECT')
-           or has_table_privilege('authenticated', format('admin_private.%I', v_table), 'SELECT')
-           or has_table_privilege('service_role', format('admin_private.%I', v_table), 'SELECT')
-           or has_table_privilege('authenticator', format('admin_private.%I', v_table), 'SELECT') then
-            raise exception 'direct API SELECT grant on %', v_table;
+        if exists (
+            select 1
+            from unnest(array['anon','authenticated','service_role','authenticator']) as api(role_name)
+            cross join unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) as priv(name)
+            where has_table_privilege(api.role_name, format('admin_private.%I', v_table), priv.name)
+        ) then
+            raise exception 'direct API table grant on %', v_table;
         end if;
         if not has_table_privilege('admin_executor', format('admin_private.%I', v_table), 'SELECT')
            or has_table_privilege('admin_executor', format('admin_private.%I', v_table), 'INSERT')
@@ -61,8 +63,15 @@ begin
        or has_table_privilege('admin_executor', 'private.guildbook_sentinel', 'SELECT') then
         raise exception 'executor crossed managed Auth/Account/Guildbook boundary';
     end if;
-    if has_function_privilege('authenticated', 'admin_private.reject_immutable_change()', 'EXECUTE')
-       or has_function_privilege('anon', 'admin_private.reject_active_mapping_insert()', 'EXECUTE') then
+    if exists (
+        select 1
+        from unnest(array['anon','authenticated','service_role','authenticator']) as api(role_name)
+        cross join unnest(array[
+            'admin_private.reject_immutable_change()',
+            'admin_private.reject_active_mapping_insert()'
+        ]) as helper(signature)
+        where has_function_privilege(api.role_name, helper.signature, 'EXECUTE')
+    ) then
         raise exception 'Admin trigger function broadly executable';
     end if;
     if exists (
@@ -173,6 +182,11 @@ begin
     begin
         update admin_private.policy_versions set label = 'edited' where version_id = 1;
         raise exception 'policy version was mutable';
+    exception when insufficient_privilege then null;
+    end;
+    begin
+        update admin_private.active_policy set version_id = 1 where singleton;
+        raise exception 'proposed policy could be activated';
     exception when insufficient_privilege then null;
     end;
     begin
