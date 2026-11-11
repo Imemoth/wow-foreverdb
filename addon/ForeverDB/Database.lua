@@ -48,9 +48,15 @@ local function newDatabase()
         installationId = createInstallationId(),
         createdAt = now(),
         updatedAt = now(),
+        snapshotRevision = 1,
         sources = {},
         maps = {},
         guilds = {},
+        geographicStats = {
+            unknown = { sources = {} },
+            interactionZone = { zones = {} },
+            correlatedInteractionZone = { zones = {} },
+        },
         diagnostics = {
             unresolvedLootWindows = 0,
         },
@@ -94,6 +100,15 @@ function FDB:EnsureInstallationId()
     if not self.DB then return nil end
 
     if type(self.DB.installationId) ~= "string" or self.DB.installationId == "" then
+        local hasHistoricalRows = next(self.DB.sources or {}) ~= nil
+            or next(self.DB.guilds or {}) ~= nil
+            or next((self.DB.geographicStats and self.DB.geographicStats.unknown
+                and self.DB.geographicStats.unknown.sources) or {}) ~= nil
+            or type(self.DB.guildbookCapture) == "table"
+        if hasHistoricalRows then
+            self.DB.installationRecoveryRequired = true
+            return nil
+        end
         self.DB.installationId = createInstallationId()
     end
 
@@ -263,12 +278,32 @@ function FDB:InitializeDatabase()
     db.schemaVersion = FDB.SCHEMA_VERSION
     db.addonVersion = FDB.VERSION
     db.createdAt = db.createdAt or now()
-    db.updatedAt = now()
+    db.updatedAt = db.updatedAt or now()
     db.sources = db.sources or {}
     db.maps = db.maps or {}
     db.guilds = db.guilds or {}
     db.diagnostics = db.diagnostics or {}
     db.diagnostics.unresolvedLootWindows = db.diagnostics.unresolvedLootWindows or 0
+    db.snapshotRevision = math.max(1, math.floor(tonumber(db.snapshotRevision) or 1))
+    if type(db.geographicStats) ~= "table" then db.geographicStats = {} end
+    if type(db.geographicStats.unknown) ~= "table" then
+        db.geographicStats.unknown = {}
+    end
+    if type(db.geographicStats.unknown.sources) ~= "table" then
+        db.geographicStats.unknown.sources = {}
+    end
+    if type(db.geographicStats.interactionZone) ~= "table" then
+        db.geographicStats.interactionZone = {}
+    end
+    if type(db.geographicStats.interactionZone.zones) ~= "table" then
+        db.geographicStats.interactionZone.zones = {}
+    end
+    if type(db.geographicStats.correlatedInteractionZone) ~= "table" then
+        db.geographicStats.correlatedInteractionZone = {}
+    end
+    if type(db.geographicStats.correlatedInteractionZone.zones) ~= "table" then
+        db.geographicStats.correlatedInteractionZone.zones = {}
+    end
 
     self.DB = db
     self:EnsureInstallationId()
@@ -276,11 +311,174 @@ end
 
 function FDB:PrepareForSave()
     if not self.DB then return end
-    self.DB.updatedAt = now()
+    self:TouchSnapshot()
     self.DB.addonVersion = self.VERSION
     self.DB.schemaVersion = self.SCHEMA_VERSION
     self:EnsureInstallationId()
     self:BuildExportSnapshot()
+end
+
+-- A revision distinguishes snapshots whose second-resolution timestamps match.
+-- It changes only when the exported snapshot changes; building/exporting is pure.
+function FDB:TouchSnapshot()
+    if not self.DB then return end
+    self.DB.snapshotRevision = math.max(1, math.floor(tonumber(self.DB.snapshotRevision) or 1)) + 1
+    self.DB.updatedAt = now()
+    self.DB.addonVersion = self.VERSION
+    self.DB.schemaVersion = self.SCHEMA_VERSION
+    self:EnsureInstallationId()
+    if self.BuildExportSnapshot then self:BuildExportSnapshot() end
+end
+
+local function ensureGeoBucket(db, source, kind)
+    if type(db.geographicStats) ~= "table" then db.geographicStats = {} end
+    if type(db.geographicStats.unknown) ~= "table" then
+        db.geographicStats.unknown = {}
+    end
+    if type(db.geographicStats.unknown.sources) ~= "table" then
+        db.geographicStats.unknown.sources = {}
+    end
+    local unknownSources = db.geographicStats.unknown.sources
+    local sourceKey = FDB:SourceKey(source.sourceType, source.sourceId, source.sourceLevel)
+    local geoSource = unknownSources[sourceKey]
+    if type(geoSource) ~= "table" then
+        geoSource = {
+            sourceType = source.sourceType,
+            sourceId = source.sourceId,
+            sourceLevel = source.sourceLevel or 0,
+            name = source.name,
+            attribution = "source_map_unverified",
+            buckets = {},
+        }
+        unknownSources[sourceKey] = geoSource
+    end
+    if type(geoSource.buckets) ~= "table" then geoSource.buckets = {} end
+    local bucket = geoSource.buckets[kind]
+    if type(bucket) ~= "table" then
+        bucket = { observations = 0, items = {} }
+        geoSource.buckets[kind] = bucket
+    end
+    bucket.observations = tonumber(bucket.observations) or 0
+    if type(bucket.items) ~= "table" then bucket.items = {} end
+    return geoSource, bucket
+end
+
+local function incrementGeographicItems(bucket, observedItems)
+    for itemId, observed in pairs(observedItems or {}) do
+        local key = tostring(itemId)
+        local item = bucket.items[key]
+        if type(item) ~= "table" then
+            item = { itemId = tonumber(itemId), drops = 0, quantity = 0, questDrops = 0, questIds = {} }
+            bucket.items[key] = item
+        end
+        item.itemId = item.itemId or tonumber(itemId)
+        item.drops = tonumber(item.drops) or 0
+        item.quantity = tonumber(item.quantity) or 0
+        item.questDrops = tonumber(item.questDrops) or 0
+        if type(item.questIds) ~= "table" then item.questIds = {} end
+        if observed.name and observed.name ~= "" then item.name = observed.name end
+        item.drops = item.drops + 1
+        item.quantity = item.quantity + (tonumber(observed.quantity) or 1)
+        if observed.isQuestItem then
+            item.questDrops = item.questDrops + 1
+            if observed.questId and observed.questId > 0 then
+                item.questIds[tostring(observed.questId)] = true
+            end
+        end
+    end
+end
+
+local function addUnknownObservation(db, source, kind, observedItems)
+    local geoSource, bucket = ensureGeoBucket(db, source, kind)
+    bucket.observations = bucket.observations + 1
+    incrementGeographicItems(bucket, observedItems)
+end
+
+local function addInteractionZoneObservation(db, source, kind, observedItems, attribution)
+    if type(attribution) ~= "table" then
+        return false
+    end
+    local class = attribution.class
+    local evidence = attribution.evidence
+    local destination
+    if class == "verified_interaction_zone" and evidence == "loot_event" then
+        destination = "interactionZone"
+    elseif class == "correlated_interaction_zone"
+        and evidence == "cast_loot_correlation" then
+        destination = "correlatedInteractionZone"
+    else
+        return false
+    end
+    local mapId = tonumber(attribution and attribution.mapId)
+    local zoneName = attribution and attribution.zoneName
+    if not mapId or mapId <= 0 or type(zoneName) ~= "string" or zoneName == "" then
+        return false
+    end
+
+    if type(db.geographicStats) ~= "table" then db.geographicStats = {} end
+    local interactionZone = db.geographicStats[destination]
+    if type(interactionZone) ~= "table" then
+        interactionZone = { zones = {} }
+        db.geographicStats[destination] = interactionZone
+    end
+    if type(interactionZone.zones) ~= "table" then
+        interactionZone.zones = {}
+    end
+    local zoneKey = tostring(mapId) .. "|" .. zoneName
+    local zone = interactionZone.zones[zoneKey]
+    if type(zone) ~= "table" then
+        zone = {
+            mapId = mapId,
+            zoneName = zoneName,
+            evidence = class,
+            sources = {},
+        }
+        interactionZone.zones[zoneKey] = zone
+    end
+
+    local sourceKey = FDB:SourceKey(source.sourceType, source.sourceId, source.sourceLevel)
+    if type(zone.sources) ~= "table" then zone.sources = {} end
+    local geoSource = zone.sources[sourceKey]
+    if type(geoSource) ~= "table" then
+        geoSource = {
+            sourceType = source.sourceType,
+            sourceId = source.sourceId,
+            sourceLevel = source.sourceLevel or 0,
+            name = source.name,
+            attribution = class,
+            buckets = {},
+        }
+        zone.sources[sourceKey] = geoSource
+    end
+
+    if type(geoSource.buckets) ~= "table" then geoSource.buckets = {} end
+    local bucket = geoSource.buckets[kind]
+    if type(bucket) ~= "table" then
+        bucket = { observations = 0, items = {} }
+        geoSource.buckets[kind] = bucket
+    end
+    bucket.observations = tonumber(bucket.observations) or 0
+    if type(bucket.items) ~= "table" then bucket.items = {} end
+    bucket.observations = bucket.observations + 1
+    incrementGeographicItems(bucket, observedItems)
+    return true
+end
+
+function FDB:ForkInstallation()
+    if not self.DB then return false end
+    local old = self.DB
+    local oldId = self:EnsureInstallationId()
+        or ("missing-install-" .. createInstallationId())
+    ForeverDB_ForkArchive = ForeverDB_ForkArchive or {}
+    if ForeverDB_ForkArchive[oldId] then return false, "installation already archived" end
+    ForeverDB_ForkArchive[oldId] = { archivedAt = now(), snapshot = old }
+    local fresh = newDatabase()
+    fresh.maps = old.maps or {}
+    fresh.diagnostics = old.diagnostics or { unresolvedLootWindows = 0 }
+    self.DB = fresh
+    ForeverDB_Saved = fresh
+    self:BuildExportSnapshot()
+    return true, fresh.installationId
 end
 
 function FDB:GetOrCreateSource(sourceType, sourceId, sourceLevel, name)
@@ -315,7 +513,7 @@ function FDB:GetOrCreateSource(sourceType, sourceId, sourceLevel, name)
     return source
 end
 
-function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel, location)
+function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedItems, observedLevel, location, attribution)
     local source = self:GetOrCreateSource(
         sourceType,
         sourceId,
@@ -409,7 +607,9 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
     end
 
     local timestamp = now()
-    self.DB.updatedAt = timestamp
+    if not addInteractionZoneObservation(self.DB, source, kind, observedItems, attribution) then
+        addUnknownObservation(self.DB, source, kind, observedItems)
+    end
     self.DB.lastObservation = {
         timestamp = timestamp,
         kind = kind,
@@ -427,9 +627,7 @@ function FDB:RecordObservation(kind, sourceType, sourceId, sourceName, observedI
         self:InvalidateItemSourceIndex()
     end
 
-    if self.BuildExportSnapshot then
-        self:BuildExportSnapshot()
-    end
+    self:TouchSnapshot()
 
     return true
 end

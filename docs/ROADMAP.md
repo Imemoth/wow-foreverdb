@@ -14,6 +14,15 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Geographic collection — Geo A Draft PR #189 (2026-11-10)
+
+- [x] Complete static collector/API evidence review and local Lua 5.1/5.4 fixtures; source-map runtime behavior remains unverified on `wowf 1.60.1.70862`.
+- [x] Add Unknown-only scoped counters, persistent snapshot revisions, and explicit empty-counter installation fork recovery while preserving global counters and Companion export schema 9.
+- [ ] Owner-run source-map evidence checks for creature loot, skinning, herbalism, mining, and fishing; retain Unknown for every ambiguous event.
+- [ ] Review Geo A Draft PR #189 and its CI results before approving the next implementation gate. Geo B–E remain unstarted.
+
+Evidence matrix: [Geo A Phase 0 findings](geo-a-phase-0-findings.md).
+
 ## Ownerless public ingestion — Draft implementation (2026-11-09)
 
 - [x] Remove installation ownership UI and website claim/list routes.

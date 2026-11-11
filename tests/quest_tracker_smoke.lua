@@ -86,7 +86,7 @@ local function setup(opts)
     end
     local FDB = {
         DB = { sources = {}, guilds = {}, schemaVersion = 9, updatedAt=1 },
-        VERSION = "0.7.1-alpha", SCHEMA_VERSION = 9,
+        VERSION = "0.7.3-alpha", SCHEMA_VERSION = 11, EXPORT_SCHEMA_VERSION = 9,
         Debug = function() end,
     }
     function FDB:GetCurrentLocation()
@@ -480,7 +480,7 @@ test("source index, mob and item tooltips retain verified quest associations", f
     contains(table.concat(lines,"\n"),"367")
 end)
 
-test("real database, loot windows and exporter preserve schema 9 without journal privacy leaks", function()
+test("real database, loot windows and exporter preserve the Companion schema without journal privacy leaks", function()
     local FDB, s = setup()
     strsplit=function(separator,value) return value:match("^(%w+)%-([^%-]*)%-([^%-]*)%-([^%-]*)%-([^%-]*)%-([^%-]*)") end
     ForeverDB_Saved = {schemaVersion=9,installationId="existing-installation",sources={},maps={},guilds={}}
@@ -519,11 +519,11 @@ test("real database, loot windows and exporter preserve schema 9 without journal
     s:emit("LOOT_CLOSED"); s:emit("LOOT_READY"); equal(b.observations,2)
     FDB:PrepareForSave()
     local export=ForeverDB_Export
-    contains(export,"H|9|0.7.1-alpha|existing-installation|")
+    contains(export,"H|9|0.7.3-alpha|existing-installation|")
     contains(export,"I|creature|7000|7|mob|201|Explicit quest link|2|4|2|404")
     falsy(export:find("questJournal",1,true)); falsy(export:find("Player-",1,true))
     falsy(export:find("The plague is spreading",1,true))
-    falsy(export:match("\nQ|")); falsy(export:match("\nR|"))
+    truthy(export:match("\nQ|1|")); falsy(export:match("\nR|"))
     FDB:InitializeDatabase()
     equal(FDB.DB.installationId,"existing-installation"); equal(FDB.DB.questJournal,journal)
     equal(FDB.DB.sources["creature:7000:7"].buckets.mob.items["201"].questDrops,2)

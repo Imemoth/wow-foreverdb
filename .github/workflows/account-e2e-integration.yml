@@ -35,7 +35,10 @@ env:
 jobs:
   account-e2e:
     name: Account end-to-end (GoTrue + PostgREST)
-    runs-on: ubuntu-latest
+    # Playwright's OS/browser dependencies are present on this stable runner image.
+    # Install only the lockfile-matched browser; --with-deps invokes apt and
+    # currently fails when Ubuntu mirrors have transient DNS outages.
+    runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
       PGHOST: 127.0.0.1
@@ -113,7 +116,7 @@ jobs:
           npm run build
           npm run check:bundle-secrets
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Integrated acceptance (redemption with fresh password, pre-hijack, two accounts + anonymous owner, private Guildbook, real PostgREST semantics, replay/concurrency/preservation, fault injection, CSRF/XSS/redirects, browser UI + accessibility)
         env:

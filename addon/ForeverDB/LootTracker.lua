@@ -2,8 +2,11 @@ local _, FDB = ...
 
 local lootFrame
 local lootWindowCaptured = false
+local lootWindowOpenedAt
 local recentGatheringSources = {}
 local GATHERING_INSTANCE_DEDUP_SECONDS = 600
+local CORRELATED_GATHERING_LOOT_WINDOW_SECONDS = 4
+local CORRELATED_FISHING_LOOT_WINDOW_SECONDS = 5
 
 local CHEST_WORDS = {
     "chest",
@@ -125,7 +128,10 @@ local function getFishingZoneSource()
 end
 
 local function getSourceGuidFromLoot()
-    if not GetLootSourceInfo then return nil end
+    if not GetLootSourceInfo then return nil, false, false end
+
+    local sources = {}
+    local hasUnrecognized = false
 
     for slot = 1, GetNumLootItems() do
         local sourceInfo = { GetLootSourceInfo(slot) }
@@ -135,12 +141,172 @@ local function getSourceGuidFromLoot()
             local sourceType, sourceId = FDB:ParseSourceGuid(guid)
 
             if sourceType and sourceId then
-                return guid
+                sources[guid] = true
+            elseif guid ~= nil then
+                hasUnrecognized = true
             end
         end
     end
 
-    return nil
+    local guid
+    local count = 0
+    for candidate in pairs(sources) do
+        guid = candidate
+        count = count + 1
+    end
+    return count == 1 and guid or nil, count > 1 or hasUnrecognized, count == 1 and not hasUnrecognized
+end
+
+local function safeCall(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
+    return ok and value or nil
+end
+
+local function getLootInteractionZone()
+    if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetMapInfo
+        and C_Map.GetPlayerMapPosition) then
+        return nil
+    end
+
+    local mapId = safeCall(C_Map.GetBestMapForUnit, "player")
+    if type(mapId) ~= "number" or mapId <= 0 then return nil end
+
+    local mapInfo = safeCall(C_Map.GetMapInfo, mapId)
+    if type(mapInfo) ~= "table"
+        or tonumber(mapInfo.mapID) ~= mapId
+        or type(mapInfo.name) ~= "string"
+        or mapInfo.name == ""
+        or type(mapInfo.mapType) ~= "number"
+        or type(mapInfo.parentMapID) ~= "number"
+        or mapInfo.parentMapID <= 0 then
+        return nil
+    end
+
+    local zoneMapType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+    if mapInfo.mapType ~= zoneMapType then return nil end
+    local parentInfo = safeCall(C_Map.GetMapInfo, mapInfo.parentMapID)
+    if type(parentInfo) ~= "table"
+        or tonumber(parentInfo.mapID) ~= mapInfo.parentMapID
+        or type(parentInfo.name) ~= "string"
+        or parentInfo.name == "" then
+        return nil
+    end
+
+    local zoneName = safeCall(GetZoneText)
+    if type(zoneName) ~= "string" or zoneName == "" or zoneName ~= mapInfo.name then
+        return nil
+    end
+
+    -- Confirm this is a usable coordinate map without retaining the player's
+    -- point as a source location.
+    local position = safeCall(C_Map.GetPlayerMapPosition, mapId, "player")
+    if position == nil then return nil end
+    local x, y
+    local ok, getter = pcall(function() return position.GetXY end)
+    if ok and type(getter) == "function" then
+        ok, x, y = pcall(getter, position)
+    else
+        ok, x, y = pcall(function() return position.x, position.y end)
+    end
+    if not ok or type(x) ~= "number" or type(y) ~= "number"
+        or x < 0 or x > 1 or y < 0 or y > 1 then
+        return nil
+    end
+
+    return { mapId = mapId, zoneName = zoneName }
+end
+
+local function sameInteractionZone(first, second)
+    return first ~= nil and second ~= nil
+        and first.mapId == second.mapId
+        and first.zoneName == second.zoneName
+end
+
+local function resolveFishingInteractionZone(directSource, ambiguousSource,
+    before, after, pending, captureStartedAt, openedAt)
+    local capturedAt = GetTime and GetTime() or captureStartedAt
+    if not directSource or ambiguousSource or not pending
+        or pending.state ~= "completed"
+        or not pending.zone
+        or not sameInteractionZone(before, after)
+        or not sameInteractionZone(pending.zone, before)
+        or not capturedAt or not openedAt
+        or openedAt < pending.stoppedAt
+        or capturedAt < openedAt
+        or capturedAt - pending.stoppedAt > CORRELATED_FISHING_LOOT_WINDOW_SECONDS
+        or openedAt - pending.stoppedAt > CORRELATED_FISHING_LOOT_WINDOW_SECONDS then
+        return nil
+    end
+
+    return {
+        class = "correlated_interaction_zone",
+        mapId = before.mapId,
+        zoneName = before.zoneName,
+        evidence = "cast_loot_correlation",
+    }
+end
+
+local function resolveLootInteractionZone(sourceGuid, directSource, ambiguousSource,
+    before, after, pending, captureStartedAt, stalePending, openedAt)
+    local capturedAt = GetTime and GetTime() or captureStartedAt
+    if not directSource or ambiguousSource or not sourceGuid
+        or stalePending
+        or not sameInteractionZone(before, after)
+        or not capturedAt or capturedAt < captureStartedAt then
+        return nil
+    end
+
+    if pending then
+        if pending.guid and pending.guid ~= sourceGuid then return nil end
+        local pendingLocation = pending.location
+        if not pendingLocation
+            or tonumber(pendingLocation.mapId) ~= before.mapId
+            or pendingLocation.zoneName ~= before.zoneName then
+            return nil
+        end
+
+        if pending.guid then
+            return {
+                class = "verified_interaction_zone",
+                mapId = before.mapId,
+                zoneName = before.zoneName,
+                evidence = "loot_event",
+            }
+        end
+
+        local sentLocation = pending.sentLocation
+        local succeededLocation = pending.succeededLocation
+        local succeededAt = tonumber(pending.succeededAt)
+        if not pending.correlated
+            or not sentLocation
+            or not succeededLocation
+            or not succeededAt
+            or capturedAt < succeededAt
+            or capturedAt - succeededAt > CORRELATED_GATHERING_LOOT_WINDOW_SECONDS
+            or (openedAt ~= nil and (openedAt < succeededAt
+                or openedAt - succeededAt > CORRELATED_GATHERING_LOOT_WINDOW_SECONDS))
+            or tonumber(sentLocation.mapId) ~= before.mapId
+            or sentLocation.zoneName ~= before.zoneName
+            or tonumber(succeededLocation.mapId) ~= before.mapId
+            or succeededLocation.zoneName ~= before.zoneName then
+            return nil
+        end
+
+        return {
+            class = "correlated_interaction_zone",
+            mapId = before.mapId,
+            zoneName = before.zoneName,
+            evidence = "cast_loot_correlation",
+        }
+    end
+
+    return {
+        class = "verified_interaction_zone",
+        mapId = before.mapId,
+        zoneName = before.zoneName,
+        evidence = "loot_event",
+    }
 end
 
 local function getFallbackGuid()
@@ -326,6 +492,19 @@ function FDB:CaptureLootWindow()
     local kind
     local location
     local observedLevel
+    local directSource = false
+    local ambiguousSource = false
+    local interactionZoneBefore
+    local pending
+    local originalSourceType
+    local originalSourceId
+    local fishingCorrelationCandidate = false
+    local pendingFishing = self.GetPendingFishingCorrelation
+        and self:GetPendingFishingCorrelation()
+    local captureStartedAt = GetTime and GetTime() or 0
+    local pendingBefore = self.PendingGathering
+    local stalePending = pendingBefore ~= nil
+        and captureStartedAt - (tonumber(pendingBefore.at) or captureStartedAt) > 12
 
     local disenchant =
         self.GetActiveDisenchant
@@ -339,14 +518,21 @@ function FDB:CaptureLootWindow()
             or ("Item " .. tostring(disenchant.itemId))
         kind = "disenchant"
     else
-        sourceGuid =
-            getSourceGuidFromLoot()
-            or getFallbackGuid()
+        interactionZoneBefore = getLootInteractionZone()
+        local lootSourceGuid
+        lootSourceGuid, ambiguousSource, directSource = getSourceGuidFromLoot()
+        sourceGuid = lootSourceGuid
+        if not sourceGuid and not ambiguousSource then
+            sourceGuid = getFallbackGuid()
+        end
 
         sourceType, sourceId =
             self:ParseSourceGuid(sourceGuid)
 
         if not sourceType or not sourceId then
+            if self.ConsumePendingFishingCorrelation then
+                self:ConsumePendingFishingCorrelation()
+            end
             self:RegisterUnresolvedLootWindow()
             self:Debug(
                 "loot unresolved; slots:",
@@ -354,6 +540,7 @@ function FDB:CaptureLootWindow()
             )
             return
         end
+        originalSourceType, originalSourceId = sourceType, sourceId
 
         sourceName =
             resolveSourceName(
@@ -382,11 +569,12 @@ function FDB:CaptureLootWindow()
                 pool.location
                 or self:GetProjectedInteractionLocation(15)
         elseif kind == "fishing" then
+            fishingCorrelationCandidate = sourceType == "gameobject"
             sourceType, sourceId, sourceName =
                 getFishingZoneSource()
         end
 
-        local pending =
+        pending =
             self.GetPendingGathering
             and self:GetPendingGathering()
 
@@ -424,6 +612,21 @@ function FDB:CaptureLootWindow()
     end
 
     local items = collectItems()
+    local interactionZoneAfter = getLootInteractionZone()
+    local interactionAttribution
+    if sourceType == originalSourceType and sourceId == originalSourceId then
+        interactionAttribution = resolveLootInteractionZone(
+            sourceGuid, directSource, ambiguousSource,
+            interactionZoneBefore, interactionZoneAfter,
+            pending, captureStartedAt, stalePending, lootWindowOpenedAt
+        )
+    elseif fishingCorrelationCandidate and kind == "fishing" then
+        interactionAttribution = resolveFishingInteractionZone(
+            directSource, ambiguousSource,
+            interactionZoneBefore, interactionZoneAfter,
+            pendingFishing, captureStartedAt, lootWindowOpenedAt
+        )
+    end
 
     self:RecordObservation(
         kind,
@@ -432,7 +635,8 @@ function FDB:CaptureLootWindow()
         sourceName,
         items,
         observedLevel,
-        location
+        location,
+        interactionAttribution
     )
 
     local itemKinds = 0
@@ -461,6 +665,11 @@ function FDB:CaptureLootWindow()
 
     markGatheringSourceCaptured(sourceGuid, kind)
     self:ConsumePendingGatheringKind(kind)
+    if self.ConsumePendingFishingCorrelation then
+        -- One completed cast can explain at most one loot window. Consume it
+        -- even when the window was unrelated or ambiguous.
+        self:ConsumePendingFishingCorrelation()
+    end
 
     if kind == "fishing_pool"
         and self.ConsumeActiveFishingPool then
@@ -476,13 +685,20 @@ function FDB:InitializeLootTracker()
 
     lootFrame = CreateFrame("Frame")
     lootFrame:RegisterEvent("LOOT_READY")
+    lootFrame:RegisterEvent("LOOT_OPENED")
     lootFrame:RegisterEvent("LOOT_CLOSED")
 
     lootFrame:SetScript("OnEvent", function(_, event)
-        if event == "LOOT_READY" then
+        if event == "LOOT_OPENED" then
+            -- LOOT_OPENED can precede populated source/slot data. Treat it as
+            -- the start of the same bounded interaction window and capture on
+            -- LOOT_READY, when loot-source APIs are available.
+            lootWindowOpenedAt = GetTime and GetTime() or 0
+        elseif event == "LOOT_READY" then
             FDB:CaptureLootWindow()
         elseif event == "LOOT_CLOSED" then
             lootWindowCaptured = false
+            lootWindowOpenedAt = nil
         end
     end)
 end
