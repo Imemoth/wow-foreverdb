@@ -10,13 +10,15 @@ export async function GET() {
   const databaseItems = await data().newsList({ category: null, query: "", page: 1, pageSize: 30 }).then((result) => result.rows).catch(() => []);
   const rssItems = [
     ...items.map((a) => ({ title: a.sample ? `[Sample] ${a.title}` : a.title, link: base + articlePath(a), date: a.publishedAt, description: a.description, categories: a.tags })),
-    // One item per region/topic, dated by the latest VERIFIED official activity (never ingestion time or ordinary replies).
-    // A new official post in an existing thread has a new permalink, so readers see it as a new item.
+    // One item per GLOBAL STORY (the same announcement in several regions is one item), dated by the latest VERIFIED official activity
+    // (never ingestion time or ordinary replies). The item's link/GUID is the permalink of the story's newest verified official post, so
+    // linking two existing threads reuses a GUID readers already have (no repeat notification), while a genuinely new official post
+    // (in any region) has a new permalink and appears as a new item.
     ...databaseItems.map((entry) => ({
       title: entry.entryKind === "official_update" || entry.entryKind === "staff_reply" ? `${entry.title} (Blizzard update)` : entry.title,
       link: `${base}/news/entry/${entry.slug}`,
       date: entry.officialUpdatedAt && entry.officialUpdatedAt > entry.publishedAt ? entry.officialUpdatedAt : entry.publishedAt,
-      description: entry.excerpt, categories: [entry.category, entry.region],
+      description: entry.excerpt, categories: [entry.category, ...new Set(entry.regions?.length ? entry.regions : [entry.region])],
     })),
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

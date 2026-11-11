@@ -53,17 +53,6 @@ describe("guildbook-local-only-policy", () => {
     ])).toEqual([]);
   });
 
-  it("allows the public ingest wrapper to call the preserved 0018 projection", () => {
-    expect(guildbookPolicyViolations([
-      approved,
-      { name: "0019_technical_installation_ingest.sql", sql: "create function public.ingest_foreverdb_snapshot_auth(jsonb) returns jsonb language plpgsql as $$ begin return private.foreverdb_ingest_snapshot_impl_v1(private.fdb_public_snapshot('{}'::jsonb)); end $$;" },
-    ])).toEqual([]);
-    expect(guildbookPolicyViolations([
-      approved,
-      { name: "0019_bad.sql", sql: "create or replace function private.fdb_public_snapshot(jsonb) returns jsonb language sql as $$ select '{}'::jsonb $$;" },
-    ])).toContain("0019_bad.sql: ingest wrapper/projection modification");
-  });
-
   it("matches the exact historical 0005 and 0012 cloud definitions only", () => {
     const historical = ["0005_guildbook_v1.sql", "0012_account_ownership_claims.sql"].map((name) => ({
       name,

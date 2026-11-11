@@ -55,6 +55,38 @@ export interface NewsEntry {
   threadOrigin?: NewsThreadOrigin | null;
   entryKind?: NewsEntryKind | null;
   updates?: NewsThreadUpdate[];
+  /** Global story grouping (migration 0013). Absent/null on an older database: the entry is its own single-region story. */
+  storyKey?: string | null;
+  /** Every region that has a verified source for this story (cards: all members; independent of the region filter). */
+  regions?: NewsRegion[];
+  memberCount?: number;
+  /** Slug of the story's canonical entry (cards): sitemap and canonical URL. Equals `slug` for unlinked entries. */
+  canonicalSlug?: string;
+  /** Detail page only: all regional sources of the story. */
+  story?: NewsStory | null;
+}
+
+/** One regional forum thread of a global story. Original identities (thread, topic, slugs) are preserved. */
+export interface NewsStoryMember {
+  region: NewsRegion;
+  threadKey: string;
+  topicId: string | null;
+  title: string;
+  sourceUrl: string;
+  openerSlug: string;
+  author: string | null;
+  firstPublishedAt: string;
+  lastOfficialAt: string;
+  updateCount: number;
+  updates: NewsThreadUpdate[];
+}
+
+export interface NewsStory {
+  storyKey: string;
+  /** Slug of the canonical thread's opener: the one URL search engines should index for the whole story. */
+  canonicalSlug: string;
+  regions: NewsRegion[];
+  members: NewsStoryMember[];
 }
 
 export type NewsThreadOrigin = "official" | "community";

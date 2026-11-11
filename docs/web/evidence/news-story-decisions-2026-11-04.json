@@ -1,0 +1,101 @@
+{
+  "reviewedAt": "2026-11-04",
+  "decidedBy": "owner (Imemoth)",
+  "rule": "exact_content_v1 + reviewed overrides (pub.news_story_overrides)",
+  "note": "Decisions only. No override row, story link or migration 0013 has been applied to production.",
+  "productionSnapshot": "read-only query of pub.news_entries (source_post_number = 1, published, not suppressed) on azerdex-public-read, 2026-11-04",
+  "decisions": [
+    {
+      "story": "WoW Forever Beta Development Notes",
+      "decision": "allow",
+      "threadA": "eu:topic:631316",
+      "threadB": "us:topic:2360696",
+      "us": {
+        "sourceTopicId": "topic:2360696",
+        "sourceEntryId": "post:30185131",
+        "publishedAt": "2026-09-24T22:23:24.849Z",
+        "title": "WoW Forever Beta Development Notes – Updated November 2",
+        "excerptLength": 420,
+        "excerptMd5Prefix": "55cb9d3852"
+      },
+      "eu": {
+        "sourceTopicId": "topic:631316",
+        "sourceEntryId": "post:6391795",
+        "publishedAt": "2026-09-24T22:37:36.828Z",
+        "title": "WoW Forever Beta Development Notes – Updated 3 November",
+        "excerptLength": 420,
+        "excerptMd5Prefix": "55cb9d3852"
+      },
+      "evidence": "Same author (Kaivax); excerpts byte-identical (equal md5, 420 chars); openers 14.2 minutes apart; titles differ only in the date wording. The US opener was ingested by the normal collector on 2026-11-04 19:40 UTC (before that the pair could not be evaluated)."
+    },
+    {
+      "story": "The WoW: Forever Podcast: Episode 5 - End of Beta Special",
+      "decision": "allow",
+      "threadA": "eu:topic:637043",
+      "threadB": "us:topic:2389565",
+      "us": {
+        "sourceTopicId": "topic:2389565",
+        "sourceEntryId": "post:30577452",
+        "publishedAt": "2026-10-22T16:21:16.245Z",
+        "title": "The WoW: Forever Podcast: Episode 5 - End of Beta Special",
+        "excerptLength": 0
+      },
+      "eu": {
+        "sourceTopicId": "topic:637043",
+        "sourceEntryId": "post:6446965",
+        "publishedAt": "2026-10-22T16:22:03.465Z",
+        "title": "The WoW: Forever Podcast: Episode 5 - End of Beta Special",
+        "excerptLength": 0
+      },
+      "evidence": "Identical title and author, 47 s apart; both openers have an empty excerpt (so no automatic content evidence); equivalence proven against the live US and EU forum posts."
+    },
+    {
+      "story": "The WoW: Forever Podcast: Episode 6 - All About Tech",
+      "decision": "allow",
+      "threadA": "eu:topic:638462",
+      "threadB": "us:topic:2395799",
+      "us": {
+        "sourceTopicId": "topic:2395799",
+        "sourceEntryId": "post:30671248",
+        "publishedAt": "2026-10-29T16:17:57.194Z",
+        "title": "The WoW: Forever Podcast: Episode 6 - All About Tech ft. @Shobek",
+        "excerptLength": 0
+      },
+      "eu": {
+        "sourceTopicId": "topic:638462",
+        "sourceEntryId": "post:6462927",
+        "publishedAt": "2026-10-29T16:18:25.305Z",
+        "title": "The WoW: Forever Podcast: Episode 6 - All About Tech ft. @Shobek",
+        "excerptLength": 0
+      },
+      "evidence": "Identical title and author, 28 s apart; both openers have an empty excerpt; equivalence proven against the live US and EU forum posts."
+    },
+    {
+      "story": "The WoW Forever Beta Celebration is Underway",
+      "decision": "deny",
+      "threadA": "eu:topic:637055",
+      "threadB": "us:topic:2389633",
+      "us": {
+        "sourceTopicId": "topic:2389633",
+        "sourceEntryId": "post:30578134",
+        "publishedAt": "2026-10-22T17:00:00Z",
+        "title": "The WoW Forever Beta Celebration is Underway",
+        "excerptLength": 420,
+        "excerptMd5Prefix": "888a10f6c8"
+      },
+      "eu": {
+        "sourceTopicId": "topic:637055",
+        "sourceEntryId": "post:6447060",
+        "publishedAt": "2026-10-22T17:00:00Z",
+        "title": "The WoW Forever Beta Celebration is Underway",
+        "excerptLength": 420,
+        "excerptMd5Prefix": "ff1d2e31e1"
+      },
+      "evidence": "Same title/author/time, but the excerpts differ (different md5, similarity 0.885): the announcement carries region-specific event times. Kept as two regional cards by owner decision."
+    }
+  ],
+  "expectedAfterDecisions": {
+    "note": "computed by the matcher test (news-stories.test.ts, production-shaped dataset)",
+    "stories": "see test"
+  }
+}
