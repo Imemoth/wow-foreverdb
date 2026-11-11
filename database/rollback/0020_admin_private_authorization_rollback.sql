@@ -11,6 +11,9 @@ begin
         raise exception '0020 rollback: schema or executor role missing';
     end if;
     if (select version_id from admin_private.active_policy where singleton) is distinct from 0
+       or (select epoch from admin_private.active_policy where singleton) is distinct from 0
+       or (select activated_at from admin_private.active_policy where singleton)
+          is distinct from (select created_at from admin_private.policy_versions where version_id = 0)
        or (select count(*) from admin_private.active_policy) <> 1
        or (select count(*) from admin_private.policy_versions) <> 2
        or (select count(*) from admin_private.permission_catalog) <> 22

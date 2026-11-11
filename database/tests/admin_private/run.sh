@@ -36,6 +36,32 @@ executor_count=$("${root[@]}" -At -c     "set role admin_executor; select count(
 [ "$executor_count" = 22 ] || { echo "executor RLS read failed" >&2; exit 1; }
 
 # A rollback must refuse to discard staff data.
+"${root[@]}" -c "update admin_private.active_policy set epoch = 1 where singleton"
+if "${migrator[@]}" -f database/rollback/0020_admin_private_authorization_rollback.sql > /tmp/admin_rollback_policy_refusal.log 2>&1; then
+    echo "FAIL: rollback accepted a changed active policy epoch" >&2
+    exit 1
+fi
+grep -q 'policy changed or staff data exists' /tmp/admin_rollback_policy_refusal.log || {
+    cat /tmp/admin_rollback_policy_refusal.log >&2
+    exit 1
+}
+"${root[@]}" -c "update admin_private.active_policy set epoch = 0 where singleton"
+
+"${root[@]}" -c "update admin_private.active_policy
+    set activated_at = clock_timestamp() + interval '1 second' where singleton"
+if "${migrator[@]}" -f database/rollback/0020_admin_private_authorization_rollback.sql > /tmp/admin_rollback_timestamp_refusal.log 2>&1; then
+    echo "FAIL: rollback accepted a changed active policy timestamp" >&2
+    exit 1
+fi
+grep -q 'policy changed or staff data exists' /tmp/admin_rollback_timestamp_refusal.log || {
+    cat /tmp/admin_rollback_timestamp_refusal.log >&2
+    exit 1
+}
+"${root[@]}" -c "update admin_private.active_policy
+    set activated_at = (select created_at from admin_private.policy_versions where version_id = 0)
+    where singleton"
+
+# A rollback must also refuse while staff data is present.
 "${root[@]}" -c     "insert into auth.users values ('00000000-0000-0000-0000-000000000002');
      insert into admin_private.staff_subjects (user_id,status)
      values ('00000000-0000-0000-0000-000000000002','active')"
