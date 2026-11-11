@@ -2,8 +2,10 @@ local _, FDB = ...
 
 local lootFrame
 local lootWindowCaptured = false
+local lootWindowOpenedAt
 local recentGatheringSources = {}
 local GATHERING_INSTANCE_DEDUP_SECONDS = 600
+local CORRELATED_GATHERING_LOOT_WINDOW_SECONDS = 4
 
 local CHEST_WORDS = {
     "chest",
@@ -221,7 +223,7 @@ local function sameInteractionZone(first, second)
 end
 
 local function resolveLootInteractionZone(sourceGuid, directSource, ambiguousSource,
-    before, after, pending, captureStartedAt, stalePending)
+    before, after, pending, captureStartedAt, stalePending, openedAt)
     local capturedAt = GetTime and GetTime() or captureStartedAt
     if not directSource or ambiguousSource or not sourceGuid
         or stalePending
@@ -231,13 +233,47 @@ local function resolveLootInteractionZone(sourceGuid, directSource, ambiguousSou
     end
 
     if pending then
-        if not pending.guid or pending.guid ~= sourceGuid then return nil end
+        if pending.guid and pending.guid ~= sourceGuid then return nil end
         local pendingLocation = pending.location
         if not pendingLocation
             or tonumber(pendingLocation.mapId) ~= before.mapId
             or pendingLocation.zoneName ~= before.zoneName then
             return nil
         end
+
+        if pending.guid then
+            return {
+                class = "verified_interaction_zone",
+                mapId = before.mapId,
+                zoneName = before.zoneName,
+                evidence = "loot_event",
+            }
+        end
+
+        local sentLocation = pending.sentLocation
+        local succeededLocation = pending.succeededLocation
+        local succeededAt = tonumber(pending.succeededAt)
+        if not pending.correlated
+            or not sentLocation
+            or not succeededLocation
+            or not succeededAt
+            or capturedAt < succeededAt
+            or capturedAt - succeededAt > CORRELATED_GATHERING_LOOT_WINDOW_SECONDS
+            or (openedAt ~= nil and (openedAt < succeededAt
+                or openedAt - succeededAt > CORRELATED_GATHERING_LOOT_WINDOW_SECONDS))
+            or tonumber(sentLocation.mapId) ~= before.mapId
+            or sentLocation.zoneName ~= before.zoneName
+            or tonumber(succeededLocation.mapId) ~= before.mapId
+            or succeededLocation.zoneName ~= before.zoneName then
+            return nil
+        end
+
+        return {
+            class = "correlated_interaction_zone",
+            mapId = before.mapId,
+            zoneName = before.zoneName,
+            evidence = "cast_loot_correlation",
+        }
     end
 
     return {
@@ -550,7 +586,7 @@ function FDB:CaptureLootWindow()
         interactionAttribution = resolveLootInteractionZone(
             sourceGuid, directSource, ambiguousSource,
             interactionZoneBefore, interactionZoneAfter,
-            pending, captureStartedAt, stalePending
+            pending, captureStartedAt, stalePending, lootWindowOpenedAt
         )
     end
 
@@ -606,13 +642,20 @@ function FDB:InitializeLootTracker()
 
     lootFrame = CreateFrame("Frame")
     lootFrame:RegisterEvent("LOOT_READY")
+    lootFrame:RegisterEvent("LOOT_OPENED")
     lootFrame:RegisterEvent("LOOT_CLOSED")
 
     lootFrame:SetScript("OnEvent", function(_, event)
-        if event == "LOOT_READY" then
+        if event == "LOOT_OPENED" then
+            -- LOOT_OPENED can precede populated source/slot data. Treat it as
+            -- the start of the same bounded interaction window and capture on
+            -- LOOT_READY, when loot-source APIs are available.
+            lootWindowOpenedAt = GetTime and GetTime() or 0
+        elseif event == "LOOT_READY" then
             FDB:CaptureLootWindow()
         elseif event == "LOOT_CLOSED" then
             lootWindowCaptured = false
+            lootWindowOpenedAt = nil
         end
     end)
 end

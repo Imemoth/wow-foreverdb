@@ -55,6 +55,7 @@ local function newDatabase()
         geographicStats = {
             unknown = { sources = {} },
             interactionZone = { zones = {} },
+            correlatedInteractionZone = { zones = {} },
         },
         diagnostics = {
             unresolvedLootWindows = 0,
@@ -297,6 +298,12 @@ function FDB:InitializeDatabase()
     if type(db.geographicStats.interactionZone.zones) ~= "table" then
         db.geographicStats.interactionZone.zones = {}
     end
+    if type(db.geographicStats.correlatedInteractionZone) ~= "table" then
+        db.geographicStats.correlatedInteractionZone = {}
+    end
+    if type(db.geographicStats.correlatedInteractionZone.zones) ~= "table" then
+        db.geographicStats.correlatedInteractionZone.zones = {}
+    end
 
     self.DB = db
     self:EnsureInstallationId()
@@ -388,9 +395,18 @@ local function addUnknownObservation(db, source, kind, observedItems)
 end
 
 local function addInteractionZoneObservation(db, source, kind, observedItems, attribution)
-    if type(attribution) ~= "table"
-        or attribution.class ~= "verified_interaction_zone"
-        or attribution.evidence ~= "loot_event" then
+    if type(attribution) ~= "table" then
+        return false
+    end
+    local class = attribution.class
+    local evidence = attribution.evidence
+    local destination
+    if class == "verified_interaction_zone" and evidence == "loot_event" then
+        destination = "interactionZone"
+    elseif class == "correlated_interaction_zone"
+        and evidence == "cast_loot_correlation" then
+        destination = "correlatedInteractionZone"
+    else
         return false
     end
     local mapId = tonumber(attribution and attribution.mapId)
@@ -400,10 +416,10 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
     end
 
     if type(db.geographicStats) ~= "table" then db.geographicStats = {} end
-    local interactionZone = db.geographicStats.interactionZone
+    local interactionZone = db.geographicStats[destination]
     if type(interactionZone) ~= "table" then
         interactionZone = { zones = {} }
-        db.geographicStats.interactionZone = interactionZone
+        db.geographicStats[destination] = interactionZone
     end
     if type(interactionZone.zones) ~= "table" then
         interactionZone.zones = {}
@@ -414,7 +430,7 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
         zone = {
             mapId = mapId,
             zoneName = zoneName,
-            evidence = "verified_interaction_zone",
+            evidence = class,
             sources = {},
         }
         interactionZone.zones[zoneKey] = zone
@@ -429,7 +445,7 @@ local function addInteractionZoneObservation(db, source, kind, observedItems, at
             sourceId = source.sourceId,
             sourceLevel = source.sourceLevel or 0,
             name = source.name,
-            attribution = "verified_interaction_zone",
+            attribution = class,
             buckets = {},
         }
         zone.sources[sourceKey] = geoSource

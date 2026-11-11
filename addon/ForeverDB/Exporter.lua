@@ -244,31 +244,37 @@ function FDB:BuildExportSnapshot()
         end
     end
 
-    local interactionZones = self.DB.geographicStats
-        and self.DB.geographicStats.interactionZone
-        and self.DB.geographicStats.interactionZone.zones or {}
-    for _, zoneKey in ipairs(sortedKeys(interactionZones)) do
-        local zone = interactionZones[zoneKey]
-        for _, sourceKey in ipairs(sortedKeys(zone.sources or {})) do
-            local source = zone.sources[sourceKey]
-            for _, kind in ipairs(sortedKeys(source.buckets or {})) do
-                local bucket = source.buckets[kind]
-                lines[#lines + 1] = table.concat({
-                    "Z", "interaction_zone", tostring(zone.mapId or 0),
-                    encode(zone.zoneName), source.sourceType,
-                    tostring(source.sourceId), tostring(source.sourceLevel or 0),
-                    kind, tostring(bucket.observations or 0), "loot_event",
-                }, "|")
-                for _, itemKey in ipairs(sortedKeys(bucket.items or {})) do
-                    local item = bucket.items[itemKey]
+    local geography = self.DB.geographicStats or {}
+    local interactionTiers = {
+        { key = "interactionZone", label = "interaction_zone", evidence = "loot_event" },
+        { key = "correlatedInteractionZone", label = "correlated_interaction_zone",
+            evidence = "cast_loot_correlation" },
+    }
+    for _, tier in ipairs(interactionTiers) do
+        local zones = geography[tier.key] and geography[tier.key].zones or {}
+        for _, zoneKey in ipairs(sortedKeys(zones)) do
+            local zone = zones[zoneKey]
+            for _, sourceKey in ipairs(sortedKeys(zone.sources or {})) do
+                local source = zone.sources[sourceKey]
+                for _, kind in ipairs(sortedKeys(source.buckets or {})) do
+                    local bucket = source.buckets[kind]
                     lines[#lines + 1] = table.concat({
-                        "Y", "interaction_zone", tostring(zone.mapId or 0),
+                        "Z", tier.label, tostring(zone.mapId or 0),
                         encode(zone.zoneName), source.sourceType,
                         tostring(source.sourceId), tostring(source.sourceLevel or 0),
-                        kind, tostring(item.itemId or itemKey), encode(item.name),
-                        tostring(item.drops or 0), tostring(item.quantity or 0),
-                        tostring(item.questDrops or 0), encode(questIdsCsv(item)),
+                        kind, tostring(bucket.observations or 0), tier.evidence,
                     }, "|")
+                    for _, itemKey in ipairs(sortedKeys(bucket.items or {})) do
+                        local item = bucket.items[itemKey]
+                        lines[#lines + 1] = table.concat({
+                            "Y", tier.label, tostring(zone.mapId or 0),
+                            encode(zone.zoneName), source.sourceType,
+                            tostring(source.sourceId), tostring(source.sourceLevel or 0),
+                            kind, tostring(item.itemId or itemKey), encode(item.name),
+                            tostring(item.drops or 0), tostring(item.quantity or 0),
+                            tostring(item.questDrops or 0), encode(questIdsCsv(item)),
+                        }, "|")
+                    end
                 end
             end
         end

@@ -435,16 +435,17 @@ test("creature loot on map 1420 records only a verified Tirisfal interaction zon
         "interaction-zone records do not contain player coordinates")
 end)
 
-test("mining source learned only from loot is not retroactively matched to pending cast", function()
+test("mining SENT to successful cast to unique loot is correlated only to zone", function()
     local f, s = setup()
     local lootSource = "GameObject-0-0-0-0-1731-0001"
     s.guid = nil
-    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "mining-cast", 2575)
+    s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000001", 2575)
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000001", 2575)
     equal(f.PendingGathering.kind, "mining")
     equal(f.PendingGathering.guid, nil)
 
-    -- The loot window exposes one source GUID, which is sufficient for
-    -- deduplication, but it cannot prove that the earlier cast targeted it.
+    -- A successful, single cast followed by a unique loot source establishes
+    -- zone-only correlation, but does not establish the source's coordinates.
     s.lootSources = { lootSource }
     s.slots = { { id = 700, qty = 1 } }
     s:event("LOOT_READY")
@@ -452,11 +453,154 @@ test("mining source learned only from loot is not retroactively matched to pendi
     local source = f.DB.sources["gameobject:1731"]
     equal(source.buckets.mining.observations, 1)
     equal(source.buckets.mining.items["700"].quantity, 1)
-    equal(f.DB.geographicStats.unknown.sources["gameobject:1731"].buckets.mining.observations, 1)
-    equal(next(f.DB.geographicStats.interactionZone.zones), nil)
+    local bucket = f.DB.geographicStats.correlatedInteractionZone.zones["42|Test Zone"]
+        .sources["gameobject:1731"].buckets.mining
+    equal(bucket.observations, 1)
+    equal(bucket.items["700"].quantity, 1)
+    equal(f.DB.geographicStats.unknown.sources["gameobject:1731"], nil)
+    contains(ForeverDB_Export,
+        "Z|correlated_interaction_zone|42|Test Zone|gameobject|1731|0|mining|1|cast_loot_correlation")
     f:PrintGeographyDiagnostics()
     contains(table.concat(s.messages, "\n"),
-        "mining events: 1 unknown: 1 interaction-zone: 0 source-map: 0 player-context-only: 1 legacy/unclassified: 0")
+        "mining events: 1 unknown: 0 interaction-zone: 0 correlated-interaction-zone: 1 source-map: 0 player-context-only: 0 legacy/unclassified: 0")
+end)
+
+test("one ordered gathering operation can correlate when cast GUID is unavailable", function()
+    local f, s = setup()
+    s.guid = nil
+    s:event("UNIT_SPELLCAST_SENT", "player", "Mining", 2575)
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Mining", 2575)
+    s.lootSources = { "GameObject-0-0-0-0-1731-0003" }
+    s.slots = { { id = 700, qty = 1 }, { id = 701, qty = 2 } }
+    s:event("LOOT_OPENED")
+    s:event("LOOT_READY")
+    local bucket = f.DB.geographicStats.correlatedInteractionZone.zones["42|Test Zone"]
+        .sources["gameobject:1731"].buckets.mining
+    equal(bucket.observations, 1)
+    equal(bucket.items["700"].drops, 1)
+    equal(bucket.items["701"].quantity, 2)
+    equal(f.DB.sources["gameobject:1731"].buckets.mining.observations, 1)
+    equal(f.DB.geographicStats.unknown.sources["gameobject:1731"], nil)
+end)
+
+test("gather correlation preserves nil event arguments and does not invent a CastGUID", function()
+    local f, s = setup()
+    s.guid = nil
+    s:event("UNIT_SPELLCAST_SENT", "player", nil, nil, 2575)
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 2575)
+    s.lootSources = { "GameObject-0-0-0-0-1731-0006" }
+    s.slots = { { id = 700, qty = 1 } }
+    s:event("LOOT_READY")
+    local bucket = f.DB.geographicStats.correlatedInteractionZone.zones["42|Test Zone"]
+        .sources["gameobject:1731"].buckets.mining
+    equal(bucket.observations, 1)
+    equal(f.DB.sources["gameobject:1731"].buckets.mining.observations, 1)
+end)
+
+test("zero-drop mining with fallback source conserves one Unknown observation", function()
+    local f, s = setup()
+    s.guid = nil
+    s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000010", 2575)
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000010", 2575)
+    s.guid = "GameObject-0-0-0-0-1731-0009"
+    s.slots = {}
+    s:event("LOOT_READY")
+    local global = f.DB.sources["gameobject:1731"].buckets.mining
+    local bucket = f.DB.geographicStats.unknown.sources["gameobject:1731"].buckets.mining
+    equal(global.observations, 1)
+    equal(next(global.items), nil)
+    equal(bucket.observations, 1)
+    equal(next(bucket.items), nil)
+    equal(next(f.DB.geographicStats.correlatedInteractionZone.zones), nil)
+end)
+
+test("gather cast correlation fails closed for cast mismatch, timeout and map transition", function()
+    local cases = {
+        { name = "cast GUID mismatch", success = "other-cast" },
+        { name = "late loot", advance = 5 },
+        { name = "map changed after cast", mapChange = true },
+        { name = "cast and success source GUID conflict", sourceConflict = true },
+        { name = "loot window opened before successful cast", openedBeforeSuccess = true },
+    }
+    for _, case in ipairs(cases) do
+        local f, s = setup()
+        s.guid = case.sourceConflict and "GameObject-0-0-0-0-1731-0007" or nil
+        if case.openedBeforeSuccess then
+            s.now = s.now - 1
+            s:event("LOOT_OPENED")
+            s.now = s.now + 1
+        end
+        s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000002", 2575)
+        if case.sourceConflict then
+            s.guid = "GameObject-0-0-0-0-1731-0008"
+        end
+        s:event("UNIT_SPELLCAST_SUCCEEDED", "player",
+            case.success == "other-cast" and "Cast-0-1-2-3-2575-000099"
+                or "Cast-0-1-2-3-2575-000002", 2575)
+        if case.advance then s.now = s.now + case.advance end
+        if case.mapChange then
+            s.mapId = 43
+            s.parentMapId = 1
+            s.zoneName = "Other Zone"
+            s.mapName = "Other Zone"
+        end
+        s.lootSources = { case.sourceConflict
+            and "GameObject-0-0-0-0-1731-0007"
+            or "GameObject-0-0-0-0-1731-0002" }
+        s.slots = { { id = 700, qty = 1 } }
+        s:event("LOOT_READY")
+        local unknown = f.DB.geographicStats.unknown.sources["gameobject:1731"]
+        assert(unknown and unknown.buckets.mining.observations == 1,
+            case.name .. " must remain Unknown")
+        assert(not f.DB.geographicStats.correlatedInteractionZone.zones["42|Test Zone"],
+            case.name .. " must not receive the cast interaction zone")
+    end
+end)
+
+test("failed, interrupted, unrelated and overlapping casts cannot earn correlated geography", function()
+    local cases = {
+        { name = "failed", event = "UNIT_SPELLCAST_FAILED" },
+        { name = "interrupted", event = "UNIT_SPELLCAST_INTERRUPTED" },
+        { name = "unrelated cast", unrelated = true },
+        { name = "overlap", overlap = true },
+    }
+    for _, case in ipairs(cases) do
+        local f, s = setup()
+        s.guid = nil
+        s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000004", 2575)
+        if case.event then
+            s:event(case.event, "player", "Cast-0-1-2-3-2575-000004", 2575)
+        elseif case.unrelated then
+            s:event("UNIT_SPELLCAST_SENT", "player", "Unrelated", "Cast-0-1-2-3-9999-000004", 9999)
+            s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000004", 2575)
+        else
+            s:event("UNIT_SPELLCAST_SENT", "player", "Mining", "Cast-0-1-2-3-2575-000005", 2575)
+            s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-0-1-2-3-2575-000004", 2575)
+        end
+        s.lootSources = { "GameObject-0-0-0-0-1731-0005" }
+        s.slots = { { id = 700, qty = 1 } }
+        s:event("LOOT_READY")
+        local correlated = f.DB.geographicStats.correlatedInteractionZone.zones["42|Test Zone"]
+        assert(not correlated, case.name .. " unexpectedly earned correlated geography")
+        local global = f.DB.sources["gameobject:1731"]
+        if global then
+            local kind = global.buckets.mining and "mining" or "gameobject"
+            equal(global.buckets[kind].observations, 1)
+            local unknown = f.DB.geographicStats.unknown.sources["gameobject:1731"]
+            local unknownCount = unknown and unknown.buckets[kind]
+                and unknown.buckets[kind].observations or 0
+            local verifiedCount = 0
+            for _, zone in pairs(f.DB.geographicStats.interactionZone.zones) do
+                local source = zone.sources["gameobject:1731"]
+                verifiedCount = verifiedCount
+                    + (source and source.buckets[kind]
+                        and source.buckets[kind].observations or 0)
+            end
+            equal(unknownCount + verifiedCount, 1)
+        else
+            equal(f:GetDatabaseStats().unresolvedLootWindows, 1)
+        end
+    end
 end)
 
 test("zero-drop mining with a known fallback source conserves one event and deduplicates", function()
@@ -581,7 +725,7 @@ test("legacy herbalism totals are not backfilled; a new loot event is still expl
     equal(f.DB.geographicStats.interactionZone.zones["42|Test Zone"]
         .sources["gameobject:1618"].buckets.herbalism.observations, 1)
     f:PrintGeographyDiagnostics()
-    contains(table.concat(s.messages, "\n"), "herbalism events: 95 unknown: 0 interaction-zone: 1 source-map: 0 player-context-only: 0 legacy/unclassified: 94")
+    contains(table.concat(s.messages, "\n"), "herbalism events: 95 unknown: 0 interaction-zone: 1 correlated-interaction-zone: 0 source-map: 0 player-context-only: 0 legacy/unclassified: 94")
 end)
 
 test("malformed geographic SavedVariables recover before global observation counters change", function()
@@ -618,7 +762,7 @@ test("geography diagnostics expose counts and candidate APIs without changing Sa
     f:PrintGeographyDiagnostics()
     local report = table.concat(s.messages, "\n")
     contains(report, "revision:")
-    contains(report, "mob events: 1 unknown: 1 interaction-zone: 0 source-map: 0 player-context-only: 1 legacy/unclassified: 0 no-location-context: 0")
+    contains(report, "mob events: 1 unknown: 1 interaction-zone: 0 correlated-interaction-zone: 0 source-map: 0 player-context-only: 1 legacy/unclassified: 0 no-location-context: 0")
     contains(report, "api candidate target recognized source guid: creature")
     contains(report, "candidate only; not source-map proof")
     equal(f.DB.snapshotRevision, beforeRevision)

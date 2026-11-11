@@ -88,12 +88,15 @@ function FDB:PrintGeographyDiagnostics()
     local interactionZones = db.geographicStats
         and db.geographicStats.interactionZone
         and db.geographicStats.interactionZone.zones or {}
+    local correlatedZones = db.geographicStats
+        and db.geographicStats.correlatedInteractionZone
+        and db.geographicStats.correlatedInteractionZone.zones or {}
 
     print("ForeverDB local geography diagnostics (read-only; no reset or sync)")
     print("revision:", tonumber(db.snapshotRevision) or 1,
         "updatedAt:", tonumber(db.updatedAt) or 0,
         "saved schema:", tonumber(db.schemaVersion) or 0)
-    print("evidence classes: source-map verified=0; interaction-zone is zone-only, never a source coordinate")
+    print("evidence classes: source-map verified=0; interaction-zone and correlated-interaction-zone are zone-only, never source coordinates")
 
     for _, kind in ipairs(COLLECTOR_KINDS) do
         local observations = bucketObservationTotals(globalSources, kind)
@@ -102,11 +105,14 @@ function FDB:PrintGeographyDiagnostics()
             local interactionZone = zoneObservationTotals(interactionZones, kind)
             local interaction = math.min(unknown, bucketLocationTotals(globalSources, kind))
             local noContext = math.max(0, unknown - interaction)
-            local legacyOrUnclassified = math.max(0, observations - unknown - interactionZone)
+            local correlated = zoneObservationTotals(correlatedZones, kind)
+            local legacyOrUnclassified = math.max(0,
+                observations - unknown - interactionZone - correlated)
             print(kind,
                 "events:", observations,
                 "unknown:", unknown,
                 "interaction-zone:", interactionZone,
+                "correlated-interaction-zone:", correlated,
                 "source-map:", 0,
                 "player-context-only:", interaction,
                 "legacy/unclassified:", legacyOrUnclassified,

@@ -3,8 +3,8 @@ local addonName, FDB = ...
 FDB = FDB or {}
 _G[addonName] = FDB
 
-FDB.VERSION = "0.7.2-alpha"
-FDB.SCHEMA_VERSION = 10
+FDB.VERSION = "0.7.3-alpha"
+FDB.SCHEMA_VERSION = 11
 -- The Companion's public ingestion contract remains schema 9; Geo A records
 -- are optional addon-export extensions until a later Companion phase parses them.
 FDB.EXPORT_SCHEMA_VERSION = 9

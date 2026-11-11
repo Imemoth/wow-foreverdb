@@ -732,7 +732,7 @@ test("session SavedVariables stay local and public schema 9 export has no sessio
     state:event("PLAYER_XP_UPDATE")
     truthy(FDB:ResetSession()) -- archive one session into history too
 
-    equal(FDB.SCHEMA_VERSION, 10)
+    equal(FDB.SCHEMA_VERSION, 11)
     truthy(FDB.DB.sessions)
     local char = FDB.DB.sessions.characters[state.guid]
     truthy(char)
