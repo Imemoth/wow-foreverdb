@@ -11,6 +11,7 @@ No secret, key, signature or database URL appears in this document or was shown 
 | Gate key | Generated inside the database by `ops_report.rotate_gate_key()`; owner entered it as `OPS_HEALTH_GATE_KEY`. One `current` key valid; `previous` slot expired (valid=false). |
 | Edge secrets | `OPS_HEALTH_GATE_KEY`, `OPS_HEALTH_APIKEY` set by the owner. `OPS_HEALTH_DATABASE_URL` still set (rollback). |
 | Edge Function `azerdex-ops-health` | v10, bundle sha256 `d6495cb58a527fa68ea8f10630f014f9a9c65129e87e76c479f4f0defc8d1b1d`, `verify_jwt=false`, byte-identical to `release`. |
+| Migration history | Row `20261111092220` / `ops_0020_gated_rpc` recorded in `supabase_migrations.schema_migrations` after the fact (SQL not re-run). `statements[1]` is the exact released file: 8132 bytes, sha256 `80cdc31624020ff1521f67c6405c9b94efde2a5569586940593309d49d4b8ab5`, verified equal to the release (the insert was guarded on that hash). Same convention as the 0019 row (one element holding the whole file). The CRLF cosmetic difference of three function bodies in the live catalog is unchanged. |
 | Not touched | `0021`, the `azerdex_ops_reporter` login, `azerdex-news-collector`, jobs 3-7, G6, GO-2, GO-3. |
 
 ## Owner acceptance (external script, 9 checks)
