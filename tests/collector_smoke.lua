@@ -435,6 +435,50 @@ test("creature loot on map 1420 records only a verified Tirisfal interaction zon
         "interaction-zone records do not contain player coordinates")
 end)
 
+test("mining source learned only from loot is not retroactively matched to pending cast", function()
+    local f, s = setup()
+    local lootSource = "GameObject-0-0-0-0-1731-0001"
+    s.guid = nil
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "mining-cast", 2575)
+    equal(f.PendingGathering.kind, "mining")
+    equal(f.PendingGathering.guid, nil)
+
+    -- The loot window exposes one source GUID, which is sufficient for
+    -- deduplication, but it cannot prove that the earlier cast targeted it.
+    s.lootSources = { lootSource }
+    s.slots = { { id = 700, qty = 1 } }
+    s:event("LOOT_READY")
+
+    local source = f.DB.sources["gameobject:1731"]
+    equal(source.buckets.mining.observations, 1)
+    equal(source.buckets.mining.items["700"].quantity, 1)
+    equal(f.DB.geographicStats.unknown.sources["gameobject:1731"].buckets.mining.observations, 1)
+    equal(next(f.DB.geographicStats.interactionZone.zones), nil)
+    f:PrintGeographyDiagnostics()
+    contains(table.concat(s.messages, "\n"),
+        "mining events: 1 unknown: 1 interaction-zone: 0 source-map: 0 player-context-only: 1 legacy/unclassified: 0")
+end)
+
+test("zero-drop mining with a known fallback source conserves one event and deduplicates", function()
+    local f, s = setup()
+    s.guid = "GameObject-0-0-0-0-1731-0001"
+    s.slots = {}
+
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "mining-cast", 2575)
+    s:event("LOOT_READY")
+
+    local source = f.DB.sources["gameobject:1731"]
+    equal(source.buckets.mining.observations, 1)
+    equal(next(source.buckets.mining.items), nil)
+    equal(f.DB.geographicStats.unknown.sources["gameobject:1731"].buckets.mining.observations, 1)
+    equal(next(f.DB.geographicStats.interactionZone.zones), nil)
+
+    s:event("LOOT_CLOSED")
+    s:event("UNIT_SPELLCAST_SUCCEEDED", "player", "repeat-cast", 2575)
+    s:event("LOOT_READY")
+    equal(source.buckets.mining.observations, 1)
+end)
+
 test("source-matched skinning records interaction-zone totals without source coordinates", function()
     local f, s = setup()
     s.guid = "Creature-0-0-0-0-300-0001"
