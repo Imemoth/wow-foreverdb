@@ -129,7 +129,8 @@ declare
 begin
     -- This helper is deliberately private. The eventual public action wrapper
     -- must use a verified PostgREST JWT, not caller-supplied claims or service_role.
-    if p_permission is null or p_environment not in ('staging','production')
+    if p_permission is null or p_environment is null or p_scope_kind is null
+       or p_environment not in ('staging','production')
        or p_scope_kind not in ('global','collection','article')
        or (p_scope_kind = 'global' and p_scope_id is not null)
        or (p_scope_kind <> 'global' and
@@ -138,12 +139,15 @@ begin
         return false;
     end if;
     v_claims := pg_catalog.current_setting('request.jwt.claims', true)::jsonb;
-    if v_claims is null or v_claims->>'role' <> 'authenticated'
-       or v_claims->>'aal' <> 'aal2'
-       or (v_claims->>'sub') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       or (v_claims->>'session_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       or (v_claims->>'exp') !~ '^[0-9]{1,12}$'
-       or pg_catalog.to_timestamp((v_claims->>'exp')::double precision) <= v_now then
+    if v_claims is null
+       or v_claims->>'role' is distinct from 'authenticated'
+       or v_claims->>'aal' is distinct from 'aal2'
+       or coalesce(v_claims->>'sub','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_claims->>'session_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_claims->>'exp','') !~ '^[0-9]{1,12}$' then
+        return false;
+    end if;
+    if pg_catalog.to_timestamp((v_claims->>'exp')::double precision) <= v_now then
         return false;
     end if;
     v_uid := (v_claims->>'sub')::uuid;

@@ -105,6 +105,31 @@ begin
     end if;
 end
 $test$;
+-- Every required JWT field must be present. SQL NULL must never turn an OR
+-- guard into an implicit allow when the staff row and role are otherwise valid.
+do $test$
+declare
+    good jsonb := '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}'::jsonb;
+    field text;
+begin
+    foreach field in array array['aal','role','exp','sub','session_id'] loop
+        perform pg_catalog.set_config('request.jwt.claims', (good - field)::text, false);
+        if admin_private.authorize_action('admin.enter','staging','global',null) then
+            raise exception 'missing JWT % claim admitted', field;
+        end if;
+        perform pg_catalog.set_config('request.jwt.claims',
+            (good || pg_catalog.jsonb_build_object(field,null))::text, false);
+        if admin_private.authorize_action('admin.enter','staging','global',null) then
+            raise exception 'NULL JWT % claim admitted', field;
+        end if;
+    end loop;
+    perform pg_catalog.set_config('request.jwt.claims', good::text, false);
+    if admin_private.authorize_action('admin.enter','staging',null,null)
+       or admin_private.authorize_action('admin.enter',null,'global',null) then
+        raise exception 'NULL environment or resource scope admitted';
+    end if;
+end
+$test$;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal1","exp":4102444800}';
 do $test$ begin
     if admin_private.authorize_action('admin.enter','staging','global',null) then
