@@ -189,7 +189,7 @@ public class CompanionRegressionTests
     [Fact]
     public void Sync_health_still_sanitises_secrets_and_tracks_success()
     {
-        var settings = new CompanionSettings { WowRoot = @"C:\Games\WoW", SupabaseKey = "sb_publishable_abc123" };
+        var settings = new CompanionSettings { WowRoot = @"C:\Games\WoW", WowRootConfirmed = true, SupabaseKey = "sb_publishable_abc123" };
         var health = new SyncHealthState();
         health.Configure(settings);
         Assert.True(health.ConfigurationReady);

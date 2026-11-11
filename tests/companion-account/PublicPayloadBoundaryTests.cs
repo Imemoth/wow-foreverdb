@@ -58,6 +58,9 @@ public sealed class PublicPayloadBoundaryTests
     [InlineData("{\"installationId\":\"i\",\"guildbookCaptureId\":\"c\"}", "$.guildbookCaptureId")]
     [InlineData("{\"installationId\":\"i\",\"guildbookCapturedAt\":1}", "$.guildbookCapturedAt")]
     [InlineData("{\"installationId\":\"i\",\"guildbookSourceCharacter\":\"x\"}", "$.guildbookSourceCharacter")]
+    [InlineData("{\"installationId\":\"i\",\"questJournal\":{\"characterGuid\":\"x\"}}", "$.questJournal")]
+    [InlineData("{\"installationId\":\"i\",\"characterGuid\":\"x\"}", "$.characterGuid")]
+    [InlineData("{\"installationId\":\"i\",\"characters\":[{\"name\":\"x\"}]}", "$.characters")]
     [InlineData("{\"installationId\":\"i\",\"sources\":[{\"name\":\"n\",\"members\":[]}]}", "$.sources[0].members")]
     [InlineData("{\"installationId\":\"i\",\"sources\":[{\"buckets\":[{\"items\":[{\"itemId\":1,\"memberName\":\"x\"}]}]}]}", "$.sources[0].buckets[0].items[0].memberName")]
     [InlineData("{\"installationId\":\"i\",\"sources\":[{\"buckets\":[{\"locations\":[{\"mapId\":1,\"professions\":[]}]}]}]}", "$.sources[0].buckets[0].locations[0].professions")]
@@ -114,6 +117,7 @@ public sealed class PublicPayloadBoundaryTests
         using var local = new AccountGuildbookSync(rig.Sessions, store);
         rig.Runtime.Sync.SelectOwner("inst-1", OwnerChoice.RegisteredAccount);
         var service = new SyncService(rig.Runtime.Sync, guildbook: local);
+        Assert.True((await local.ImportLocalSnapshotAsync(new ForeverDbExportParser().ParseSavedVariables(WriteExport(rig.Directory)), authorizeFirstImport: true)).CaptureAccepted);
 
         var result = await service.SyncFileAsync(WriteExport(rig.Directory), force: true, trigger: SyncTrigger.Manual);
 
@@ -159,6 +163,7 @@ public sealed class PublicPayloadBoundaryTests
         using var local = new AccountGuildbookSync(rig.Sessions, store);
         rig.Runtime.Sync.SelectOwner("inst-1", OwnerChoice.RegisteredAccount);
         var service = new SyncService(rig.Runtime.Sync, guildbook: local);
+        Assert.True((await local.ImportLocalSnapshotAsync(new ForeverDbExportParser().ParseSavedVariables(WriteExport(rig.Directory)), authorizeFirstImport: true)).CaptureAccepted);
 
         rig.Handler.Offline = true;
         var result = await service.SyncFileAsync(WriteExport(rig.Directory), force: true, trigger: SyncTrigger.Manual);

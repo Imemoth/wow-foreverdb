@@ -39,7 +39,7 @@ public class DeviceIntegrationTests
                 () => new[] { Installation });
             SavedVariables = Path.Combine(Dir, $"ForeverDB-{Installation}.lua");
             Write(100);
-            Sync = new SyncService(Runtime.Sync, device: Runtime.Device!.Sync);
+            Sync = new SyncService(Runtime.Sync, device: Runtime.Device!.Sync, accountSessions: Runtime.Sessions);
             Sync.SyncCompleted += (_, e) => Events.Add($"synced:{e.Trigger}");
             Sync.Authenticated += () => Events.Add("auth");
             Sync.SyncBlocked += (_, e) => { Blocks.Add(e.Reason); BlockMessages.Add(e.Message); };
@@ -57,6 +57,8 @@ public class DeviceIntegrationTests
             File.WriteAllText(Path.Combine(Activation, "foreverdb-activation.fdbact"), FakeDeviceBackend.ActivationJson(Backend.IssueTicket(Account.Id)));
             Sync.DiscoverInstallations(new[] { SavedVariables });
             Assert.Equal(DeviceState.Registered, (await Runtime.Device!.Enrollment.InitializeAsync()).State);
+            Assert.Equal(SignInOutcome.Success,
+                await Runtime.Sessions.SignInRegisteredAsync("owner@example.test", "correct horse battery".ToCharArray()));
         }
 
         public void Dispose()
@@ -159,11 +161,10 @@ public class DeviceIntegrationTests
 
         var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
         Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
-        Assert.Equal(BlockReason.DeviceSyncNotCompleted, attempt.Reason);
+        Assert.Equal(BlockReason.NoCredential, attempt.Reason);
         Assert.Equal(0, w.Server.IngestCount);
         Assert.Equal(0, AnonymousIngests(w));
-        Assert.Single(w.Blocks);
-        Assert.Contains("revoked", w.BlockMessages.Single());
+        Assert.Equal(0, w.Backend.DeviceIngests);
     }
 
     [Fact]
@@ -230,6 +231,66 @@ public class DeviceIntegrationTests
         Assert.True(PublicSnapshotGuard.CheckBody(System.Text.Json.Nodes.JsonNode.Parse(body)).IsPublic);
         Assert.Contains("\"sources\"", body);
         Assert.DoesNotContain(w.Server.Requests, r => r.Path.Contains("guild", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task A_registered_device_is_not_used_after_switching_to_an_unrelated_human_account()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        var other = w.Server.AddRegisteredUser("other@example.test", "another correct horse battery");
+        Assert.Equal(SignOutOutcome.Confirmed, await w.Runtime.Sessions.SignOutRegisteredAsync());
+        Assert.Equal(SignInOutcome.Success,
+            await w.Runtime.Sessions.SignInRegisteredAsync("other@example.test", "another correct horse battery".ToCharArray()));
+
+        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
+        Assert.Equal(BlockReason.OwnerSelectionRequired, attempt.Reason);
+        Assert.Equal(0, w.Backend.DeviceIngests);
+        Assert.Equal(0, AnonymousIngests(w));
+        Assert.Equal(0, w.Server.IngestCount);
+        Assert.Equal(other.Id, w.Runtime.Sessions.Status.AccountId);
+    }
+
+    [Fact]
+    public async Task Ownership_api_unavailable_blocks_registered_device_upload_before_device_ingest()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        w.Handler.Offline = true;
+
+        var attempt = await w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+
+        Assert.Equal(SyncOutcome.Blocked, attempt!.Outcome);
+        Assert.Equal(BlockReason.OwnershipUnavailable, attempt.Reason);
+        Assert.Equal(0, w.Backend.DeviceIngests);
+        Assert.Equal(0, AnonymousIngests(w));
+    }
+
+    [Fact]
+    public async Task Switching_accounts_cancels_an_in_flight_registered_device_upload()
+    {
+        using var w = new Wiring();
+        await w.Enroll();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        w.Handler.Before = async (request, token) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/fdb_device_ingest", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                await Task.Delay(Timeout.Infinite, token);
+            }
+        };
+
+        var inFlight = w.Sync.SyncFileAsync(w.SavedVariables, force: true, trigger: SyncTrigger.Manual);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(SignOutOutcome.Confirmed, await w.Runtime.Sessions.SignOutRegisteredAsync());
+        var attempt = await inFlight;
+
+        Assert.Equal(SyncOutcome.StaleDiscarded, attempt!.Outcome);
+        Assert.Equal(0, w.Backend.DeviceIngests);
+        Assert.Equal(0, AnonymousIngests(w));
     }
 
     [Fact]

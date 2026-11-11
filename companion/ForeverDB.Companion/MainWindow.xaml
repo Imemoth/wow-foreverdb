@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="ForeverDB Companion 0.9.0-alpha"
+        Title="ForeverDB Companion 0.9.11-alpha"
         Width="1180"
         Height="760"
         MinWidth="960"
@@ -43,7 +43,8 @@
                                Foreground="{StaticResource MutedTextBrush}"
                                FontSize="12"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="  •  0.9.0-alpha"
+                    <TextBlock x:Name="BuildVersionText"
+                               Text="  •  0.9.11-alpha"
                                Foreground="#677387"
                                FontSize="11"
                                VerticalAlignment="Center" />
@@ -478,7 +479,7 @@
                             <Button Grid.Column="8"
                                     Width="120"
                                     Height="38"
-                                    Click="SyncNow_Click"
+                                    Click="RefreshGuildbook_Click"
                                     Content="Refresh data" />
                         </Grid>
                     </Border>
@@ -510,6 +511,11 @@
                                                Margin="0,4,0,0"
                                                Foreground="{StaticResource MutedTextBrush}"
                                                Text="Local only — Stored on this device" />
+                                    <TextBlock x:Name="GuildbookImportDiagnosticsText"
+                                               Margin="0,5,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="Local import: not refreshed yet."
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1"
@@ -809,6 +815,18 @@
                                             Height="38"
                                             Click="AccountSignOut_Click"
                                             Content="Sign out of this computer" />
+                                    <Button x:Name="AccountSwitchButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountSwitchAccount_Click"
+                                            Content="Switch account" />
+                                    <Button x:Name="AccountReturnAnonymousButton"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Height="38"
+                                            Margin="0,8,0,0"
+                                            Click="AccountReturnAnonymous_Click"
+                                            Content="Return to preserved anonymous identity" />
                                     <TextBlock Foreground="{StaticResource MutedTextBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
@@ -1011,20 +1029,33 @@
 
                             <CheckBox x:Name="AutoSyncCheck"
                                       Margin="0,5"
+                                      Checked="SettingsInput_Changed"
+                                      Unchecked="SettingsInput_Changed"
                                       Content="Automatically sync after /reload, logout or exit" />
 
                             <CheckBox x:Name="LaunchWithWindowsCheck"
                                       Margin="0,8,0,5"
+                                      Checked="SettingsInput_Changed"
+                                      Unchecked="SettingsInput_Changed"
                                       Content="Launch ForeverDB Companion with Windows" />
 
                             <CheckBox x:Name="StartMinimizedCheck"
                                       Margin="0,8,0,18"
+                                      Checked="SettingsInput_Changed"
+                                      Unchecked="SettingsInput_Changed"
                                       Content="Start minimized when launched with Windows" />
 
-                            <Button Width="140"
-                                    HorizontalAlignment="Left"
-                                    Click="SaveSettings_Click"
-                                    Content="Save settings" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button Width="140"
+                                        HorizontalAlignment="Left"
+                                        Click="SaveSettings_Click"
+                                        Content="Save settings" />
+                                <Button Margin="8,0,0,0"
+                                        Padding="14,6"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="CancelSettings_Click"
+                                        Content="Cancel" />
+                            </StackPanel>
 
                             <TextBlock x:Name="SettingsSaveStatusText"
                                        Margin="0,10,0,0"
@@ -1048,18 +1079,38 @@
 
                             <TextBlock Text="WoW Forever root"
                                        Foreground="{StaticResource MutedTextBrush}" />
-                            <TextBox x:Name="WowRootBox"
-                                     Margin="0,6,0,16" />
+                            <ComboBox x:Name="WowInstallationSelector"
+                                      Margin="0,6,0,8"
+                                      DisplayMemberPath="DisplayName"
+                                      SelectionChanged="WowInstallationSelector_SelectionChanged"
+                                      ToolTip="Detected WoW client installations" />
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right"
+                                        Margin="8,0,0,0"
+                                        Padding="12,5"
+                                        Click="BrowseWowRoot_Click"
+                                        Content="Browse…" />
+                                <TextBox x:Name="WowRootBox"
+                                         VerticalContentAlignment="Center"
+                                         TextChanged="SettingsInput_Changed"
+                                         ToolTip="The selected WoW client folder" />
+                            </DockPanel>
+                            <TextBlock x:Name="WowRootStatusText"
+                                       Margin="0,0,0,16"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       TextWrapping="Wrap" />
 
                             <TextBlock Text="Supabase project URL"
                                        Foreground="{StaticResource MutedTextBrush}" />
                             <TextBox x:Name="SupabaseUrlBox"
-                                     Margin="0,6,0,16" />
+                                     Margin="0,6,0,16"
+                                     TextChanged="SettingsInput_Changed" />
 
                             <TextBlock Text="Supabase publishable key"
                                        Foreground="{StaticResource MutedTextBrush}" />
                             <TextBox x:Name="SupabaseKeyBox"
-                                     Margin="0,6,0,0" />
+                                     Margin="0,6,0,0"
+                                     TextChanged="SettingsInput_Changed" />
                         </StackPanel>
                     </Border>
                 </Grid>

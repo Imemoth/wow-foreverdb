@@ -630,6 +630,32 @@ public class SessionManagerTests
     }
 
     [Fact]
+    public async Task Return_to_anonymous_restores_only_the_preserved_identity_and_never_signs_up_if_it_is_unavailable()
+    {
+        using var rig = new Rig();
+        var anon = rig.SeedAnonymous();
+        rig.Server.AddRegisteredUser("a@b.test", "a-long-password-1");
+        await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+
+        Assert.Equal(StartAnonymousOutcome.RestoredLegacyIdentity, await rig.Sessions.RestoreLegacyAnonymousAsync());
+        Assert.Equal(anon.UserId, rig.Vault().Primary.Read().Session!.UserId);
+
+        // After another sign-in, damage/reject the preserved identity. Return-to-anonymous must leave it in place.
+        await rig.Sessions.SignInRegisteredAsync("a@b.test", "a-long-password-1".ToCharArray());
+        var legacy = rig.Vault().LegacyOwner.Read().Session!;
+        rig.Vault().LegacyOwner.Write(legacy, SlotMarker.For(SessionKind.Anonymous, rejected: true));
+        Assert.Equal(SignOutOutcome.Confirmed, await rig.Sessions.SignOutRegisteredAsync());
+
+        var outcome = await rig.Sessions.RestoreLegacyAnonymousAsync();
+
+        Assert.Equal(StartAnonymousOutcome.PreservedIdentityUnavailable, outcome);
+        Assert.Equal(SlotReadStatus.Missing, rig.Vault().Primary.Read().Status);
+        Assert.True(rig.Vault().LegacyOwner.Read().Marker!.Rejected);
+        Assert.Equal(0, rig.Server.SignupCount);
+    }
+
+    [Fact]
     public async Task Failed_server_revocation_is_not_reported_as_confirmed_and_is_retained_for_retry()
     {
         using var rig = new Rig();
