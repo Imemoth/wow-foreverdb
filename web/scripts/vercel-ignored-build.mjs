@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 const SAFE_PREFIXES = [
   "docs/",
   "database/",
+  "supabase/",
+  "publisher/",
   "addon/",
   "addons/",
   "companion/",
