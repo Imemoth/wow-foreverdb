@@ -34,7 +34,16 @@ Consequence of strictness: **merges to one branch are serial.** After a merge, e
 - **`axe-core` and `@axe-core/playwright` 4.14.0 stay blocked** until issue #152 (the talent-control accessible names) is resolved and verified.
 - After production dependency merges, include them in the next release-to-main synchronisation so Dependabot rebases against the real baseline.
 
-## 5. Open items this policy leaves for the owner
+## 5. Vercel deployment relevance and retention (PR #198, proposed)
+
+- **GitHub CI and Vercel deployments are different gates.** Continue the relevant repository security, schema, quality, WPF/AddOn and public-read checks regardless of whether a web deployment is needed.
+- The canonical, versioned rules are in [Vercel deployment policy](vercel-deployment-policy.md). A repo-root Git diff against Vercel's prior successful deployment lets pure documentation, database, Supabase, publisher, addon and Companion updates skip a new **Next.js build**. Web source, bundled content, public assets, dependencies, or an unknown file path must build.
+- Run the filter conservatively: if Git history or the previous deployment SHA is unavailable, run the build. First deployment of a new branch runs normally.
+- **`release` remains the production branch.** Skipped builds never count as application acceptance or authorize promotion. Stage and owner-approve new production builds before assigning `azerdex.com`.
+- When PR #198 passes its acceptance and is merged into `release`, use the established reviewed `release`→`main` reconciliation PR to propagate the same policy. All newly created work branches must inherit the policy from their base; older feature branches require deliberate refresh before relying on it.
+- Historical cleanup is a second, owner-approved phase, driven by an ID-specific manifest, with protection for aliased production, beta, staged, rollback and active PR acceptance deployments.
+
+## 6. Open items this policy leaves for the owner
 
 - Approve and perform the first release-to-main synchronisation (not automatic).
 - Align the stale ruleset JSON and `release-gates.md` on `release` (ride on that synchronisation).
