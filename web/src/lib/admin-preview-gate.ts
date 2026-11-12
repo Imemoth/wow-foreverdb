@@ -19,7 +19,9 @@ export const ADMIN_PREVIEW_BUILD: boolean = process.env.AZERDEX_ADMIN_PREVIEW_BU
 export const ADMIN_PREVIEW_RUNTIME_VALUE = "isolated-synthetic";
 
 /** Names that indicate production/private backends. Presence (non-empty) of ANY of them closes the gate. */
-const BACKEND_NAME = /(^|_)SUPABASE(_|$)|(^|_)DATABASE_URL$|^POSTGRES_|^PG(HOST|PASSWORD|USER|DATABASE)$|DB_URL$|^ACCOUNT_(AUTH|CSRF)|UPSTASH|TURNSTILE_SECRET|CHALLENGE_COOKIE_SECRET|RATE_LIMIT_SALT|^ADMIN_(AUTH|OWNER|BOOTSTRAP)/i;
+const BACKEND_NAME = /(^|_)SUPABASE(_|$)|(^|_)DATABASE_URL$|^POSTGRES_|^PG(HOST|PASSWORD|USER|DATABASE)$|DB_URL$|^ACCOUNT_(AUTH|CSRF)|UPSTASH|TURNSTILE_SECRET|CHALLENGE_COOKIE_SECRET|RATE_LIMIT_SALT|^ADMIN_(AUTH|OWNER|BOOTSTRAP)|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_KEY|PRIVATE_KEY|_KEY$/i;
+/** Other hosting platforms' markers: this preview is loopback-only, so any of them closes the gate. */
+const OTHER_HOST_SIGNAL = /^(NETLIFY|AWS_LAMBDA_FUNCTION_NAME|AWS_EXECUTION_ENV|K_SERVICE|CF_PAGES|RENDER|FLY_APP_NAME|RAILWAY_ENVIRONMENT|KUBERNETES_SERVICE_HOST|WEBSITE_SITE_NAME|DYNO)$/;
 // (The private production project reference is already scanned by evaluateEnv below; it is deliberately not repeated here.)
 const PRIVATE_VALUE = /postgres(ql)?:\/\/|-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
 
@@ -34,6 +36,7 @@ export function evaluatePreviewGate(raw: RawEnv = process.env, build: boolean = 
     if (raw.AZERDEX_ADMIN_PREVIEW_DATA !== "synthetic") return no("synthetic-data acknowledgement absent or inconsistent");
     // A hosted deployment (any Vercel signal) never qualifies here. A hosted preview needs its own approved, access-protected design.
     if (Object.keys(raw).some((k) => /^(NEXT_PUBLIC_)?VERCEL_?/i.test(k) && raw[k] !== undefined && raw[k] !== "")) return no("hosted platform signal present");
+    if (Object.keys(raw).some((k) => OTHER_HOST_SIGNAL.test(k) && raw[k] !== undefined && raw[k] !== "")) return no("hosted platform signal present");
     if (raw.FOREVERDB_DEPLOYMENT !== "local" || raw.FOREVERDB_DATA_SOURCE !== "fixture") return no("deployment must be explicitly local with fixture data");
     if (raw.AZERDEX_READ_DB_URL) return no("a database URL is configured");
     if (raw.BETA_SEO_AUTHORIZED_BRANCH) return no("beta SEO authorization present");
@@ -53,5 +56,17 @@ export function evaluatePreviewGate(raw: RawEnv = process.env, build: boolean = 
   }
 }
 
-export const isAdminPreviewPath = (pathname: string): boolean =>
-  pathname === ADMIN_PREVIEW_PATH_PREFIX || pathname.startsWith(`${ADMIN_PREVIEW_PATH_PREFIX}/`);
+/** Matches on the DECODED, lower-cased path so encoded or differently-cased spellings of the prefix are still treated as preview paths. */
+export const isAdminPreviewPath = (pathname: string): boolean => {
+  let p = pathname;
+  try { p = decodeURIComponent(pathname); } catch { /* malformed escape: fall through with the raw path, and treat it as a preview path if it looks like one */ }
+  p = p.toLowerCase().replace(/\/{2,}/g, "/");
+  return p === ADMIN_PREVIEW_PATH_PREFIX || p.startsWith(`${ADMIN_PREVIEW_PATH_PREFIX}/`);
+};
+
+/** The preview is loopback-only: a Host header that is not loopback (tunnel, rebinding, 0.0.0.0 exposure) is refused. */
+export const isLoopbackHost = (hostHeader: string | null): boolean => {
+  const h = (hostHeader ?? "").toLowerCase();
+  const name = h.startsWith("[") ? h.slice(0, h.indexOf("]") + 1) : h.split(":")[0];
+  return name === "localhost" || name === "127.0.0.1" || name === "[::1]";
+};

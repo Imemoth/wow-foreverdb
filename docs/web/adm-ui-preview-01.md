@@ -16,7 +16,7 @@ npm ci
 npm run admin-preview        # builds the dedicated preview build, then serves http://localhost:3300/admin-preview
 ```
 
-Requires Node 24 (the repository's pinned major). The launcher gives the server a **scrubbed environment** (only what Node needs, plus the preview's own variables) so no ambient secret can reach it. Stop with Ctrl+C. `npm run admin-preview:build` / `:start` run the steps separately; `ADMIN_PREVIEW_PORT` changes the port.
+Requires Node 24 (the repository's pinned major). The launcher gives the server a **scrubbed process environment** (only what Node needs, plus the preview's own variables) and refuses to run while a `web/.env*` file exists (Next.js would load it); set `ADMIN_PREVIEW_ALLOW_DOTENV=1` only if such a file holds nothing sensitive. The runtime gate also refuses any backend/secret-looking variable or hosting-platform marker. Stop with Ctrl+C. `npm run admin-preview:build` / `:start` run the steps separately; `ADMIN_PREVIEW_PORT` changes the port.
 
 A suggested 10-minute walk-through (persona names are synthetic; switch with the **Act as** menu in the top bar):
 
@@ -53,9 +53,9 @@ Roles/permissions matrix and `G` (grant-only) cells, publishing delegation, high
 
 The preview must never be reachable in, or usable against, a real environment. Three independent layers:
 
-1. **Build.** The preview routes are `*.preview.tsx` files, recognised as routes only by a dedicated preview build (`scripts/admin-preview.mjs`, output in `.next-admin-preview`). A normal build contains neither the code nor a route; a build-time constant cannot be flipped by a runtime variable. CI proves this by scanning the normal build output (`npm run check:admin-preview-isolation`).
+1. **Build.** The preview routes are `*.preview.tsx` files, recognised as routes only by a dedicated preview build (`scripts/admin-preview.mjs`, output in `.next-admin-preview`). A normal build contains neither the code nor a route; a build-time constant cannot be flipped by a runtime variable, and the build itself refuses to run for a hosted (Vercel) environment. CI proves this by scanning the normal build output (`npm run check:admin-preview-isolation`).
 2. **Runtime.** Even in a preview build, serving requires an explicit, mutually consistent configuration: loopback site URL, explicit local designation with fixture data, an exact opt-in value, and the absence of any hosted-platform signal, database URL or backend/secret configuration. Absent or inconsistent ⇒ 404 (fail closed).
-3. **Route.** The proxy answers 404 before any page code unless both layers hold, permits only `GET`/`HEAD` on the path, and treats it like the private account area (no-store, noindex, no referrer leakage, no cookies). There are **no API routes**: all state is in the browser tab and nothing is transmitted.
+3. **Route.** The proxy answers 404 before any page code unless both layers hold and the `Host` is loopback, matches the path on its decoded, case-folded form, permits only `GET`/`HEAD` on it, and treats it like the private account area (no-store, noindex, no referrer leakage, no cookies). There are **no API routes**: all state is in the browser tab and nothing is transmitted.
 
 The preview reads no environment value in client code, holds no credential, imports no production authorization/Auth/database module (enforced by a source-boundary unit test) and talks to its data only through an `AdminPort` adapter boundary (`kind: "synthetic-preview"`), which is the seam a future production implementation would plug into.
 

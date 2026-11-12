@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_PREVIEW_BUILD, evaluatePreviewGate, isAdminPreviewPath } from "@/lib/admin-preview-gate";
+import { ADMIN_PREVIEW_BUILD, evaluatePreviewGate, isAdminPreviewPath, isLoopbackHost } from "@/lib/admin-preview-gate";
 
 const GOOD: Record<string, string> = {
   AZERDEX_ADMIN_PREVIEW: "isolated-synthetic",
@@ -73,6 +73,21 @@ describe("Admin UI preview runtime gate", () => {
   it("an empty-string leftover does not count as configuration, a non-empty one does", () => {
     expect(evaluatePreviewGate({ ...GOOD, SUPABASE_URL: "" }, true)).toEqual({ allowed: true });
     expect(closed({ ...GOOD, SUPABASE_URL: "x" })).toBeTruthy();
+  });
+
+  it("closes on other hosting platforms' markers and on generic secret-looking variable names", () => {
+    for (const k of ["NETLIFY", "AWS_LAMBDA_FUNCTION_NAME", "K_SERVICE", "CF_PAGES", "RENDER", "FLY_APP_NAME", "RAILWAY_ENVIRONMENT", "KUBERNETES_SERVICE_HOST"]) expect(closed({ ...GOOD, [k]: "1" }, true, k), k).toMatch(/hosted/);
+    for (const k of ["SOME_SERVICE_ROLE_KEY", "AWS_SECRET_ACCESS_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "DB_PASSWORD"]) expect(closed({ ...GOOD, [k]: "x" }, true, k), k).toMatch(/backend/);
+  });
+
+  it("only loopback Host headers pass", () => {
+    for (const h of ["localhost:3300", "127.0.0.1:3300", "LOCALHOST", "[::1]:3300"]) expect(isLoopbackHost(h), h).toBe(true);
+    for (const h of [null, "", "evil.com", "localhost.evil.com", "127.0.0.1.evil.com", "0.0.0.0:3300", "preview.foreverdb.test", "x.trycloudflare.com"]) expect(isLoopbackHost(h), String(h)).toBe(false);
+  });
+
+  it("recognises encoded and differently-cased spellings of the preview prefix", () => {
+    for (const p of ["/%61dmin-preview", "/admin%2Dpreview/x", "/ADMIN-PREVIEW", "//admin-preview//x", "/Admin-Preview/articles"]) expect(isAdminPreviewPath(p), p).toBe(true);
+    expect(isAdminPreviewPath("/%E0%A4%A")).toBe(false);
   });
 
   it("recognises only the exact preview path prefix", () => {

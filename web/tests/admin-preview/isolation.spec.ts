@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const PORT = Number(process.env.ADMIN_PREVIEW_PORT ?? 3300);
 const CLOSED = `http://localhost:${PORT + 2}`;
-const HOSTED = `http://localhost:${PORT + 3}`;
+const BACKEND = `http://localhost:${PORT + 3}`;
 const MAIN = `http://localhost:${PORT}`;
 
 test.describe("preview runtime isolation (fail closed)", () => {
@@ -14,9 +14,17 @@ test.describe("preview runtime isolation (fail closed)", () => {
     }
   });
 
-  test("a would-be hosted deployment (platform signal present) never serves the preview", async ({ request }) => {
-    const r = await request.get(`${HOSTED}/admin-preview`);
+  test("a backend/database configuration present in the environment closes the preview", async ({ request }) => {
+    const r = await request.get(`${BACKEND}/admin-preview`);
     expect(r.status()).toBe(404);
+  });
+
+  test("a non-loopback Host header is refused, and encoded or re-cased spellings of the path are still guarded", async ({ request }) => {
+    expect((await request.get(`${MAIN}/admin-preview`, { headers: { host: "preview.example.test" } })).status()).toBe(404);
+    for (const p of ["/%61dmin-preview", "/ADMIN-PREVIEW", "/admin-preview%2Farticles"]) {
+      const r = await request.post(`${MAIN}${p}`, { data: {} });
+      expect([404, 405], p).toContain(r.status());
+    }
   });
 
   test("the correctly isolated preview is private, uncached, not indexable and has no API surface", async ({ request, page }) => {

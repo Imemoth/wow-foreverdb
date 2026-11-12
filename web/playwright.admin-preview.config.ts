@@ -7,7 +7,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const PORT = Number(process.env.ADMIN_PREVIEW_PORT ?? 3300);
 const CLOSED_PORT = PORT + 2;
-const HOSTED_PORT = PORT + 3;
+const BACKEND_PORT = PORT + 3;
 const reuse = process.env.REUSE_PREVIEW_SERVERS === "1";
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined;
 const nextBin = "node_modules/next/dist/bin/next";
@@ -30,7 +30,8 @@ export default defineConfig({
     { command: "node scripts/admin-preview.mjs all", url: `http://localhost:${PORT}/admin-preview`, reuseExistingServer: reuse, timeout: 240_000, env: { ADMIN_PREVIEW_PORT: String(PORT), PATH: process.env.PATH ?? "" } },
     // Gate failure 1: the preview build with its runtime flag ABSENT.
     { command: `node ${nextBin} start -p ${CLOSED_PORT} -H 127.0.0.1`, port: CLOSED_PORT, reuseExistingServer: reuse, timeout: 120_000, env: { ...base, SITE_URL: `http://localhost:${CLOSED_PORT}` } },
-    // Gate failure 2: every preview flag correct, but the environment is a (simulated) hosted Vercel preview deployment.
-    { command: `node ${nextBin} start -p ${HOSTED_PORT} -H 127.0.0.1`, port: HOSTED_PORT, reuseExistingServer: reuse, timeout: 120_000, env: { ...base, AZERDEX_ADMIN_PREVIEW: "isolated-synthetic", AZERDEX_ADMIN_PREVIEW_DATA: "synthetic", VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "foreverdb-preview-abc123.vercel.app", VERCEL_BRANCH_URL: "foreverdb-git-preview-test.vercel.app", FOREVERDB_DEPLOYMENT: "preview", SITE_URL: "https://preview.foreverdb.test" } },
+    // Gate failure 2: every preview flag correct, but a backend variable (a database/Auth configuration) is present. (A hosted Vercel environment cannot even
+    // load this build: next.config.ts refuses it, which tests/unit/admin-preview-build-config.test.ts covers.)
+    { command: `node ${nextBin} start -p ${BACKEND_PORT} -H 127.0.0.1`, port: BACKEND_PORT, reuseExistingServer: reuse, timeout: 120_000, env: { ...base, AZERDEX_ADMIN_PREVIEW: "isolated-synthetic", AZERDEX_ADMIN_PREVIEW_DATA: "synthetic", SUPABASE_URL: "https://example.invalid", SITE_URL: `http://localhost:${BACKEND_PORT}` } },
   ],
 });

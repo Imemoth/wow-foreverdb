@@ -7,11 +7,14 @@
  *   node scripts/admin-preview.mjs dev     # next dev with the preview enabled
  *   node scripts/admin-preview.mjs         # build + start
  *
- * The child process receives a SCRUBBED environment: only what the runtime needs to find Node plus the explicit preview variables below.
- * No ambient secret (Supabase, database URL, Auth keys, Vercel token, ...) can reach the preview process even if the shell has one.
- * It also refuses to start if the shell would leak a platform/hosted signal into a would-be local run.
+ * The child process receives a SCRUBBED process environment: only what the runtime needs to find Node plus the explicit preview variables below,
+ * so no ambient shell variable (database URL, Auth keys, tokens, hosted-platform markers, ...) is inherited.
+ * Next.js itself also loads dotenv files from this directory; to keep the guarantee honest the launcher REFUSES to run while any web/.env* file
+ * (other than .env.example) exists, unless ADMIN_PREVIEW_ALLOW_DOTENV=1 is set deliberately. The runtime gate additionally refuses any
+ * backend/secret-looking variable it can see.
  */
 import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -33,6 +36,12 @@ Object.assign(env, {
   NODE_ENV: undefined,
 });
 for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
+
+const dotenv = existsSync(".") ? readdirSync(".").filter((f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example") : [];
+if (dotenv.length && process.env.ADMIN_PREVIEW_ALLOW_DOTENV !== "1") {
+  console.error(`Refusing to run: dotenv file(s) present in this directory (${dotenv.join(", ")}). Next.js would load them into the preview process.\nMove them away for the preview run, or set ADMIN_PREVIEW_ALLOW_DOTENV=1 if they contain nothing but harmless local settings.`);
+  process.exit(2);
+}
 
 const run = (args) => new Promise((resolve, reject) => {
   const child = spawn(process.execPath, [nextBin, ...args], { env, stdio: "inherit" });
