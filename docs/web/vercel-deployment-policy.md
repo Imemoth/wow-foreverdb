@@ -10,7 +10,7 @@ The repository is a monorepo; Vercel Root Directory must remain `web` for `web/v
 
 ## Classification (conservative)
 
-- Skip: `docs/**`, `database/**`, `addon/**`, `addons/**`, `companion/**`, `Companion/**`, `desktop/**`, `.github/**`, `.mcp.json`, root-level README/CONTRIBUTING/LICENSE/CHANGELOG, `web/tests/**`, `web/docs/**`, `web/README.md`.
+- Skip: `docs/**`, `database/**`, `supabase/**`, `publisher/**`, `addon/**`, `addons/**`, `companion/**`, `Companion/**`, `desktop/**`, `.github/**`, `.mcp.json`, root-level README/CONTRIBUTING/LICENSE/CHANGELOG, `web/tests/**`, `web/docs/**`, `web/README.md`.
 - Build: every other `web/**` change, including `web/content/**`, `web/public/**`, source, package lock, `next.config.ts`, build scripts and this policy's runtime code; unknown or shared root paths build by default.
 - Multi-file changes: **any build-relevant path** triggers a build, even if most changes are docs/backend.
 - If a path is later consumed by Next.js compilation, move it to the build-relevant set in the same reviewed PR. Do not silently broaden the skip allowlist.
@@ -19,7 +19,7 @@ Important: a backend SQL migration can be operationally required independently o
 
 ## Acceptance before merge
 
-1. Unit tests for documentation-only, SQL-only, Companion-only, web-test-only, mixed code + docs, web content, public images, config, empty/malformed diff and unknown paths.
+1. Unit tests (part of `npm test`) for documentation-only, SQL/Supabase/publisher-only, Companion-only, web-test-only, mixed code + docs, web content, public images, config, empty/malformed diff and unknown paths; include an actual temporary Git repository diff from `web/` to detect root-wide changes.
 2. Verify representative historical commit diffs and multiple-commit pushes; confirm Git metadata is actually available on Vercel and first deployment fails open.
 3. Verify Vercel Root Directory and configuration precedence; do not create a duplicate conflicting Dashboard Ignored Build Step.
 4. CI and Vercel preview test on the exact Draft PR HEAD. Explicitly verify expected `SKIP` and `BUILD` outcomes from Vercel logs.
