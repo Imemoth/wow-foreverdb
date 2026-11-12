@@ -377,7 +377,8 @@ test.describe("17. public browsing and quotas are unchanged with accounts enable
   });
 
   test("the public search quota (30 per minute per client) is unchanged", async ({ playwright }) => {
-    const c = await newClient(playwright, "main", "198.51.100.240");
+    // Keep this quota probe outside uniqueIp()'s 198.51.100.x pool.
+    const c = await newClient(playwright, "main", "203.0.113.240");
     const codes: number[] = [];
     for (let i = 0; i < 32; i += 1) codes.push((await c.get(`/api/v1/search?q=copper&limit=${(i % 5) + 1}`)).status());
     expect(codes.slice(0, 30).every((s) => s === 200)).toBe(true);

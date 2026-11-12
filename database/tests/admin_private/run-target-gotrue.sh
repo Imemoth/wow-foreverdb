@@ -126,6 +126,23 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
           and not has_function_privilege('authenticated','admin_private.bootstrap_initial_owner(uuid,uuid,bytea,uuid,uuid,text)','EXECUTE')
           and admin_private.eligible_staff_identity('00000000-0000-0000-0000-000000000101')=false")
       [ "$staff_ok" = t ] || { echo "real-GoTrue ADM-01B-4 boundary failed" >&2; exit 1; }
+      if [ "${FDB_ADMIN_EDITORIAL:-}" = 1 ]; then
+        docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+          psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+          < "$repo/database/migrations/0024_admin_editorial_boundary.sql"
+        editorial_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+          -c "select (select version_id from admin_private.active_policy)=0
+            and (select count(*) from admin_private.staff_subjects)=0
+            and not has_schema_privilege('authenticated','admin_private','USAGE')
+            and not has_function_privilege('authenticated',
+              'admin_private.editorial_actor(text,text)','EXECUTE')
+            and not has_function_privilege('service_role',
+              'admin_private.append_editorial_audit(text,text,uuid,uuid,jsonb,jsonb)','EXECUTE')")
+        [ "$editorial_ok" = t ] || { echo "real-GoTrue ADM-01B-5 boundary failed" >&2; exit 1; }
+        docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+          psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+          < "$repo/database/rollback/0024_admin_editorial_boundary_rollback.sql"
+      fi
       docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
         psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
         < "$repo/database/rollback/0023_admin_staff_lifecycle_rollback.sql"
