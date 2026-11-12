@@ -1,0 +1,43 @@
+name: ADM-01B-5 inactive editorial boundary
+on:
+  pull_request:
+    paths:
+      - 'database/migrations/0024_admin_editorial_boundary.sql'
+      - 'database/rollback/0024_admin_editorial_boundary_rollback.sql'
+      - 'database/tests/admin_editorial/**'
+      - '.github/workflows/admin-editorial-boundary.yml'
+jobs:
+  editorial-sql:
+    name: ADM-01B-5 protected action boundary PG${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disposable security and transaction tests
+        env:
+          FDB_ADMIN_PG_IMAGE: postgres:${{ matrix.postgres }}
+        run: bash database/tests/admin_editorial/run-docker.sh
+  editorial-gotrue:
+    name: ADM-01B-5 pinned GoTrue migration compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rehearse 0020 to 0024 and guarded rollback on disposable GoTrue
+        env:
+          FDB_ADMIN_EVALUATOR: '1'
+          FDB_ADMIN_AUTH: '1'
+          FDB_ADMIN_STAFF: '1'
+          FDB_ADMIN_EDITORIAL: '1'
+        run: bash database/tests/admin_private/run-target-gotrue.sh
+  editorial-postgrest:
+    name: ADM-01B-5 pinned GoTrue and PostgREST isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test inactive 0024 in the pinned real Auth and API stack
+        env:
+          FDB_ADMIN_EDITORIAL: '1'
+        run: bash database/tests/admin_auth/run-companion-mfa-gotrue.sh

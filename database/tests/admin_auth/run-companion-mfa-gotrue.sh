@@ -46,6 +46,12 @@ for n in 0020_admin_private_authorization 0021_admin_private_evaluator 0022_admi
   docker exec -i -e PGPASSWORD=local-test-password "$pg_name" psql -X -q -v ON_ERROR_STOP=1 \
     -h 127.0.0.1 -U fdb_migrator -d "$db" < "$repo/database/migrations/$n.sql"
 done
+if [ "${FDB_ADMIN_EDITORIAL:-}" = 1 ]; then
+  for n in 0023_admin_staff_lifecycle 0024_admin_editorial_boundary; do
+    docker exec -i -e PGPASSWORD=local-test-password "$pg_name" psql -X -q -v ON_ERROR_STOP=1 \
+      -h 127.0.0.1 -U fdb_migrator -d "$db" < "$repo/database/migrations/$n.sql"
+  done
+fi
 
 # Pin the real PostgREST version/checksum used by the repository's Account E2E stack.
 rest_bin="${FDB_POSTGREST_BIN:-/tmp/fdb-admin-postgrest-v12.2.12}"
