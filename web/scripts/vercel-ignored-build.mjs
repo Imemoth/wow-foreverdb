@@ -2,6 +2,8 @@
 // Vercel Ignored Build Step. Exit 0 = skip build; exit 1 = build.
 // Fail open: any uncertainty must build, never silently suppress a web change.
 import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SAFE_PREFIXES = [
   "docs/",
@@ -45,10 +47,13 @@ function run() {
     return 1;
   }
   try {
+    // Important: run at Git repository root. Vercel invokes this from web/;
+    // a diff restricted to that working directory could silently miss root changes.
+    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 15000 }).trim();
     const diff = execFileSync(
       "git",
       ["diff", "--name-only", "--no-renames", "-z", base, "HEAD", "--"],
-      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 15000 },
+      { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 15000 },
     );
     const paths = diff.split("\0").filter(Boolean);
     const build = requiresWebBuild(paths);
@@ -60,6 +65,6 @@ function run() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   process.exitCode = run();
 }
