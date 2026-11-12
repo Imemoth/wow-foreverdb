@@ -109,6 +109,27 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
          and not has_table_privilege('authenticated','admin_private.handoff_tokens','SELECT')
          and not has_function_privilege('anon','public.fdb_admin_entry_ready()','EXECUTE')")
     [ "$auth_ok" = t ] || { echo "real-GoTrue ADM-01B-3 boundary failed" >&2; exit 1; }
+    if [ "${FDB_ADMIN_STAFF:-}" = 1 ]; then
+      docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+        psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+        < "$repo/database/migrations/0023_admin_staff_lifecycle.sql"
+      staff_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+        -c "select (select version_id from admin_private.active_policy)=0
+          and (select count(*) from admin_private.staff_subjects)=0
+          and (select event_no from admin_private.staff_audit_head)=0
+          and (select bool_and(relrowsecurity and relforcerowsecurity) from pg_class
+               where relnamespace='admin_private'::regnamespace
+                 and relname in ('bootstrap_control','staff_action_approvals',
+                   'staff_audit_head','staff_audit_events'))
+          and not has_schema_privilege('authenticated','admin_private','USAGE')
+          and not has_function_privilege('anon','public.fdb_admin_role_propose(uuid,text,integer,text)','EXECUTE')
+          and not has_function_privilege('authenticated','admin_private.bootstrap_initial_owner(uuid,uuid,bytea,uuid,uuid,text)','EXECUTE')
+          and admin_private.eligible_staff_identity('00000000-0000-0000-0000-000000000101')=false")
+      [ "$staff_ok" = t ] || { echo "real-GoTrue ADM-01B-4 boundary failed" >&2; exit 1; }
+      docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+        psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+        < "$repo/database/rollback/0023_admin_staff_lifecycle_rollback.sql"
+    fi
     docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
       psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
       < "$repo/database/rollback/0022_admin_auth_handoff_rollback.sql"

@@ -1,0 +1,37 @@
+name: ADM-01B-4 staff lifecycle and Owner ceremony
+
+on:
+  pull_request:
+    paths:
+      - 'database/migrations/0023_admin_staff_lifecycle.sql'
+      - 'database/rollback/0023_admin_staff_lifecycle_rollback.sql'
+      - 'database/tests/admin_staff/**'
+      - 'database/tests/admin_private/run-target-gotrue.sh'
+      - '.github/workflows/admin-staff-lifecycle.yml'
+
+jobs:
+  staff-sql:
+    name: ADM-01B-4 staff and bootstrap SQL boundaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disposable staff lifecycle, audit and concurrency
+        env:
+          FDB_ADMIN_PG_IMAGE: postgres:${{ matrix.postgres }}
+        run: bash database/tests/admin_staff/run-docker.sh
+
+  staff-gotrue:
+    name: ADM-01B-4 pinned GoTrue Auth compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rehearse 0020 to 0023 and guarded rollback on disposable GoTrue
+        env:
+          FDB_ADMIN_EVALUATOR: '1'
+          FDB_ADMIN_AUTH: '1'
+          FDB_ADMIN_STAFF: '1'
+        run: bash database/tests/admin_private/run-target-gotrue.sh
