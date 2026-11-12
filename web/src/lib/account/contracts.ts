@@ -31,6 +31,8 @@ export interface AuthEndpoint {
    * selectable by request data. The global logout that ends every session of a user after a successful password reset.
    */
   recoveryOnly?: boolean;
+  /** Only a canonical UUID may fill this single path segment. */
+  factorOperation?: "challenge" | "verify";
 }
 
 export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
@@ -47,6 +49,9 @@ export const AUTH_ENDPOINTS: readonly AuthEndpoint[] = [
   { method: "POST", path: "/auth/v1/logout", fixedQuery: { scope: "global" }, recoveryOnly: true },
   { method: "GET", path: "/auth/v1/user" },
   { method: "PUT", path: "/auth/v1/user" },
+  { method: "POST", path: "/auth/v1/factors" },
+  { method: "POST", path: "/auth/v1/factors/{factor_id}/challenge", factorOperation: "challenge" },
+  { method: "POST", path: "/auth/v1/factors/{factor_id}/verify", factorOperation: "verify" },
   { method: "GET", path: "/auth/v1/.well-known/jwks.json" },
 ];
 
@@ -63,8 +68,14 @@ export function isAllowedAuthRequest(method: string, pathAndQuery: string, opts:
     return false;
   }
   if (url.origin !== "https://auth.invalid") return false;
-  const candidates = AUTH_ENDPOINTS.filter((e) => e.method === method.toUpperCase() && e.path === url.pathname && (!e.recoveryOnly || opts.recovery === true));
+  const candidates = AUTH_ENDPOINTS.filter((e) => e.method === method.toUpperCase() && endpointPathMatches(e,url.pathname) && (!e.recoveryOnly || opts.recovery === true));
   return candidates.some((ep) => matchesEndpoint(ep, url, opts));
+}
+
+function endpointPathMatches(ep: AuthEndpoint, pathname: string): boolean {
+  if (!ep.factorOperation) return ep.path === pathname;
+  const match = /^\/auth\/v1\/factors\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(challenge|verify)$/i.exec(pathname);
+  return !!match && match[2] === ep.factorOperation;
 }
 
 function matchesEndpoint(ep: AuthEndpoint, url: URL, opts: { callbackUrl?: string }): boolean {
@@ -105,6 +116,9 @@ export const AUTH_BODIES = {
   recover: z.object({ email: authEmail }).strict(),
   resend: z.object({ type: z.literal("signup"), email: authEmail }).strict(),
   update_password: z.object({ password: authPassword }).strict(),
+  mfa_enroll: z.object({ factor_type: z.literal("totp"), friendly_name: z.literal("AzerDex Admin"), issuer: z.literal("AzerDex") }).strict(),
+  mfa_challenge: z.object({}).strict(),
+  mfa_verify: z.object({ challenge_id: z.string().uuid(), code: z.string().regex(/^[0-9]{6}$/) }).strict(),
 } as const;
 
 // ---------------------------------------------------------------------------------------------

@@ -4,6 +4,8 @@ import { accountRuntime } from "@/lib/account/runtime";
 import { callWebRpc } from "@/lib/account/rpc-client";
 import { jarFrom, resolveSession } from "@/lib/account/session";
 import { AccountDashboard } from "./_ui/AccountDashboard";
+import { AdminEntry } from "./_components/AdminEntry";
+import { adminEnabled } from "@/lib/admin/runtime";
 
 export const metadata = { title: "My account" };
 
@@ -32,5 +34,5 @@ export default async function AccountOverview({ searchParams }: { searchParams: 
   // The same read-only list the installations page shows; it only feeds the summaries below, so a failure just drops them.
   const inst = await callWebRpc(ac.cfg, "fdb_account_installations", {}, r.session.at);
 
-  return <AccountDashboard email={r.user.email} since={since} installations={inst.ok ? inst.data : null} welcome={welcome === "1"} />;
+  return <><AccountDashboard email={r.user.email} since={since} installations={inst.ok ? inst.data : null} welcome={welcome === "1"} />{adminEnabled(ac) && <AdminEntry />}</>;
 }

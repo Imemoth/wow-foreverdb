@@ -1,0 +1,47 @@
+name: ADM-01B-3 Admin authentication and handoff
+
+on:
+  pull_request:
+    paths:
+      - 'database/migrations/0022_admin_auth_handoff.sql'
+      - 'database/rollback/0022_admin_auth_handoff_rollback.sql'
+      - 'database/tests/admin_auth/**'
+      - 'database/tests/admin_private/run-target-gotrue.sh'
+      - 'web/src/lib/admin/**'
+      - 'web/src/app/admin/**'
+      - 'web/src/app/account/api/admin/**'
+      - '.github/workflows/admin-auth-session.yml'
+
+jobs:
+  admin-auth-sql:
+    name: ADM-01B-3 handoff and MFA SQL boundaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disposable SQL grants, RLS, replay and rollback
+        env:
+          FDB_ADMIN_PG_IMAGE: postgres:${{ matrix.postgres }}
+        run: bash database/tests/admin_auth/run-docker.sh
+
+  admin-auth-gotrue:
+    name: ADM-01B-3 pinned GoTrue MFA schema compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rehearse 0020 to 0022 on disposable GoTrue Auth schema
+        env:
+          FDB_ADMIN_EVALUATOR: '1'
+          FDB_ADMIN_AUTH: '1'
+        run: bash database/tests/admin_private/run-target-gotrue.sh
+
+  companion-mfa:
+    name: ADM-01B-3 registered Companion session impact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Measure first and repeated TOTP verification in pinned GoTrue
+        run: bash database/tests/admin_auth/run-companion-mfa-gotrue.sh

@@ -143,7 +143,10 @@ describe("auth endpoint allowlist", () => {
     expect(isAllowedAuthRequest("POST", "/auth/v1/token?grant_type=refresh_token")).toBe(true);
     expect(isAllowedAuthRequest("GET", "/auth/v1/user")).toBe(true);
     expect(isAllowedAuthRequest("GET", "/auth/v1/.well-known/jwks.json")).toBe(true);
-    expect(AUTH_ENDPOINTS.length).toBe(10);
+    expect(AUTH_ENDPOINTS.length).toBe(13);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/factors")).toBe(true);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/factors/00000000-0000-0000-0000-000000000001/challenge")).toBe(true);
+    expect(isAllowedAuthRequest("POST", "/auth/v1/factors/00000000-0000-0000-0000-000000000001/verify")).toBe(true);
   });
   it("pins query parameters: logout is always scope=local (never global, so the Companion session survives)", () => {
     expect(isAllowedAuthRequest("POST", "/auth/v1/logout?scope=local")).toBe(true);
@@ -203,7 +206,11 @@ describe("auth endpoint allowlist", () => {
       ["POST", "https://evil.example/auth/v1/signup"],
       ["POST", "//evil.example/auth/v1/signup"],
       ["POST", "/auth/v1/sso"],
-      ["POST", "/auth/v1/factors"],
+      ["GET", "/auth/v1/factors"],
+      ["DELETE", "/auth/v1/factors/00000000-0000-0000-0000-000000000001"],
+      ["POST", "/auth/v1/factors/../admin/users/verify"],
+      ["POST", "/auth/v1/factors/123/verify"],
+      ["POST", "/auth/v1/factors/00000000-0000-0000-0000-000000000001/verify?x=1"],
     ] as const) {
       expect(isAllowedAuthRequest(m, p), `${m} ${p}`).toBe(false);
     }

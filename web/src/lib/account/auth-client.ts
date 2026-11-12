@@ -35,6 +35,7 @@ const sessionUser = z
     created_at: z.string().optional(),
     last_sign_in_at: z.string().nullable().optional(),
     is_anonymous: z.boolean().optional(),
+    factors: z.array(z.object({ id: z.string().uuid(), factor_type: z.string(), status: z.string() }).passthrough()).optional(),
   })
   .passthrough();
 export type AuthUser = z.infer<typeof sessionUser>;
@@ -139,6 +140,8 @@ async function readBounded(res: Response): Promise<string> {
 
 const anyJson = z.unknown();
 const noBody = z.unknown();
+const mfaEnrollResponse = z.object({ id: z.string().uuid(), type: z.literal("totp"), totp: z.object({ qr_code: z.string().max(8192), secret: z.string().max(256), uri: z.string().max(8192).optional() }) }).passthrough();
+const mfaChallengeResponse = z.object({ id: z.string().uuid(), type: z.literal("totp") }).passthrough();
 
 /** The only callback the website ever hands to Auth: computed from the validated SITE_URL, never from a request. */
 export function callbackUrlFor(siteOrigin: string): string {
@@ -202,5 +205,19 @@ export const auth = {
   updatePassword(cfg: AccountAuthConfig, accessToken: string, password: string) {
     const body = AUTH_BODIES.update_password.parse({ password });
     return call(cfg, { method: "PUT", pathAndQuery: "/auth/v1/user", body, bearer: accessToken, parse: sessionUser });
+  },
+  enrollTotp(cfg: AccountAuthConfig, accessToken: string) {
+    const body = AUTH_BODIES.mfa_enroll.parse({ factor_type: "totp", friendly_name: "AzerDex Admin", issuer: "AzerDex" });
+    return call(cfg, { method: "POST", pathAndQuery: "/auth/v1/factors", bearer: accessToken, body, parse: mfaEnrollResponse });
+  },
+  challengeTotp(cfg: AccountAuthConfig, accessToken: string, factorId: string) {
+    const id = z.string().uuid().parse(factorId);
+    const body = AUTH_BODIES.mfa_challenge.parse({});
+    return call(cfg, { method: "POST", pathAndQuery: `/auth/v1/factors/${id}/challenge`, bearer: accessToken, body, parse: mfaChallengeResponse });
+  },
+  verifyTotp(cfg: AccountAuthConfig, accessToken: string, factorId: string, challengeId: string, code: string) {
+    const id = z.string().uuid().parse(factorId);
+    const body = AUTH_BODIES.mfa_verify.parse({ challenge_id: challengeId, code });
+    return call(cfg, { method: "POST", pathAndQuery: `/auth/v1/factors/${id}/verify`, bearer: accessToken, body, parse: sessionSchema });
   },
 };

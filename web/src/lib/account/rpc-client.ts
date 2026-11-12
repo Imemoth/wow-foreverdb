@@ -165,3 +165,45 @@ export async function callWebRpc<N extends CallableRpcName>(
   if (!parsed.success) return lost; // an unexpected shape (extra column, wrong type) is never passed on
   return { ok: true, data: parsed.data as RpcOutput<N> };
 }
+
+/** Four narrow ADM-01B-3 staging-only RPCs. No caller controls an RPC name, role, environment, UID or session ID. */
+export const ADMIN_RPCS = [
+  "fdb_admin_entry_ready",
+  "fdb_admin_handoff_start",
+  "fdb_admin_handoff_redeem",
+  "fdb_admin_session_revoke",
+] as const;
+export type AdminRpcName = (typeof ADMIN_RPCS)[number];
+
+export async function callAdminRpc(
+  cfg: AccountAuthConfig,
+  name: AdminRpcName,
+  accessToken: string,
+  token?: string,
+): Promise<{ ok: true; data: boolean } | RpcFailure> {
+  if (!(ADMIN_RPCS as readonly string[]).includes(name)) throw new Error("admin_rpc_not_allowed");
+  if (typeof accessToken !== "string" || accessToken.length < 20 || accessToken.length > 8192 || /[\s\r\n]/.test(accessToken)) throw new Error("admin_rpc_bad_token");
+  const takesToken = name === "fdb_admin_handoff_start" || name === "fdb_admin_handoff_redeem";
+  if (takesToken !== (typeof token === "string") || (takesToken && !/^[A-Za-z0-9_-]{43}$/.test(token!))) throw new Error("admin_rpc_bad_handoff");
+  // A lost reply to a one-time mutation is ambiguous; the BFF never retries it.
+  const lost: RpcFailure = name === "fdb_admin_entry_ready" ? { ok: false, kind: "unavailable" } : { ok: false, kind: "unknown_outcome" };
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.authOrigin}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { apikey: cfg.publishableKey, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(takesToken ? { p_token: token } : {}),
+      redirect: "manual", cache: "no-store", credentials: "omit", signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch { return lost; }
+  const value = await readBounded(res);
+  if (res.status === 401) return { ok: false, kind: "unauthenticated" };
+  if (res.status === 403) return { ok: false, kind: "forbidden" };
+  if (res.status === 429) return { ok: false, kind: "rate_limited", retryAfterSec: retryAfter(res) };
+  if (res.status === 400) return { ok: false, kind: "bad_request" };
+  if (res.status < 200 || res.status >= 300 || value === null) return lost;
+  try {
+    const data: unknown = JSON.parse(value);
+    return typeof data === "boolean" ? { ok: true, data } : lost;
+  } catch { return lost; }
+}

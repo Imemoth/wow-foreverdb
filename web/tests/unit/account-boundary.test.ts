@@ -26,7 +26,7 @@ const files: string[] = [];
 
 const rel = (p: string) => relative(SRC, p).split(sep).join("/");
 const read = (p: string) => readFileSync(p, "utf8");
-const inZone = (r: string) => r.startsWith("lib/account/") || r.startsWith("app/account/");
+const inZone = (r: string) => r.startsWith("lib/account/") || r.startsWith("app/account/") || r.startsWith("lib/admin/") || r.startsWith("app/admin/");
 /** Every module specifier the file can load: static imports, re-exports, dynamic import(), require(), import-type. */
 const importsOf = (p: string) => ts.preProcessFile(read(p), true, true).importedFiles.map((f) => f.fileName);
 const reachesAccount = (spec: string) => /(^|[/@])account(\/|$)/.test(spec);
