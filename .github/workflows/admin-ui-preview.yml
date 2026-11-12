@@ -1,0 +1,78 @@
+name: Admin UI preview (ADM-UI-PREVIEW-01)
+
+# The Admin UI preview is a SYNTHETIC, in-browser demonstration built only by a dedicated preview build. These jobs build it, run its browser
+# acceptance suite, and prove that (a) a normal build does not contain it and (b) the preview build refuses to serve under a broken or hosted
+# configuration. Nothing here uses a secret, a database, Supabase Auth or a deployment. Not a required check: the aggregated production-build
+# absence checks live in web-ci.yml ("Web code quality" and "Web E2E").
+on:
+  pull_request:
+    paths:
+      - 'web/src/admin-preview/**'
+      - 'web/src/app/admin-preview/**'
+      - 'web/src/lib/admin-preview-gate.ts'
+      - 'web/src/proxy.ts'
+      - 'web/src/app/layout.tsx'
+      - 'web/next.config.ts'
+      - 'web/tsconfig*.json'
+      - 'web/scripts/admin-preview.mjs'
+      - 'web/scripts/check-admin-preview-isolation.mjs'
+      - 'web/tests/admin-preview/**'
+      - 'web/playwright.admin-preview.config.ts'
+      - '.github/workflows/admin-ui-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-ui-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  isolation:
+    name: Admin UI preview build isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - name: Unit tests (preview engine, runtime gate, source boundary, adapter)
+        run: npx vitest run tests/unit/admin-preview-engine.test.ts tests/unit/admin-preview-gate.test.ts tests/unit/admin-preview-isolation.test.ts
+      - name: Normal production build
+        run: npm run build
+      - name: A normal build contains no preview marker and no preview route
+        run: npm run check:admin-preview-isolation
+      - name: Dedicated preview build
+        run: npm run admin-preview:build
+      - name: The check can see the preview in the preview build (sanity)
+        run: node scripts/check-admin-preview-isolation.mjs --expect=present --dist=.next-admin-preview
+      - name: Bundle-secret scan of the preview build
+        run: NEXT_DIST_DIR=.next-admin-preview npm run check:bundle-secrets
+      - name: The preview build and the normal build do not overwrite each other, and no tracked file changed
+        run: |
+          test -d .next && test -d .next-admin-preview
+          git diff --exit-code -- tsconfig.json package.json
+
+  browser:
+    name: Admin UI preview browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance (workflow, governance, session, responsive, accessibility, isolation)
+        run: npm run test:admin-preview -- --trace off
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: admin-ui-preview-results, path: web/test-results, retention-days: 14 }

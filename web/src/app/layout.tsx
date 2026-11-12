@@ -9,6 +9,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ConsentManager } from "@/components/consent/ConsentManager";
+import { ADMIN_PREVIEW_BUILD, isAdminPreviewPath } from "@/lib/admin-preview-gate";
 import { e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { pageContext } from "@/lib/page";
@@ -39,6 +40,15 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = { themeColor: "#07091c", colorScheme: "dark" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // ADM-UI-PREVIEW-01: in a dedicated preview BUILD only (the constant is false, so this branch is dead code in every normal build), the isolated Admin
+  // preview renders its own application shell without the public site chrome (no header, footer, consent bar, dataset banner or database call).
+  if (ADMIN_PREVIEW_BUILD && isAdminPreviewPath((await headers()).get("x-request-pathname") ?? "")) {
+    return (
+      <html lang="en">
+        <body className="min-h-screen">{children}</body>
+      </html>
+    );
+  }
   const { nonce, db, baseUrl, env } = await pageContext();
   const meta = await db.meta().catch(() => null);
   // Preserve the original publication-aware beta homepage JSON-LD URL, independently of indexing.
