@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createPreviewAdapter } from "@/admin-preview/adapter";
@@ -8,7 +8,7 @@ import { sessionView } from "@/admin-preview/domain/selectors";
 
 const SRC = join(__dirname, "..", "..", "src");
 function files(dir: string, out: string[] = []): string[] {
-  for (const n of readdirSync(dir)) { const p = join(dir, n); if (statSync(p).isDirectory()) files(p, out); else if (/\.(tsx?|mjs)$/.test(n)) out.push(p); }
+  for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) files(p, out); else if (/\.(tsx?|mjs)$/.test(e.name)) out.push(p); }
   return out;
 }
 const rel = (p: string): string => relative(SRC, p).split("\\").join("/");

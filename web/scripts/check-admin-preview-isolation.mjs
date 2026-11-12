@@ -7,7 +7,7 @@
  *
  * Absent means: the preview marker literal appears in no file of the build output, and no route manifest lists an /admin-preview route.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const arg = (name, dflt) => (process.argv.find((a) => a.startsWith(`--${name}=`)) ?? `--${name}=${dflt}`).split("=")[1];
@@ -16,20 +16,19 @@ const expectPresent = arg("expect", "absent") === "present";
 const MARKER = "AZERDEX-ADMIN-UI-PREVIEW-ISOLATED-SYNTHETIC-MARKER-v1";
 const SKIP_DIRS = new Set(["cache"]);
 
-if (!existsSync(dist)) { console.error(`FAIL: build output not found: ${dist} (run the build first)`); process.exit(2); }
-
+// No check-then-use on the filesystem: read directly and treat a missing output directory as a failure (exit 2, fail closed).
 function* walk(dir) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    const st = statSync(p);
-    if (st.isDirectory()) { if (!SKIP_DIRS.has(name)) yield* walk(p); } else yield p;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) yield* walk(p); } else if (entry.isFile()) yield p;
   }
 }
 
 let files = 0, markerHits = [], routeHits = [];
-for (const file of walk(dist)) {
+let list;
+try { list = [...walk(dist)]; } catch { console.error(`FAIL: build output not found or unreadable: ${dist} (run the build first)`); process.exit(2); }
+for (const file of list) {
   files++;
-  if (statSync(file).size > 25 * 1024 * 1024) continue;
   const text = readFileSync(file, "latin1");
   if (text.includes(MARKER)) markerHits.push(file.slice(dist.length + 1));
   if (/(routes-manifest|app-path-routes-manifest|app-paths-manifest|prerender-manifest)\.json$/.test(file) && /admin-preview/.test(text)) routeHits.push(file.slice(dist.length + 1));

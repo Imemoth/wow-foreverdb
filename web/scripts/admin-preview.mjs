@@ -14,7 +14,7 @@
  * backend/secret-looking variable it can see.
  */
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -37,7 +37,8 @@ Object.assign(env, {
 });
 for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
 
-const dotenv = existsSync(".") ? readdirSync(".").filter((f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example") : [];
+let dotenv = [];
+try { dotenv = readdirSync(".").filter((f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example"); } catch { /* unreadable directory: nothing to refuse */ }
 if (dotenv.length && process.env.ADMIN_PREVIEW_ALLOW_DOTENV !== "1") {
   console.error(`Refusing to run: dotenv file(s) present in this directory (${dotenv.join(", ")}). Next.js would load them into the preview process.\nMove them away for the preview run, or set ADMIN_PREVIEW_ALLOW_DOTENV=1 if they contain nothing but harmless local settings.`);
   process.exit(2);
