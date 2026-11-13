@@ -63,6 +63,8 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: CANARY-upstash-token-value-123
           RATE_LIMIT_SALT: CANARY-salt-value-0123456789abcdef0123456789
         run: npm run check:bundle-secrets
+      - name: Admin UI preview is absent from the production build (no marker, no route)
+        run: npm run check:admin-preview-isolation
 
   # ---------------------------------------------------------------------------------------------
   web-e2e:
@@ -83,6 +85,8 @@ jobs:
         run: npx playwright test --project=desktop tests/e2e/journeys.spec.ts
       - name: Security headers, CSP, API validation and rate limiting
         run: npx playwright test --project=desktop tests/e2e/security.spec.ts
+      - name: Admin UI preview is unreachable from a normal build (404 on every preview path)
+        run: npx playwright test --project=desktop tests/e2e/admin-preview-absent.spec.ts
       - name: Preview safety (synthetic banner, noindex, robots, sitemap, headers, cookies, fail-closed configurations)
         run: npx playwright test --project=preview
       - name: Accessibility regression (axe WCAG 2.2 AA) and SEO

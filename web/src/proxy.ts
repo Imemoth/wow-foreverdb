@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ADMIN_PREVIEW_BUILD, evaluatePreviewGate, isAdminPreviewPath, isLoopbackHost } from "@/lib/admin-preview-gate";
 import { E2E_FIXTURE_PATH_PREFIX, e2eFixturesAllowed } from "@/lib/e2e-fixtures";
 import { serverEnv } from "@/lib/env";
 import { assetOriginForPage, heroImgOrigin } from "@/lib/maps/zone-maps-gate";
@@ -79,11 +80,22 @@ export async function proxy(request: NextRequest) {
   if ((pathname === E2E_FIXTURE_PATH_PREFIX || pathname.startsWith(`${E2E_FIXTURE_PATH_PREFIX}/`)) && !e2eFixturesAllowed()) {
     return new NextResponse("Not found", { status: 404, headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "text/plain; charset=utf-8" } });
   }
+  // ADM-UI-PREVIEW-01: the synthetic Admin preview. In a normal build ADMIN_PREVIEW_BUILD is the constant false, so every /admin-preview path is
+  // refused here before any page code runs; in a preview build the runtime gate must also pass (fail closed on absence or inconsistency).
+  const previewPath = isAdminPreviewPath(pathname);
+  if (previewPath && (!ADMIN_PREVIEW_BUILD || !evaluatePreviewGate().allowed || !isLoopbackHost(request.headers.get("host")))) {
+    return new NextResponse("Not found", { status: 404, headers: { ...BASE_SECURITY_HEADERS, "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "text/plain; charset=utf-8" } });
+  }
+  // The preview has no server endpoints at all: only reading the document is allowed, so there is no mutating surface to probe or abuse.
+  if (previewPath && request.method !== "GET" && request.method !== "HEAD") {
+    return new NextResponse("Method not allowed", { status: 405, headers: { ...BASE_SECURITY_HEADERS, Allow: "GET, HEAD", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "text/plain; charset=utf-8" } });
+  }
   const isAccountApi = isAccountApiPath(pathname);
   const isApi = pathname.startsWith("/api/") || isAccountApi;
   // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
   // deployment, production included), never leaks an account path/query in Referer, and never receives the anonymous rate-limit cookie.
-  const isAccount = isAccountPath(pathname);
+  // The preview is treated exactly like the private account area: never cached, never indexed, no referrer leak, no anonymous rate-limit cookie.
+  const isAccount = isAccountPath(pathname) || previewPath;
   const accountHeaders: Record<string, string> = isAccount
     ? {
         "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",

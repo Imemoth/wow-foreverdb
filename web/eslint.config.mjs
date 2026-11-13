@@ -4,7 +4,7 @@ import nextTs from "eslint-config-next/typescript";
 const config = [
   ...nextVitals,
   ...nextTs,
-  { ignores: [".next/**", "node_modules/**", "playwright-report/**", "test-results/**", "next-env.d.ts"] },
+  { ignores: [".next/**", ".next-admin-preview/**", "node_modules/**", "playwright-report/**", "test-results/**", "next-env.d.ts"] },
   {
     rules: {
       // Raw HTML injection is banned outside the audited JSON-LD component.
