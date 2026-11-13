@@ -43,7 +43,7 @@ jobs:
         with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
       - run: npm ci
       - name: Unit tests (preview engine, runtime gate, source boundary, adapter)
-        run: npx vitest run tests/unit/admin-preview-engine.test.ts tests/unit/admin-preview-gate.test.ts tests/unit/admin-preview-isolation.test.ts tests/unit/admin-preview-build-config.test.ts
+        run: npx vitest run tests/unit/admin-preview-engine.test.ts tests/unit/admin-preview-gate.test.ts tests/unit/admin-preview-isolation.test.ts tests/unit/admin-preview-build-config.test.ts tests/unit/admin-preview-launcher.test.ts
       - name: Normal production build
         run: npm run build
       - name: A normal build contains no preview marker and no preview route

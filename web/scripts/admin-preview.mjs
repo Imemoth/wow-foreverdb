@@ -10,7 +10,7 @@
  * The child process receives a SCRUBBED process environment: only what the runtime needs to find Node plus the explicit preview variables below,
  * so no ambient shell variable (database URL, Auth keys, tokens, hosted-platform markers, ...) is inherited.
  * Next.js itself also loads dotenv files from this directory; to keep the guarantee honest the launcher REFUSES to run while any web/.env* file
- * (other than .env.example) exists, unless ADMIN_PREVIEW_ALLOW_DOTENV=1 is set deliberately. The runtime gate additionally refuses any
+ * (other than .env.example) exists. It also refuses to start if it cannot inspect the directory. The runtime gate additionally refuses any
  * backend/secret-looking variable it can see.
  */
 import { spawn } from "node:child_process";
@@ -37,10 +37,15 @@ Object.assign(env, {
 });
 for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
 
-let dotenv = [];
-try { dotenv = readdirSync(".").filter((f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example"); } catch { /* unreadable directory: nothing to refuse */ }
-if (dotenv.length && process.env.ADMIN_PREVIEW_ALLOW_DOTENV !== "1") {
-  console.error(`Refusing to run: dotenv file(s) present in this directory (${dotenv.join(", ")}). Next.js would load them into the preview process.\nMove them away for the preview run, or set ADMIN_PREVIEW_ALLOW_DOTENV=1 if they contain nothing but harmless local settings.`);
+let dotenv;
+try { dotenv = readdirSync(".").filter((f) => /^\.env(\..+)?$/.test(f) && f !== ".env.example"); }
+catch (error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error(`Cannot inspect preview environment files in the current directory: ${detail}. Check directory read permissions and retry. Preview was not started.`);
+  process.exit(2);
+}
+if (dotenv.length) {
+  console.error(`Refusing to run: dotenv file(s) present in this directory (${dotenv.join(", ")}). Next.js would load them into the preview process.\nMove them away before starting the local preview.`);
   process.exit(2);
 }
 

@@ -1,6 +1,6 @@
 # ADM-UI-PREVIEW-01 — Interactive Admin Platform preview
 
-**Status:** Draft, isolated development. A **synthetic, in-browser UX preview** of the approved Admin editorial and staff workflows so the Product Owner can inspect and operate them before any production activation. It is **not** an Admin implementation: it activates no authentication, role, policy, migration, publication or deployment, and it is not approval of any mechanic it demonstrates.
+**Status:** Product Owner **approved the six-screen Preview V1 as the product/UX baseline** for initial use and further development. This remains a local-only, synthetic, in-browser preview pending separate code-level merge approval. It is **not** an Admin implementation: it activates no authentication, role, policy, migration, publication or deployment, and the UX decision does not approve production activation or any mechanic it demonstrates.
 
 Authoritative inputs: [ADR-020](adr-020-admin-platform-adm-00.md) (OWNER APPROVED product policy), the [Admin access-control specification](admin-platform-access-control.md), [ADM-01B-4 operational gates](adm-01b-4-owner-operations.md) and the inactive ADM-01B-5 protected-action boundary (PR #201, now merged to `main`), and — **provisionally, as a documented contract only** — the ADM-03A article/revision contract (Draft PR #202, unmerged). No code, SQL or security logic from either PR is used by the preview; where it must say something about the unmerged contract it is labelled *provisional*.
 
@@ -16,7 +16,7 @@ npm ci
 npm run admin-preview        # builds the dedicated preview build, then serves http://localhost:3300/admin-preview
 ```
 
-Requires Node 24 (the repository's pinned major). The launcher gives the server a **scrubbed process environment** (only what Node needs, plus the preview's own variables) and refuses to run while a `web/.env*` file exists (Next.js would load it); set `ADMIN_PREVIEW_ALLOW_DOTENV=1` only if such a file holds nothing sensitive. The runtime gate also refuses any backend/secret-looking variable or hosting-platform marker. Stop with Ctrl+C. `npm run admin-preview:build` / `:start` run the steps separately; `ADMIN_PREVIEW_PORT` changes the port.
+Requires Node 24 (the repository's pinned major). The launcher gives the server a **scrubbed process environment** (only what Node needs, plus the preview's own variables) and refuses to run if it cannot inspect the working directory or if a `web/.env*` file exists (Next.js would load it). Move such files out of `web/` before starting the local preview; there is no dotenv override. The runtime gate also refuses any backend/secret-looking variable or hosting-platform marker. Stop with Ctrl+C. `npm run admin-preview:build` / `:start` run the steps separately; `ADMIN_PREVIEW_PORT` changes the port.
 
 A suggested 10-minute walk-through (persona names are synthetic; switch with the **Act as** menu in the top bar):
 
@@ -74,7 +74,7 @@ None of these were requested or changed here.
 
 | Command | Covers |
 | --- | --- |
-| `npx vitest run tests/unit/admin-preview-*.test.ts` | engine rules (≈ 35 cases), runtime gate matrix, source-boundary and adapter tests |
+| `npx vitest run tests/unit/admin-preview-*.test.ts` | engine rules, runtime gate matrix, launcher environment-file refusal, source-boundary and adapter tests |
 | `npm run test:admin-preview` | 12 required browser scenarios plus accessibility (axe WCAG 2.2 AA on every view), keyboard, responsive (1366/1024/820 px), isolation (fail-closed servers, no network writes, no cookies, no secrets in bundles) |
 | `npm run check:admin-preview-isolation` (after `npm run build`) | normal build contains no preview |
 | `npx playwright test --project=desktop tests/e2e/admin-preview-absent.spec.ts` | every `/admin-preview` path is 404 in a normal build |
