@@ -64,6 +64,14 @@ do $$ begin
 end $$;
 reset role;
 select current_revision_id as rev from editorial_private.articles where article_id='00000000-0000-0000-0000-000000000401' \gset
+do $$ begin
+ begin
+  update editorial_private.revisions set snapshot='{}'::jsonb
+    where revision_id=(select current_revision_id from editorial_private.articles
+                       where article_id='00000000-0000-0000-0000-000000000401');
+  raise exception 'revision was mutable';
+ exception when insufficient_privilege then null; end;
+end $$;
 set role authenticated;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
 select public.fdb_cms_submit_review('00000000-0000-0000-0000-000000000401', :'rev',
@@ -261,7 +269,19 @@ do $$ begin
   raise exception 'cross-resource publish allowed';
  exception when insufficient_privilege then null; end;
 end $$;
+select public.fdb_cms_review_decide('00000000-0000-0000-0000-000000000407', :'scopedrev',
+ 'return','Needs a more precise source summary',
+ '00000000-0000-0000-0000-000000000535');
+select public.fdb_cms_submit_review('00000000-0000-0000-0000-000000000407', :'scopedrev',
+ '00000000-0000-0000-0000-000000000536');
+select public.fdb_cms_review_decide('00000000-0000-0000-0000-000000000407', :'scopedrev',
+ 'reject','Source could not be verified',
+ '00000000-0000-0000-0000-000000000537');
 reset role;
+do $$ begin
+ if (select review_state from editorial_private.articles where article_id='00000000-0000-0000-0000-000000000407')<>'rejected'
+   then raise exception 'review return or reject failed'; end if;
+end $$;
 -- Claims naming another user's live session are insufficient.
 set role authenticated;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000202","aal":"aal2","exp":4102444800}';
