@@ -323,3 +323,29 @@ do $$ begin
     or exists(select 1 from admin_private.staff_audit_events where request_id='00000000-0000-0000-0000-000000000534')
     then raise exception 'outbox failure left protected state or audit'; end if;
 end $$;
+-- Image snapshots accept only immutable, rights-verified asset versions and
+-- retain attribution/provenance in the canonical hashed revision.
+insert into editorial_private.media_assets(asset_id,asset_version,path,rights_source,
+ rights_license,attribution,verified_by,verified_at)
+values('00000000-0000-0000-0000-000000000601',1,'/content-images/test.png',
+ 'synthetic fixture release','test-only license','Synthetic test author',
+ '00000000-0000-0000-0000-000000000102',clock_timestamp());
+set role authenticated;
+set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
+do $$ begin
+ begin
+  perform public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000410',
+   'cms-unknown-asset','{"title":"Unknown asset article","summary":"A synthetic missing asset summary today.","body_markdown":"A body.","classification":"normal","images":[{"asset_id":"00000000-0000-0000-0000-000000000602","alt":"Synthetic image"}]}',
+   '00000000-0000-0000-0000-000000000538');
+  raise exception 'unverified image accepted';
+ exception when invalid_parameter_value then null; end;
+end $$;
+select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000411',
+ 'cms-verified-image','{"title":"Verified image article","summary":"A synthetic verified asset summary today.","body_markdown":"A body.","classification":"normal","images":[{"asset_id":"00000000-0000-0000-0000-000000000601","alt":"Synthetic image"}]}',
+ '00000000-0000-0000-0000-000000000539');
+reset role;
+do $$ begin
+ if (select snapshot #>> '{images,0,rights_license}' from editorial_private.revisions
+     where article_id='00000000-0000-0000-0000-000000000411')<>'test-only license'
+    then raise exception 'asset provenance absent from snapshot'; end if;
+end $$;

@@ -283,7 +283,7 @@ as $snapshot$
 declare v_title text; v_summary text; v_body text; v_byline text; v_category text;
   v_seo text; v_class text; v_featured boolean; v_sample boolean;
   v_tags jsonb; v_links jsonb; v_images jsonb; v_output_images jsonb := '[]'::jsonb;
-  item jsonb; asset record; asset_id uuid;
+  item jsonb; asset record; v_asset_id uuid;
 begin
   if p_input is null or pg_catalog.jsonb_typeof(p_input)<>'object'
      or exists(select 1 from pg_catalog.jsonb_object_keys(p_input) k
@@ -344,8 +344,8 @@ begin
        or pg_catalog.length(item->>'alt') not between 3 and 200 then
       raise exception 'invalid image reference' using errcode='22023';
     end if;
-    asset_id:=(item->>'asset_id')::uuid;
-    select * into asset from editorial_private.media_assets where media_assets.asset_id=asset_id;
+    v_asset_id:=(item->>'asset_id')::uuid;
+    select * into asset from editorial_private.media_assets m where m.asset_id=v_asset_id;
     if not found or asset.verified_at is null then
       raise exception 'image rights not verified' using errcode='22023';
     end if;
