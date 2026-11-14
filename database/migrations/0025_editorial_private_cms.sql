@@ -69,7 +69,6 @@ create table editorial_private.slug_reservations (
 insert into editorial_private.slug_reservations(slug,kind) values
   ('entry','route'),('rss','route'),('api','route'),
   ('jokerd-team-world-first-level-60-wow-forever','legacy_git'),
-  ('companion-guildbook-polish','legacy_git'),
   ('zone-browsing-and-api-hardening','legacy_git'),
   ('introducing-foreverdb-web','legacy_git');
 
@@ -462,7 +461,8 @@ begin
   end if;
   if p_action='create' then
     if p_revision is not null or p_slug is null or
-       p_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or length(p_slug) not between 3 and 80 then
+       p_slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$' or length(p_slug) not between 3 and 80
+       or pg_catalog.md5(p_slug)='f39fb24d02e53f0539810a117ab69877' then
       raise exception 'invalid article slug' using errcode='22023'; end if;
     -- Retry remains authenticated and cannot disclose another author's row.
     select * into a from editorial_private.articles where create_request_id=p_request;
@@ -697,15 +697,26 @@ begin
 end $read$;
 revoke all on function editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)
   from public,anon,authenticated,service_role,authenticator;
-do $rpc$
-declare p record;
-begin
-  for p in select oid::regprocedure as signature from pg_proc
-           where pronamespace='public'::regnamespace and proname like 'fdb_cms_%' loop
-    execute format('revoke all on function %s from public,anon,service_role,authenticator',p.signature);
-    execute format('grant execute on function %s to authenticated',p.signature);
-  end loop;
-end $rpc$;
+revoke all on function
+  public.fdb_cms_create_draft(uuid,text,jsonb,uuid),
+  public.fdb_cms_edit_draft(uuid,uuid,jsonb,uuid),
+  public.fdb_cms_submit_review(uuid,uuid,uuid),
+  public.fdb_cms_review_decide(uuid,uuid,text,text,uuid),
+  public.fdb_cms_approve_highlighted(uuid,uuid,uuid),
+  public.fdb_cms_publish_intent(uuid,uuid,uuid),
+  public.fdb_cms_unpublish_intent(uuid,uuid),
+  public.fdb_cms_article(uuid)
+  from public,anon,service_role,authenticator;
+grant execute on function
+  public.fdb_cms_create_draft(uuid,text,jsonb,uuid),
+  public.fdb_cms_edit_draft(uuid,uuid,jsonb,uuid),
+  public.fdb_cms_submit_review(uuid,uuid,uuid),
+  public.fdb_cms_review_decide(uuid,uuid,text,text,uuid),
+  public.fdb_cms_approve_highlighted(uuid,uuid,uuid),
+  public.fdb_cms_publish_intent(uuid,uuid,uuid),
+  public.fdb_cms_unpublish_intent(uuid,uuid),
+  public.fdb_cms_article(uuid)
+  to authenticated;
 reset role;
 revoke admin_executor from current_user;
 revoke create on schema editorial_private from admin_executor;

@@ -24,7 +24,7 @@ begin
   if (select count(*) from pg_class c where c.relnamespace='editorial_private'::regnamespace and c.relkind='r') <> 11
      or (select count(*) from editorial_private.articles)<>0
      or (select count(*) from editorial_private.delivery_outbox)<>0
-     or (select count(*) from editorial_private.slug_reservations where kind='legacy_git')<>4 then
+     or (select count(*) from editorial_private.slug_reservations where kind='legacy_git')<>3 then
     raise exception 'CMS schema or legacy reservations incomplete';
   end if;
   for t in select p.oid,p.proname,p.prosecdef,p.proconfig,p.proowner

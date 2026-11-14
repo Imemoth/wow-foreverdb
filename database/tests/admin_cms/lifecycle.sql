@@ -46,6 +46,15 @@ update admin_private.active_policy set version_id=1,epoch=1,activated_at=clock_t
 alter table admin_private.active_policy enable trigger active_policy_immutable;
 set role authenticated;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
+do $$ begin
+ begin
+  perform public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000409',
+   'companion-guildbook-polish',
+   '{"title":"Protected legacy slug","summary":"A synthetic legacy slug summary today.","body_markdown":"A body.","classification":"normal"}',
+   '00000000-0000-0000-0000-000000000509');
+  raise exception 'historical slug reused';
+ exception when invalid_parameter_value then null; end;
+end $$;
 select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000401',
   'cms-test-article','{"title":"A test article","summary":"A synthetic summary with enough words.","body_markdown":"A draft body.","classification":"normal"}',
   '00000000-0000-0000-0000-000000000501');
