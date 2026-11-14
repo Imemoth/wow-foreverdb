@@ -4,7 +4,7 @@
 
 ## Dependency reconciliation
 
-PR #202 is dirty against `main` because both PR #202 and the merged Admin UI Preview PR #203 added a neighboring entry to `docs/web/README.md`. A later authorized synchronization should retain both links, leave the ADM-03A contract unchanged, and rerun exact-head CI. Do not merge #202 or alter its approved architecture in this implementation branch. ADM-03B's own migration and tests start from the current `main` and contain no file imported from #202.
+At development start, PR #202 was dirty against `main` because both PR #202 and the merged Admin UI Preview PR #203 added a neighboring entry to `docs/web/README.md`. A separate, external branch synchronization subsequently advanced #202 to `7b7a364de27302ece6796b79171bdb4404e6cc5b`; GitHub now reports it mergeable, and inspection confirms both documentation links remain. #202 is still open and unmerged, with its Owner merge gate intact. This branch did not modify or merge #202; ADM-03B's migration and tests start from `main` and contain no file imported from #202.
 
 ## Reviewable slices and intended files
 
@@ -24,6 +24,6 @@ The `published_revision_id` guard is intentionally locked at null until an indep
 
 ## Later gates
 
-PR #202 still needs separate owner merge authorization and reconciliation against `main`; the ADM-03B implementation PR also needs its own exact-head security review and merge GO. ADM-03C will add a separate projection/worker and measure the currently unaccepted cross-database revocation window. The real Admin UI adapter and approved isolated end-to-end workflow follow as another integration stage. Companion MFA/session compatibility, first-Owner operations, hosted migrations, policy activation and production launch remain separate gates.
+PR #202 still needs separate owner merge authorization; the ADM-03B implementation PR also needs its own exact-head CI and merge GO. ADM-03C will add a separate projection/worker and measure the currently unaccepted cross-database revocation window. The real Admin UI adapter and approved isolated end-to-end workflow follow as another integration stage. Companion MFA/session compatibility, first-Owner operations, hosted migrations, policy activation and production launch remain separate gates.
 
 **Migration/rollback review:** 0025 requires a reviewed migration operator with `CREATE` and Admin role-management capability and the existing 0020–0024 foundation. It uses PostgreSQL's built-in `sha256(bytea)`, with no new extension grant. It refuses a nonzero active policy or existing staff. The guarded rollback restores the 0024 helper and refuses any CMS article, verified asset, intent, staff, active policy or unrecognized schema/function count; after data exists, use a reviewed forward repair. Before any hosted staging apply, inventory newly added Git slugs beyond the four frozen at this branch HEAD and reserve them. The rollback uses a checked schema drop only while empty; no hosted rollback is authorized here.
