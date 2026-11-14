@@ -7,7 +7,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOT = join(process.cwd(), ".next", "static");
+// NEXT_DIST_DIR lets the same scan cover the dedicated Admin UI preview build (.next-admin-preview).
+const ROOT = join(process.cwd(), process.env.NEXT_DIST_DIR ?? ".next", "static");
 const FORBIDDEN = [
   /klxhikdlfwgxurdyexdi/, // private production project ref
   /service_role/i,
