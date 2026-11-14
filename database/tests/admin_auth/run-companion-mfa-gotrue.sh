@@ -52,6 +52,13 @@ if [ "${FDB_ADMIN_EDITORIAL:-}" = 1 ]; then
       -h 127.0.0.1 -U fdb_migrator -d "$db" < "$repo/database/migrations/$n.sql"
   done
 fi
+if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
+  docker exec "$pg_name" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db" \
+    -c 'grant usage on schema extensions to admin_executor' >/dev/null
+  docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+    psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db" \
+    < "$repo/database/migrations/0025_editorial_private_cms.sql"
+fi
 
 # Pin the real PostgREST version/checksum used by the repository's Account E2E stack.
 rest_bin="${FDB_POSTGREST_BIN:-/tmp/fdb-admin-postgrest-v12.2.12}"
@@ -78,6 +85,12 @@ for _ in $(seq 1 60); do
   kill -0 "$rest_pid" || { tail -20 /tmp/fdb-admin-postgrest.log >&2; exit 1; }
   sleep 1
 done
+if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
+  cms_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 \
+    -H 'Content-Type: application/json' -d '{}' \
+    "http://127.0.0.1:$rest_port/rpc/fdb_cms_create_draft")
+  case "$cms_status" in 401|403|404) ;; *) echo "anonymous CMS RPC returned $cms_status" >&2; exit 1;; esac
+fi
 FDB_LOCAL_GOTRUE_URL="http://127.0.0.1:$port" FDB_LOCAL_REST_URL="http://127.0.0.1:$rest_port" \
 FDB_LOCAL_PG_CONTAINER="$pg_name" FDB_LOCAL_PG_DATABASE="$db" \
   node "$repo/database/tests/admin_auth/companion-mfa-gotrue.mjs"
