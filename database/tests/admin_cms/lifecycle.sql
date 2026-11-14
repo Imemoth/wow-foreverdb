@@ -58,6 +58,17 @@ end $$;
 select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000401',
   'cms-test-article','{"title":"A test article","summary":"A synthetic summary with enough words.","body_markdown":"A draft body.","classification":"normal"}',
   '00000000-0000-0000-0000-000000000501');
+select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000401',
+  'cms-test-article','{"title":"A test article","summary":"A synthetic summary with enough words.","body_markdown":"A draft body.","classification":"normal"}',
+  '00000000-0000-0000-0000-000000000501');
+do $$ begin
+ begin
+  perform public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000401',
+   'cms-test-article','{"title":"Changed retry title","summary":"A synthetic summary with enough words.","body_markdown":"A draft body.","classification":"normal"}',
+   '00000000-0000-0000-0000-000000000501');
+  raise exception 'changed retry payload was accepted';
+ exception when unique_violation then null; end;
+end $$;
 do $$ begin
  if (public.fdb_cms_article('00000000-0000-0000-0000-000000000401')->>'slug')<>'cms-test-article'
     then raise exception 'authorized CMS read failed'; end if;
@@ -84,6 +95,14 @@ do $$ begin
    or (select count(*) from editorial_private.delivery_outbox where status='blocked')<>1
    or (select count(*) from editorial_private.publication_intents)<>1
    or (select count(*) from admin_private.staff_audit_events where action_key like 'news.%')<>3
+   or (select after_state->>'hash' from admin_private.staff_audit_events
+       where request_id='00000000-0000-0000-0000-000000000501')<>
+       (select encode(snapshot_hash,'hex') from editorial_private.revisions
+        where article_id='00000000-0000-0000-0000-000000000401')
+   or (select after_state->>'payload_hash' from admin_private.staff_audit_events
+       where request_id='00000000-0000-0000-0000-000000000503')<>
+       (select encode(payload_hash,'hex') from editorial_private.publication_intents
+        where request_id='00000000-0000-0000-0000-000000000503')
  then raise exception 'CMS lifecycle not atomic'; end if;
 end $$;
 -- Highlighted flow: no self-approval, edits invalidate approval and publisher
@@ -325,9 +344,10 @@ do $$ begin
 end $$;
 -- Image snapshots accept only immutable, rights-verified asset versions and
 -- retain attribution/provenance in the canonical hashed revision.
-insert into editorial_private.media_assets(asset_id,asset_version,path,rights_source,
+insert into editorial_private.media_assets(asset_id,asset_version,path,content_sha256,rights_source,
  rights_license,attribution,verified_by,verified_at)
 values('00000000-0000-0000-0000-000000000601',1,'/content-images/test.png',
+ pg_catalog.sha256(pg_catalog.convert_to('synthetic image bytes','UTF8')),
  'synthetic fixture release','test-only license','Synthetic test author',
  '00000000-0000-0000-0000-000000000102',clock_timestamp());
 set role authenticated;
@@ -347,5 +367,8 @@ reset role;
 do $$ begin
  if (select snapshot #>> '{images,0,rights_license}' from editorial_private.revisions
      where article_id='00000000-0000-0000-0000-000000000411')<>'test-only license'
+    or (select snapshot #>> '{images,0,content_sha256}' from editorial_private.revisions
+     where article_id='00000000-0000-0000-0000-000000000411')<>
+       encode(pg_catalog.sha256(pg_catalog.convert_to('synthetic image bytes','UTF8')),'hex')
     then raise exception 'asset provenance absent from snapshot'; end if;
 end $$;

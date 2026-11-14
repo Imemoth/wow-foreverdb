@@ -53,8 +53,6 @@ if [ "${FDB_ADMIN_EDITORIAL:-}" = 1 ]; then
   done
 fi
 if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
-  docker exec "$pg_name" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db" \
-    -c 'grant usage on schema extensions to admin_executor' >/dev/null
   docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
     psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db" \
     < "$repo/database/migrations/0025_editorial_private_cms.sql"

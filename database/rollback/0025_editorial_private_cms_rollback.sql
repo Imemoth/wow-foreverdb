@@ -6,10 +6,14 @@ begin
      or (select version_id from admin_private.active_policy where singleton)<>0
      or exists(select 1 from admin_private.staff_subjects)
      or exists(select 1 from editorial_private.articles)
+     or exists(select 1 from editorial_private.media_assets)
      or exists(select 1 from editorial_private.slug_reservations where kind='cms')
+     or (select count(*) from editorial_private.slug_reservations)<>6
      or exists(select 1 from editorial_private.publication_intents)
      or (select count(*) from pg_class where relnamespace='editorial_private'::regnamespace and relkind='r')<>11
-     or (select count(*) from pg_proc where pronamespace='editorial_private'::regnamespace)<>6
+     or (select count(*) from pg_class where relnamespace='editorial_private'::regnamespace and relkind='i')<>24
+     or exists(select 1 from pg_class where relnamespace='editorial_private'::regnamespace and relkind not in ('r','i'))
+     or (select count(*) from pg_proc where pronamespace='editorial_private'::regnamespace)<>7
      or (select count(*) from pg_proc where pronamespace='public'::regnamespace and proname like 'fdb_cms_%')<>8
      then raise exception '0025 rollback refused: protected data, policy or schema changed'; end if;
 end $guard$;

@@ -18,6 +18,11 @@ lock_article() {
   psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
     "begin; select article_id from editorial_private.articles where article_id='$article' for update; select pg_sleep(3); commit" >/tmp/fdb-cms-lock.log 2>&1
 }
+lock_audit_head() {
+  psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
+    "begin; select singleton from admin_private.staff_audit_head where singleton for update;
+     select pg_sleep(3); commit" >/tmp/fdb-cms-audit-lock.log 2>&1
+}
 # Evaluator lock precedes article lock. A revoke queued after authorization
 # cannot commit first; the action commits, then the revoke takes effect.
 rev=$(revision)
@@ -52,4 +57,28 @@ if wait "$action"; then echo 'expired role permitted edit' >&2; exit 1; fi
 grep -q 'editorial action denied' /tmp/fdb-cms-concurrent-action.log
 count=$(psql -X -At -U postgres -d fdb_admin_it -c "select count(*) from editorial_private.revisions where article_id='$article'")
 [ "$count" = 2 ] || { echo 'failed action left an immutable revision' >&2; exit 1; }
+psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
+  "update admin_private.role_assignments set expires_at=clock_timestamp()+interval '1 second'
+   where user_id='$uid' and role_name='Editor' and status='active'" >/dev/null
+lock_audit_head & locker=$!
+sleep 0.3
+try_edit "$rev" 00000000-0000-0000-0000-000000000540 & action=$!
+seen_wait=0
+for _ in $(seq 1 20); do
+  waiting=$(psql -X -At -U postgres -d fdb_admin_it -c \
+    "select count(*) from pg_stat_activity where wait_event_type='Lock'
+      and query like '%fdb_cms_edit_draft%'")
+  if [ "$waiting" -gt 0 ]; then seen_wait=1; break; fi
+  sleep 0.1
+done
+[ "$seen_wait" = 1 ] || { echo 'audit-head wait not observed' >&2; exit 1; }
+wait "$locker"
+if wait "$action"; then echo 'audit-head wait bypassed fresh authorization' >&2; exit 1; fi
+if ! grep -q 'editorial action denied' /tmp/fdb-cms-concurrent-action.log \
+   || ! grep -q 'lock_audit_and_recheck' /tmp/fdb-cms-concurrent-action.log; then
+  cat /tmp/fdb-cms-concurrent-action.log >&2
+  exit 1
+fi
+count=$(psql -X -At -U postgres -d fdb_admin_it -c "select count(*) from editorial_private.revisions where article_id='$article'")
+[ "$count" = 2 ] || { echo 'audit-head wait left a revision' >&2; exit 1; }
 echo 'ADM-03B concurrent revoke and expiry: PASS'

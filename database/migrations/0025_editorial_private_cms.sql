@@ -8,9 +8,6 @@ begin
   if to_regnamespace('editorial_private') is not null
      or to_regprocedure('admin_private.editorial_actor(text,text)') is null
      or to_regprocedure('admin_private.append_editorial_audit(text,text,uuid,uuid,jsonb,jsonb)') is null
-     or to_regprocedure('extensions.digest(bytea,text)') is null
-     or not has_schema_privilege('admin_executor','extensions','USAGE')
-     or not has_function_privilege('admin_executor','extensions.digest(bytea,text)','EXECUTE')
      or to_regrole('admin_executor') is null
      or (select version_id from admin_private.active_policy where singleton) <> 0
      or exists(select 1 from admin_private.staff_subjects) then
@@ -37,6 +34,7 @@ create table editorial_private.media_assets (
   asset_id uuid primary key default pg_catalog.gen_random_uuid(),
   asset_version integer not null check (asset_version > 0),
   path text not null check (path ~ '^/content-images/[a-z0-9/_-]+\.(svg|png|jpg|webp)$'),
+  content_sha256 bytea not null check (pg_catalog.octet_length(content_sha256)=32),
   rights_source text not null check (pg_catalog.length(pg_catalog.btrim(rights_source)) between 3 and 500),
   rights_license text not null check (pg_catalog.length(pg_catalog.btrim(rights_license)) between 3 and 200),
   attribution text not null check (pg_catalog.length(pg_catalog.btrim(attribution)) between 3 and 200),
@@ -351,7 +349,8 @@ begin
     end if;
     v_output_images:=v_output_images || pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object('asset_id',asset.asset_id,'version',asset.asset_version,
-        'path',asset.path,'alt',item->>'alt','attribution',asset.attribution,
+        'path',asset.path,'content_sha256',pg_catalog.encode(asset.content_sha256,'hex'),
+        'alt',item->>'alt','attribution',asset.attribution,
         'rights_source',asset.rights_source,'rights_license',asset.rights_license));
   end loop;
   return pg_catalog.jsonb_build_object(
@@ -383,9 +382,10 @@ grant execute on function editorial_private.require_actor(text,uuid) to admin_ex
 create function editorial_private.eligible_approver(p_uid uuid,p_article_id uuid,p_policy bigint)
 returns boolean language plpgsql security invoker set search_path = '' as $eligible$
 declare v_now timestamptz; v_role record; v_grant record;
-  v_editor boolean:=false; v_default boolean:=false; v_delegated boolean:=false;
-  v_has_enter boolean:=false;
-  v_deadline timestamptz:='infinity'; v_collection text;
+  v_enter_deadline timestamptz:='-infinity';
+  v_default_deadline timestamptz:='-infinity';
+  v_editor_deadline timestamptz:='-infinity';
+  v_grant_deadline timestamptz:='-infinity'; v_collection text;
 begin
   select collection_key into v_collection from editorial_private.articles
     where article_id=p_article_id;
@@ -405,19 +405,22 @@ begin
       and (a.scope_kind='global' or (a.scope_kind='article' and a.scope_id=p_article_id::text)
            or (a.scope_kind='collection' and a.scope_id=v_collection))
     order by a.assignment_id for share of a loop
-    v_deadline:=least(v_deadline,coalesce(v_role.expires_at,'infinity'::timestamptz),v_role.review_due_at);
     if v_role.scope_kind='global' and exists(select 1 from admin_private.role_permissions
          where version_id=p_policy and role_name=v_role.role_name and permission_key='admin.enter')
-       then v_has_enter:=true; end if;
-    if v_role.role_name='Editor' then v_editor:=true; end if;
+       then v_enter_deadline:=greatest(v_enter_deadline,
+         least(coalesce(v_role.expires_at,'infinity'::timestamptz),v_role.review_due_at)); end if;
+    if v_role.role_name='Editor' then
+      v_editor_deadline:=greatest(v_editor_deadline,
+        least(coalesce(v_role.expires_at,'infinity'::timestamptz),v_role.review_due_at)); end if;
     if v_role.role_name in ('Administrator','Owner')
        and exists(select 1 from admin_private.role_permissions
                   where version_id=p_policy and role_name=v_role.role_name
                     and permission_key='news.article.approve_highlighted') then
-      v_default:=true;
+      v_default_deadline:=greatest(v_default_deadline,
+        least(coalesce(v_role.expires_at,'infinity'::timestamptz),v_role.review_due_at));
     end if;
   end loop;
-  if v_editor then
+  if v_editor_deadline>'-infinity'::timestamptz then
     for v_grant in select g.expires_at from admin_private.direct_grants g
       where g.user_id=p_uid and g.policy_version_id=p_policy
         and g.environment_scope='staging' and g.status='active'
@@ -426,12 +429,13 @@ begin
         and ((g.scope_kind='article' and g.scope_id=p_article_id::text)
              or (g.scope_kind='collection' and g.scope_id=v_collection))
       order by g.grant_id for share of g loop
-      v_delegated:=true;
-      v_deadline:=least(v_deadline,v_grant.expires_at);
+      v_grant_deadline:=greatest(v_grant_deadline,v_grant.expires_at);
     end loop;
   end if;
   v_now:=pg_catalog.clock_timestamp();
-  return v_has_enter and (v_default or v_delegated) and v_deadline>v_now
+  return v_enter_deadline>v_now
+     and (v_default_deadline>v_now
+       or (v_editor_deadline>v_now and v_grant_deadline>v_now))
      and (select version_id from admin_private.active_policy where singleton)=p_policy
      and exists(select 1 from admin_private.staff_subjects where user_id=p_uid and status='active');
 end $eligible$;
@@ -445,12 +449,24 @@ grant create on schema editorial_private to admin_executor;
 grant create on schema public to admin_executor;
 grant admin_executor to current_user;
 set role admin_executor;
+create function editorial_private.lock_audit_and_recheck(
+  p_permission text,p_article uuid,p_actor uuid,p_approver uuid,p_policy bigint
+) returns void language plpgsql security invoker set search_path = '' as $lock$
+begin
+  perform 1 from admin_private.staff_audit_head where singleton for update;
+  if not found or editorial_private.require_actor(p_permission,p_article)
+     is distinct from p_actor then
+    raise exception 'editorial authority expired during audit wait' using errcode='42501'; end if;
+  if p_approver is not null and
+     not editorial_private.eligible_approver(p_approver,p_article,p_policy) then
+    raise exception 'approver authority expired during audit wait' using errcode='42501'; end if;
+end $lock$;
 create function editorial_private.run_action(
   p_action text,p_article uuid,p_revision uuid,p_snapshot jsonb,
   p_slug text,p_note text,p_request uuid
 ) returns uuid language plpgsql security invoker set search_path = '' as $action$
 declare a editorial_private.articles%rowtype; r editorial_private.revisions%rowtype;
-  v_actor uuid; v_snapshot jsonb; v_hash bytea; v_new uuid;
+  v_actor uuid; v_snapshot jsonb; v_original_snapshot jsonb; v_hash bytea; v_new uuid;
   v_before jsonb; v_after jsonb; v_audit bigint; v_policy bigint;
   v_approval editorial_private.approvals%rowtype; v_prior editorial_private.publication_intents%rowtype;
   v_class integer; v_kind text; v_payload jsonb;
@@ -468,7 +484,11 @@ begin
     select * into a from editorial_private.articles where create_request_id=p_request;
     if found then
       v_actor:=editorial_private.require_actor('news.draft.write',a.article_id);
+      v_snapshot:=editorial_private.canonical_snapshot(p_snapshot);
+      select snapshot into v_original_snapshot from editorial_private.revisions
+        where article_id=a.article_id and revision_no=1;
       if a.article_id=p_article and a.slug=p_slug and a.created_by=v_actor
+         and v_snapshot=v_original_snapshot
          then return a.article_id; end if;
       raise exception 'request id reused' using errcode='23505';
     end if;
@@ -478,7 +498,9 @@ begin
       or (v_snapshot->>'featured')::boolean then 1 else 0 end;
     if v_class=1 and v_snapshot->>'classification'<>'highlighted' then
       raise exception 'featured content must be highlighted' using errcode='22023'; end if;
+    perform editorial_private.lock_audit_and_recheck('news.draft.write',p_article,v_actor,null,null);
     v_new:=pg_catalog.gen_random_uuid();
+    v_hash:=pg_catalog.sha256(pg_catalog.convert_to(v_snapshot::text,'UTF8'));
     insert into editorial_private.articles(article_id,slug,origin,current_revision_id,
       review_state,classification_floor,created_by,create_request_id)
       values(p_article,p_slug,'manual',v_new,'draft',v_class,v_actor,p_request);
@@ -486,12 +508,12 @@ begin
       values(p_slug,'cms',p_article);
     insert into editorial_private.revisions(revision_id,article_id,revision_no,
       snapshot_schema_version,snapshot,snapshot_hash,effective_classification,created_by)
-      values(v_new,p_article,1,1,v_snapshot,
-        extensions.digest(pg_catalog.convert_to(v_snapshot::text,'UTF8'),'sha256'),v_class,v_actor);
+      values(v_new,p_article,1,1,v_snapshot,v_hash,v_class,v_actor);
     insert into editorial_private.revision_contributors(article_id,revision_id,actor_id,contribution)
       values(p_article,v_new,v_actor,'author');
     perform admin_private.append_editorial_audit('news.draft.write',p_article::text,v_actor,
-      p_request,'{}'::jsonb,pg_catalog.jsonb_build_object('event','create','revision',v_new));
+      p_request,'{}'::jsonb,pg_catalog.jsonb_build_object('event','create','revision',v_new,
+        'hash',pg_catalog.encode(v_hash,'hex')));
     return p_article;
   end if;
 
@@ -525,8 +547,9 @@ begin
     if v_class<a.classification_floor or
        (v_class=1 and v_snapshot->>'classification'<>'highlighted') then
       raise exception 'classification downgrade forbidden' using errcode='42501'; end if;
+    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,null,null);
     v_new:=pg_catalog.gen_random_uuid();
-    v_hash:=extensions.digest(pg_catalog.convert_to(v_snapshot::text,'UTF8'),'sha256');
+    v_hash:=pg_catalog.sha256(pg_catalog.convert_to(v_snapshot::text,'UTF8'));
     insert into editorial_private.revisions(revision_id,article_id,revision_no,parent_revision_id,
       snapshot_schema_version,snapshot,snapshot_hash,effective_classification,created_by)
       values(v_new,p_article,r.revision_no+1,r.revision_id,1,v_snapshot,v_hash,
@@ -543,6 +566,7 @@ begin
   elsif p_action='submit' then
     if p_revision is distinct from r.revision_id or a.review_state not in ('draft','rejected') then
       raise exception 'stale or unsubmitted revision' using errcode='40001'; end if;
+    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,null,null);
     insert into editorial_private.review_events(article_id,revision_id,revision_hash,actor_id,decision)
       values(p_article,r.revision_id,r.snapshot_hash,v_actor,'submit') returning event_id into v_new;
     update editorial_private.articles set review_state='in_review' where article_id=p_article;
@@ -551,6 +575,7 @@ begin
     if p_revision is distinct from r.revision_id or a.review_state<>'in_review'
        or p_note is null or length(btrim(p_note)) not between 5 and 2000 then
       raise exception 'invalid review decision' using errcode='22023'; end if;
+    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,null,null);
     insert into editorial_private.review_events(article_id,revision_id,revision_hash,
       actor_id,decision,note) values(p_article,r.revision_id,r.snapshot_hash,v_actor,
       p_action,p_note) returning event_id into v_new;
@@ -566,6 +591,7 @@ begin
     select version_id into v_policy from admin_private.active_policy where singleton for share;
     if not editorial_private.eligible_approver(v_actor,p_article,v_policy) then
       raise exception 'approver no longer eligible' using errcode='42501'; end if;
+    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,v_actor,v_policy);
     insert into editorial_private.approvals(article_id,revision_id,revision_hash,
       approver_id,policy_version_id) values(p_article,r.revision_id,r.snapshot_hash,
       v_actor,v_policy) returning approval_id into v_new;
@@ -605,6 +631,8 @@ begin
       v_payload:=pg_catalog.jsonb_build_object('kind','publish','article_id',p_article,
         'slug',a.slug,'revision_id',r.revision_id,'revision_hash',
         pg_catalog.encode(r.snapshot_hash,'hex'),'generation',a.generation+1);
+      perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,
+        case when r.effective_classification=1 then v_approval.approver_id end,v_policy);
       update editorial_private.articles set review_state='publish_pending',
         generation=generation+1 where article_id=p_article;
     else
@@ -612,13 +640,16 @@ begin
         raise exception 'nothing to unpublish' using errcode='42501'; end if;
       v_payload:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',p_article,
         'slug',a.slug,'generation',a.generation+1);
+      perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,null,null);
       update editorial_private.articles set review_state='unpublish_pending',
         generation=generation+1 where article_id=p_article;
     end if;
-    v_hash:=extensions.digest(pg_catalog.convert_to(v_payload::text,'UTF8'),'sha256');
+    v_hash:=pg_catalog.sha256(pg_catalog.convert_to(v_payload::text,'UTF8'));
     v_new:=pg_catalog.gen_random_uuid();
     v_after:=pg_catalog.jsonb_build_object('event',p_action||'_intent',
       'revision',case when p_action='publish' then r.revision_id end,
+      'revision_hash',case when p_action='publish' then pg_catalog.encode(r.snapshot_hash,'hex') end,
+      'payload_hash',pg_catalog.encode(v_hash,'hex'),
       'intent',v_new,'generation',a.generation+1);
     v_audit:=admin_private.append_editorial_audit(v_kind,p_article::text,v_actor,
       p_request,v_before,v_after);
@@ -632,6 +663,9 @@ begin
     end if;
     insert into editorial_private.delivery_outbox(intent_id,article_id,generation,payload,payload_hash)
       values(v_new,p_article,a.generation+1,v_payload,v_hash);
+    if p_action='publish' and r.effective_classification=1
+       and not editorial_private.eligible_approver(v_approval.approver_id,p_article,v_policy) then
+      raise exception 'approver eligibility expired during publication' using errcode='42501'; end if;
     return v_new;
   end if;
   perform admin_private.append_editorial_audit(v_kind,p_article::text,v_actor,
@@ -696,6 +730,8 @@ begin
     'snapshot_hash',pg_catalog.encode(r.snapshot_hash,'hex'),'snapshot',r.snapshot);
 end $read$;
 revoke all on function editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)
+  from public,anon,authenticated,service_role,authenticator;
+revoke all on function editorial_private.lock_audit_and_recheck(text,uuid,uuid,uuid,bigint)
   from public,anon,authenticated,service_role,authenticator;
 revoke all on function
   public.fdb_cms_create_draft(uuid,text,jsonb,uuid),

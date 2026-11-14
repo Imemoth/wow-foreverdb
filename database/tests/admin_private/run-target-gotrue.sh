@@ -140,8 +140,6 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
               'admin_private.append_editorial_audit(text,text,uuid,uuid,jsonb,jsonb)','EXECUTE')")
         [ "$editorial_ok" = t ] || { echo "real-GoTrue ADM-01B-5 boundary failed" >&2; exit 1; }
         if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
-          docker exec "$pg_name" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db_name" \
-            -c 'grant usage on schema extensions to admin_executor' >/dev/null
           docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
             psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
             < "$repo/database/migrations/0025_editorial_private_cms.sql"
@@ -154,8 +152,6 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
           docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
             psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
             < "$repo/database/rollback/0025_editorial_private_cms_rollback.sql"
-          docker exec "$pg_name" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db_name" \
-            -c 'revoke usage on schema extensions from admin_executor' >/dev/null
         fi
         docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
           psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
