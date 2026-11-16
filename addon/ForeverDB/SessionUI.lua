@@ -198,7 +198,7 @@ local BUTTON_GAP = 10
 local BUTTON_SEPARATOR_GAP = BUTTON_GAP -- extra clearance around the Reset button
 local BUTTON_ROW_Y = DETAIL_ACTION_TOP_Y + (DETAIL_ACTION_BAND_HEIGHT - BUTTON_HEIGHT) / 2
 
-local CONFIRM_WIDTH, CONFIRM_HEIGHT = 260, 110
+local CONFIRM_WIDTH, CONFIRM_HEIGHT = 390, 172
 local CONFIRM_TEXT_WIDTH = CONFIRM_WIDTH - 32
 local CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT = 90, 22
 
@@ -607,7 +607,7 @@ function FDB:CancelSessionResetConfirmation()
 end
 
 local function buildResetConfirmFrame(FDB)
-    local frame = CreateFrame("Frame", "ForeverDBSessionResetConfirm", UIParent)
+    local frame = CreateFrame("Frame", nil, UIParent)
     frame:SetSize(CONFIRM_WIDTH, CONFIRM_HEIGHT)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     applyBackdrop(frame)
@@ -617,50 +617,61 @@ local function buildResetConfirmFrame(FDB)
     frame.text:SetPoint("TOP", frame, "TOP", 0, -16)
     frame.text:SetWidth(CONFIRM_TEXT_WIDTH)
     frame.text:SetJustifyH("CENTER")
-    frame.text:SetText("Reset the current ForeverDB session? This cannot be undone.")
+    frame.text:SetText("")
 
     frame.acceptButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.acceptButton:SetSize(CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT)
     frame.acceptButton:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 6, 16)
-    frame.acceptButton:SetText("Reset")
-    frame.acceptButton:SetScript("OnClick", function() FDB:ConfirmSessionReset() end)
+    frame.acceptButton:SetText("")
+    frame.acceptButton:SetScript("OnClick", function()
+        local callback = frame.onAccept
+        frame.onAccept, frame.onCancel = nil, nil
+        frame:Hide()
+        if callback then callback() end
+    end)
 
     frame.cancelButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.cancelButton:SetSize(CONFIRM_BUTTON_WIDTH, CONFIRM_BUTTON_HEIGHT)
     frame.cancelButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -6, 16)
-    frame.cancelButton:SetText("Cancel")
-    frame.cancelButton:SetScript("OnClick", function() FDB:CancelSessionResetConfirmation() end)
+    frame.cancelButton:SetText("")
+    frame.cancelButton:SetScript("OnClick", function()
+        local callback = frame.onCancel
+        frame.onAccept, frame.onCancel = nil, nil
+        frame:Hide()
+        if callback then callback() end
+    end)
 
     return frame
+end
+
+-- Uses ordinary addon-owned widgets for confirmations. Keeping confirmation
+-- state inside addon-owned frames avoids mutation of Blizzard UI globals.
+function FDB:ShowLocalConfirmation(message, acceptLabel, cancelLabel, onAccept, onCancel)
+    if not CreateFrame or not UIParent then return false end
+    if not self.LocalConfirmationFrame then
+        self.LocalConfirmationFrame = buildResetConfirmFrame(self)
+    end
+
+    local frame = self.LocalConfirmationFrame
+    frame.text:SetText(message or "")
+    frame.acceptButton:SetText(acceptLabel or "Confirm")
+    frame.cancelButton:SetText(cancelLabel or "Cancel")
+    frame.onAccept, frame.onCancel = onAccept, onCancel
+    frame:Show()
+    return true
 end
 
 -- Both the Reset button and `/fdb session reset` enter this same
 -- confirmation path; only a confirmed accept ever calls ResetSession().
 function FDB:ShowSessionResetConfirmation()
     self.SessionResetConfirmationPending = true
-
-    if StaticPopupDialogs and StaticPopup_Show then
-        StaticPopupDialogs["FOREVERDB_SESSION_RESET"] = StaticPopupDialogs["FOREVERDB_SESSION_RESET"] or {
-            text = "Reset the current ForeverDB session? This cannot be undone.",
-            button1 = "Reset",
-            button2 = "Cancel",
-            OnAccept = function() FDB:ConfirmSessionReset() end,
-            OnCancel = function() FDB:CancelSessionResetConfirmation() end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-        StaticPopup_Show("FOREVERDB_SESSION_RESET")
-        return
-    end
-
-    -- Fallback for a client without StaticPopup support: a minimal native
-    -- confirmation frame using only base widget templates.
-    if not self.SessionResetConfirmFrame then
-        self.SessionResetConfirmFrame = buildResetConfirmFrame(self)
-    end
-    self.SessionResetConfirmFrame:Show()
+    local shown = self:ShowLocalConfirmation(
+        "Reset the current ForeverDB session? This cannot be undone.",
+        "Reset", "Cancel",
+        function() FDB:ConfirmSessionReset() end,
+        function() FDB:CancelSessionResetConfirmation() end)
+    if not shown then self:CancelSessionResetConfirmation() end
+    self.SessionResetConfirmFrame = self.LocalConfirmationFrame
 end
 
 --- Detailed session window ---------------------------------------------------

@@ -183,8 +183,6 @@ local function captureGuildbookProvenance(beforeFingerprint)
         fingerprint = afterFingerprint,
     }
 
-    FDB.DB.updatedAt = now()
-
     return true
 end
 
@@ -477,16 +475,8 @@ local function captureRoster()
 
     captureOwnProfessions(guild)
 
-    local changed =
-        captureGuildbookProvenance(
-            beforeFingerprint
-        )
-
-    if changed and FDB.BuildExportSnapshot then
-        FDB:BuildExportSnapshot()
-    end
-
-    FDB.DB.updatedAt = now()
+    captureGuildbookProvenance(beforeFingerprint)
+    if FDB.TouchSnapshot then FDB:TouchSnapshot() end
 
     return true
 end
@@ -587,16 +577,8 @@ local function captureGuildTradeSkills()
 
     guild.capturedAt = now()
 
-    local changed =
-        captureGuildbookProvenance(
-            beforeFingerprint
-        )
-
-    if changed and FDB.BuildExportSnapshot then
-        FDB:BuildExportSnapshot()
-    end
-
-    FDB.DB.updatedAt = now()
+    captureGuildbookProvenance(beforeFingerprint)
+    if FDB.TouchSnapshot then FDB:TouchSnapshot() end
 
     return true
 end

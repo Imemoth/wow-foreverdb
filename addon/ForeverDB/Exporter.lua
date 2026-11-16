@@ -47,10 +47,14 @@ function FDB:BuildExportSnapshot()
     end
 
     self:EnsureInstallationId()
+    if not self.DB.installationId then
+        ForeverDB_Export = ""
+        return ForeverDB_Export
+    end
 
     local header = {
         "H",
-        tostring(self.SCHEMA_VERSION),
+        tostring(self.EXPORT_SCHEMA_VERSION or self.SCHEMA_VERSION),
         self.VERSION,
         self.DB.installationId,
         tostring(self.DB.updatedAt or 0),
@@ -72,6 +76,11 @@ function FDB:BuildExportSnapshot()
     local lines = {
         table.concat(header, "|")
     }
+
+    -- Optional additive records are ignored by older Companion parsers.
+    lines[#lines + 1] = table.concat({
+        "Q", "1", tostring(self.DB.snapshotRevision or 1),
+    }, "|")
 
     for _, mapKey in ipairs(sortedKeys(self.DB.maps or {})) do
         local map = self.DB.maps[mapKey]
@@ -205,6 +214,68 @@ function FDB:BuildExportSnapshot()
                     tostring(item.questDrops or 0),
                     encode(questIdsCsv(item)),
                 }, "|")
+            end
+        end
+    end
+
+    local unknownSources = self.DB.geographicStats
+        and self.DB.geographicStats.unknown
+        and self.DB.geographicStats.unknown.sources or {}
+    for _, sourceKey in ipairs(sortedKeys(unknownSources)) do
+        local source = unknownSources[sourceKey]
+        for _, kind in ipairs(sortedKeys(source.buckets)) do
+            local bucket = source.buckets[kind]
+            lines[#lines + 1] = table.concat({
+                "Z", "unknown", source.sourceType,
+                tostring(source.sourceId), tostring(source.sourceLevel or 0),
+                kind, tostring(bucket.observations or 0),
+                encode(source.attribution or "source_map_unverified"),
+            }, "|")
+            for _, itemKey in ipairs(sortedKeys(bucket.items)) do
+                local item = bucket.items[itemKey]
+                lines[#lines + 1] = table.concat({
+                    "Y", "unknown", source.sourceType,
+                    tostring(source.sourceId), tostring(source.sourceLevel or 0),
+                    kind, tostring(item.itemId or itemKey), encode(item.name),
+                    tostring(item.drops or 0), tostring(item.quantity or 0),
+                    tostring(item.questDrops or 0), encode(questIdsCsv(item)),
+                }, "|")
+            end
+        end
+    end
+
+    local geography = self.DB.geographicStats or {}
+    local interactionTiers = {
+        { key = "interactionZone", label = "interaction_zone", evidence = "loot_event" },
+        { key = "correlatedInteractionZone", label = "correlated_interaction_zone",
+            evidence = "cast_loot_correlation" },
+    }
+    for _, tier in ipairs(interactionTiers) do
+        local zones = geography[tier.key] and geography[tier.key].zones or {}
+        for _, zoneKey in ipairs(sortedKeys(zones)) do
+            local zone = zones[zoneKey]
+            for _, sourceKey in ipairs(sortedKeys(zone.sources or {})) do
+                local source = zone.sources[sourceKey]
+                for _, kind in ipairs(sortedKeys(source.buckets or {})) do
+                    local bucket = source.buckets[kind]
+                    lines[#lines + 1] = table.concat({
+                        "Z", tier.label, tostring(zone.mapId or 0),
+                        encode(zone.zoneName), source.sourceType,
+                        tostring(source.sourceId), tostring(source.sourceLevel or 0),
+                        kind, tostring(bucket.observations or 0), tier.evidence,
+                    }, "|")
+                    for _, itemKey in ipairs(sortedKeys(bucket.items or {})) do
+                        local item = bucket.items[itemKey]
+                        lines[#lines + 1] = table.concat({
+                            "Y", tier.label, tostring(zone.mapId or 0),
+                            encode(zone.zoneName), source.sourceType,
+                            tostring(source.sourceId), tostring(source.sourceLevel or 0),
+                            kind, tostring(item.itemId or itemKey), encode(item.name),
+                            tostring(item.drops or 0), tostring(item.quantity or 0),
+                            tostring(item.questDrops or 0), encode(questIdsCsv(item)),
+                        }, "|")
+                    end
+                end
             end
         end
     end
