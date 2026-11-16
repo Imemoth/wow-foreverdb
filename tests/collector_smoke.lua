@@ -267,6 +267,27 @@ test("same-second observations advance the persisted snapshot revision", functio
     contains(ForeverDB_Export, "Q|1|3")
 end)
 
+test("saving unchanged SavedVariables does not advance the snapshot revision", function()
+    local f = setup()
+    f:BuildExportSnapshot()
+    local beforeRevision = f.DB.snapshotRevision
+    local beforeUpdatedAt = f.DB.updatedAt
+    local beforeExport = ForeverDB_Export
+
+    f:PrepareForSave()
+
+    equal(f.DB.snapshotRevision, beforeRevision)
+    equal(f.DB.updatedAt, beforeUpdatedAt)
+    equal(ForeverDB_Export, beforeExport)
+
+    f:RecordObservation("mob", "creature", 123, "Test Creature", {
+        [501] = { name = "Test Item", quantity = 1 },
+    }, 10, nil)
+    local changedRevision = f.DB.snapshotRevision
+    f:PrepareForSave()
+    equal(f.DB.snapshotRevision, changedRevision)
+end)
+
 test("legacy observations are not retroactively copied into geographic counters", function()
     local f = setup()
     ForeverDB_Saved = {
