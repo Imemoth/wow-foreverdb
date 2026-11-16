@@ -27,4 +27,12 @@ update admin_private.direct_grants set status='revoked',revoked_at=pg_catalog.cl
 set role azerdex_cms_dispatch;
 select 1/(case when editorial_private.cms_dispatch_recheck(:'cms_intent'::uuid,:'cms_token'::uuid)
   then 0 else 1 end);
+select 1/(case when editorial_private.cms_dispatch_cancel(:'cms_intent'::uuid,
+  :'cms_token'::uuid,'authorization_revoked') then 1 else 0 end);
 reset role;
+select 1/(case when (select state from editorial_private.delivery_state
+  where intent_id=:'cms_intent'::uuid)='cancelled' and
+  (select count(*) from editorial_private.delivery_state where article_id=
+    '00000000-0000-0000-0000-000000000401' and is_compensation)=1 and
+  (select generation from editorial_private.articles where article_id=
+    '00000000-0000-0000-0000-000000000401')=2 then 1 else 0 end);

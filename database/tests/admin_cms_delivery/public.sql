@@ -33,6 +33,11 @@ begin
   envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent1,
     'payload_hash',hash,'snapshot',snap,'auth_expires_epoch',expiry,
     'auth_mac',cms_pub.cms_mac(intent1::text||':'||hash||':'||expiry::text));
+  begin
+    perform pub_admin.cms_apply(envelope||pg_catalog.jsonb_build_object(
+      'auth_expires_epoch',expiry-3600));
+    raise exception 'expired dispatch authorization accepted';
+  exception when insufficient_privilege then null; end;
   receipt:=pub_admin.cms_apply(envelope);
   if receipt->>'intent_id'<>intent1::text or
     pub_admin.cms_apply(envelope)<>receipt then
