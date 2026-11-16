@@ -15,6 +15,7 @@ import { FeatureRoster, FeatureStats } from "@/components/content/FeatureParts";
 import { fmtDate } from "@/lib/format";
 import { pageContext } from "@/lib/page";
 import { itemPath, sourcePath } from "@/lib/routes";
+import { cmsArticle } from "@/lib/content/cms-public";
 
 const SECTION_LABEL: Record<Section, string> = { news: "News", guides: "Guides", blog: "Blog" };
 
@@ -30,7 +31,9 @@ const SECTION_LABEL: Record<Section, string> = { news: "News", guides: "Guides",
  */
 export async function ArticleReader({ section, slug }: { section: Section; slug: string }) {
   const { nonce, baseUrl } = await pageContext();
-  const a = getArticle(section, slug);
+  const projected = section === 'news' ? await cmsArticle(slug) : null;
+  if (projected?.tombstone) notFound();
+  const a = projected?.article ?? getArticle(section, slug);
   if (!a) notFound();
   const db = data();
   const relItems = (await Promise.all(a.related.items.map((id) => db.item(id).catch(() => null)))).filter(Boolean);

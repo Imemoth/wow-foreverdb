@@ -9,6 +9,7 @@ import { fmtDate } from "@/lib/format";
 import type { NewsRegionFilter } from "@/lib/news/presentation";
 import { pageContext } from "@/lib/page";
 import { NewsFeatureLead, pickLeadArticle } from "@/components/news/NewsFeatureLead";
+import { cmsArticles } from "@/lib/content/cms-public";
 
 const PAGE_SIZE = 12;
 const TABS: Array<{ label: string; value: NewsCategory | null }> = [
@@ -64,7 +65,12 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
   const adjustedLoad = !initialLoad.error && safePage !== page ? await loadNews(category, query, safePage, region) : null;
   const result = adjustedLoad?.result ?? initialLoad.result;
   const newsError = initialLoad.error || Boolean(adjustedLoad?.error);
-  const editorial = visibleArticles("news");
+  const gitEditorial = visibleArticles("news");
+  const projected = await cmsArticles();
+  const existingSlugs = new Set(gitEditorial.map((a) => a.slug));
+  if (projected.some((a) => existingSlugs.has(a.slug))) throw new Error('CMS and Git news slug collision');
+  const editorial = [...projected, ...gitEditorial]
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.slug.localeCompare(b.slug));
   // The lead story belongs to "All News" and the "AzerDex" tab only, on the first page of an unsearched view.
   // Blue Post / Official News filters stay purely Blizzard-sourced.
   const lead = !query && safePage === 1 && (category === null || category === "azerdex") ? pickLeadArticle(editorial) : null;

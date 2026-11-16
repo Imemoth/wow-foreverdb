@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { articleCoverImages } from "@/lib/content/article-media";
 import { articlePath, getArticle, type Section } from "@/lib/content/loader";
 import { robotsFor } from "@/lib/seo";
+import { cmsArticle } from "@/lib/content/cms-public";
 
 /**
  * Shared News/Guides/Blog metadata helper. The list/reader views this module used to export
@@ -17,7 +18,8 @@ export const SECTION_META: Record<Section, { title: string; intro: string }> = {
 };
 
 export async function articleMetadata(section: Section, slug: string): Promise<Metadata> {
-  const a = getArticle(section, slug);
+  const projected = section === 'news' ? await cmsArticle(slug) : null;
+  const a = projected?.tombstone ? null : projected?.article ?? getArticle(section, slug);
   if (!a) return { title: "Not found", robots: { index: false } };
   const cover = articleCoverImages(a);
   const image = cover ? { url: cover.social.src, width: cover.social.width, height: cover.social.height, alt: cover.hero.alt } : null;
