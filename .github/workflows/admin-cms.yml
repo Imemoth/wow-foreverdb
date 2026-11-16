@@ -1,0 +1,37 @@
+name: Admin CMS private boundary
+on:
+  push:
+    paths:
+      - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/rollback/0025_editorial_private_cms_rollback.sql'
+      - 'database/tests/admin_cms/**'
+      - 'web/src/lib/admin/cms-contract.ts'
+      - '.github/workflows/admin-cms.yml'
+  pull_request:
+    paths:
+      - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/rollback/0025_editorial_private_cms_rollback.sql'
+      - 'database/tests/admin_cms/**'
+      - 'web/src/lib/admin/cms-contract.ts'
+      - '.github/workflows/admin-cms.yml'
+jobs:
+  postgres-16:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: FDB_ADMIN_PG_IMAGE=postgres:16 bash database/tests/admin_cms/run-docker.sh
+  postgres-17:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: FDB_ADMIN_PG_IMAGE=postgres:17 bash database/tests/admin_cms/run-docker.sh
+  gotrue-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: FDB_ADMIN_EVALUATOR=1 FDB_ADMIN_AUTH=1 FDB_ADMIN_STAFF=1 FDB_ADMIN_EDITORIAL=1 FDB_ADMIN_CMS=1 bash database/tests/admin_private/run-target-gotrue.sh
+  postgrest-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: FDB_ADMIN_EDITORIAL=1 FDB_ADMIN_CMS=1 bash database/tests/admin_auth/run-companion-mfa-gotrue.sh

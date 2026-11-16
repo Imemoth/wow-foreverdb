@@ -139,6 +139,20 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
             and not has_function_privilege('service_role',
               'admin_private.append_editorial_audit(text,text,uuid,uuid,jsonb,jsonb)','EXECUTE')")
         [ "$editorial_ok" = t ] || { echo "real-GoTrue ADM-01B-5 boundary failed" >&2; exit 1; }
+        if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
+          docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+            psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+            < "$repo/database/migrations/0025_editorial_private_cms.sql"
+          cms_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+            -c "select (select version_id from admin_private.active_policy)=0
+              and (select count(*) from editorial_private.articles)=0
+              and not has_schema_privilege('authenticated','editorial_private','USAGE')
+              and not has_function_privilege('anon','public.fdb_cms_create_draft(uuid,text,jsonb,uuid)','EXECUTE')")
+          [ "$cms_ok" = t ] || { echo 'real-GoTrue ADM-03B private CMS boundary failed' >&2; exit 1; }
+          docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+            psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+            < "$repo/database/rollback/0025_editorial_private_cms_rollback.sql"
+        fi
         docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
           psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
           < "$repo/database/rollback/0024_admin_editorial_boundary_rollback.sql"
