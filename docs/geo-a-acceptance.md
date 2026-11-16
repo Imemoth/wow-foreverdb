@@ -81,6 +81,10 @@ force. Fishing-pool handling is separate from ordinary fishing correlation.
   the active installation with empty counters. Missing installation identity
   with historical counters pauses export until recovery; there is no automatic
   re-upload under a fresh identity.
+- Final code review found that logout save preparation advanced the revision
+  even when the exported snapshot was unchanged. The unconditional bump is
+  removed; actual state mutations continue to advance it. A Lua regression
+  verifies both unchanged save and changed-observation behavior.
 - Export keeps Companion schema 9 and existing record types. Additive `Q`, `Z`
   and `Y` records are optional extensions ignored by the current Companion.
   This does not implement upload or scoped server ingestion.
@@ -97,7 +101,8 @@ force. Fishing-pool handling is separate from ordinary fishing correlation.
 
 On the original source HEAD `e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`, all
 eight PR Actions workflows and the Vercel check were green. Lua 5.1 and 5.4
-local container runs passed the collector suite (49 simulated cases), session
+local container runs passed the collector suite (50 simulated cases after the
+save-revision regression was added), session
 tracker (54), session UI (76), quest API (5), quest tracker (29), quest kill
 tracker, Guildbook capture, and Lua syntax checks. CI will be rerun after
 dependency reconciliation and documentation updates; only checks on the final

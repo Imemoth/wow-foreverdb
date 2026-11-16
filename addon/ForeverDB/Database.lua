@@ -311,7 +311,9 @@ end
 
 function FDB:PrepareForSave()
     if not self.DB then return end
-    self:TouchSnapshot()
+    -- Saving SavedVariables is not itself a snapshot mutation. Every exported
+    -- state change calls TouchSnapshot at its write site; advancing here would
+    -- create a new revision for identical exported data on every logout.
     self.DB.addonVersion = self.VERSION
     self.DB.schemaVersion = self.SCHEMA_VERSION
     self:EnsureInstallationId()
