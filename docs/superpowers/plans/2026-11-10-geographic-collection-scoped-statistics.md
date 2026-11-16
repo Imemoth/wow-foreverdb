@@ -405,6 +405,18 @@ Geo A requirements for this case:
 Focused Geo A fixtures cover both Lua 5.1 and 5.4, including the no-CastGUID
 single-operation path, cast mismatch, failure/interruption, unrelated/overlap,
 timeout, map transition, source ambiguity, multi-slot and duplicate loot, empty
-loot, counters/export and no source-coordinate leakage. Live WoW Forever gameplay
-remains the acceptance gate for event argument order and the actual success-to-
-loot latency; static references and simulated APIs are not live measurements.
+loot, both fishing loot callback orders, missing callbacks, counters/export and
+no source-coordinate leakage. Owner positive LIVE acceptance has passed for all
+five collectors as recorded above. Negative event paths remain simulated and
+are not claimed as LIVE-verified; static references and fixtures are not
+measurements of Forever latency or false-positive rates.
+
+## Release dependency reconciliation
+
+PR #186 contains the approved design and plan documents only and targets the
+protected `release` branch. Geo A implementation remains in existing Draft PR
+#189, stacked on #186. #189 must be retargeted directly to `release` only after
+#186 is merged and its strict status checks are refreshed. Neither PR inherits
+unfinished Companion/map work through #183/#181, and the separate #179/#180
+workstreams are not prerequisites for Geo A. This order keeps each production
+diff limited to its reviewed scope.
