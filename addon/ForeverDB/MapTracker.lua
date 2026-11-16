@@ -16,6 +16,31 @@ local function hasUsableTextures(record)
     return false
 end
 
+local function sameMetadata(a, b)
+    if not a or a.metadataVersion ~= b.metadataVersion
+        or a.mapId ~= b.mapId or a.name ~= b.name
+        or a.parentMapId ~= b.parentMapId or a.mapArtId ~= b.mapArtId
+        or # (a.layers or {}) ~= # (b.layers or {}) then
+        return false
+    end
+    for index, layer in ipairs(b.layers or {}) do
+        local old = a.layers[index]
+        if not old or old.layerWidth ~= layer.layerWidth
+            or old.layerHeight ~= layer.layerHeight
+            or old.tileWidth ~= layer.tileWidth
+            or old.tileHeight ~= layer.tileHeight
+            or old.minScale ~= layer.minScale or old.maxScale ~= layer.maxScale
+            or old.additionalZoomSteps ~= layer.additionalZoomSteps
+            or # (old.textureRefs or {}) ~= # (layer.textureRefs or {}) then
+            return false
+        end
+        for textureIndex, ref in ipairs(layer.textureRefs or {}) do
+            if old.textureRefs[textureIndex] ~= ref then return false end
+        end
+    end
+    return true
+end
+
 function FDB:CaptureMapMetadata(mapId)
     if not self.DB
         or not mapId
@@ -106,7 +131,11 @@ function FDB:CaptureMapMetadata(mapId)
         end
     end
 
+    if sameMetadata(existing, record) then return end
+
     self.DB.maps[mapKey] = record
+
+    if self.TouchSnapshot then self:TouchSnapshot() end
 
     self:Debug(
         "map metadata",

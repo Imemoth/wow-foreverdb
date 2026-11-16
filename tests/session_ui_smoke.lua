@@ -528,22 +528,23 @@ test("confirmed reset delegates exactly once", function()
     falsy(FDB.SessionResetConfirmationPending)
 end)
 
-test("reset confirmation uses StaticPopup when available and only resets on accept", function()
+test("reset confirmation stays local and only resets on accept", function()
     local FDB = setup()
     truthy(FDB:SessionPlayerReady())
 
-    -- Unlike every other reset test in this file, define StaticPopupDialogs/
-    -- StaticPopup_Show so ShowSessionResetConfirmation takes the primary
-    -- (non-fallback) path a live client with StaticPopup support would
-    -- actually execute.
-    local shownKeys = {}
-    StaticPopupDialogs = {}
-    StaticPopup_Show = function(key) shownKeys[#shownKeys + 1] = key end
+    local previousDialogs = StaticPopupDialogs
+    local previousShow = StaticPopup_Show
+    local dialogSentinel = { untouched = true }
+    local showCalls = 0
+    StaticPopupDialogs = dialogSentinel
+    StaticPopup_Show = function() showCalls = showCalls + 1 end
 
     FDB:ShowSessionResetConfirmation()
-    truthy(StaticPopupDialogs["FOREVERDB_SESSION_RESET"])
-    equal(shownKeys[1], "FOREVERDB_SESSION_RESET")
+    equal(StaticPopupDialogs, dialogSentinel)
+    equal(showCalls, 0)
     truthy(FDB.SessionResetConfirmationPending)
+    truthy(FDB.SessionResetConfirmFrame)
+    truthy(FDB.SessionResetConfirmFrame.shown)
 
     local resetCalls = 0
     local realResetSession = FDB.ResetSession
@@ -552,17 +553,20 @@ test("reset confirmation uses StaticPopup when available and only resets on acce
         return realResetSession(self, ...)
     end
 
-    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnCancel()
+    FDB.SessionResetConfirmFrame.cancelButton.scripts.OnClick()
     equal(resetCalls, 0)
     falsy(FDB.SessionResetConfirmationPending)
+    falsy(FDB.SessionResetConfirmFrame.shown)
 
     FDB:ShowSessionResetConfirmation()
-    StaticPopupDialogs["FOREVERDB_SESSION_RESET"].OnAccept()
+    FDB.SessionResetConfirmFrame.acceptButton.scripts.OnClick()
     equal(resetCalls, 1)
     falsy(FDB.SessionResetConfirmationPending)
+    equal(StaticPopupDialogs, dialogSentinel)
+    equal(showCalls, 0)
 
-    StaticPopupDialogs = nil
-    StaticPopup_Show = nil
+    StaticPopupDialogs = previousDialogs
+    StaticPopup_Show = previousShow
 end)
 
 test("timeout command accepts positive integer minutes and rejects invalid values", function()

@@ -6,9 +6,16 @@ version contract and release checklist are documented in
 
 ## Current versions
 
-- Addon: **0.7.1-alpha**
+- Addon: **0.7.3-alpha**
+- SavedVariables schema: **11**
 - Export schema: **9**
 - Companion: **0.9.11-alpha**
+
+## 0.7.3-alpha — 2026-11-16 (Geo A acceptance, Draft PR #189)
+
+- Added conservative verified/correlated interaction-zone aggregates for the supported event paths, while retaining Unknown for ambiguous, stale, interrupted, overlapping, mismatched, or invalid-map cases. No source coordinates are inferred from player position.
+- Preserved global and historical counters, zero-drop denominators, duplicate suppression, installation identity, SavedVariables schema 11, and Companion export schema 9.
+- Owner accepted positive WoW Forever `1.60.1.70862` results for all five collectors, including the fishing event-order correction. Full evidence and limits: [Geo A acceptance report](docs/geo-a-acceptance.md).
 
 ## 0.9.11-alpha — 2026-11-06 (Guildbook local import and build provenance, PR #176 draft)
 
