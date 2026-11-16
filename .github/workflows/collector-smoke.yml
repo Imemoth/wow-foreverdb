@@ -11,7 +11,9 @@ on:
 jobs:
   collector_lua:
     name: collector-smoke (Lua ${{ matrix.lua }})
-    runs-on: ubuntu-latest
+    # Pin the supported runner image. Ubuntu 26.04 apt mirrors were returning
+    # repeated DNS resolution failures during the prior CI run.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -21,10 +23,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Lua
+      - name: Install Lua ${{ matrix.lua }}
+        env:
+          LUA_PACKAGE: lua${{ matrix.lua }}
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y lua${{ matrix.lua }}
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            log="$(mktemp)"
+            if {
+              sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update &&
+              sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y "$LUA_PACKAGE"
+            } >"$log" 2>&1; then
+              cat "$log"
+              rm -f "$log"
+              exit 0
+            else
+              status=$?
+            fi
+
+            cat "$log"
+            if ! grep -Eqi 'Temporary failure resolving|Could not resolve|Name or service not known|Network is unreachable|Could not connect|Connection timed out' "$log"; then
+              rm -f "$log"
+              exit "$status"
+            fi
+            rm -f "$log"
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Could not install $LUA_PACKAGE after three DNS/network attempts."
+              exit "$status"
+            fi
+            echo "Transient package mirror DNS/network error; retrying Lua installation (attempt $((attempt + 1))/3)."
+            sleep "$((attempt * 5))"
+          done
 
       - name: Run collector smoke tests
         run: lua${{ matrix.lua }} tests/collector_smoke.lua
