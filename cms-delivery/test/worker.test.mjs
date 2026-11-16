@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { requireDisposable, validateEnvelope } from '../src/once.mjs';
+import { dispatchOnce, requireDisposable, validateEnvelope } from '../src/once.mjs';
 
 const local = {
   FDB_CMS_DISPOSABLE: '1', FOREVERDB_DEPLOYMENT: 'local',
@@ -17,6 +17,29 @@ test('worker refuses hosted or shared databases', () => {
   assert.throws(() => requireDisposable({ ...local, VERCEL_ENV: 'preview' }));
   assert.throws(() => requireDisposable({ ...local, FDB_CMS_PUBLIC_URL: local.FDB_CMS_PRIVATE_URL }));
   assert.throws(() => requireDisposable({ ...local, FDB_CMS_PRIVATE_URL: 'postgres://test@production.example/private' }));
+});
+test('uncertain public commit preserves claim for receipt recovery', async () => {
+  const id = '00000000-0000-0000-0000-000000000001';
+  const calls = [];
+  const privateDb = { async query(sql) {
+    calls.push(sql);
+    if (sql.includes('cms_dispatch_candidates')) return { rows: [{ intent_id: id }] };
+    if (sql.includes('cms_dispatch_qualify')) return { rows: [{ value: true }] };
+    if (sql.includes('cms_dispatch_claim')) return { rows: [{ value: {
+      intent_id: id, article_id: id, claim_token: id, kind: 'unpublish',
+      generation: 1, slug: 'test-slug', payload_hash: 'a'.repeat(64),
+    } }] };
+    if (sql.includes('cms_dispatch_recheck')) return { rows: [{ value: true }] };
+    throw new Error(`unexpected private query: ${sql}`);
+  } };
+  const publicDb = { async query(sql) {
+    if (sql.includes('cms_receipt')) return { rows: [{ value: null }] };
+    if (sql.includes('cms_apply')) throw new Error('connection_lost_after_commit');
+    throw new Error(`unexpected public query: ${sql}`);
+  } };
+  await assert.rejects(dispatchOnce(privateDb, publicDb, '/tmp'), /connection_lost_after_commit/);
+  assert.ok(!calls.some((sql) => sql.includes('cms_dispatch_fail')));
+  assert.ok(!calls.some((sql) => sql.includes('cms_dispatch_cancel')));
 });
 test('asset byte hash and rights are mandatory', async () => {
   const root = await mkdtemp(join(tmpdir(), 'cms-assets-'));

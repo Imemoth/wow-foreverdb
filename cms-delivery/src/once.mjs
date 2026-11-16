@@ -98,6 +98,7 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
     if (!await rpc(privateDb, 'select editorial_private.cms_dispatch_qualify($1) as value', [intent])) continue;
     const claim = await rpc(privateDb, 'select editorial_private.cms_dispatch_claim($1) as value', [intent]);
     if (!claim) continue;
+    let publicAttempted = false;
     try {
       await validateEnvelope(claim, assetRoot);
       if (!await rpc(privateDb, 'select editorial_private.cms_dispatch_recheck($1,$2) as value',
@@ -111,6 +112,7 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
       }
       const { claim_token: _token, ...payload } = claim;
       if (payload.kind === 'unpublish') delete payload.snapshot;
+      publicAttempted = true;
       const applied = await rpc(publicDb, 'select pub_admin.cms_apply($1::jsonb) as value', [JSON.stringify(payload)]);
       const receipt = await rpc(publicDb, 'select pub_admin.cms_receipt($1) as value', [intent]);
       if (!sameReceipt(applied, receipt)) throw new Error('public_receipt_mismatch');
@@ -121,7 +123,9 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
       if (ack.compensation_intent) report.compensated++;
     } catch (error) {
       const code = String(error.message).match(/^[a-z_]{3,40}$/)?.[0] ?? 'delivery_failure';
-      if (code !== 'private_ack_pending' && code !== 'public_receipt_after_revoke') {
+      // A network failure after starting the public command cannot prove that
+      // it rolled back. Preserve the claim for receipt recovery after expiry.
+      if (!publicAttempted && code !== 'private_ack_pending' && code !== 'public_receipt_after_revoke') {
         await rpc(privateDb, 'select editorial_private.cms_dispatch_fail($1,$2,$3) as value',
           [intent, claim.claim_token, code]);
       }
