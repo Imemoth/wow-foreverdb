@@ -1,10 +1,10 @@
 # ADM-03B — Private CMS implementation plan
 
-**Status:** development-only implementation plan. Branch from `main` `3111f188d17196bc4534143f1ada98a8fa34ea47`; no hosted migration, active Admin policy, public delivery or UI connection is authorized. ADR-020 is the approved authorization policy. The owner-approved ADM-03A contract is in open PR #202 and is used as a read-only design input, not as an unmerged code dependency.
+**Status:** development-only implementation plan. ADM-03B began from `main` `3111f188d17196bc4534143f1ada98a8fa34ea47` and was synchronized with `main` `15f6d960405ce3ae24c1f6f4e4fe5bceaa632db4` after PR #202 merged. No hosted migration, active Admin policy, public delivery or UI connection is authorized. ADR-020 is the approved authorization policy; the merged [ADM-03A contract](adm-03a-article-revision-contract.md) is the authoritative article/revision architecture.
 
 ## Dependency reconciliation
 
-At development start, PR #202 was dirty against `main` because both PR #202 and the merged Admin UI Preview PR #203 added a neighboring entry to `docs/web/README.md`. A separate, external branch synchronization subsequently advanced #202 to `7b7a364de27302ece6796b79171bdb4404e6cc5b`; GitHub now reports it mergeable, and inspection confirms both documentation links remain. #202 is still open and unmerged, with its Owner merge gate intact. This branch did not modify or merge #202; ADM-03B's migration and tests start from `main` and contain no file imported from #202.
+At development start, PR #202 was dirty against `main` because both PR #202 and the merged Admin UI Preview PR #203 added a neighboring entry to `docs/web/README.md`. A separate synchronization advanced #202 to `7b7a364de27302ece6796b79171bdb4404e6cc5b` and retained both links. PR #202 subsequently merged as `15f6d960405ce3ae24c1f6f4e4fe5bceaa632db4`. This branch incorporated that merge with a regular merge commit; the ADM-03B implementation remains the same reviewed private backend, and PR #201's Admin foundation remains inactive. PR #203's accepted local synthetic preview remains separate from the real CMS backend.
 
 ## Reviewable slices and intended files
 
@@ -24,6 +24,6 @@ The `published_revision_id` guard is intentionally locked at null until an indep
 
 ## Later gates
 
-PR #202 still needs separate owner merge authorization; the ADM-03B implementation PR also needs its own exact-head CI and merge GO. ADM-03C will add a separate projection/worker and measure the currently unaccepted cross-database revocation window. The real Admin UI adapter and approved isolated end-to-end workflow follow as another integration stage. Companion MFA/session compatibility, first-Owner operations, hosted migrations, policy activation and production launch remain separate gates.
+PR #205 needs exact-head CI, focused security review and the conditional development-only merge gate. ADM-03B provides the inactive real private CMS backend. ADM-03C will add a separate public-read projection and delivery pipeline and measure the currently unaccepted cross-database revocation window. The real Admin UI adapter and approved isolated end-to-end workflow follow as another integration stage. Companion MFA/session compatibility, first-Owner operations, hosted migrations, policy activation and production launch remain separate gates.
 
 **Migration/rollback review:** 0025 requires a reviewed migration operator with `CREATE` and Admin role-management capability and the existing 0020–0024 foundation. It uses PostgreSQL's built-in `sha256(bytea)`, with no new extension grant. It refuses a nonzero active policy or existing staff. The guarded rollback restores the 0024 helper and refuses any CMS article, verified asset, intent, staff, active policy or unrecognized schema/function count; after data exists, use a reviewed forward repair. Before any hosted staging apply, inventory newly added Git slugs beyond the four frozen at this branch HEAD and reserve them. The rollback uses a checked schema drop only while empty; no hosted rollback is authorized here.
