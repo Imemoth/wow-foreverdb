@@ -121,6 +121,7 @@ create table editorial_private.approvals (
   revision_id uuid not null,
   revision_hash bytea not null check (pg_catalog.octet_length(revision_hash)=32),
   approver_id uuid not null,
+  grant_id uuid references admin_private.direct_grants(grant_id) on delete restrict,
   policy_version_id bigint not null references admin_private.policy_versions(version_id) on delete restrict,
   approved_at timestamptz not null default pg_catalog.clock_timestamp(),
   unique(article_id,revision_id,approver_id),
@@ -166,6 +167,12 @@ create table editorial_private.legacy_git_map (
   source_hash bytea not null check (pg_catalog.octet_length(source_hash)=32),
   cutover_state text not null default 'not_started' check (cutover_state='not_started')
 );
+
+-- A request ID identifies one committed editorial mutation across actions.
+-- Publication retries return their original intent before another audit append.
+create unique index staff_editorial_request_once
+  on admin_private.staff_audit_events(request_id)
+  where action_key like 'news.%';
 
 create function editorial_private.reject_evidence_change()
 returns trigger language plpgsql set search_path = '' as $$
@@ -379,7 +386,7 @@ grant execute on function editorial_private.require_actor(text,uuid) to admin_ex
 
 -- A historical approval is useful only while its approver has live authority
 -- under the current policy. Lock staff/grants so a competing revoke serializes.
-create function editorial_private.eligible_approver(p_uid uuid,p_article_id uuid,p_policy bigint)
+create function editorial_private.eligible_approver(p_uid uuid,p_article_id uuid,p_policy bigint,p_grant uuid default null)
 returns boolean language plpgsql security invoker set search_path = '' as $eligible$
 declare v_now timestamptz; v_role record; v_grant record;
   v_enter_deadline timestamptz:='-infinity';
@@ -423,6 +430,7 @@ begin
   if v_editor_deadline>'-infinity'::timestamptz then
     for v_grant in select g.expires_at from admin_private.direct_grants g
       where g.user_id=p_uid and g.policy_version_id=p_policy
+        and g.grant_id=p_grant
         and g.environment_scope='staging' and g.status='active'
         and g.permission_key='news.article.approve_highlighted'
         and g.starts_at<=v_now and g.expires_at>v_now
@@ -434,14 +442,14 @@ begin
   end if;
   v_now:=pg_catalog.clock_timestamp();
   return v_enter_deadline>v_now
-     and (v_default_deadline>v_now
-       or (v_editor_deadline>v_now and v_grant_deadline>v_now))
+     and ((p_grant is null and v_default_deadline>v_now)
+       or (p_grant is not null and v_editor_deadline>v_now and v_grant_deadline>v_now))
      and (select version_id from admin_private.active_policy where singleton)=p_policy
      and exists(select 1 from admin_private.staff_subjects where user_id=p_uid and status='active');
 end $eligible$;
-revoke all on function editorial_private.eligible_approver(uuid,uuid,bigint)
+revoke all on function editorial_private.eligible_approver(uuid,uuid,bigint,uuid)
   from public,anon,authenticated,service_role,authenticator;
-grant execute on function editorial_private.eligible_approver(uuid,uuid,bigint) to admin_executor;
+grant execute on function editorial_private.eligible_approver(uuid,uuid,bigint,uuid) to admin_executor;
 
 -- Only the no-login executor can enter this dispatcher; each API RPC below has
 -- a fixed operation and fixed signature. No caller chooses a permission or role.
@@ -450,7 +458,7 @@ grant create on schema public to admin_executor;
 grant admin_executor to current_user;
 set role admin_executor;
 create function editorial_private.lock_audit_and_recheck(
-  p_permission text,p_article uuid,p_actor uuid,p_approver uuid,p_policy bigint
+  p_permission text,p_article uuid,p_actor uuid,p_approver uuid,p_policy bigint,p_grant uuid default null
 ) returns void language plpgsql security invoker set search_path = '' as $lock$
 begin
   perform 1 from admin_private.staff_audit_head where singleton for update;
@@ -458,7 +466,7 @@ begin
      is distinct from p_actor then
     raise exception 'editorial authority expired during audit wait' using errcode='42501'; end if;
   if p_approver is not null and
-     not editorial_private.eligible_approver(p_approver,p_article,p_policy) then
+     not editorial_private.eligible_approver(p_approver,p_article,p_policy,p_grant) then
     raise exception 'approver authority expired during audit wait' using errcode='42501'; end if;
 end $lock$;
 create function editorial_private.run_action(
@@ -469,7 +477,8 @@ declare a editorial_private.articles%rowtype; r editorial_private.revisions%rowt
   v_actor uuid; v_snapshot jsonb; v_original_snapshot jsonb; v_hash bytea; v_new uuid;
   v_before jsonb; v_after jsonb; v_audit bigint; v_policy bigint;
   v_approval editorial_private.approvals%rowtype; v_prior editorial_private.publication_intents%rowtype;
-  v_class integer; v_kind text; v_payload jsonb;
+  v_class integer; v_kind text; v_payload jsonb; v_approval_grant uuid;
+  v_action_grant uuid;
 begin
   if p_request is null or p_article is null or p_action not in
     ('create','edit','submit','return','reject','approve','publish','unpublish') then
@@ -581,7 +590,9 @@ begin
       p_action,p_note) returning event_id into v_new;
     update editorial_private.articles set review_state=case when p_action='return'
       then 'draft' else 'rejected' end where article_id=p_article;
-    v_after:=pg_catalog.jsonb_build_object('event',p_action,'revision',r.revision_id);
+    v_after:=pg_catalog.jsonb_build_object('event',p_action,'revision',r.revision_id,
+      'review_event',v_new,'reason_hash',pg_catalog.encode(
+        pg_catalog.sha256(pg_catalog.convert_to(p_note,'UTF8')),'hex'));
   elsif p_action='approve' then
     if p_revision is distinct from r.revision_id or a.review_state<>'in_review'
        or r.effective_classification<>1 or exists(
@@ -589,18 +600,29 @@ begin
          where revision_id=r.revision_id and actor_id=v_actor) then
       raise exception 'independent highlighted approval required' using errcode='42501'; end if;
     select version_id into v_policy from admin_private.active_policy where singleton for share;
-    if not editorial_private.eligible_approver(v_actor,p_article,v_policy) then
-      raise exception 'approver no longer eligible' using errcode='42501'; end if;
-    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,v_actor,v_policy);
+    if not editorial_private.eligible_approver(v_actor,p_article,v_policy,null) then
+      select g.grant_id into v_approval_grant from admin_private.direct_grants g
+        where g.user_id=v_actor and g.policy_version_id=v_policy
+          and g.environment_scope='staging' and g.status='active'
+          and g.permission_key='news.article.approve_highlighted'
+          and g.starts_at<=pg_catalog.clock_timestamp() and g.expires_at>pg_catalog.clock_timestamp()
+          and ((g.scope_kind='article' and g.scope_id=p_article::text)
+            or (g.scope_kind='collection' and g.scope_id=a.collection_key))
+        order by g.grant_id limit 1 for share of g;
+      if v_approval_grant is null or not editorial_private.eligible_approver(
+           v_actor,p_article,v_policy,v_approval_grant) then
+        raise exception 'approver no longer eligible' using errcode='42501'; end if;
+    end if;
+    perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,v_actor,v_policy,v_approval_grant);
     insert into editorial_private.approvals(article_id,revision_id,revision_hash,
-      approver_id,policy_version_id) values(p_article,r.revision_id,r.snapshot_hash,
-      v_actor,v_policy) returning approval_id into v_new;
+      approver_id,grant_id,policy_version_id) values(p_article,r.revision_id,r.snapshot_hash,
+      v_actor,v_approval_grant,v_policy) returning approval_id into v_new;
     insert into editorial_private.review_events(article_id,revision_id,revision_hash,
       actor_id,decision) values(p_article,r.revision_id,r.snapshot_hash,
       v_actor,'approve_highlighted');
     update editorial_private.articles set review_state='approved' where article_id=p_article;
     v_after:=pg_catalog.jsonb_build_object('event','approve_highlighted',
-      'revision',r.revision_id,'approval',v_new);
+      'revision',r.revision_id,'approval',v_new,'approval_grant',v_approval_grant);
   elsif p_action in ('publish','unpublish') then
     select * into v_prior from editorial_private.publication_intents where request_id=p_request;
     if found then
@@ -608,13 +630,13 @@ begin
          (p_action='unpublish' or v_prior.revision_id=p_revision) and
          v_prior.requested_by=v_actor then return v_prior.intent_id; end if;
       raise exception 'request id reused' using errcode='23505'; end if;
+    select version_id into v_policy from admin_private.active_policy where singleton for share;
     if p_action='publish' then
       if p_revision is distinct from r.revision_id or
          (r.effective_classification=0 and a.review_state<>'in_review') or
          (r.effective_classification=1 and a.review_state<>'approved') or
          a.classification_floor>r.effective_classification then
         raise exception 'revision not publishable' using errcode='42501'; end if;
-      select version_id into v_policy from admin_private.active_policy where singleton for share;
       if r.effective_classification=1 then
         select * into v_approval from editorial_private.approvals ap
           where ap.article_id=p_article and ap.revision_id=r.revision_id
@@ -625,14 +647,15 @@ begin
         if not found or v_approval.approver_id=v_actor
            or exists(select 1 from editorial_private.revision_contributors
                      where revision_id=r.revision_id and actor_id=v_approval.approver_id)
-           or not editorial_private.eligible_approver(v_approval.approver_id,p_article,v_policy)
+           or not editorial_private.eligible_approver(v_approval.approver_id,p_article,v_policy,v_approval.grant_id)
            then raise exception 'independent current approval required' using errcode='42501'; end if;
       end if;
       v_payload:=pg_catalog.jsonb_build_object('kind','publish','article_id',p_article,
         'slug',a.slug,'revision_id',r.revision_id,'revision_hash',
         pg_catalog.encode(r.snapshot_hash,'hex'),'generation',a.generation+1);
       perform editorial_private.lock_audit_and_recheck(v_kind,p_article,v_actor,
-        case when r.effective_classification=1 then v_approval.approver_id end,v_policy);
+        case when r.effective_classification=1 then v_approval.approver_id end,
+        v_policy,case when r.effective_classification=1 then v_approval.grant_id end);
       update editorial_private.articles set review_state='publish_pending',
         generation=generation+1 where article_id=p_article;
     else
@@ -644,13 +667,26 @@ begin
       update editorial_private.articles set review_state='unpublish_pending',
         generation=generation+1 where article_id=p_article;
     end if;
+    -- The evaluator already locked relevant grants before the audit-head wait.
+    -- Read the still-live applicable grant without taking a new post-audit lock.
+    select g.grant_id into v_action_grant from admin_private.direct_grants g
+      where g.user_id=v_actor and g.policy_version_id=v_policy
+        and g.environment_scope='staging' and g.status='active'
+        and g.permission_key=v_kind
+        and g.starts_at<=pg_catalog.clock_timestamp() and g.expires_at>pg_catalog.clock_timestamp()
+        and ((g.scope_kind='article' and g.scope_id=p_article::text)
+          or (g.scope_kind='collection' and g.scope_id=a.collection_key))
+      order by g.grant_id limit 1;
     v_hash:=pg_catalog.sha256(pg_catalog.convert_to(v_payload::text,'UTF8'));
     v_new:=pg_catalog.gen_random_uuid();
     v_after:=pg_catalog.jsonb_build_object('event',p_action||'_intent',
       'revision',case when p_action='publish' then r.revision_id end,
       'revision_hash',case when p_action='publish' then pg_catalog.encode(r.snapshot_hash,'hex') end,
       'payload_hash',pg_catalog.encode(v_hash,'hex'),
-      'intent',v_new,'generation',a.generation+1);
+      'intent',v_new,'generation',a.generation+1,
+      'approval',case when p_action='publish' and r.effective_classification=1 then v_approval.approval_id end,
+      'approval_grant',case when p_action='publish' and r.effective_classification=1 then v_approval.grant_id end,
+      'action_grant',v_action_grant);
     v_audit:=admin_private.append_editorial_audit(v_kind,p_article::text,v_actor,
       p_request,v_before,v_after);
     insert into editorial_private.publication_intents(intent_id,article_id,revision_id,
@@ -664,7 +700,7 @@ begin
     insert into editorial_private.delivery_outbox(intent_id,article_id,generation,payload,payload_hash)
       values(v_new,p_article,a.generation+1,v_payload,v_hash);
     if p_action='publish' and r.effective_classification=1
-       and not editorial_private.eligible_approver(v_approval.approver_id,p_article,v_policy) then
+       and not editorial_private.eligible_approver(v_approval.approver_id,p_article,v_policy,v_approval.grant_id) then
       raise exception 'approver eligibility expired during publication' using errcode='42501'; end if;
     return v_new;
   end if;
@@ -731,7 +767,7 @@ begin
 end $read$;
 revoke all on function editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)
   from public,anon,authenticated,service_role,authenticator;
-revoke all on function editorial_private.lock_audit_and_recheck(text,uuid,uuid,uuid,bigint)
+revoke all on function editorial_private.lock_audit_and_recheck(text,uuid,uuid,uuid,bigint,uuid)
   from public,anon,authenticated,service_role,authenticator;
 revoke all on function
   public.fdb_cms_create_draft(uuid,text,jsonb,uuid),

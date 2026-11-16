@@ -2,18 +2,23 @@
 -- Synthetic, disposable-only activation. Never run this file against hosted Auth.
 insert into auth.users(id,email_confirmed_at) values
  ('00000000-0000-0000-0000-000000000101',clock_timestamp()),
- ('00000000-0000-0000-0000-000000000102',clock_timestamp());
+ ('00000000-0000-0000-0000-000000000102',clock_timestamp()),
+ ('00000000-0000-0000-0000-000000000103',clock_timestamp());
 insert into auth.mfa_factors(id,user_id,factor_type,status) values
  ('00000000-0000-0000-0000-000000000301','00000000-0000-0000-0000-000000000101','totp','verified'),
- ('00000000-0000-0000-0000-000000000302','00000000-0000-0000-0000-000000000102','totp','verified');
+ ('00000000-0000-0000-0000-000000000302','00000000-0000-0000-0000-000000000102','totp','verified'),
+ ('00000000-0000-0000-0000-000000000303','00000000-0000-0000-0000-000000000103','totp','verified');
 insert into auth.sessions(id,user_id,factor_id,aal) values
  ('00000000-0000-0000-0000-000000000201','00000000-0000-0000-0000-000000000101','00000000-0000-0000-0000-000000000301','aal2'),
- ('00000000-0000-0000-0000-000000000202','00000000-0000-0000-0000-000000000102','00000000-0000-0000-0000-000000000302','aal2');
+ ('00000000-0000-0000-0000-000000000202','00000000-0000-0000-0000-000000000102','00000000-0000-0000-0000-000000000302','aal2'),
+ ('00000000-0000-0000-0000-000000000203','00000000-0000-0000-0000-000000000103','00000000-0000-0000-0000-000000000303','aal2');
 insert into auth.refresh_tokens(session_id) values
- ('00000000-0000-0000-0000-000000000201'),('00000000-0000-0000-0000-000000000202');
+ ('00000000-0000-0000-0000-000000000201'),('00000000-0000-0000-0000-000000000202'),
+ ('00000000-0000-0000-0000-000000000203');
 insert into auth.mfa_amr_claims(session_id,authentication_method,updated_at) values
  ('00000000-0000-0000-0000-000000000201','totp',clock_timestamp()),
- ('00000000-0000-0000-0000-000000000202','totp',clock_timestamp());
+ ('00000000-0000-0000-0000-000000000202','totp',clock_timestamp()),
+ ('00000000-0000-0000-0000-000000000203','totp',clock_timestamp());
 insert into admin_private.staff_subjects(user_id,status) values
  ('00000000-0000-0000-0000-000000000101','active'),
  ('00000000-0000-0000-0000-000000000102','active');
@@ -44,6 +49,19 @@ alter table admin_private.policy_versions enable trigger policy_versions_immutab
 alter table admin_private.active_policy disable trigger active_policy_immutable;
 update admin_private.active_policy set version_id=1,epoch=1,activated_at=clock_timestamp() where singleton;
 alter table admin_private.active_policy enable trigger active_policy_immutable;
+-- A real, live AAL2 Auth session without staff assignment is still an
+-- ordinary user and cannot enter a protected CMS RPC.
+set role authenticated;
+set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000103","session_id":"00000000-0000-0000-0000-000000000203","aal":"aal2","exp":4102444800}';
+do $$ begin
+ begin
+  perform public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000499',
+   'cms-ordinary-denial','{"title":"Ordinary user article","summary":"A synthetic ordinary user summary today.","body_markdown":"A body.","classification":"normal"}',
+   '00000000-0000-0000-0000-000000000599');
+  raise exception 'ordinary authenticated user entered CMS';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
 set role authenticated;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
 do $$ begin
@@ -194,7 +212,10 @@ do $$ begin
   if (select count(*) from editorial_private.publication_intents where article_id='00000000-0000-0000-0000-000000000402')<>1
      or (select count(*) from editorial_private.approval_uses)<>1
      or (select count(*) from editorial_private.revisions where article_id='00000000-0000-0000-0000-000000000402')<>2
-     or (select count(*) from editorial_private.approvals where article_id='00000000-0000-0000-0000-000000000402')<>2 then
+     or (select count(*) from editorial_private.approvals where article_id='00000000-0000-0000-0000-000000000402')<>2
+     or (select after_state->>'approval' from admin_private.staff_audit_events
+         where request_id='00000000-0000-0000-0000-000000000521')<>
+       (select approval_id::text from editorial_private.approval_uses limit 1) then
     raise exception 'revision approval or idempotency failure'; end if;
 end $$;
 set role authenticated;
@@ -267,6 +288,14 @@ select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000406',
 reset role;
 -- An article outside the Editor's publishing grants cannot be sent, even if
 -- the same account can author and submit it.
+-- This exact article also has an expired synthetic grant; neither that row nor
+-- the active grants for other articles may authorize publication.
+insert into admin_private.direct_grants(user_id,permission_key,policy_version_id,
+ environment_scope,scope_kind,scope_id,starts_at,expires_at,status,approved_by,reason)
+values('00000000-0000-0000-0000-000000000101','news.article.publish',1,
+ 'staging','article','00000000-0000-0000-0000-000000000407',
+ clock_timestamp()-interval '2 days',clock_timestamp()-interval '1 day',
+ 'active','00000000-0000-0000-0000-000000000102','expired fixture');
 set role authenticated;
 set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
 -- The fixture's Editor role has now expired in the concurrency test, which
@@ -299,6 +328,11 @@ select public.fdb_cms_review_decide('00000000-0000-0000-0000-000000000407', :'sc
 reset role;
 do $$ begin
  if (select review_state from editorial_private.articles where article_id='00000000-0000-0000-0000-000000000407')<>'rejected'
+   or (select after_state->>'reason_hash' from admin_private.staff_audit_events
+      where request_id='00000000-0000-0000-0000-000000000535')<>
+      encode(pg_catalog.sha256(pg_catalog.convert_to('Needs a more precise source summary','UTF8')),'hex')
+   or (select after_state->>'review_event' from admin_private.staff_audit_events
+      where request_id='00000000-0000-0000-0000-000000000537') is null
    then raise exception 'review return or reject failed'; end if;
 end $$;
 -- Claims naming another user's live session are insufficient.
@@ -371,4 +405,77 @@ do $$ begin
      where article_id='00000000-0000-0000-0000-000000000411')<>
        encode(pg_catalog.sha256(pg_catalog.convert_to('synthetic image bytes','UTF8')),'hex')
     then raise exception 'asset provenance absent from snapshot'; end if;
+end $$;
+-- A grant-bound Editor approval cannot be revived by replacing its grant.
+update admin_private.role_assignments set role_name='Editor',
+ expires_at=clock_timestamp()+interval '29 days'
+ where user_id='00000000-0000-0000-0000-000000000102' and role_name='Owner';
+insert into admin_private.direct_grants(grant_id,user_id,permission_key,policy_version_id,
+ environment_scope,scope_kind,scope_id,starts_at,expires_at,status,approved_by,reason)
+values('00000000-0000-0000-0000-000000000701',
+ '00000000-0000-0000-0000-000000000102','news.article.approve_highlighted',1,
+ 'staging','article','00000000-0000-0000-0000-000000000412',
+ clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+ 'active','00000000-0000-0000-0000-000000000101','synthetic approval A');
+set role authenticated;
+set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
+select public.fdb_cms_create_draft('00000000-0000-0000-0000-000000000412',
+ 'cms-grant-replacement','{"title":"Grant replacement test","summary":"A synthetic grant replacement summary.","body_markdown":"Highlighted body.","classification":"highlighted"}',
+ '00000000-0000-0000-0000-000000000541');
+do $$ begin
+ begin
+  perform public.fdb_cms_edit_draft('00000000-0000-0000-0000-000000000412',
+    (public.fdb_cms_article('00000000-0000-0000-0000-000000000412')->>'current_revision_id')::uuid,
+    '{"title":"Changed grant replacement test","summary":"A synthetic grant replacement summary.","body_markdown":"Changed body.","classification":"highlighted"}',
+    '00000000-0000-0000-0000-000000000541');
+  raise exception 'cross-action request replay accepted';
+ exception when unique_violation then null; end;
+end $$;
+select public.fdb_cms_submit_review('00000000-0000-0000-0000-000000000412',
+ (public.fdb_cms_article('00000000-0000-0000-0000-000000000412')->>'current_revision_id')::uuid,
+ '00000000-0000-0000-0000-000000000542');
+reset role;
+set role authenticated;
+set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000102","session_id":"00000000-0000-0000-0000-000000000202","aal":"aal2","exp":4102444800}';
+select public.fdb_cms_approve_highlighted('00000000-0000-0000-0000-000000000412',
+ (public.fdb_cms_article('00000000-0000-0000-0000-000000000412')->>'current_revision_id')::uuid,
+ '00000000-0000-0000-0000-000000000543');
+reset role;
+do $$ begin
+ if (select grant_id from editorial_private.approvals
+       where article_id='00000000-0000-0000-0000-000000000412')<>
+       '00000000-0000-0000-0000-000000000701'::uuid
+    or (select after_state->>'approval_grant' from admin_private.staff_audit_events
+       where request_id='00000000-0000-0000-0000-000000000543')<>
+       '00000000-0000-0000-0000-000000000701'
+    or (select count(*) from editorial_private.revisions
+       where article_id='00000000-0000-0000-0000-000000000412')<>1 then
+    raise exception 'grant provenance or replay rollback missing'; end if;
+end $$;
+update admin_private.direct_grants set status='revoked',revoked_at=clock_timestamp()
+ where grant_id='00000000-0000-0000-0000-000000000701';
+insert into admin_private.direct_grants(grant_id,user_id,permission_key,policy_version_id,
+ environment_scope,scope_kind,scope_id,starts_at,expires_at,status,approved_by,reason)
+values('00000000-0000-0000-0000-000000000702',
+ '00000000-0000-0000-0000-000000000102','news.article.approve_highlighted',1,
+ 'staging','article','00000000-0000-0000-0000-000000000412',
+ clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+ 'active','00000000-0000-0000-0000-000000000101','synthetic approval B');
+set role authenticated;
+set request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-000000000101","session_id":"00000000-0000-0000-0000-000000000201","aal":"aal2","exp":4102444800}';
+do $$ begin
+ begin
+  perform public.fdb_cms_publish_intent('00000000-0000-0000-0000-000000000412',
+    (public.fdb_cms_article('00000000-0000-0000-0000-000000000412')->>'current_revision_id')::uuid,
+    '00000000-0000-0000-0000-000000000544');
+  raise exception 'replacement grant revived old approval';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from editorial_private.publication_intents
+      where article_id='00000000-0000-0000-0000-000000000412')
+    or exists(select 1 from admin_private.staff_audit_events
+      where request_id='00000000-0000-0000-0000-000000000544') then
+    raise exception 'denied grant replacement left a mutation'; end if;
 end $$;

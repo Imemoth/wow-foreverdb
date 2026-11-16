@@ -15,6 +15,36 @@ begin
      or exists(select 1 from pg_class where relnamespace='editorial_private'::regnamespace and relkind not in ('r','i'))
      or (select count(*) from pg_proc where pronamespace='editorial_private'::regnamespace)<>7
      or (select count(*) from pg_proc where pronamespace='public'::regnamespace and proname like 'fdb_cms_%')<>8
+     or exists(select 1 from pg_depend d join pg_rewrite rw
+         on d.classid='pg_rewrite'::regclass and d.objid=rw.oid
+         join pg_class v on v.oid=rw.ev_class
+       where d.refobjid in (select oid from pg_class
+               where relnamespace='editorial_private'::regnamespace)
+         and v.relnamespace<>'editorial_private'::regnamespace)
+     or exists(select 1 from pg_depend d join pg_constraint c
+         on d.classid='pg_constraint'::regclass and d.objid=c.oid
+       where d.refobjid in (select oid from pg_class
+               where relnamespace='editorial_private'::regnamespace)
+         and c.conrelid<>0 and c.connamespace<>'editorial_private'::regnamespace)
+     or exists(select 1 from pg_depend d join pg_proc p
+         on d.classid='pg_proc'::regclass and d.objid=p.oid
+       where d.refobjid in (select oid from pg_class
+               where relnamespace='editorial_private'::regnamespace
+             union select oid from pg_type
+               where typnamespace='editorial_private'::regnamespace)
+         and p.pronamespace<>'editorial_private'::regnamespace
+         and not (p.pronamespace='public'::regnamespace and p.proname like 'fdb_cms_%'))
+     or exists(select 1 from pg_depend d join pg_type t
+         on d.classid='pg_type'::regclass and d.objid=t.oid
+       where d.refobjid in (select oid from pg_type
+               where typnamespace='editorial_private'::regnamespace)
+         and t.typnamespace<>'editorial_private'::regnamespace)
+     or exists(select 1 from pg_depend d join pg_trigger tr
+         on d.classid='pg_trigger'::regclass and d.objid=tr.oid
+         join pg_class rel on rel.oid=tr.tgrelid
+       where d.refobjid in (select oid from pg_proc
+               where pronamespace='editorial_private'::regnamespace)
+         and rel.relnamespace<>'editorial_private'::regnamespace)
      then raise exception '0025 rollback refused: protected data, policy or schema changed'; end if;
 end $guard$;
 -- The old helper must be restored before the private schema is removed.
@@ -73,5 +103,6 @@ drop function public.fdb_cms_approve_highlighted(uuid,uuid,uuid);
 drop function public.fdb_cms_publish_intent(uuid,uuid,uuid);
 drop function public.fdb_cms_unpublish_intent(uuid,uuid);
 drop function public.fdb_cms_article(uuid);
+drop index admin_private.staff_editorial_request_once;
 drop schema editorial_private cascade;
 commit;

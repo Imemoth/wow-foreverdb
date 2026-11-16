@@ -20,6 +20,9 @@ done
 "${root[@]}" -f database/tests/admin_cms/assertions.sql
 createdb -U postgres -T "$db" fdb_admin_rollback
 createdb -U postgres -T "$db" fdb_admin_asset_rollback
+createdb -U postgres -T "$db" fdb_admin_dependent_rollback
+createdb -U postgres -T "$db" fdb_admin_fk_rollback
+createdb -U postgres -T "$db" fdb_admin_trigger_rollback
 psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_rollback \
   -f database/rollback/0025_editorial_private_cms_rollback.sql
 psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_rollback \
@@ -33,6 +36,24 @@ psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_asset_rollback \
 if psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_asset_rollback \
    -f database/rollback/0025_editorial_private_cms_rollback.sql >/dev/null 2>&1; then
   echo 'rollback discarded verified media evidence' >&2; exit 1
+fi
+psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_dependent_rollback \
+  -c 'create view public.cms_external_dependency as select article_id from editorial_private.articles'
+if psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_dependent_rollback \
+   -f database/rollback/0025_editorial_private_cms_rollback.sql >/dev/null 2>&1; then
+  echo 'rollback discarded an external schema dependency' >&2; exit 1
+fi
+psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_fk_rollback \
+  -c 'create table public.cms_external_fk(article_id uuid references editorial_private.articles(article_id))'
+if psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_fk_rollback \
+   -f database/rollback/0025_editorial_private_cms_rollback.sql >/dev/null 2>&1; then
+  echo 'rollback discarded an external foreign key' >&2; exit 1
+fi
+psql -X -q -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_trigger_rollback \
+  -c 'create table public.cms_external_trigger(id integer); create trigger cms_external_guard before insert on public.cms_external_trigger for each row execute function editorial_private.reject_evidence_change()'
+if psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_trigger_rollback \
+   -f database/rollback/0025_editorial_private_cms_rollback.sql >/dev/null 2>&1; then
+  echo 'rollback discarded an external trigger' >&2; exit 1
 fi
 "${root[@]}" -f database/tests/admin_cms/lifecycle.sql
 if "${migrator[@]}" -f database/rollback/0025_editorial_private_cms_rollback.sql \

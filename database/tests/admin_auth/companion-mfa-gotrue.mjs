@@ -92,6 +92,29 @@ const repeatedReauth=ok(await call('/token?grant_type=password',{email,password}
 assert.equal(repeatedReauth.user.id,uid);
 const anonAfter=await call('/user',undefined,anonymous.access_token,'GET');
 assert.equal(anonAfter.status,200,'anonymous identity isolation');
+if (process.env.FDB_ADMIN_CMS === '1') {
+  const article=randomUUID(),revision=randomUUID(),request=randomUUID();
+  const snapshot={title:'Isolated CMS probe',summary:'A disposable ordinary-user denial probe.',
+    body_markdown:'A harmless draft.',classification:'normal'};
+  const cmsCalls=[
+    ['fdb_cms_create_draft',{p_article:article,p_slug:'cms-ordinary-denied',p_snapshot:snapshot,p_request:request}],
+    ['fdb_cms_article',{p_article:article}],
+    ['fdb_cms_edit_draft',{p_article:article,p_revision:revision,p_snapshot:snapshot,p_request:request}],
+    ['fdb_cms_submit_review',{p_article:article,p_revision:revision,p_request:request}],
+    ['fdb_cms_review_decide',{p_article:article,p_revision:revision,p_decision:'return',p_note:'Needs a source',p_request:request}],
+    ['fdb_cms_approve_highlighted',{p_article:article,p_revision:revision,p_request:request}],
+    ['fdb_cms_publish_intent',{p_article:article,p_revision:revision,p_request:request}],
+    ['fdb_cms_unpublish_intent',{p_article:article,p_request:request}],
+  ];
+  for (const [name,body] of cmsCalls) {
+    assert.equal((await rpc(name,web.access_token,body)).status,403,
+      `${name}: live AAL2 account without staff denied by inactive policy`);
+  }
+  assert.equal((await rpc('fdb_cms_create_draft',forged,cmsCalls[0][1])).status,401,
+    'CMS forged JWT refused before SQL');
+  assert.notEqual((await rpc('fdb_cms_create_draft',null,cmsCalls[0][1])).status,200,
+    'CMS anonymous caller denied');
+}
 console.log(JSON.stringify({firstImpact,repeatedImpact,registeredReauth:'same_uid',anonymousSession:'valid',
   afterEnrollment:{user:afterEnrollUser.status,refresh:afterEnrollRefresh.status},
   postgrest:'forged and anonymous denied; private schema hidden; active policy deny-all',
