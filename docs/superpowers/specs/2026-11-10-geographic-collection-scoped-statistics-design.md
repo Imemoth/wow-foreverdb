@@ -477,3 +477,27 @@ current x64 Companion and runs full map-mode/coordinate regressions.
 - Historical data remains Global / Legacy without geographic backfill.
 - Implementation is phased and the PR remains Draft until all verification and
   owner acceptance gates pass.
+
+## Geo A implementation acceptance note — 2026-11-16
+
+The owner accepted the Addon-only Geo A implementation and its five positive
+collector results on WoW Forever `wowf 1.60.1.70862` (Addon build marker
+`geo-a-fishing-event-order-3`, code HEAD `e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`):
+creature loot 36 interaction-zone observations, skinning 33 interaction-zone,
+mining 2 correlated-interaction-zone, herbalism 4 correlated-interaction-zone,
+and fishing 1 correlated-interaction-zone. The fishing result includes the
+READY-before-OPENED event-order correction. These are owner-reported positive
+live observations; they do not prove every negative runtime case. Automated
+Lua 5.1/5.4 fixtures cover ambiguous, interrupted, overlapping, stale, map
+transition, duplicate, zero-drop, and missing-event rejection paths.
+
+The accepted evidence tiers remain as specified above. `verified_source_map`
+has no accepted Geo A live result and is not emitted by the current collectors.
+Creature/skinning interaction-zone observations identify the validated loot
+interaction zone, not a source coordinate. Mining, herbalism and ordinary
+fishing correlations identify a zone only through their event-to-loot sequence.
+Player coordinates are transient map-validity context and are not persisted as
+source coordinates. Existing Unknown and legacy observations were preserved;
+there was no backfill or sync as part of acceptance. This note records Geo A
+evidence only; it does not authorize Geo B–E, migration 0019, production data
+changes, or deployment.

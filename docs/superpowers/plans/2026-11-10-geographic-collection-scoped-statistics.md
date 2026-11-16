@@ -295,6 +295,76 @@ The current estimates below are hypotheses only, not feasibility results, teleme
 - Review payload diffs and SQL RPC outputs for Guildbook exclusion and aggregate-only privacy; verify `git diff` contains no production configuration/secrets.
 - Keep every implementation PR Draft until upstream merge/dependency and all phase acceptance gates pass. Request owner approval before any merge or production migration/deployment.
 
+## Geo A closure record — 2026-11-16
+
+Geo A is limited to the Addon collection layer. Its owner-accepted live positive
+results on WoW Forever `wowf 1.60.1.70862`, Addon marker
+`geo-a-fishing-event-order-3` (implementation source HEAD before dependency
+reconciliation: `e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`), are:
+
+| Collector | Accepted geographic class | Live count |
+| --- | --- | ---: |
+| Creature loot | `verified_interaction_zone` | 36 |
+| Skinning | `verified_interaction_zone` | 33 |
+| Mining | `correlated_interaction_zone` | 2 |
+| Herbalism | `correlated_interaction_zone` | 4 |
+| Ordinary fishing | `correlated_interaction_zone` | 1 |
+
+The final fishing sample was event marker `geo-a-fishing-event-order-3`:
+78→79 fishing observations, correlated interaction-zone 0→1, Unknown 13→13,
+player-context-only 13→13, and legacy/unclassified 65→65. The channel START,
+SUCCEEDED and STOP were recognized; loot was recorded and the event-order
+diagnostic reported a correlated interaction zone. The fix records actual
+`LOOT_READY` and `LOOT_OPENED` timestamps whichever arrives first; a missing
+event never receives an invented timestamp. Its five-second bound, unique
+bobber identity, stable validated map, one-use pending operation, and Unknown
+fallback are unchanged.
+
+### Invariants and review checklist
+
+- Every successfully recorded new observation increments the existing global observation
+  and item counters once and exactly one geographic class; unresolved source
+  windows remain unresolved rather than guessed.
+- Zero-drop observations preserve their observation denominator and have no
+  fabricated items. Duplicate source/window handling is independent of the
+  geography result.
+- Geography is additive to schema-9 export; optional extension records carry
+  evidence class, scope and revision. Current Companion parsing ignores those
+  records. Global exports, legacy locations and existing `SavedVariables`
+  remain compatible.
+- Snapshot revisions increase when observations change, including within one
+  second. Existing observations are not reclassified. Installation recovery
+  archives prior history locally and starts the new installation with empty
+  counters only after explicit confirmation; export pauses if historical data
+  has lost its installation identity.
+- No exact source coordinates are emitted. Player coordinates are only checked
+  transiently for usable map evidence. No Companion sync or public upload was
+  performed for owner acceptance.
+- Lua 5.1 and 5.4 regression fixtures cover single-event attribution and
+  rejection cases for missing/mismatched identities, interruptions,
+  overlapping or unrelated casts, expired windows, changed/invalid maps,
+  multiple source candidates, duplicate callbacks, missing fishing event
+  order members, READY-before-OPENED, zero drops, and fishing-pool separation.
+  These are simulated tests, not live negative acceptance.
+- The owner reports Blizzard protected-action/taint retest PASS. Simulated
+  static regression coverage also asserts that production addon Lua never
+  references Blizzard `StaticPopup*` globals. Additional live negative taint
+  permutations were not independently exercised.
+
+### Limits and remaining phases
+
+No Geo A collector emits `verified_source_map`; source-specific coordinates are
+not established by this phase. Fishing-pool source attribution remains separate
+and was not part of the ordinary-fishing live PASS. Live negative cases were
+not independently tested for every collector. Geographic parsing, scoped
+database ingestion, API responses, Search UI, server revision replay and
+migration 0019 remain Geo B–E work and were not started or tested here. The
+Reset/Fork modal opacity/readability item remains deferred UX backlog; current
+confirmation logic and data-safety protections passed existing UI simulations.
+
+This closure is documentation of Geo A only. It neither applies migration 0019
+nor authorizes sync, production changes, deployment, or Geo B implementation.
+
 ## Geo A evidence-model refinement: gathering cast-to-loot
 
 The Addon phase may add the distinct evidence class `correlated_interaction_zone`
