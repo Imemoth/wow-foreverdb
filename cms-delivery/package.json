@@ -1,0 +1,7 @@
+{
+  "name": "azerdex-cms-delivery",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/worker.test.mjs", "once": "node src/once.mjs" },
+  "dependencies": { "pg": "8.23.1" }
+}

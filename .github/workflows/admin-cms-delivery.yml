@@ -1,0 +1,46 @@
+name: Admin CMS delivery isolation
+on:
+  push:
+    paths:
+      - 'cms-delivery/**'
+      - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/public-read/migrations/0013_cms_projection.sql'
+      - 'database/tests/admin_cms_delivery/**'
+      - 'web/src/lib/content/cms-public.ts'
+      - 'web/src/app/news/**'
+      - 'web/src/app/sitemap.ts'
+      - 'web/src/components/NewsArchive.tsx'
+      - 'web/src/components/ArticleViews.tsx'
+      - 'web/src/components/content/ArticleReader.tsx'
+      - '.github/workflows/admin-cms-delivery.yml'
+  pull_request:
+    paths:
+      - 'cms-delivery/**'
+      - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/public-read/migrations/0013_cms_projection.sql'
+      - 'database/tests/admin_cms_delivery/**'
+      - 'web/src/lib/content/cms-public.ts'
+      - 'web/src/app/news/**'
+      - 'web/src/app/sitemap.ts'
+      - 'web/src/components/NewsArchive.tsx'
+      - 'web/src/components/ArticleViews.tsx'
+      - 'web/src/components/content/ArticleReader.tsx'
+      - '.github/workflows/admin-cms-delivery.yml'
+jobs:
+  disposable-databases:
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cms-delivery/package-lock.json
+      - run: npm ci --prefix cms-delivery --ignore-scripts
+      - run: npm test --prefix cms-delivery
+      - run: FDB_CMS_PG_IMAGE=postgres:${{ matrix.postgres }} bash database/tests/admin_cms_delivery/run-docker.sh
+      - run: FDB_CMS_PG_IMAGE=postgres:${{ matrix.postgres }} FDB_CMS_WORKER_TEST=1 FDB_CMS_CI=1 bash database/tests/admin_cms_delivery/run-docker.sh
