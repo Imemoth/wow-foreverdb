@@ -69,7 +69,8 @@ export async function NewsArchive({ searchParams = {} }: { searchParams?: Search
   const projected = await cmsArticles();
   const existingSlugs = new Set(gitEditorial.map((a) => a.slug));
   if (projected.some((a) => existingSlugs.has(a.slug))) throw new Error('CMS and Git news slug collision');
-  const editorial = [...projected, ...gitEditorial];
+  const editorial = [...projected, ...gitEditorial]
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.slug.localeCompare(b.slug));
   // The lead story belongs to "All News" and the "AzerDex" tab only, on the first page of an unsearched view.
   // Blue Post / Official News filters stay purely Blizzard-sourced.
   const lead = !query && safePage === 1 && (category === null || category === "azerdex") ? pickLeadArticle(editorial) : null;

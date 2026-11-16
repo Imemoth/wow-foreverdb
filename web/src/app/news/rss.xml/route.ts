@@ -11,7 +11,8 @@ export async function GET() {
   const projected = await cmsArticles();
   const gitSlugs = new Set(gitItems.map((a) => a.slug));
   if (projected.some((a) => gitSlugs.has(a.slug))) throw new Error('CMS and Git RSS slug collision');
-  const items = [...projected, ...gitItems].slice(0, 30);
+  const items = [...projected, ...gitItems]
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 30);
   const databaseItems = await data().newsList({ category: null, query: "", page: 1, pageSize: 30 }).then((result) => result.rows).catch(() => []);
   const rssItems = [
     ...items.map((a) => ({ title: a.sample ? `[Sample] ${a.title}` : a.title, link: base + articlePath(a), date: a.publishedAt, description: a.description, categories: a.tags })),
