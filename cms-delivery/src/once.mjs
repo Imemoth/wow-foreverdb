@@ -151,8 +151,8 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
   }
   const articles = await privateDb.query('select editorial_private.cms_dispatch_reconcile_candidates($1) as article_id', [20]);
   for (const { article_id } of articles.rows) {
-    const comp = await rpc(privateDb, 'select editorial_private.cms_dispatch_reconcile($1) as value', [article_id]);
-    if (comp) report.compensated++;
+    const cancelled = await rpc(privateDb, 'select editorial_private.cms_dispatch_reconcile($1) as value', [article_id]);
+    if (cancelled) report.cancelled++;
   }
   return report;
 }

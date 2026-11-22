@@ -28,23 +28,22 @@ try {
   await publicDb.query('reset role');
   await privateDb.query(`update editorial_private.delivery_state
     set lease_until=pg_catalog.clock_timestamp()-interval '1 second' where intent_id=$1`, [intent]);
+  await privateDb.query(`update admin_private.direct_grants set status='revoked',
+    revoked_at=pg_catalog.clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
+    and permission_key='news.article.publish' and scope_id=$1`, [article]);
   const report = await main();
   assert.ok(report.delivered >= 1, JSON.stringify(report));
+  assert.ok(report.compensated >= 1, 'in-flight publication revoke must queue compensation');
   assert.ok(report.timings.some((timing) => timing.recovered && timing.publicAppliedAt));
   const p = await privateDb.query('select published_revision_id,review_state from editorial_private.articles where article_id=$1', [article]);
   const u = await publicDb.query('select revision_id,tombstone from cms_pub.articles where article_id=$1', [article]);
-  assert.equal(p.rows[0].review_state, 'published');
+  assert.equal(p.rows[0].review_state, 'unpublish_pending');
   assert.equal(p.rows[0].published_revision_id, u.rows[0].revision_id);
   assert.equal(u.rows[0].tombstone, false);
   await publicDb.query('set role foreverdb_web_reader');
   const liveReader = await publicDb.query('select web_api.cms_article($1) as value', ['cms-test-article']);
   assert.equal(liveReader.rows[0].value.revision_id, p.rows[0].published_revision_id);
   await publicDb.query('reset role');
-  assert.equal((await main()).delivered, 0, 'replay must not create a new delivery');
-  await privateDb.query(`update admin_private.direct_grants set status='revoked',
-    revoked_at=pg_catalog.clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
-    and permission_key='news.article.publish' and scope_id=$1`, [article]);
-  assert.ok((await main()).compensated >= 1, 'revocation must enqueue an ordered unpublish');
   const compensationReport = await main();
   assert.ok(compensationReport.delivered >= 1, 'compensating tombstone must be delivered');
   assert.ok(compensationReport.timings.some((timing) =>
@@ -61,9 +60,10 @@ try {
   const final = await privateDb.query('select published_revision_id,review_state from editorial_private.articles where article_id=$1', [article]);
   assert.equal(final.rows[0].published_revision_id, null);
   assert.equal(final.rows[0].review_state, 'unpublished');
+  assert.equal((await main()).delivered, 0, 'replay must not create a new delivery');
 
-  // A queued unpublish can lose its Editor grant before dispatch. The old
-  // public revision must not remain exposed because the old intent stalls.
+  // A completed publication survives later grant loss. A revoked, unclaimed
+  // unpublish is cancelled and audited, preserving the prior public revision.
   const stuck = '00000000-0000-0000-0000-000000000413';
   await privateDb.query(`insert into admin_private.direct_grants(user_id,permission_key,
     policy_version_id,environment_scope,scope_kind,scope_id,starts_at,expires_at,
@@ -93,6 +93,17 @@ try {
     [stuck, revision, '00000000-0000-0000-0000-000000000603']);
   await privateDb.query('reset role');
   assert.ok((await main()).delivered >= 1, 'new article must publish first');
+  await privateDb.query(`update admin_private.direct_grants set status='revoked',
+    revoked_at=clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
+    and permission_key='news.article.publish' and scope_id=$1`, [stuck]);
+  assert.equal((await main()).compensated, 0, 'completed publication must not depend on an old grant');
+  assert.equal((await publicDb.query('select tombstone from cms_pub.articles where article_id=$1',
+    [stuck])).rows[0].tombstone, false);
+  await privateDb.query(`update auth.mfa_amr_claims set updated_at=clock_timestamp()-interval '20 minutes'
+    where session_id='00000000-0000-0000-0000-000000000201' and authentication_method='totp'`);
+  assert.equal((await main()).compensated, 0, 'completed publication must survive later TOTP freshness expiry');
+  await privateDb.query(`update auth.mfa_amr_claims set updated_at=clock_timestamp()
+    where session_id='00000000-0000-0000-0000-000000000201' and authentication_method='totp'`);
   await privateDb.query('set role authenticated');
   await privateDb.query('select public.fdb_cms_unpublish_intent($1,$2)',
     [stuck, '00000000-0000-0000-0000-000000000604']);
@@ -100,13 +111,18 @@ try {
   await privateDb.query(`update admin_private.direct_grants set status='revoked',
     revoked_at=clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
     and permission_key='news.article.unpublish' and scope_id=$1`, [stuck]);
-  assert.ok((await main()).compensated >= 1, 'stalled unpublish must queue safety tombstone');
-  assert.ok((await main()).delivered >= 1, 'safety tombstone must skip revoked generation');
+  const cancelledUnpublish = await main();
+  assert.ok(cancelledUnpublish.cancelled >= 1, 'unclaimed revoked unpublish must be cancelled');
+  assert.equal(cancelledUnpublish.compensated, 0);
   const safe = await publicDb.query('select generation,tombstone from cms_pub.articles where article_id=$1', [stuck]);
-  assert.equal(Number(safe.rows[0].generation), 3);
-  assert.equal(safe.rows[0].tombstone, true);
-  assert.equal((await privateDb.query('select published_revision_id from editorial_private.articles where article_id=$1',
-    [stuck])).rows[0].published_revision_id, null);
+  assert.equal(Number(safe.rows[0].generation), 1);
+  assert.equal(safe.rows[0].tombstone, false);
+  const privateStuck = await privateDb.query('select published_revision_id,review_state from editorial_private.articles where article_id=$1',
+    [stuck]);
+  assert.ok(privateStuck.rows[0].published_revision_id);
+  assert.equal(privateStuck.rows[0].review_state, 'delivery_failed');
+  assert.equal((await privateDb.query(`select state from editorial_private.delivery_state
+    where article_id=$1 and generation=2`, [stuck])).rows[0].state, 'cancelled');
 
   // A later intent fences a claim that was already issued but not delivered.
   const superseded = '00000000-0000-0000-0000-000000000414';

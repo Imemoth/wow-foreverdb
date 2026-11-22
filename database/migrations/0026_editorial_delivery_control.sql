@@ -224,9 +224,8 @@ begin
   if not found then return null; end if;
   select * into a from editorial_private.articles where article_id=src.article_id for update;
   if a.generation<>src.generation then return null; end if;
-  if src.kind='publish' and not exists(select 1 from editorial_private.delivery_state
+  if src.kind<>'publish' or not exists(select 1 from editorial_private.delivery_state
       where intent_id=p_source and state in ('delivered','cancelled')) then return null; end if;
-  if src.kind='unpublish' and a.published_revision_id is null then return null; end if;
   next_intent:=pg_catalog.gen_random_uuid(); next_request:=pg_catalog.gen_random_uuid();
   payload:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',a.article_id,
     'slug',a.slug,'generation',a.generation+1);
@@ -371,22 +370,40 @@ exception when invalid_text_representation or invalid_parameter_value then retur
 end $ack$;
 
 create function editorial_private.cms_dispatch_reconcile(p_article uuid)
-returns uuid language plpgsql security definer set search_path = '' as $reconcile$
+returns boolean language plpgsql security definer set search_path = '' as $reconcile$
 declare a editorial_private.articles%rowtype;
   src editorial_private.publication_intents%rowtype;
+  s editorial_private.delivery_state%rowtype;
 begin
+  if not (select enabled from editorial_private.delivery_control where singleton)
+    then return false; end if;
   select * into a from editorial_private.articles where article_id=p_article;
-  if not found or a.published_revision_id is null then return null; end if;
+  if not found then return false; end if;
   select * into src from editorial_private.publication_intents
     where article_id=p_article and generation=a.generation;
-  if not found or (src.kind='publish' and not exists(
-      select 1 from editorial_private.delivery_state where intent_id=src.intent_id
-        and state='delivered')) or editorial_private.delivery_eligible(src.intent_id)
-    then return null; end if;
+  if not found or editorial_private.delivery_eligible(src.intent_id)
+    then return false; end if;
   select * into a from editorial_private.articles where article_id=p_article for update;
-  if a.generation<>src.generation or a.published_revision_id is null
-     or editorial_private.delivery_eligible(src.intent_id) then return null; end if;
-  return editorial_private.cms_queue_compensation(src.intent_id);
+  if a.generation<>src.generation then return false; end if;
+  insert into editorial_private.delivery_state(intent_id,article_id,generation,state)
+    values(src.intent_id,p_article,src.generation,'blocked') on conflict(intent_id) do nothing;
+  select * into s from editorial_private.delivery_state
+    where intent_id=src.intent_id for update;
+  if s.state not in ('blocked','eligible','retryable')
+     or editorial_private.delivery_eligible(src.intent_id) then return false; end if;
+  update editorial_private.delivery_state set state='cancelled',
+    last_error_code='authorization_revoked',updated_at=pg_catalog.clock_timestamp()
+    where intent_id=src.intent_id;
+  update editorial_private.articles set review_state=case when src.kind='publish'
+    then 'in_review' else 'delivery_failed' end
+    where article_id=p_article;
+  perform admin_private.append_staff_audit(null,null,null,'news.delivery.cancel',
+    'article:'||p_article::text,
+    (select version_id from admin_private.active_policy where singleton),
+    'deny','denied',pg_catalog.gen_random_uuid(),'{}'::jsonb,
+    pg_catalog.jsonb_build_object('intent',src.intent_id,'generation',src.generation,
+      'code','authorization_revoked'),'editorial_action');
+  return true;
 end $reconcile$;
 
 create function editorial_private.cms_dispatch_fail(p_intent uuid,p_token uuid,p_code text)
@@ -466,8 +483,8 @@ returns setof uuid language sql security definer set search_path = '' as $$
     join editorial_private.publication_intents i on i.article_id=a.article_id
       and i.generation=a.generation
     left join editorial_private.delivery_state s on s.intent_id=i.intent_id
-  where a.published_revision_id is not null
-    and (i.kind='unpublish' or (i.kind='publish' and s.state='delivered'))
+  where (select enabled from editorial_private.delivery_control where singleton)
+    and (s.state is null or s.state in ('blocked','eligible','retryable'))
     and not editorial_private.delivery_eligible(i.intent_id)
   order by a.article_id limit least(greatest(coalesce(p_limit,0),0),20)
 $$;

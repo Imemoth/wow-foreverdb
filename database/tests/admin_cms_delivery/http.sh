@@ -37,9 +37,9 @@ rg -qi '^cache-control: .*no-store' /tmp/adm03c-http-rss-headers.txt
 curl -fsS "$web_base/sitemap.xml" -o /tmp/adm03c-http-sitemap.xml
 rg -q '/news/cms-test-article' /tmp/adm03c-http-sitemap.xml
 
-docker exec "$FDB_CMS_CONTAINER" psql -U postgres -d fdb_admin_it -c \
-  "update admin_private.direct_grants set status='revoked',revoked_at=clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101' and permission_key='news.article.publish' and scope_id='00000000-0000-0000-0000-000000000401'" >/dev/null
-node --input-type=module -e "import {main} from './cms-delivery/src/once.mjs'; const a=await main(); const b=await main(); if(a.compensated<1||b.delivered<1) process.exit(1)"
+docker exec "$FDB_CMS_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
+  "set role authenticated; set request.jwt.claims = '{\"role\":\"authenticated\",\"sub\":\"00000000-0000-0000-0000-000000000101\",\"session_id\":\"00000000-0000-0000-0000-000000000201\",\"aal\":\"aal2\",\"exp\":4102444800}'; select public.fdb_cms_unpublish_intent('00000000-0000-0000-0000-000000000401','00000000-0000-0000-0000-000000000901');" >/dev/null
+node --input-type=module -e "import {main} from './cms-delivery/src/once.mjs'; const result=await main(); if(result.delivered<1) process.exit(1)"
 status="$(curl -sS -o /tmp/adm03c-http-after.html -w '%{http_code}' "$web_base/news/cms-test-article")"
 [ "$status" = 404 ]
 curl -fsS "$web_base/news" -o /tmp/adm03c-http-archive-after.html
