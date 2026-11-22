@@ -150,3 +150,24 @@ The command displays lifetime counters, so always compare start/end values. Exis
 ## Deferred UI acceptance backlog
 
 Confirmation modal readability remains a separate follow-up: use a 95–100% opaque dialog surface, a dark backdrop, higher-contrast warning text with improved spacing, separated confirm/cancel buttons, shared styling for Session Reset and Installation Fork, and blocked interaction with the underlying Session UI. Preserve current confirmation logic and data-safety guards. Prioritize the current taint fix and Geo A gameplay acceptance before this unrelated UI work; this collector change does not modify the modal.
+
+## Final owner LIVE confirmation — 2026-11-22
+
+On WoW Forever `wowf 1.60.1.70862`, the owner confirmed positive acceptance for
+all five collector classes using Addon `0.7.3-alpha`, marker
+`geo-a-fishing-event-order-3`. The final ordinary fishing catch was Raw
+Brilliant Smallfish in Tirisfal Glades (map ID 1420). Fishing observations
+advanced 78→79, correlated interaction-zone 0→1, Unknown 13→13,
+player-context-only 13→13, and Legacy/unclassified 65→65. The owner reported
+CHANNEL_START, SUCCEEDED and CHANNEL_STOP recognized and the event classified
+as correlated interaction-zone. The event establishes zone correlation only;
+it does not establish fish/bobber coordinates or a source-map identity.
+
+The installed build is associated with source commit
+`e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`. Current PR implementation commit
+`1e456eb0834890532d4295c5ebb937511943cd2c` carries the matching feature, and
+`02ca51fd389fa7df9fac86c2e04cb51c5c94c3b1` adds the tested no-op-save revision
+fix after the LIVE binary. Historical Unknown and Legacy observations were
+preserved. The taint result is owner-reported; negative map, interruption,
+ambiguity, timeout, zero-drop and duplicate cases are covered only by
+simulated regression fixtures, not independent LIVE trials.

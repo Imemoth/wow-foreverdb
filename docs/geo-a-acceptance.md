@@ -1,7 +1,8 @@
 # Geo A final acceptance and implementation report
 
-**Status:** Owner-accepted positive live acceptance; implementation and CI are
-being reconciled onto the protected `release` dependency chain.
+**Status:** Geo A positive LIVE acceptance PASS; final repository integration
+is BLOCKED by the required web dependency audit and dependent release gate.
+The independent code review found no confirmed Geo A implementation blocker.
 
 **Scope:** Addon-only geographic collection and local diagnostic evidence.
 Companion parsing, database ingestion, scoped RPCs and Search UI are not part
@@ -25,12 +26,29 @@ not contain SavedVariables or private diagnostics.
 | Ordinary fishing | PASS | 1 `correlated_interaction_zone` |
 | Blizzard protected-action / taint retest | PASS | Owner reports clean taint log |
 
-The final fishing sample advanced fishing observations 78→79 and correlated
+The final fishing sample produced Raw Brilliant Smallfish in Tirisfal Glades
+(map ID 1420). Fishing observations advanced 78→79 and correlated
 interaction-zone 0→1; Unknown and player-context-only remained 13, and
 legacy/unclassified remained 65. The owner reported CHANNEL_START, SUCCEEDED,
-CHANNEL_STOP, loot capture and the correlated-zone diagnostic for the sample.
-The loot event was on map 1420/Tirisfal Glades. The addon marker was
-`geo-a-fishing-event-order-3`.
+CHANNEL_STOP, loot capture and the correlated-zone diagnostic. The installed
+addon marker was `geo-a-fishing-event-order-3`.
+
+### Build and commit identity
+
+- Owner-tested client: WoW Forever `wowf 1.60.1.70862`.
+- Owner-tested addon: `0.7.3-alpha`, marker `geo-a-fishing-event-order-3`.
+- Owner-associated live source commit: `e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`
+  (`Handle reversed fishing loot event timestamps`).
+- Current reconstructed implementation commit on the reviewed PR branch:
+  `1e456eb0834890532d4295c5ebb937511943cd2c` (`feat(addon): complete Geo A
+  attribution and acceptance record`).
+- Later no-op-save revision correction: commit
+  `02ca51fd389fa7df9fac86c2e04cb51c5c94c3b1`; it was not present in the
+  owner-tested binary.
+
+The tested source and the current PR commits are distinguished deliberately:
+owner acceptance validates the event-order implementation in the tested
+build; automated tests validate the later no-op-save revision correction.
 
 These results establish positive classification for the listed live events.
 They do not establish a source map or source coordinates, and they do not prove
@@ -99,14 +117,16 @@ force. Fishing-pool handling is separate from ordinary fishing correlation.
 
 ## Automated verification and limits
 
-On the original source HEAD `e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`, all
-eight PR Actions workflows and the Vercel check were green. Lua 5.1 and 5.4
-local container runs passed the collector suite (50 simulated cases after the
-save-revision regression was added), session
+Lua 5.1 and 5.4 local container runs passed the collector suite (50 simulated
+cases after the save-revision regression was added), session
 tracker (54), session UI (76), quest API (5), quest tracker (29), quest kill
 tracker, Guildbook capture, and Lua syntax checks. CI will be rerun after
-dependency reconciliation and documentation updates; only checks on the final
-rewritten HEAD count for integration.
+final documentation/rebase updates; only checks on the final exact PR heads
+count for integration. The reviewed prior heads passed all required checks
+except `Dependency audit (web)` and its dependent `Web release gate`. The audit
+blocked inherited Next.js `16.3.0–16.4.4`, advisory
+`GHSA-mfr8-8qww-v76h` (patched release reported as `16.4.6`). The audit failure
+is outside Geo A scope and is not suppressed or waived.
 
 Fixtures cover zero drops, conservation, legacy data preservation, revision
 increments within one second, installation recovery, duplicate suppression,
