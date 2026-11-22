@@ -7,7 +7,7 @@ import { RACE_GUIDES, racePath } from "@/lib/races/registry";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { itemPath, sourcePath, zonePath } from "@/lib/routes";
 import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHost, requestHostname } from "@/lib/seo";
-import { cmsArticles } from "@/lib/content/cms-public";
+import { cmsArticles, cmsPublicEnabled } from "@/lib/content/cms-public";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // are noindex by the thin-content policy until the beta is promoted).
     return [{ url: `https://${BETA_SEO_HOSTNAME}/`, changeFrequency: "daily", priority: 1 }];
   }
-  if (!isIndexable(env)) return [];
+  if (!isIndexable(env)) {
+    // Disposable local proof only: local remains noindex, while this lets the
+    // same projection verify publish/unpublish sitemap membership over HTTP.
+    if (!cmsPublicEnabled()) return [];
+    return (await cmsArticles()).filter((a) => !a.sample).map((a) => ({
+      url: new URL(articlePath(a), env.SITE_URL).toString(),
+      lastModified: a.updatedAt ?? a.publishedAt,
+    }));
+  }
   const u = (p: string) => new URL(p, env.SITE_URL).toString();
   const db = data();
   const projected = await cmsArticles();
