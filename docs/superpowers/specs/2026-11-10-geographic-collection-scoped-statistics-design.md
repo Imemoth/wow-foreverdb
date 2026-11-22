@@ -478,6 +478,30 @@ current x64 Companion and runs full map-mode/coordinate regressions.
 - Implementation is phased and the PR remains Draft until all verification and
   owner acceptance gates pass.
 
+## Geo A final LIVE acceptance addendum — 2026-11-22
+
+The owner confirms the five Geo A collectors have positive real-client
+acceptance on WoW Forever `wowf 1.60.1.70862`, Addon `0.7.3-alpha`, build marker
+`geo-a-fishing-event-order-3`: creature loot 36 `verified_interaction_zone`,
+skinning 33 `verified_interaction_zone`, mining 2 and herbalism 4
+`correlated_interaction_zone`, and ordinary fishing 1
+`correlated_interaction_zone`. The final fishing event was Raw Brilliant
+Smallfish in Tirisfal Glades (map ID 1420), with fishing observations 78→79,
+correlated count 0→1, Unknown 13→13, player-context-only 13→13, and
+legacy/unclassified 65→65. CHANNEL_START, SUCCEEDED and CHANNEL_STOP were
+accepted. The owner reports the taint log remained clean.
+
+The fishing result verifies a zone-level event-to-loot correlation, not fish,
+bobber or source coordinates. The READY/OPENED correction uses the actual
+timestamps supplied by both callbacks and supports either order; it never
+fabricates a missing event time. These are positive live results only; negative
+correlation cases remain simulated Lua 5.1/5.4 regressions. The live-tested
+source implementation is identified by owner acceptance as
+`e6c3fab6cc5e41c2fc5e8aa015ea08dbc81a20e8`; the release-review branch contains
+the later no-op-save revision fix at
+`8be79f3573b04c53e0e2cde063ad5408e193e82d`, which was not the live-tested
+binary. Unknown and legacy observations remain unchanged.
+
 ## Geo A implementation acceptance note — 2026-11-16
 
 The owner accepted the Addon-only Geo A implementation and its five positive

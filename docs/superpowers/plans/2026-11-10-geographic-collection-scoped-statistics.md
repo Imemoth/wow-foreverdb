@@ -420,3 +420,29 @@ protected `release` branch. Geo A implementation remains in existing Draft PR
 unfinished Companion/map work through #183/#181, and the separate #179/#180
 workstreams are not prerequisites for Geo A. This order keeps each production
 diff limited to its reviewed scope.
+
+## Geo A final acceptance and release-gate record — 2026-11-22
+
+Owner positive LIVE acceptance is complete for creature loot (36
+`verified_interaction_zone`), skinning (33 `verified_interaction_zone`),
+mining (2 `correlated_interaction_zone`), herbalism (4
+`correlated_interaction_zone`), and ordinary fishing (1
+`correlated_interaction_zone`) on `wowf 1.60.1.70862` with Addon `0.7.3-alpha`
+and marker `geo-a-fishing-event-order-3`. The final fishing event was Raw
+Brilliant Smallfish at map 1420, Tirisfal Glades; observations advanced
+78→79, correlated count 0→1, Unknown and player-context-only remained 13, and
+legacy/unclassified remained 65. This confirms positive paths only; automated
+negative cases remain simulated.
+
+The current dependency chain is #186 documentation-only on `release` and #189
+Addon implementation stacked on #186. Neither depends on #183/#181 or the
+independent #179/#180 branches. No production migration, live database change,
+deployment, sync or Geo B implementation is part of this closure.
+
+The active `release` ruleset is strict and requires ten checks. On the reviewed
+PR heads, the web dependency audit and its dependent Web release gate failed for
+inherited Next.js `16.3.0–16.4.4`, advisory `GHSA-mfr8-8qww-v76h`; the audit
+reports a fix at `16.4.6`. This web dependency is outside Geo A scope and must
+be resolved through its own focused release-based dependency change. Do not
+mark Geo A PRs Ready or merge until the documentation-updated heads pass every
+required check and the protected merge order can be followed.
