@@ -57,6 +57,11 @@ if [ "${FDB_ADMIN_CMS:-}" = 1 ]; then
     psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db" \
     < "$repo/database/migrations/0025_editorial_private_cms.sql"
 fi
+if [ "${FDB_ADMIN_CMS_DELIVERY:-}" = 1 ]; then
+  docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+    psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db" \
+    < "$repo/database/migrations/0026_editorial_delivery_control.sql"
+fi
 
 # Pin the real PostgREST version/checksum used by the repository's Account E2E stack.
 rest_bin="${FDB_POSTGREST_BIN:-/tmp/fdb-admin-postgrest-v12.2.12}"
