@@ -185,7 +185,9 @@ begin
   end if;
   select * into a from cms_pub.articles where article_id=v_article for update;
   if found then
-    if a.slug<>v_slug or v_generation<>a.generation+1 then
+    -- Superseded or revoked intents may never reach this database. A signed
+    -- current intent can jump over them, but never overwrite a newer pointer.
+    if a.slug<>v_slug or v_generation<=a.generation then
       raise exception 'stale or conflicting CMS generation' using errcode='40001'; end if;
   elsif v_generation<1 then
     raise exception 'invalid first CMS generation' using errcode='40001';

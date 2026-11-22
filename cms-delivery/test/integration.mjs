@@ -19,7 +19,8 @@ try {
     [intent, claim.claim_token, JSON.stringify(forged)])).rows[0].value, null);
   await privateDb.query('reset role');
   await publicDb.query('set role azerdex_cms_delivery');
-  const { claim_token: _token, ...envelope } = claim;
+  const { claim_token: _token, is_compensation: _system,
+    intent_created_at: _created, ...envelope } = claim;
   await assert.rejects(publicDb.query('select pub_admin.cms_apply($1::jsonb)',
     [JSON.stringify({ ...envelope, auth_mac: '0'.repeat(64) })]), /MAC mismatch/);
   assert.equal((await publicDb.query('select pub_admin.cms_receipt($1) as value', [intent])).rows[0].value, null);
@@ -29,6 +30,7 @@ try {
     set lease_until=pg_catalog.clock_timestamp()-interval '1 second' where intent_id=$1`, [intent]);
   const report = await main();
   assert.ok(report.delivered >= 1, JSON.stringify(report));
+  assert.ok(report.timings.some((timing) => timing.recovered && timing.publicAppliedAt));
   const p = await privateDb.query('select published_revision_id,review_state from editorial_private.articles where article_id=$1', [article]);
   const u = await publicDb.query('select revision_id,tombstone from cms_pub.articles where article_id=$1', [article]);
   assert.equal(p.rows[0].review_state, 'published');
@@ -43,7 +45,10 @@ try {
     revoked_at=pg_catalog.clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
     and permission_key='news.article.publish' and scope_id=$1`, [article]);
   assert.ok((await main()).compensated >= 1, 'revocation must enqueue an ordered unpublish');
-  assert.ok((await main()).delivered >= 1, 'compensating tombstone must be delivered');
+  const compensationReport = await main();
+  assert.ok(compensationReport.delivered >= 1, 'compensating tombstone must be delivered');
+  assert.ok(compensationReport.timings.some((timing) =>
+    timing.compensation && timing.publicAppliedAt && timing.privateAckAt));
   const tombstone = await publicDb.query('select generation,tombstone,revision_id from cms_pub.articles where article_id=$1', [article]);
   assert.equal(tombstone.rows[0].tombstone, true);
   assert.equal(tombstone.rows[0].revision_id, null);
@@ -56,5 +61,102 @@ try {
   const final = await privateDb.query('select published_revision_id,review_state from editorial_private.articles where article_id=$1', [article]);
   assert.equal(final.rows[0].published_revision_id, null);
   assert.equal(final.rows[0].review_state, 'unpublished');
+
+  // A queued unpublish can lose its Editor grant before dispatch. The old
+  // public revision must not remain exposed because the old intent stalls.
+  const stuck = '00000000-0000-0000-0000-000000000413';
+  await privateDb.query(`insert into admin_private.direct_grants(user_id,permission_key,
+    policy_version_id,environment_scope,scope_kind,scope_id,starts_at,expires_at,
+    status,approved_by,reason) values
+    ('00000000-0000-0000-0000-000000000101','news.article.publish',1,'staging',
+     'article',$1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+     'active','00000000-0000-0000-0000-000000000102','disposable fixture'),
+    ('00000000-0000-0000-0000-000000000101','news.article.unpublish',1,'staging',
+     'article',$1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+     'active','00000000-0000-0000-0000-000000000102','disposable fixture')`, [stuck]);
+  await privateDb.query('set role authenticated');
+  await privateDb.query(`set request.jwt.claims = '{"role":"authenticated",
+    "sub":"00000000-0000-0000-0000-000000000101",
+    "session_id":"00000000-0000-0000-0000-000000000201",
+    "aal":"aal2","exp":4102444800}'`);
+  await privateDb.query(`select public.fdb_cms_create_draft($1,$2,$3::jsonb,$4)`,
+    [stuck, 'cms-stuck-unpublish', JSON.stringify({ title: 'Stuck unpublish fixture',
+      summary: 'A synthetic article proving revoked unpublish safety.',
+      body_markdown: 'A safe disposable test body.', classification: 'normal' }),
+    '00000000-0000-0000-0000-000000000601']);
+  const revision = (await privateDb.query(
+    "select (public.fdb_cms_article($1)->>'current_revision_id')::uuid as current_revision_id",
+    [stuck])).rows[0].current_revision_id;
+  await privateDb.query('select public.fdb_cms_submit_review($1,$2,$3)',
+    [stuck, revision, '00000000-0000-0000-0000-000000000602']);
+  await privateDb.query('select public.fdb_cms_publish_intent($1,$2,$3)',
+    [stuck, revision, '00000000-0000-0000-0000-000000000603']);
+  await privateDb.query('reset role');
+  assert.ok((await main()).delivered >= 1, 'new article must publish first');
+  await privateDb.query('set role authenticated');
+  await privateDb.query('select public.fdb_cms_unpublish_intent($1,$2)',
+    [stuck, '00000000-0000-0000-0000-000000000604']);
+  await privateDb.query('reset role');
+  await privateDb.query(`update admin_private.direct_grants set status='revoked',
+    revoked_at=clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
+    and permission_key='news.article.unpublish' and scope_id=$1`, [stuck]);
+  assert.ok((await main()).compensated >= 1, 'stalled unpublish must queue safety tombstone');
+  assert.ok((await main()).delivered >= 1, 'safety tombstone must skip revoked generation');
+  const safe = await publicDb.query('select generation,tombstone from cms_pub.articles where article_id=$1', [stuck]);
+  assert.equal(Number(safe.rows[0].generation), 3);
+  assert.equal(safe.rows[0].tombstone, true);
+  assert.equal((await privateDb.query('select published_revision_id from editorial_private.articles where article_id=$1',
+    [stuck])).rows[0].published_revision_id, null);
+
+  // A later intent fences a claim that was already issued but not delivered.
+  const superseded = '00000000-0000-0000-0000-000000000414';
+  await privateDb.query(`insert into admin_private.direct_grants(user_id,permission_key,
+    policy_version_id,environment_scope,scope_kind,scope_id,starts_at,expires_at,
+    status,approved_by,reason) values
+    ('00000000-0000-0000-0000-000000000101','news.article.publish',1,'staging',
+     'article',$1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+     'active','00000000-0000-0000-0000-000000000102','disposable fixture'),
+    ('00000000-0000-0000-0000-000000000101','news.article.unpublish',1,'staging',
+     'article',$1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '29 days',
+     'active','00000000-0000-0000-0000-000000000102','disposable fixture')`, [superseded]);
+  await privateDb.query('set role authenticated');
+  await privateDb.query('select public.fdb_cms_create_draft($1,$2,$3::jsonb,$4)',
+    [superseded, 'cms-superseded-claim', JSON.stringify({ title: 'Superseded claim fixture',
+      summary: 'A synthetic article proving old dispatch fencing.',
+      body_markdown: 'A safe disposable test body.', classification: 'normal' }),
+    '00000000-0000-0000-0000-000000000611']);
+  const rev414 = (await privateDb.query(
+    "select (public.fdb_cms_article($1)->>'current_revision_id')::uuid as value", [superseded])).rows[0].value;
+  await privateDb.query('select public.fdb_cms_submit_review($1,$2,$3)',
+    [superseded, rev414, '00000000-0000-0000-0000-000000000612']);
+  const oldIntent = (await privateDb.query('select public.fdb_cms_publish_intent($1,$2,$3) as value',
+    [superseded, rev414, '00000000-0000-0000-0000-000000000613'])).rows[0].value;
+  await privateDb.query('reset role');
+  await privateDb.query('set role azerdex_cms_dispatch');
+  assert.equal((await privateDb.query('select editorial_private.cms_dispatch_qualify($1) as value',
+    [oldIntent])).rows[0].value, true);
+  const oldClaim = (await privateDb.query('select editorial_private.cms_dispatch_claim($1) as value',
+    [oldIntent])).rows[0].value;
+  await privateDb.query('reset role');
+  await privateDb.query('set role authenticated');
+  await privateDb.query('select public.fdb_cms_unpublish_intent($1,$2)',
+    [superseded, '00000000-0000-0000-0000-000000000614']);
+  await privateDb.query('reset role');
+  assert.equal((await privateDb.query('select state from editorial_private.delivery_state where intent_id=$1',
+    [oldIntent])).rows[0].state, 'superseded');
+  assert.equal((await privateDb.query(`select count(*)::int as n from admin_private.staff_audit_events
+    where action_key='news.delivery.supersede' and resource_key=$1`,
+    [`article:${superseded}`])).rows[0].n, 1);
+  assert.ok((await main()).delivered >= 1, 'newer unpublish must become the tombstone');
+  await publicDb.query('set role azerdex_cms_delivery');
+  const { claim_token: _oldToken, is_compensation: _oldSystem,
+    intent_created_at: _oldCreated, ...oldEnvelope } = oldClaim;
+  await assert.rejects(publicDb.query('select pub_admin.cms_apply($1::jsonb)',
+    [JSON.stringify(oldEnvelope)]), /stale or conflicting CMS generation/);
+  await publicDb.query('reset role');
+  const supersededPublic = await publicDb.query(
+    'select generation,tombstone from cms_pub.articles where article_id=$1', [superseded]);
+  assert.equal(Number(supersededPublic.rows[0].generation), 2);
+  assert.equal(supersededPublic.rows[0].tombstone, true);
   console.log('ADM-03C two-database worker: PASS');
 } finally { await privateDb.end(); await publicDb.end(); }

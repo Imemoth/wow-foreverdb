@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import pg from 'pg';
 
 const PRIVATE_ROLE = 'azerdex_cms_dispatch';
@@ -83,7 +84,7 @@ function sameReceipt(a, b) {
 }
 
 export async function dispatchOnce(privateDb, publicDb, assetRoot) {
-  const report = { candidates: 0, delivered: 0, cancelled: 0, retried: 0, compensated: 0 };
+  const report = { candidates: 0, delivered: 0, cancelled: 0, retried: 0, compensated: 0, timings: [] };
   const candidates = await privateDb.query('select editorial_private.cms_dispatch_candidates($1) as intent_id', [20]);
   for (const { intent_id: intent } of candidates.rows) {
     report.candidates++;
@@ -92,7 +93,12 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
     if (existing) {
       const recovered = await rpc(privateDb, 'select editorial_private.cms_dispatch_recover($1,$2::jsonb) as value',
         [intent, JSON.stringify(existing)]);
-      if (recovered?.acknowledged) { report.delivered++; if (recovered.compensation_intent) report.compensated++; }
+      if (recovered?.acknowledged) {
+        report.delivered++;
+        if (recovered.compensation_intent) report.compensated++;
+        report.timings.push({ intentId: intent, recovered: true,
+          publicAppliedAt: existing.applied_at, privateAckAt: new Date().toISOString() });
+      }
       continue;
     }
     if (!await rpc(privateDb, 'select editorial_private.cms_dispatch_qualify($1) as value', [intent])) continue;
@@ -110,10 +116,13 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
         report.cancelled++;
         continue;
       }
-      const { claim_token: _token, ...payload } = claim;
+      const { claim_token: _token, is_compensation: _system,
+        intent_created_at: _intentCreated, ...payload } = claim;
       if (payload.kind === 'unpublish') delete payload.snapshot;
       publicAttempted = true;
+      const publicStart = performance.now();
       const applied = await rpc(publicDb, 'select pub_admin.cms_apply($1::jsonb) as value', [JSON.stringify(payload)]);
+      const publicReply = performance.now();
       const receipt = await rpc(publicDb, 'select pub_admin.cms_receipt($1) as value', [intent]);
       if (!sameReceipt(applied, receipt)) throw new Error('public_receipt_mismatch');
       const ack = await rpc(privateDb, 'select editorial_private.cms_dispatch_ack($1,$2,$3::jsonb) as value',
@@ -121,6 +130,13 @@ export async function dispatchOnce(privateDb, publicDb, assetRoot) {
       if (!ack?.acknowledged) throw new Error('private_ack_pending');
       report.delivered++;
       if (ack.compensation_intent) report.compensated++;
+      report.timings.push({ intentId: intent, articleId: claim.article_id,
+        generation: claim.generation, kind: claim.kind,
+        compensation: claim.is_compensation === true,
+        privateIntentCreatedAt: claim.intent_created_at,
+        publicAppliedAt: receipt.applied_at, privateAckAt: new Date().toISOString(),
+        publicCommandMs: Math.round(publicReply - publicStart),
+        publicReplyToAckMs: Math.round(performance.now() - publicReply) });
     } catch (error) {
       const code = String(error.message).match(/^[a-z_]{3,40}$/)?.[0] ?? 'delivery_failure';
       // A network failure after starting the public command cannot prove that

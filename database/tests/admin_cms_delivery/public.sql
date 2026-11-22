@@ -1,9 +1,13 @@
 do $security$
 begin
   if has_schema_privilege('foreverdb_web_reader','cms_pub','USAGE')
+     or cms_pub.cms_mac('test')<>
+       '248c3141988983387d02b1f0b0fd9f94b7ebef6f841a501a90deeaa2f72e5fd3'
      or has_schema_privilege('azerdex_cms_delivery','cms_pub','USAGE')
      or has_table_privilege('foreverdb_web_reader','cms_pub.articles','SELECT')
      or has_table_privilege('azerdex_cms_delivery','cms_pub.articles','INSERT')
+     or has_table_privilege('azerdex_cms_delivery','cms_pub.delivery_mac_key','SELECT')
+     or has_function_privilege('azerdex_cms_delivery','cms_pub.cms_mac(text)','EXECUTE')
      or has_function_privilege('foreverdb_publisher','pub_admin.cms_apply(jsonb)','EXECUTE')
      or has_function_privilege('azerdex_news_ingest','pub_admin.cms_apply(jsonb)','EXECUTE')
      or not has_function_privilege('azerdex_cms_delivery','pub_admin.cms_apply(jsonb)','EXECUTE')
@@ -20,6 +24,7 @@ declare article uuid:='00000000-0000-0000-0000-000000000801';
   intent1 uuid:='00000000-0000-0000-0000-000000000811';
   intent2 uuid:='00000000-0000-0000-0000-000000000812';
   intent3 uuid:='00000000-0000-0000-0000-000000000813';
+  intent4 uuid:='00000000-0000-0000-0000-000000000814';
   snap jsonb:='{"title":"Disposable CMS article","summary":"A synthetic article used for isolated testing.","body_markdown":"A safe test body.","classification":"normal","featured":false,"sample":false}';
   core jsonb; envelope jsonb; receipt jsonb; hash text;
   expiry bigint:=pg_catalog.floor(pg_catalog.date_part('epoch',
@@ -54,19 +59,23 @@ begin
     'snapshot',snap,'auth_expires_epoch',expiry,
     'auth_mac',cms_pub.cms_mac(intent2::text||':'||
       pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex')||':'||expiry::text));
-  begin
-    perform pub_admin.cms_apply(envelope);
-    raise exception 'generation gap accepted';
-  exception when serialization_failure then null; end;
+  perform pub_admin.cms_apply(envelope);
+  if (select revision_id from cms_pub.articles where article_id=article)<>rev2 then
+    raise exception 'signed newer generation was not published'; end if;
   core:=core||pg_catalog.jsonb_build_object('generation',2);
-  envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent2,
+  envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent4,
     'payload_hash',pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex'),
     'snapshot',snap,'auth_expires_epoch',expiry,
-    'auth_mac',cms_pub.cms_mac(intent2::text||':'||
+    'auth_mac',cms_pub.cms_mac(intent4::text||':'||
       pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex')||':'||expiry::text));
-  perform pub_admin.cms_apply(envelope);
+  begin
+    perform pub_admin.cms_apply(envelope);
+    raise exception 'stale lower generation accepted';
+  exception when serialization_failure then null; end;
+  if (select revision_id from cms_pub.articles where article_id=article)<>rev2 then
+    raise exception 'failed delivery changed the published revision'; end if;
   core:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',article,
-    'slug','cms-disposable-article','generation',3);
+    'slug','cms-disposable-article','generation',4);
   envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent3,
     'payload_hash',pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex'),
     'auth_expires_epoch',expiry,
@@ -98,7 +107,7 @@ do $evidence$
 begin
   if (select count(*) from cms_pub.receipts)<>3
      or (select count(*) from cms_pub.revisions)<>2
-     or (select generation from cms_pub.articles)<>3
+     or (select generation from cms_pub.articles)<>4
      or (select revision_id from cms_pub.articles) is not null then
     raise exception 'public projection history or atomic pointer failed'; end if;
 end $evidence$;

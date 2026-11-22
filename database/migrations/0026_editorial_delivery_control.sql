@@ -221,11 +221,12 @@ declare src editorial_private.publication_intents%rowtype;
   payload jsonb; digest bytea; audit_no bigint;
 begin
   select * into src from editorial_private.publication_intents where intent_id=p_source;
-  if not found or src.kind<>'publish' then return null; end if;
+  if not found then return null; end if;
   select * into a from editorial_private.articles where article_id=src.article_id for update;
   if a.generation<>src.generation then return null; end if;
-  if not exists(select 1 from editorial_private.delivery_state
+  if src.kind='publish' and not exists(select 1 from editorial_private.delivery_state
       where intent_id=p_source and state in ('delivered','cancelled')) then return null; end if;
+  if src.kind='unpublish' and a.published_revision_id is null then return null; end if;
   next_intent:=pg_catalog.gen_random_uuid(); next_request:=pg_catalog.gen_random_uuid();
   payload:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',a.article_id,
     'slug',a.slug,'generation',a.generation+1);
@@ -299,6 +300,7 @@ begin
     updated_at=pg_catalog.clock_timestamp() where intent_id=p_intent;
   return o.payload||pg_catalog.jsonb_build_object('intent_id',p_intent,
     'payload_hash',pg_catalog.encode(o.payload_hash,'hex'),'claim_token',token,
+    'is_compensation',s.is_compensation,'intent_created_at',i.created_at,
     'auth_expires_epoch',expire_epoch,
     'auth_mac',editorial_private.cms_mac(p_intent::text||':'||
       pg_catalog.encode(o.payload_hash,'hex')||':'||expire_epoch::text),
@@ -370,17 +372,21 @@ end $ack$;
 
 create function editorial_private.cms_dispatch_reconcile(p_article uuid)
 returns uuid language plpgsql security definer set search_path = '' as $reconcile$
-declare a editorial_private.articles%rowtype; src uuid;
+declare a editorial_private.articles%rowtype;
+  src editorial_private.publication_intents%rowtype;
 begin
   select * into a from editorial_private.articles where article_id=p_article;
   if not found or a.published_revision_id is null then return null; end if;
-  select intent_id into src from editorial_private.delivery_state
-    where article_id=p_article and generation=a.generation and state='delivered';
-  if src is null or editorial_private.delivery_eligible(src) then return null; end if;
+  select * into src from editorial_private.publication_intents
+    where article_id=p_article and generation=a.generation;
+  if not found or (src.kind='publish' and not exists(
+      select 1 from editorial_private.delivery_state where intent_id=src.intent_id
+        and state='delivered')) or editorial_private.delivery_eligible(src.intent_id)
+    then return null; end if;
   select * into a from editorial_private.articles where article_id=p_article for update;
-  if a.generation is distinct from (select generation from editorial_private.publication_intents
-      where intent_id=src) or editorial_private.delivery_eligible(src) then return null; end if;
-  return editorial_private.cms_queue_compensation(src);
+  if a.generation<>src.generation or a.published_revision_id is null
+     or editorial_private.delivery_eligible(src.intent_id) then return null; end if;
+  return editorial_private.cms_queue_compensation(src.intent_id);
 end $reconcile$;
 
 create function editorial_private.cms_dispatch_fail(p_intent uuid,p_token uuid,p_code text)
@@ -457,11 +463,39 @@ $$;
 create function editorial_private.cms_dispatch_reconcile_candidates(p_limit integer)
 returns setof uuid language sql security definer set search_path = '' as $$
   select a.article_id from editorial_private.articles a
-    join editorial_private.delivery_state s on s.article_id=a.article_id
-      and s.generation=a.generation
-  where a.published_revision_id is not null and s.state='delivered'
+    join editorial_private.publication_intents i on i.article_id=a.article_id
+      and i.generation=a.generation
+    left join editorial_private.delivery_state s on s.intent_id=i.intent_id
+  where a.published_revision_id is not null
+    and (i.kind='unpublish' or (i.kind='publish' and s.state='delivered'))
+    and not editorial_private.delivery_eligible(i.intent_id)
   order by a.article_id limit least(greatest(coalesce(p_limit,0),0),20)
 $$;
+
+-- A newer protected intent fences all unfinished older deliveries. The old
+-- signed envelope can still race across databases until expiry, so the
+-- public projection also requires strictly increasing generations.
+create function editorial_private.supersede_pending_delivery()
+returns trigger language plpgsql security definer set search_path = '' as $supersede$
+declare prior record;
+begin
+  if new.generation<=old.generation then return new; end if;
+  for prior in update editorial_private.delivery_state
+    set state='superseded',claim_token=null,lease_until=null,
+      last_error_code='newer_generation',updated_at=pg_catalog.clock_timestamp()
+    where article_id=new.article_id and generation<new.generation
+      and state in ('blocked','eligible','claimed','retryable')
+    returning intent_id,generation loop
+    perform admin_private.append_staff_audit(null,null,null,'news.delivery.supersede',
+      'article:'||new.article_id::text,
+      (select version_id from admin_private.active_policy where singleton),
+      'deny','denied',pg_catalog.gen_random_uuid(),'{}'::jsonb,
+      pg_catalog.jsonb_build_object('old_intent',prior.intent_id,
+        'old_generation',prior.generation,'new_generation',new.generation),
+      'editorial_action');
+  end loop;
+  return new;
+end $supersede$;
 
 revoke all on function
   editorial_private.cms_mac(text),
@@ -476,7 +510,8 @@ revoke all on function
   editorial_private.cms_dispatch_cancel(uuid,uuid,text),
   editorial_private.cms_dispatch_recover(uuid,jsonb),
   editorial_private.cms_dispatch_candidates(integer),
-  editorial_private.cms_dispatch_reconcile_candidates(integer)
+  editorial_private.cms_dispatch_reconcile_candidates(integer),
+  editorial_private.supersede_pending_delivery()
   from public,anon,authenticated,service_role,authenticator;
 grant execute on function
   editorial_private.cms_dispatch_qualify(uuid),
@@ -491,6 +526,10 @@ grant execute on function
   editorial_private.cms_dispatch_reconcile_candidates(integer)
   to azerdex_cms_dispatch;
 reset role;
+grant execute on function editorial_private.supersede_pending_delivery() to current_user;
+create trigger cms_supersede_pending after update of generation on editorial_private.articles
+  for each row execute function editorial_private.supersede_pending_delivery();
+revoke execute on function editorial_private.supersede_pending_delivery() from current_user;
 revoke admin_executor from current_user;
 revoke create on schema editorial_private from admin_executor;
 
