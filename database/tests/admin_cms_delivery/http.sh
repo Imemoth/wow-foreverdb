@@ -11,7 +11,7 @@ web_pid=''
 cleanup() {
   if [ -n "$web_pid" ]; then kill -- -"$web_pid" 2>/dev/null || true; fi
   if [ "$had_agents" = 0 ] && [ -f web/AGENTS.md ] &&
-     rg -q 'BEGIN:nextjs-agent-rules' web/AGENTS.md; then rm web/AGENTS.md; fi
+     grep -q 'BEGIN:nextjs-agent-rules' web/AGENTS.md; then rm web/AGENTS.md; fi
 }
 trap cleanup EXIT
 
@@ -28,14 +28,14 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ "$ready" = 1 ] || { tail -30 /tmp/adm03c-http-web.log; exit 1; }
-rg -q 'A test article' /tmp/adm03c-http-article.html
+grep -q 'A test article' /tmp/adm03c-http-article.html
 curl -fsS "$web_base/news" -o /tmp/adm03c-http-archive.html
-rg -q '/news/cms-test-article' /tmp/adm03c-http-archive.html
+grep -q '/news/cms-test-article' /tmp/adm03c-http-archive.html
 curl -fsS -D /tmp/adm03c-http-rss-headers.txt "$web_base/news/rss.xml" -o /tmp/adm03c-http-rss.xml
-rg -q '/news/cms-test-article' /tmp/adm03c-http-rss.xml
-rg -qi '^cache-control: .*no-store' /tmp/adm03c-http-rss-headers.txt
+grep -q '/news/cms-test-article' /tmp/adm03c-http-rss.xml
+grep -Eiq '^cache-control: .*no-store' /tmp/adm03c-http-rss-headers.txt
 curl -fsS "$web_base/sitemap.xml" -o /tmp/adm03c-http-sitemap.xml
-rg -q '/news/cms-test-article' /tmp/adm03c-http-sitemap.xml
+grep -q '/news/cms-test-article' /tmp/adm03c-http-sitemap.xml
 
 docker exec "$FDB_CMS_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
   "set role authenticated; set request.jwt.claims = '{\"role\":\"authenticated\",\"sub\":\"00000000-0000-0000-0000-000000000101\",\"session_id\":\"00000000-0000-0000-0000-000000000201\",\"aal\":\"aal2\",\"exp\":4102444800}'; select public.fdb_cms_unpublish_intent('00000000-0000-0000-0000-000000000401','00000000-0000-0000-0000-000000000901');" >/dev/null
@@ -43,9 +43,9 @@ node --input-type=module -e "import {main} from './cms-delivery/src/once.mjs'; c
 status="$(curl -sS -o /tmp/adm03c-http-after.html -w '%{http_code}' "$web_base/news/cms-test-article")"
 [ "$status" = 404 ]
 curl -fsS "$web_base/news" -o /tmp/adm03c-http-archive-after.html
-! rg -q '/news/cms-test-article' /tmp/adm03c-http-archive-after.html
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-archive-after.html
 curl -fsS "$web_base/news/rss.xml" -o /tmp/adm03c-http-rss-after.xml
-! rg -q '/news/cms-test-article' /tmp/adm03c-http-rss-after.xml
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-rss-after.xml
 curl -fsS "$web_base/sitemap.xml" -o /tmp/adm03c-http-sitemap-after.xml
-! rg -q '/news/cms-test-article' /tmp/adm03c-http-sitemap-after.xml
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-sitemap-after.xml
 printf 'ADM-03C disposable HTTP article/archive/RSS/sitemap: PASS\n'
