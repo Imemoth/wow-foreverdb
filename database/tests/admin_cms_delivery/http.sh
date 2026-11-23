@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[ "${FDB_CMS_DISPOSABLE:-}" = 1 ] || exit 2
+[ -n "${FDB_CMS_CONTAINER:-}" ] && [ -n "${FDB_CMS_PUBLIC_PORT:-}" ] || exit 2
+
+web_port="$(node -e 'const s=require("node:net").createServer(); s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})')"
+web_base="http://127.0.0.1:$web_port"
+had_agents=0
+[ -e web/AGENTS.md ] && had_agents=1
+web_pid=''
+cleanup() {
+  if [ -n "$web_pid" ]; then kill -- -"$web_pid" 2>/dev/null || true; fi
+  if [ "$had_agents" = 0 ] && [ -f web/AGENTS.md ] &&
+     grep -q 'BEGIN:nextjs-agent-rules' web/AGENTS.md; then rm web/AGENTS.md; fi
+}
+trap cleanup EXIT
+
+node --input-type=module -e "import {main} from './cms-delivery/src/once.mjs'; const r=await main(); if(r.delivered<1) process.exit(1)"
+AZERDEX_READ_DB_URL="postgres://foreverdb_web_reader:local-test-only@127.0.0.1:$FDB_CMS_PUBLIC_PORT/cms_public_it" \
+FOREVERDB_DATA_SOURCE=postgres SITE_URL="$web_base" \
+  setsid npm run dev --prefix web -- --port "$web_port" >/tmp/adm03c-http-web.log 2>&1 &
+web_pid=$!
+ready=0
+for _ in $(seq 1 60); do
+  if curl -fsS "$web_base/news/cms-test-article" -o /tmp/adm03c-http-article.html 2>/dev/null; then
+    ready=1; break
+  fi
+  sleep 1
+done
+[ "$ready" = 1 ] || { tail -30 /tmp/adm03c-http-web.log; exit 1; }
+grep -q 'A test article' /tmp/adm03c-http-article.html
+curl -fsS "$web_base/news" -o /tmp/adm03c-http-archive.html
+grep -q '/news/cms-test-article' /tmp/adm03c-http-archive.html
+curl -fsS -D /tmp/adm03c-http-rss-headers.txt "$web_base/news/rss.xml" -o /tmp/adm03c-http-rss.xml
+grep -q '/news/cms-test-article' /tmp/adm03c-http-rss.xml
+grep -Eiq '^cache-control: .*no-store' /tmp/adm03c-http-rss-headers.txt
+curl -fsS "$web_base/sitemap.xml" -o /tmp/adm03c-http-sitemap.xml
+grep -q '/news/cms-test-article' /tmp/adm03c-http-sitemap.xml
+
+docker exec "$FDB_CMS_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d fdb_admin_it -c \
+  "set role authenticated; set request.jwt.claims = '{\"role\":\"authenticated\",\"sub\":\"00000000-0000-0000-0000-000000000101\",\"session_id\":\"00000000-0000-0000-0000-000000000201\",\"aal\":\"aal2\",\"exp\":4102444800}'; select public.fdb_cms_unpublish_intent('00000000-0000-0000-0000-000000000401','00000000-0000-0000-0000-000000000901');" >/dev/null
+node --input-type=module -e "import {main} from './cms-delivery/src/once.mjs'; const result=await main(); if(result.delivered<1) process.exit(1)"
+status="$(curl -sS -o /tmp/adm03c-http-after.html -w '%{http_code}' "$web_base/news/cms-test-article")"
+[ "$status" = 404 ]
+curl -fsS "$web_base/news" -o /tmp/adm03c-http-archive-after.html
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-archive-after.html
+curl -fsS "$web_base/news/rss.xml" -o /tmp/adm03c-http-rss-after.xml
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-rss-after.xml
+curl -fsS "$web_base/sitemap.xml" -o /tmp/adm03c-http-sitemap-after.xml
+! grep -q '/news/cms-test-article' /tmp/adm03c-http-sitemap-after.xml
+printf 'ADM-03C disposable HTTP article/archive/RSS/sitemap: PASS\n'

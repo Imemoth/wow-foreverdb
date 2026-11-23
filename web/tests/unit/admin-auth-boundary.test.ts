@@ -42,7 +42,11 @@ describe("isolated Admin cookie and live entry boundary",()=>{
     expect(headers[0]).toMatch(/^__Secure-fdb_admin=.*; Path=\/admin; Max-Age=[0-9]+; HttpOnly; Secure; SameSite=Lax$/);
     expect(headers[0]).not.toContain("refresh-token-is-never-in-admin-cookie");
     expect((await readAdminSession(ac,jar(cookieValue(headers[0]!))))?.uid).toBe(UID);
-    expect(await readAdminSession(ac,jar(cookieValue(headers[0]!).slice(0,-1)+"A"))).toBeNull();
+    const sealed=cookieValue(headers[0]!);
+    const ciphertextStart=sealed.indexOf(".")+1;
+    const tampered=sealed.slice(0,ciphertextStart)+
+      (sealed[ciphertextStart]==="A"?"B":"A")+sealed.slice(ciphertextStart+1);
+    expect(await readAdminSession(ac,jar(tampered))).toBeNull();
     const cleared:string[]=[];clearAdminSession({append:(_n,v)=>cleared.push(v)});
     expect(cleared.filter(v=>v.includes("Path=/admin"))).toHaveLength(2);
     expect(cleared.every(v=>v.includes("Max-Age=0"))).toBe(true);

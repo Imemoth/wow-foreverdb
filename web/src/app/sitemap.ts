@@ -7,6 +7,7 @@ import { RACE_GUIDES, racePath } from "@/lib/races/registry";
 import { isIndexable, serverEnv } from "@/lib/env";
 import { itemPath, sourcePath, zonePath } from "@/lib/routes";
 import { BETA_SEO_HOSTNAME, isIndexablePublicBetaHost, requestHostname } from "@/lib/seo";
+import { cmsArticles, cmsPublicEnabled } from "@/lib/content/cms-public";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // are noindex by the thin-content policy until the beta is promoted).
     return [{ url: `https://${BETA_SEO_HOSTNAME}/`, changeFrequency: "daily", priority: 1 }];
   }
-  if (!isIndexable(env)) return [];
+  if (!isIndexable(env)) {
+    // Disposable local proof only: local remains noindex, while this lets the
+    // same projection verify publish/unpublish sitemap membership over HTTP.
+    if (!cmsPublicEnabled()) return [];
+    return (await cmsArticles()).filter((a) => !a.sample).map((a) => ({
+      url: new URL(articlePath(a), env.SITE_URL).toString(),
+      lastModified: a.updatedAt ?? a.publishedAt,
+    }));
+  }
   const u = (p: string) => new URL(p, env.SITE_URL).toString();
   const db = data();
+  const projected = await cmsArticles();
+  const gitArticles = visibleArticles().filter((a) => a.status === "published" && !a.sample);
+  const gitSlugs = new Set(gitArticles.filter((a) => a.section === 'news').map((a) => a.slug));
+  if (projected.some((a) => gitSlugs.has(a.slug))) throw new Error('CMS and Git sitemap slug collision');
   const [items, sources, zones, firstNews] = await Promise.all([
     db.sitemap("item", 0, 5000), db.sitemap("source", 0, 5000), db.sitemap("zone", 0, 5000),
     db.newsList({ category: null, query: "", page: 1, pageSize: 50 }).catch(() => ({ rows: [], total: 0 })),
@@ -41,7 +54,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...RACE_GUIDES.map((g) => ({ url: u(racePath(g.slug)) })),
     ...Object.keys(SPEC_GUIDES).map((key) => { const [cls, spec] = key.split("/") as [string, string]; return { url: u(specPath(cls, spec)) }; }),
     ...news.map((entry) => ({ url: u(`/news/entry/${entry.slug}`), lastModified: entry.officialUpdatedAt ?? entry.modifiedAt ?? entry.publishedAt })),
-    ...visibleArticles().filter((a) => a.status === "published" && !a.sample).map((a) => ({ url: u(articlePath(a)), lastModified: a.updatedAt ?? a.publishedAt })),
+    ...[...projected.filter((a) => !a.sample), ...gitArticles].map((a) => ({ url: u(articlePath(a)), lastModified: a.updatedAt ?? a.publishedAt })),
     ...items.map((r) => ({ url: u(itemPath(r.itemId!)), lastModified: r.updatedAt ?? undefined })),
     ...sources.map((r) => ({ url: u(sourcePath(r.sourceType!, r.sourceId!).split("#")[0]!), lastModified: r.updatedAt ?? undefined })),
     ...zones.map((r) => ({ url: u(zonePath(r.mapId!)) })),

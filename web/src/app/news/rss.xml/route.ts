@@ -1,12 +1,18 @@
 import { articlePath, visibleArticles } from "@/lib/content/loader";
 import { data } from "@/lib/data";
 import { serverEnv } from "@/lib/env";
+import { cmsArticles, cmsPublicEnabled } from "@/lib/content/cms-public";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
 export async function GET() {
   const base = serverEnv().SITE_URL.replace(/\/$/, "");
-  const items = visibleArticles("news").filter((a) => a.status === "published").slice(0, 30);
+  const gitItems = visibleArticles("news").filter((a) => a.status === "published");
+  const projected = await cmsArticles();
+  const gitSlugs = new Set(gitItems.map((a) => a.slug));
+  if (projected.some((a) => gitSlugs.has(a.slug))) throw new Error('CMS and Git RSS slug collision');
+  const items = [...projected, ...gitItems]
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 30);
   const databaseItems = await data().newsList({ category: null, query: "", page: 1, pageSize: 30 }).then((result) => result.rows).catch(() => []);
   const rssItems = [
     ...items.map((a) => ({ title: a.sample ? `[Sample] ${a.title}` : a.title, link: base + articlePath(a), date: a.publishedAt, description: a.description, categories: a.tags })),
@@ -40,7 +46,7 @@ ${item.categories.map((t) => `<category>${esc(t)}</category>`).join("")}
   return new Response(xml, {
     headers: {
       "Content-Type": "application/rss+xml; charset=utf-8",
-      "Cache-Control": "public, max-age=300, s-maxage=900",
+      "Cache-Control": cmsPublicEnabled() ? "no-store, max-age=0" : "public, max-age=300, s-maxage=900",
       "X-Content-Type-Options": "nosniff",
     },
   });
