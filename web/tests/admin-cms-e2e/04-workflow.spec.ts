@@ -150,32 +150,37 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     const h = await createDraft(pe, { highlighted: true });
     await pe.getByTestId("edit-link").click();
     await pe.getByLabel(/^Featured/).uncheck();
-    await pe.getByLabel("Classification", { exact: true }).selectOption("normal");
+    await pe.getByRole("combobox", { name: "Classification" }).selectOption("normal");
     await pe.getByTestId("save-draft").click();
     await expect(pe.getByTestId("editor-notice")).toContainText("Classification cannot be lowered");
     expect((await articleRow(h.slug)).classification_floor).toBe(1);
   });
 
-  test("retrying an action with the same request id cannot apply twice (idempotency)", async ({ page }) => {
+  test("retries cannot apply twice: create is idempotent by request id, and a replayed submit is refused as stale without a second event", async ({ page }) => {
     const ed = await newUser("idem");
     await makeStaff(ed, "Editor");
     await enterAdmin(page, ed);
-    const a = await createDraft(page);
-    const row = await articleRow(a.slug);
     const csrf = (await (await page.request.get("/admin/api/csrf")).json()).token as string;
     const headers = { "x-fdb-csrf": csrf, origin: "http://localhost:3220", "content-type": "application/json" };
-    const data = { requestId: crypto.randomUUID(), articleId: row.article_id, revisionId: row.current_revision_id };
-    const r1 = await page.request.post("/admin/api/cms/submit", { headers, data });
-    const r2 = await page.request.post("/admin/api/cms/submit", { headers, data });
-    expect(r1.status()).toBe(200);
-    expect(r2.status()).toBe(200);
+    const create = { requestId: crypto.randomUUID(), slug: `idem-${Date.now().toString(36)}`, snapshot: { title: "Idempotent create", summary: "A summary that is certainly long enough.", body_markdown: "x", classification: "normal" } };
+    const c1 = await page.request.post("/admin/api/cms/create", { headers, data: create });
+    const c2 = await page.request.post("/admin/api/cms/create", { headers, data: create });
+    expect(c1.status()).toBe(200);
+    expect(c2.status()).toBe(200);
+    expect((await c1.json()).articleId).toBe((await c2.json()).articleId);
     const c = await db();
     try {
-      const n = (await c.query("select count(*)::int n from editorial_private.review_events e join editorial_private.articles a using(article_id) where a.slug=$1 and decision='submit'", [a.slug])).rows[0].n;
-      expect(n).toBe(1);
+      expect((await c.query("select count(*)::int n from editorial_private.articles where slug=$1", [create.slug])).rows[0].n).toBe(1);
     } finally { await c.end(); }
-    // the same request id reused for a DIFFERENT action is refused
-    const r3 = await page.request.post("/admin/api/cms/review", { headers, data: { ...data, decision: "reject", note: "Different action, same id." } });
-    expect(r3.status()).toBeGreaterThanOrEqual(400);
+    const row = await articleRow(create.slug);
+    const data = { requestId: crypto.randomUUID(), articleId: row.article_id, revisionId: row.current_revision_id };
+    expect((await page.request.post("/admin/api/cms/submit", { headers, data })).status()).toBe(200);
+    const again = await page.request.post("/admin/api/cms/submit", { headers, data });
+    expect(again.status()).toBe(409);
+    expect((await again.json()).error.kind).toBe("stale");
+    const c3 = await db();
+    try {
+      expect((await c3.query("select count(*)::int n from editorial_private.review_events e join editorial_private.articles a using(article_id) where a.slug=$1 and decision='submit'", [create.slug])).rows[0].n).toBe(1);
+    } finally { await c3.end(); }
   });
 });

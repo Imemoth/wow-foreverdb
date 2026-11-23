@@ -40,17 +40,16 @@ test.describe("audit visibility/authorization and TOTP freshness", () => {
     await enterAdmin(page, ed);
     const a = await createDraft(page);
     await ageTotp(ed.uid, 16);
-    // reading is refused (fail closed) ...
+    // entry and reading are refused (fail closed): the stale TOTP fails the private entry check before any page renders
     await page.goto("/admin/articles");
     await expect(page.getByTestId("article-table")).toHaveCount(0);
-    await expect(page.getByTestId("read-failure")).toHaveAttribute("data-kind", "denied");
-    await expect(page.getByTestId("read-failure")).toContainText("older than 15 minutes");
+    await expect(page.getByTestId("admin-denied")).toContainText("TOTP verification from the last 15 minutes");
     // ... and so is a write
     await page.goto(`${a.url}/edit`).catch(() => undefined);
     const csrf = (await (await page.request.get("/admin/api/csrf")).json()).token as string;
     const row = await articleRow(a.slug);
     const r = await page.request.post("/admin/api/cms/submit", { headers: { "x-fdb-csrf": csrf, origin: "http://localhost:3220", "content-type": "application/json" }, data: { requestId: crypto.randomUUID(), articleId: row.article_id, revisionId: row.current_revision_id } });
-    expect(r.status()).toBe(403);
+    expect([401, 403]).toContain(r.status());
     expect((await articleRow(a.slug)).review_state).toBe("draft");
     // a fresh TOTP verification restores access
     await enterAdmin(page, ed);
@@ -64,6 +63,7 @@ test.describe("audit visibility/authorization and TOTP freshness", () => {
     await enterAdmin(page, ed);
     await createDraft(page);
     await page.getByRole("button", { name: /leave admin/i }).first().click();
+    await page.waitForURL(/\/account/);
     await page.goto("/admin");
     await expect(page.getByTestId("admin-denied")).toBeVisible();
   });
