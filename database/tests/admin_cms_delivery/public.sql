@@ -111,3 +111,58 @@ begin
      or (select revision_id from cms_pub.articles) is not null then
     raise exception 'public projection history or atomic pointer failed'; end if;
 end $evidence$;
+
+-- A compensation tombstone can arrive before an earlier signed publish.
+-- A later legitimate publication must initialize its first public date.
+begin;
+set role foreverdb_pub_owner;
+do $first_publish_after_tombstone$
+declare article uuid:='00000000-0000-0000-0000-000000000821';
+  revision uuid:='00000000-0000-0000-0000-000000000822';
+  intent uuid:='00000000-0000-0000-0000-000000000823';
+  expiry bigint:=pg_catalog.floor(pg_catalog.date_part('epoch',
+    pg_catalog.clock_timestamp()+interval '2 minutes'))::bigint;
+  core jsonb; payload_hash text; envelope jsonb;
+  source_snapshot jsonb:='{"title":"After tombstone","summary":"Synthetic republish date test.","body_markdown":"Safe body.","classification":"normal","featured":false,"sample":false,"images":[{"path":"/content-images/cms-test.png","alt":"Synthetic test image","attribution":"Public attribution","rights_source":"private-licensing-contact@example.test","rights_license":"internal-contract-reference"}]}';
+begin
+  core:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',article,
+    'slug','cms-after-tombstone','generation',2);
+  payload_hash:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex');
+  envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent,
+    'payload_hash',payload_hash,'auth_expires_epoch',expiry,
+    'auth_mac',cms_pub.cms_mac(intent::text||':'||payload_hash||':'||expiry::text));
+  perform pub_admin.cms_apply(envelope);
+  if (select first_published_at from cms_pub.articles where article_id=article) is not null
+    then raise exception 'tombstone invented a publication date'; end if;
+  intent:='00000000-0000-0000-0000-000000000824';
+  core:=pg_catalog.jsonb_build_object('kind','publish','article_id',article,
+    'slug','cms-after-tombstone','revision_id',revision,'revision_hash',
+    pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(source_snapshot::text,'UTF8')),'hex'),
+    'generation',3);
+  payload_hash:=pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(core::text,'UTF8')),'hex');
+  envelope:=core||pg_catalog.jsonb_build_object('intent_id',intent,
+    'payload_hash',payload_hash,'snapshot',source_snapshot,'auth_expires_epoch',expiry,
+    'auth_mac',cms_pub.cms_mac(intent::text||':'||payload_hash||':'||expiry::text));
+  perform pub_admin.cms_apply(envelope);
+  if (select first_published_at from cms_pub.articles where article_id=article) is null
+    then raise exception 'first publication after tombstone has no public date'; end if;
+  if exists(select 1 from cms_pub.revisions where article_id=article and
+      (snapshot::text like '%private-licensing-contact%'
+       or snapshot::text like '%internal-contract-reference%'
+       or source_revision_hash<>pg_catalog.sha256(pg_catalog.convert_to(source_snapshot::text,'UTF8'))
+       or snapshot_hash<>pg_catalog.sha256(pg_catalog.convert_to(snapshot::text,'UTF8'))))
+    then raise exception 'public snapshot leaked private rights evidence or hash mismatch'; end if;
+end $first_publish_after_tombstone$;
+reset role;
+
+set role foreverdb_web_reader;
+do $dated_reader$
+begin
+  if web_api.cms_article('cms-after-tombstone')->>'published_at' is null or
+     not exists(select 1 from web_api.cms_list(50,0) as item(value)
+       where item.value->>'slug'='cms-after-tombstone'
+         and item.value->>'published_at' is not null)
+    then raise exception 'republished article is missing from dated public readers'; end if;
+end $dated_reader$;
+reset role;
+rollback;

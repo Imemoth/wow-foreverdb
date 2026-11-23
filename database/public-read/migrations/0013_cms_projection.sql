@@ -41,6 +41,7 @@ create table cms_pub.articles (
 create table cms_pub.revisions (
   article_id uuid not null references cms_pub.articles(article_id) on delete restrict,
   revision_id uuid not null,
+  source_revision_hash bytea not null check (pg_catalog.octet_length(source_revision_hash)=32),
   snapshot_hash bytea not null check (pg_catalog.octet_length(snapshot_hash)=32),
   snapshot jsonb not null check (pg_catalog.jsonb_typeof(snapshot)='object'),
   first_applied_at timestamptz not null default pg_catalog.clock_timestamp(),
@@ -125,6 +126,7 @@ language plpgsql security definer set search_path = '' as $apply$
 declare v_article uuid; v_revision uuid; v_intent uuid; v_generation bigint;
   v_auth_expires bigint;
   v_slug text; v_kind text; v_hash bytea; v_snapshot jsonb; v_snapshot_hash bytea;
+  v_public_snapshot jsonb; v_public_hash bytea;
   v_expected bytea; a cms_pub.articles%rowtype; prior cms_pub.receipts%rowtype;
   v_payload jsonb;
 begin
@@ -156,6 +158,17 @@ begin
          where k not in ('title','summary','body_markdown','byline','category',
            'tags','classification','featured','sample','seo_description','images','related_links'))
        then raise exception 'invalid CMS revision snapshot' using errcode='22023'; end if;
+    v_public_snapshot:=v_snapshot;
+    if v_snapshot ? 'images' then
+      if pg_catalog.jsonb_typeof(v_snapshot->'images')<>'array' then
+        raise exception 'invalid CMS image snapshot' using errcode='22023'; end if;
+      select pg_catalog.jsonb_set(v_snapshot,'{images}',
+        coalesce(pg_catalog.jsonb_agg(img.value - 'rights_source' - 'rights_license'
+          order by img.ordinality),'[]'::jsonb)) into v_public_snapshot
+        from pg_catalog.jsonb_array_elements(v_snapshot->'images')
+          with ordinality as img(value,ordinality);
+    end if;
+    v_public_hash:=pg_catalog.sha256(pg_catalog.convert_to(v_public_snapshot::text,'UTF8'));
     v_payload:=pg_catalog.jsonb_build_object('kind','publish','article_id',v_article,
       'slug',v_slug,'revision_id',v_revision,'revision_hash',
       pg_catalog.encode(v_snapshot_hash,'hex'),'generation',v_generation);
@@ -184,6 +197,10 @@ begin
     return cms_pub.receipt_json(prior);
   end if;
   select * into a from cms_pub.articles where article_id=v_article for update;
+  -- A valid MAC at entry must not authorize a write after a blocked row lock
+  -- outlives the short dispatch lease.
+  if v_auth_expires<=pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()) then
+    raise exception 'CMS delivery authorization expired while waiting' using errcode='42501'; end if;
   if found then
     -- Superseded or revoked intents may never reach this database. A signed
     -- current intent can jump over them, but never overwrite a newer pointer.
@@ -194,20 +211,25 @@ begin
   end if;
   if v_kind='publish' then
     if found then
-      insert into cms_pub.revisions(article_id,revision_id,snapshot_hash,snapshot)
-        values(v_article,v_revision,v_snapshot_hash,v_snapshot)
+      insert into cms_pub.revisions(article_id,revision_id,source_revision_hash,
+        snapshot_hash,snapshot)
+        values(v_article,v_revision,v_snapshot_hash,v_public_hash,v_public_snapshot)
         on conflict(article_id,revision_id) do nothing;
       if not exists(select 1 from cms_pub.revisions where article_id=v_article
-          and revision_id=v_revision and snapshot_hash=v_snapshot_hash and snapshot=v_snapshot)
+          and revision_id=v_revision and source_revision_hash=v_snapshot_hash
+          and snapshot_hash=v_public_hash and snapshot=v_public_snapshot)
         then raise exception 'revision ID content conflict' using errcode='23505'; end if;
       update cms_pub.articles set generation=v_generation,revision_id=v_revision,
-        tombstone=false,changed_at=pg_catalog.clock_timestamp() where article_id=v_article;
+        tombstone=false,changed_at=pg_catalog.clock_timestamp(),
+        first_published_at=coalesce(first_published_at,pg_catalog.clock_timestamp())
+        where article_id=v_article;
     else
       insert into cms_pub.articles(article_id,slug,generation,revision_id,tombstone,
         first_published_at) values(v_article,v_slug,v_generation,v_revision,false,
           pg_catalog.clock_timestamp());
-      insert into cms_pub.revisions(article_id,revision_id,snapshot_hash,snapshot)
-        values(v_article,v_revision,v_snapshot_hash,v_snapshot);
+      insert into cms_pub.revisions(article_id,revision_id,source_revision_hash,
+        snapshot_hash,snapshot)
+        values(v_article,v_revision,v_snapshot_hash,v_public_hash,v_public_snapshot);
     end if;
   else
     if not found then

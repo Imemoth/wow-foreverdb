@@ -224,8 +224,10 @@ begin
   if not found then return null; end if;
   select * into a from editorial_private.articles where article_id=src.article_id for update;
   if a.generation<>src.generation then return null; end if;
-  if src.kind<>'publish' or not exists(select 1 from editorial_private.delivery_state
-      where intent_id=p_source and state in ('delivered','cancelled')) then return null; end if;
+  if not exists(select 1 from editorial_private.delivery_state
+      where intent_id=p_source and state='cancelled') and
+     (src.kind<>'publish' or not exists(select 1 from editorial_private.delivery_state
+      where intent_id=p_source and state='delivered')) then return null; end if;
   next_intent:=pg_catalog.gen_random_uuid(); next_request:=pg_catalog.gen_random_uuid();
   payload:=pg_catalog.jsonb_build_object('kind','unpublish','article_id',a.article_id,
     'slug',a.slug,'generation',a.generation+1);
@@ -259,9 +261,12 @@ begin
   insert into editorial_private.delivery_state(intent_id,article_id,generation,state)
     values(p_intent,i.article_id,i.generation,'blocked') on conflict(intent_id) do nothing;
   select * into s from editorial_private.delivery_state where intent_id=p_intent for update;
-  if s.state not in ('blocked','retryable') or not editorial_private.delivery_eligible(p_intent)
+  if not (s.state in ('blocked','retryable') or
+       (s.state='claimed' and s.lease_until<=pg_catalog.clock_timestamp()))
+     or not editorial_private.delivery_eligible(p_intent)
      then return false; end if;
-  update editorial_private.delivery_state set state='eligible',last_error_code=null,
+  update editorial_private.delivery_state set state='eligible',claim_token=null,
+    lease_until=null,last_error_code=null,
     updated_at=pg_catalog.clock_timestamp() where intent_id=p_intent;
   return true;
 end $qualify$;
@@ -374,6 +379,8 @@ returns boolean language plpgsql security definer set search_path = '' as $recon
 declare a editorial_private.articles%rowtype;
   src editorial_private.publication_intents%rowtype;
   s editorial_private.delivery_state%rowtype;
+  signed_prior boolean;
+  compensation uuid;
 begin
   if not (select enabled from editorial_private.delivery_control where singleton)
     then return false; end if;
@@ -389,10 +396,16 @@ begin
     values(src.intent_id,p_article,src.generation,'blocked') on conflict(intent_id) do nothing;
   select * into s from editorial_private.delivery_state
     where intent_id=src.intent_id for update;
-  if s.state not in ('blocked','eligible','retryable')
+  if not (s.state in ('blocked','eligible','retryable') or
+       (s.state='claimed' and s.lease_until<=pg_catalog.clock_timestamp()))
      or editorial_private.delivery_eligible(src.intent_id) then return false; end if;
+  signed_prior:=s.state='claimed' or exists(
+    select 1 from editorial_private.delivery_state prior
+    where prior.article_id=p_article and prior.generation<src.generation
+      and prior.state='superseded' and prior.attempt>0);
   update editorial_private.delivery_state set state='cancelled',
-    last_error_code='authorization_revoked',updated_at=pg_catalog.clock_timestamp()
+    claim_token=null,lease_until=null,last_error_code='authorization_revoked',
+    updated_at=pg_catalog.clock_timestamp()
     where intent_id=src.intent_id;
   update editorial_private.articles set review_state=case when src.kind='publish'
     then 'in_review' else 'delivery_failed' end
@@ -403,6 +416,11 @@ begin
     'deny','denied',pg_catalog.gen_random_uuid(),'{}'::jsonb,
     pg_catalog.jsonb_build_object('intent',src.intent_id,'generation',src.generation,
       'code','authorization_revoked'),'editorial_action');
+  if signed_prior then
+    compensation:=editorial_private.cms_queue_compensation(src.intent_id);
+    if compensation is null then
+      raise exception 'signed delivery needs tombstone' using errcode='42501'; end if;
+  end if;
   return true;
 end $reconcile$;
 
@@ -441,9 +459,9 @@ begin
     'article:'||s.article_id::text,(select version_id from admin_private.active_policy where singleton),
     'deny','denied',pg_catalog.gen_random_uuid(),'{}'::jsonb,
     pg_catalog.jsonb_build_object('intent',p_intent,'code',p_code),'editorial_action');
-  if i.kind='publish' then
+  if i.kind in ('publish','unpublish') then
     compensation:=editorial_private.cms_queue_compensation(p_intent);
-    if compensation is null then raise exception 'cancelled publish needs tombstone' using errcode='42501'; end if;
+    if compensation is null then raise exception 'cancelled claim needs tombstone' using errcode='42501'; end if;
   end if;
   return true;
 end $cancel$;
@@ -474,7 +492,8 @@ returns setof uuid language sql security definer set search_path = '' as $$
     or coalesce(s.is_compensation,false))
     and (s.state is null or s.state in ('blocked','eligible','retryable')
       or (s.state='claimed' and s.lease_until<=pg_catalog.clock_timestamp()))
-  order by o.created_at,o.intent_id limit least(greatest(coalesce(p_limit,0),0),20)
+  order by coalesce(s.is_compensation,false) desc,o.created_at,o.intent_id
+    limit least(greatest(coalesce(p_limit,0),0),20)
 $$;
 
 create function editorial_private.cms_dispatch_reconcile_candidates(p_limit integer)
@@ -484,7 +503,8 @@ returns setof uuid language sql security definer set search_path = '' as $$
       and i.generation=a.generation
     left join editorial_private.delivery_state s on s.intent_id=i.intent_id
   where (select enabled from editorial_private.delivery_control where singleton)
-    and (s.state is null or s.state in ('blocked','eligible','retryable'))
+    and (s.state is null or s.state in ('blocked','eligible','retryable') or
+      (s.state='claimed' and s.lease_until<=pg_catalog.clock_timestamp()))
     and not editorial_private.delivery_eligible(i.intent_id)
   order by a.article_id limit least(greatest(coalesce(p_limit,0),0),20)
 $$;
