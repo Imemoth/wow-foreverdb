@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/vercel-ignored-build.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:zone-maps": "playwright test -c playwright.zone-maps.config.ts",
     "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
