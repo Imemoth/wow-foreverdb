@@ -147,7 +147,7 @@ The failure scenarios (a failing delivery with an unrelated valid one in the sam
 
 ### Limitations of this environment
 
-No staff management or media upload; the worker runs only when you run `deliver.sh` (no scheduler); the stack uses a fixed public test MAC key and a superuser `SET ROLE` worker shortcut; hosted Supabase is not exercised (see below). **This is development-only evidence and does not claim production readiness.**
+No staff management or media upload; the worker runs only when you run `deliver.sh` (no scheduler); the stack uses a fixed public test MAC key and a superuser `SET ROLE` worker shortcut; the home page's "latest news" strip reads the news-collector projection (public-read migration 0011), which this stack does not apply, so the site logs a harmless `public_db_error` (`news_cards`, SQLSTATE 42883) on `/` and shows no collector news (the CMS routes `/news`, `/news/<slug>`, RSS and sitemap are unaffected); hosted Supabase is not exercised (see below). **This is development-only evidence and does not claim production readiness.**
 
 ## Remaining functional gaps
 
