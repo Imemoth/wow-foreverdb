@@ -1,0 +1,86 @@
+name: Admin CMS backend hotfix (0028)
+
+# ADM-03B/03C backend hotfix: forward repair migration 0028, the real PostgREST stale-revision regression, the real delivery worker (highlighted publication,
+# failure isolation) and, on PostgreSQL 16, the public HTTP journey. Everything runs against a throw-away PostgreSQL container; every credential is a public
+# test constant. No hosted Supabase, no production deployment, nothing is published.
+on:
+  push:
+    paths:
+      - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
+      - 'database/tests/admin_cms_repair/**'
+      - 'cms-delivery/**'
+      - 'web/src/lib/content/cms-public.ts'
+      - '.github/workflows/admin-cms-hotfix.yml'
+  pull_request:
+    paths:
+      - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
+      - 'database/tests/admin_cms_repair/**'
+      - 'cms-delivery/**'
+      - 'web/src/lib/content/cms-public.ts'
+      - '.github/workflows/admin-cms-hotfix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-cms-hotfix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sql-postgrest-worker:
+    name: Hotfix 0028 SQL, real PostgREST and real worker on PostgreSQL ${{ matrix.pg }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { pg: ['16', '17'] }
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-only
+      FDB_CMS_DISPOSABLE: '1'
+      # The worker refuses to run when CI=true unless the job states that its databases are disposable (same switch as admin-cms-delivery.yml).
+      FDB_CMS_CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24', cache: npm, cache-dependency-path: cms-delivery/package-lock.json }
+      - run: npm ci --prefix cms-delivery --ignore-scripts
+      - name: Worker unit tests (failure isolation policy)
+        run: npm test --prefix cms-delivery
+      - name: Disposable PostgreSQL
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-only postgres:${{ matrix.pg }}
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+      - name: Reproduce both defects, apply 0028, assert the repair, run the real PostgREST regression and the real worker
+        run: bash database/tests/admin_cms_repair/run.sh
+
+  public-http:
+    name: Hotfix highlighted publication over HTTP (article, archive, RSS, sitemap)
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-only
+      FDB_CMS_DISPOSABLE: '1'
+      # The worker refuses to run when CI=true unless the job states that its databases are disposable (same switch as admin-cms-delivery.yml).
+      FDB_CMS_CI: '1'
+      FDB_REPAIR_HTTP: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24', cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci --prefix cms-delivery --ignore-scripts
+      - run: npm ci --prefix web --ignore-scripts
+      - name: Disposable PostgreSQL 16
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-only postgres:16
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+      - name: Full hotfix run including the HTTP journey
+        run: bash database/tests/admin_cms_repair/run.sh

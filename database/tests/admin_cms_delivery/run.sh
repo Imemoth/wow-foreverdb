@@ -13,7 +13,8 @@ migrator=(psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d fdb_admin_it)
 "${root[@]}" -c 'alter table auth.users add column email_confirmed_at timestamptz; alter table auth.users add column phone_confirmed_at timestamptz'
 for n in 0020_admin_private_authorization 0021_admin_private_evaluator \
   0022_admin_auth_handoff 0023_admin_staff_lifecycle 0024_admin_editorial_boundary \
-  0025_editorial_private_cms 0026_editorial_delivery_control; do
+  0025_editorial_private_cms 0026_editorial_delivery_control \
+  0028_editorial_hotfix_stale_and_highlighted; do
   "${migrator[@]}" -f "database/migrations/$n.sql"
 done
 pub=(psql -X -q -v ON_ERROR_STOP=1 -U postgres -d cms_public_it)

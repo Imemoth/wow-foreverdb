@@ -165,9 +165,32 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
                 and not has_table_privilege('azerdex_cms_dispatch',
                   'editorial_private.delivery_state','SELECT')")
             [ "$delivery_ok" = t ] || { echo 'real-GoTrue ADM-03C inactive boundary failed' >&2; exit 1; }
-            echo 'PASS: pinned real GoTrue, non-superuser 0026 operator and inactive CMS delivery'
+            # ADM-03B/03C backend hotfix: forward repair, applied by the same non-superuser operator AFTER 0026.
+            docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+              psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+              < "$repo/database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql"
+            hotfix_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+              -c "select position('PT409' in pg_get_functiondef('editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)'::regprocedure))>0
+                and position('40001' in pg_get_functiondef('editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)'::regprocedure))=0
+                and position('select ap.* into ap' in pg_get_functiondef('editorial_private.delivery_eligible(uuid)'::regprocedure))=0
+                and position('select appr.* into ap' in pg_get_functiondef('editorial_private.delivery_eligible(uuid)'::regprocedure))>0
+                and not has_function_privilege('authenticated','editorial_private.delivery_eligible(uuid)','EXECUTE')
+                and not has_function_privilege('authenticated','editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)','EXECUTE')
+                and not has_schema_privilege('admin_executor','editorial_private','CREATE')
+                and not (select enabled from editorial_private.delivery_control)")
+            [ "$hotfix_ok" = t ] || { echo 'real-GoTrue ADM-03B/03C hotfix migration failed' >&2; exit 1; }
+            echo 'PASS: pinned real GoTrue, non-superuser 0026 and 0028 operator and inactive CMS delivery'
             exit 0
           fi
+          # CMS-only rehearsal: the hotfix applies on a 0025-only database (its delivery_eligible repair is skipped) and the guarded 0025 rollback still works after it.
+          docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+            psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+            < "$repo/database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql"
+          hotfix_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+            -c "select position('PT409' in pg_get_functiondef('editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)'::regprocedure))>0
+              and position('40001' in pg_get_functiondef('editorial_private.run_action(text,uuid,uuid,jsonb,text,text,uuid)'::regprocedure))=0
+              and to_regprocedure('editorial_private.delivery_eligible(uuid)') is null")
+          [ "$hotfix_ok" = t ] || { echo 'real-GoTrue ADM-03B hotfix migration failed' >&2; exit 1; }
           docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
             psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
             < "$repo/database/rollback/0025_editorial_private_cms_rollback.sql"
