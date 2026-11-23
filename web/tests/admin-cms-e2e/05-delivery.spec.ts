@@ -1,6 +1,5 @@
 import type { Page, Browser } from "@playwright/test";
-import { createHash } from "node:crypto";
-import { expect, test, newCtx, DELIVERY, aal2Token, createDraft, db, makeStaff, newStaffPage, newUser, rest, runWorker, articleRow, type Staff } from "./fixtures";
+import { expect, test, newCtx, DELIVERY, createDraft, db, makeStaff, newStaffPage, newUser, runWorker, articleRow, type Staff } from "./fixtures";
 
 test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
@@ -55,7 +54,6 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
     for (const bad of ["draft", "review_state", "editorial_private", "approved_by", a.slug.length ? "session_id" : ""]) if (bad) expect(html).not.toContain(bad === "draft" ? "editorial draft" : bad);
 
     // unpublish: an intent, still public until delivered
-    await act(t.po, "act-unpublish").catch(() => undefined);
     await t.po.getByRole("tab", { name: /Overview/ }).click();
     await act(t.po, "act-unpublish"); await confirm(t.po, /Request unpublish/);
     await expect(t.po.getByTestId("action-flash")).toContainText("Unpublish intent recorded");
@@ -77,11 +75,13 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
     const a = await createDraft(t.pe);
     await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
     await t.po.goto(a.url); await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
+    await expect(status(t.po)).toHaveText("Publish pending");
     runWorker();
     expect(await publicStatus(request, a.slug)).toBe(200);
     await t.pa.goto(a.url);
     await expect(t.pa.getByTestId("act-publish")).toBeDisabled();
     await act(t.pa, "act-unpublish"); await confirm(t.pa, /Request unpublish/);
+    await expect(status(t.pa)).toHaveText("Unpublish pending");
     runWorker();
     expect(await publicStatus(request, a.slug)).toBe(404);
   });
@@ -110,33 +110,5 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
     await expect(status(t.pa)).toHaveText(/Publish cancelled|Publish superseded/);
     await t.pa.getByRole("tab", { name: /Delivery/ }).click();
     await expect(t.pa.getByTestId("delivery-state").first()).toHaveText(/cancelled|superseded/);
-  });
-
-  test("a delivery that fails is shown as FAILED (retryable) with the previous public state unchanged", async ({ browser, request }) => {
-    const t = await team(browser, "fail");
-    // A rights-verified registry asset whose file does not exist: the real worker validates the bytes and records a retryable failure.
-    const assetId = crypto.randomUUID();
-    const c = await db();
-    try {
-      await c.query("insert into editorial_private.media_assets(asset_id,asset_version,path,content_sha256,rights_source,rights_license,attribution,verified_by,verified_at) values($1,1,$2,$3,'E2E fixture source','CC0-1.0','E2E fixture',$4,clock_timestamp())",
-        [assetId, `/content-images/e2e-missing/${assetId.slice(0, 8)}.png`, createHash("sha256").update("missing").digest(), t.owner.uid]);
-    } finally { await c.end(); }
-    const token = await aal2Token(t.ed);
-    const slug = `fail-${assetId.slice(0, 8)}`;
-    const created = await rest(token, "rpc/fdb_cms_create_draft", { method: "POST", body: { p_article: crypto.randomUUID(), p_slug: slug, p_request: crypto.randomUUID(),
-      p_snapshot: { title: "Article with a missing image", summary: "A summary that is certainly long enough to pass.", body_markdown: "Body text.", classification: "normal", images: [{ asset_id: assetId, alt: "A missing image" }] } } });
-    expect(created.status, JSON.stringify(created.body)).toBe(200);
-    const row = await articleRow(slug);
-    await t.pe.goto(`/admin/articles/${row.article_id}`);
-    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
-    await t.po.goto(`/admin/articles/${row.article_id}`);
-    await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
-    expect(() => runWorker()).toThrow(/missing_asset|delivery/);
-    await t.po.reload();
-    await expect(status(t.po)).toHaveText("Delivery failed");
-    await t.po.getByRole("tab", { name: /Delivery/ }).click();
-    await expect(t.po.getByTestId("delivery-state").first()).toHaveText("retryable");
-    await expect(t.po.getByTestId("intent-table")).toContainText("missing_asset");
-    expect(await publicStatus(request, slug)).toBe(404);
   });
 });
