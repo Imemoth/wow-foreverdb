@@ -41,14 +41,14 @@ export function ArticleDetailView({ detail, uid }: { detail: ArticleDetail; uid:
 
   const highlighted = a.snapshot.classification === "highlighted";
   const state = a.review_state;
-  const published = a.published_revision_id !== null || state === "publish_pending";
+  const published = a.published_revision_id !== null || state === "publish_pending" || state === "published";
   const can = {
     edit: p.edit && ["draft", "in_review", "approved", "rejected"].includes(state),
     submit: p.submit && (state === "draft" || state === "rejected"),
     review: p.review && state === "in_review",
     approve: p.approve && highlighted && state === "in_review",
     publish: p.publish && ((!highlighted && state === "in_review") || (highlighted && state === "approved")),
-    unpublish: p.unpublish && published && state !== "unpublish_pending",
+    unpublish: p.unpublish && published && (state as string) !== "unpublish_pending" && (state as string) !== "unpublished",
   };
   const whyNot = (what: keyof typeof can): string | null => {
     if (can[what]) return null;

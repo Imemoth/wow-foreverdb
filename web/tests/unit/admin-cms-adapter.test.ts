@@ -5,7 +5,7 @@ import { join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cmsRpc, classifyDbError } from "@/lib/admin/cms/rpc";
 import { articleIdForRequest } from "@/lib/admin/cms/ids";
-import { ACTION_INPUT, snapshotInput, detailOutput } from "@/lib/admin/cms/schemas";
+import { ACTION_INPUT, REVIEW_STATE, snapshotInput, detailOutput } from "@/lib/admin/cms/schemas";
 import { diffLines, diffSnapshots } from "@/lib/admin/cms/diff";
 import { Markdown, safeUrl } from "@/components/admin/Markdown";
 import { statusOf } from "@/components/admin/status";
@@ -127,7 +127,7 @@ describe("ADM-04 adapter: deterministic article id from the request id", () => {
 });
 
 describe("ADM-04 UI: status derived from the real delivery state, never assumed", () => {
-  const art = (rs: "draft" | "in_review" | "approved" | "rejected" | "publish_pending" | "unpublish_pending", pub: string | null = null) => ({ review_state: rs, published_revision_id: pub, current_revision_id: U(1) });
+  const art = (rs: "draft" | "in_review" | "approved" | "rejected" | "publish_pending" | "unpublish_pending" | "published" | "unpublished" | "delivery_failed", pub: string | null = null) => ({ review_state: rs, published_revision_id: pub, current_revision_id: U(1) });
   const intent = (kind: "publish" | "unpublish", state: string, extra: Record<string, unknown> = {}) => ({ intent_id: U(5), kind, generation: 1, created_at: "2026-01-01T00:00:00Z", delivery: { state, attempt: 1, compensation: false, error_code: null, applied_at: null, updated_at: null, ...extra } }) as never;
   it("shows Published only after a delivered receipt", () => {
     expect(statusOf(art("publish_pending"), intent("publish", "eligible")).key).toBe("pending");
@@ -137,6 +137,13 @@ describe("ADM-04 UI: status derived from the real delivery state, never assumed"
     expect(statusOf(art("publish_pending"), intent("publish", "retryable", { error_code: "x" })).key).toBe("failed");
     expect(statusOf(art("publish_pending"), intent("publish", "cancelled")).key).toBe("cancelled");
     expect(statusOf(art("publish_pending", U(1)), intent("unpublish", "delivered")).key).toBe("unpublished");
+  });
+  it("understands the states the ADM-03C ledger adds, and an unknown state still fails closed", () => {
+    expect(statusOf(art("published" as never), null).key).toBe("published");
+    expect(statusOf(art("unpublished" as never), null).key).toBe("unpublished");
+    expect(statusOf(art("delivery_failed" as never), null).key).toBe("failed");
+    expect(REVIEW_STATE.safeParse("published").success).toBe(true);
+    expect(REVIEW_STATE.safeParse("exploded").success).toBe(false);
   });
   it("falls back to the review state without an intent", () => {
     for (const s of ["draft", "in_review", "approved", "rejected"] as const) expect(statusOf(art(s), null).key).toBe(s);

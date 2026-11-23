@@ -36,6 +36,9 @@ export function statusOf(a: { review_state: ReviewState; published_revision_id: 
     rejected: { key: "rejected", label: "Rejected", tone: "error", detail: "Rejected. Edit to create a new revision." },
     publish_pending: { key: "pending", label: "Publish pending", tone: "warning", detail: "A publication intent exists." },
     unpublish_pending: { key: "pending", label: "Unpublish pending", tone: "warning", detail: "An unpublish intent exists." },
+    published: { key: "published", label: "Published", tone: "success", detail: "The delivery receipt confirms the revision is public." },
+    unpublished: { key: "unpublished", label: "Unpublished", tone: "neutral", detail: "The article was withdrawn; a tombstone replaces it." },
+    delivery_failed: { key: "failed", label: "Delivery failed", tone: "error", detail: "A delivery attempt failed. The previous public state is unchanged." },
   };
   return map[a.review_state];
 }

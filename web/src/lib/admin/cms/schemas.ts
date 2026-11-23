@@ -63,7 +63,9 @@ export const READ_INPUT = {
 // ---------------------------------------------------------------------------------------------------------
 // RPC outputs (strict: an unexpected column fails closed instead of reaching the browser)
 // ---------------------------------------------------------------------------------------------------------
-export const REVIEW_STATE = z.enum(["draft", "in_review", "approved", "rejected", "publish_pending", "unpublish_pending"]);
+// The first six are the ADM-03B states. The last three exist only once the ADM-03C delivery ledger is installed (its migration widens the check
+// constraint); they are accepted so the UI keeps working when that dependency lands, and an unknown value still fails closed.
+export const REVIEW_STATE = z.enum(["draft", "in_review", "approved", "rejected", "publish_pending", "unpublish_pending", "published", "unpublished", "delivery_failed"]);
 export type ReviewState = z.infer<typeof REVIEW_STATE>;
 export const DELIVERY_STATE = z.enum(["blocked", "eligible", "claimed", "delivered", "retryable", "cancelled", "superseded"]);
 export type DeliveryState = z.infer<typeof DELIVERY_STATE>;
