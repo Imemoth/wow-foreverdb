@@ -89,16 +89,10 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     await expect(pb.getByTestId("article-status")).toHaveText("Approved");
     await pb.getByRole("tab", { name: /Review evidence/ }).click();
     await expect(pb.getByTestId("approval-table")).toContainText("no"); // not yet consumed
-    // the Owner (independent of the author) can now record a publish intent
+    // the Owner (independent of the author) is now allowed to publish this exact revision (the publish itself is exercised in 08-highlighted-delivery)
     await po.reload();
     await expect(po.getByTestId("act-publish")).toBeEnabled();
-    await act(po, "act-publish"); await confirm(po, /Request publish/);
-    await expect(po.getByTestId("action-flash")).toContainText("Publish intent recorded");
-    await expect(po.getByTestId("article-status")).not.toHaveText("Approved");
-    const row = await articleRow(a.slug);
-    expect(row.review_state).toBe("publish_pending");
-    await po.getByRole("tab", { name: /Delivery/ }).click();
-    await expect(po.getByTestId("intent-publish")).toBeVisible();
+    expect((await articleRow(a.slug)).review_state).toBe("approved");
   });
 
   test("an approval does not survive a new revision: editing after approval requires approving again", async ({ browser }) => {
