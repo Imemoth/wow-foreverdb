@@ -1,6 +1,6 @@
-import { expect, test, type Page, type Browser } from "@playwright/test";
+import type { Page, Browser } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { DELIVERY, aal2Token, createDraft, db, makeStaff, newStaffPage, newUser, rest, runWorker, articleRow, type Staff } from "./fixtures";
+import { expect, test, newCtx, DELIVERY, aal2Token, createDraft, db, makeStaff, newStaffPage, newUser, rest, runWorker, articleRow, type Staff } from "./fixtures";
 
 test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
@@ -11,7 +11,7 @@ const status = (page: Page) => page.getByTestId("article-status");
 async function team(browser: Browser, tag: string): Promise<{ ed: Staff; owner: Staff; adm: Staff; pe: Page; po: Page; pa: Page }> {
   const ed = await newUser(`${tag}-ed`), owner = await newUser(`${tag}-own`), adm = await newUser(`${tag}-adm`);
   await makeStaff(ed, "Editor"); await makeStaff(owner, "Owner"); await makeStaff(adm, "Administrator");
-  return { ed, owner, adm, pe: await newStaffPage(await browser.newContext(), ed), po: await newStaffPage(await browser.newContext(), owner), pa: await newStaffPage(await browser.newContext(), adm) };
+  return { ed, owner, adm, pe: await newStaffPage(await newCtx(browser), ed), po: await newStaffPage(await newCtx(browser), owner), pa: await newStaffPage(await newCtx(browser), adm) };
 }
 const publicStatus = async (request: import("@playwright/test").APIRequestContext, slug: string): Promise<number> => (await request.get(`/news/${slug}`)).status();
 

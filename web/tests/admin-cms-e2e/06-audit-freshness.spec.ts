@@ -1,13 +1,12 @@
-import { expect, test } from "@playwright/test";
-import { ageTotp, createDraft, enterAdmin, makeStaff, newStaffPage, newUser, articleRow, BODY } from "./fixtures";
+import { expect, test, newCtx, ageTotp, createDraft, enterAdmin, makeStaff, newStaffPage, newUser, articleRow, BODY } from "./fixtures";
 
 test.describe("audit visibility/authorization and TOTP freshness", () => {
   test("authorized staff read real audit events; others are refused; no draft text or secrets appear", async ({ browser }) => {
     const ed = await newUser("aud-ed"), owner = await newUser("aud-own"), adm = await newUser("aud-adm");
     await makeStaff(ed, "Editor"); await makeStaff(owner, "Owner"); await makeStaff(adm, "Administrator");
-    const pe = await newStaffPage(await browser.newContext(), ed);
-    const po = await newStaffPage(await browser.newContext(), owner);
-    const pa = await newStaffPage(await browser.newContext(), adm);
+    const pe = await newStaffPage(await newCtx(browser), ed);
+    const po = await newStaffPage(await newCtx(browser), owner);
+    const pa = await newStaffPage(await newCtx(browser), adm);
     const secretBody = "UNIQUE-DRAFT-SENTENCE-that-must-never-reach-the-audit-log";
     const a = await createDraft(pe, { body: `${BODY}\n\n${secretBody}` });
     const row = await articleRow(a.slug);

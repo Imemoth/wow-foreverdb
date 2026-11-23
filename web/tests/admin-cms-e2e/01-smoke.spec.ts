@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { createDraft, enterAdmin, makeStaff, newUser } from "./fixtures";
+import { expect, test, createDraft, enterAdmin, makeStaff, newUser } from "./fixtures";
 
 test("an Editor signs in with real TOTP, creates a draft in the real CMS and sees it after reload", async ({ page }) => {
   const editor = await newUser("editor");

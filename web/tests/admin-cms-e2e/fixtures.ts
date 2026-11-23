@@ -2,7 +2,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { expect, type BrowserContext, type Page } from "@playwright/test";
+import { test as base, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import pg from "pg";
 
 const env = process.env as Record<string, string | undefined>;
@@ -188,3 +188,13 @@ export async function revisionCount(slug: string): Promise<number> {
   const c = await db();
   try { return (await c.query("select count(*)::int n from editorial_private.revisions r join editorial_private.articles a using(article_id) where a.slug=$1", [slug])).rows[0].n; } finally { await c.end(); }
 }
+
+// The website keeps its PER-IP budgets at the production defaults (they are part of what is tested), and every test browser would otherwise share one
+// address. Each browser context therefore presents its own forwarded address, exactly like distinct visitors behind the trusted proxy header.
+let ipSeq = Math.floor(Math.random() * 200);
+const uniqueIp = (): string => `198.51.100.${(++ipSeq % 250) + 1}`;
+export const test = base.extend({
+  contextOptions: async ({ contextOptions }, provide) => { await provide({ ...contextOptions, extraHTTPHeaders: { ...(contextOptions.extraHTTPHeaders ?? {}), "x-forwarded-for": uniqueIp() } }); },
+});
+export { expect };
+export const newCtx = (browser: Browser): Promise<BrowserContext> => browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });

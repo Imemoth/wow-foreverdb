@@ -19,7 +19,7 @@ const good = { title: "A valid title", summary: "A summary that is long enough."
 
 afterEach(() => vi.unstubAllGlobals());
 const stub = (status: number, body: unknown, headers: Record<string, string> = {}) => {
-  const f = vi.fn(async (..._a: [string, RequestInit?]) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers }));
+  const f = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers }));
   vi.stubGlobal("fetch", f);
   return f;
 };

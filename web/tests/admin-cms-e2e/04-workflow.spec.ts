@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { createDraft, db, enterAdmin, makeStaff, newStaffPage, newUser, articleRow } from "./fixtures";
+import type { Page } from "@playwright/test";
+import { expect, test, newCtx, createDraft, db, enterAdmin, makeStaff, newStaffPage, newUser, articleRow } from "./fixtures";
 
 const act = async (page: Page, id: string): Promise<void> => { await page.getByTestId(id).click(); };
 const confirm = async (page: Page, name: string | RegExp): Promise<void> => { await page.getByRole("dialog").getByRole("button", { name }).click(); };
@@ -10,8 +10,8 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     const reviewer = await newUser("wf-reviewer");
     await makeStaff(author, "Editor");
     await makeStaff(reviewer, "Editor");
-    const pa = await newStaffPage(await browser.newContext(), author);
-    const pr = await newStaffPage(await browser.newContext(), reviewer);
+    const pa = await newStaffPage(await newCtx(browser), author);
+    const pr = await newStaffPage(await newCtx(browser), reviewer);
     const a = await createDraft(pa);
     // only valid actions are enabled for a draft
     await expect(pa.getByTestId("act-submit")).toBeEnabled();
@@ -67,9 +67,9 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     await makeStaff(author, "Editor"); await makeStaff(author, "Administrator");
     await makeStaff(admin2, "Administrator");
     await makeStaff(owner, "Owner");
-    const pa = await newStaffPage(await browser.newContext(), author);
-    const pb = await newStaffPage(await browser.newContext(), admin2);
-    const po = await newStaffPage(await browser.newContext(), owner);
+    const pa = await newStaffPage(await newCtx(browser), author);
+    const pb = await newStaffPage(await newCtx(browser), admin2);
+    const po = await newStaffPage(await newCtx(browser), owner);
     const a = await createDraft(pa, { highlighted: true });
     await expect(pa.getByText("Needs independent approval").first()).toBeVisible().catch(() => undefined);
     await act(pa, "act-submit"); await confirm(pa, "Submit");
@@ -106,8 +106,8 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     const approver = await newUser("rev-approver");
     await makeStaff(author, "Editor");
     await makeStaff(approver, "Administrator");
-    const pa = await newStaffPage(await browser.newContext(), author);
-    const pb = await newStaffPage(await browser.newContext(), approver);
+    const pa = await newStaffPage(await newCtx(browser), author);
+    const pb = await newStaffPage(await newCtx(browser), approver);
     const a = await createDraft(pa, { highlighted: true });
     await act(pa, "act-submit"); await confirm(pa, "Submit");
     await pb.goto(a.url); await act(pb, "act-approve"); await confirm(pb, "Approve");
@@ -130,9 +130,9 @@ test.describe("review workflow, independent approval, publish and unpublish inte
     const adm = await newUser("pub-admin");
     const owner = await newUser("pub-owner");
     await makeStaff(ed, "Editor"); await makeStaff(adm, "Administrator"); await makeStaff(owner, "Owner");
-    const pe = await newStaffPage(await browser.newContext(), ed);
-    const pad = await newStaffPage(await browser.newContext(), adm);
-    const po = await newStaffPage(await browser.newContext(), owner);
+    const pe = await newStaffPage(await newCtx(browser), ed);
+    const pad = await newStaffPage(await newCtx(browser), adm);
+    const po = await newStaffPage(await newCtx(browser), owner);
     const a = await createDraft(pe);
     await act(pe, "act-submit"); await confirm(pe, "Submit");
     await expect(pe.getByTestId("act-publish")).toBeDisabled();

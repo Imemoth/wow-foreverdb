@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { BODY, createDraft, enterAdmin, makeStaff, newStaffPage, newUser, revisionCount, uniqueSlug, articleRow } from "./fixtures";
+import { expect, test, newCtx, BODY, createDraft, enterAdmin, makeStaff, newStaffPage, newUser, revisionCount, uniqueSlug, articleRow } from "./fixtures";
 
 test.describe("articles, revisions and drafts (real persistence)", () => {
   test("create persists in the database; the list, detail and a brand-new browser session all see it", async ({ page, browser }) => {
@@ -18,7 +17,7 @@ test.describe("articles, revisions and drafts (real persistence)", () => {
     await page.goto("/admin");
     expect(Number(await page.getByTestId("tile-draft-count").textContent())).toBeGreaterThanOrEqual(1);
     // a different browser context signing in again sees the same persisted draft
-    const ctx2 = await browser.newContext();
+    const ctx2 = await newCtx(browser);
     const p2 = await newStaffPage(ctx2, ed);
     await p2.goto(a.url);
     await expect(p2.getByRole("heading", { name: a.title })).toBeVisible();
@@ -99,7 +98,7 @@ test.describe("articles, revisions and drafts (real persistence)", () => {
   test("concurrent edits: the second writer is refused as stale, the first revision wins and nothing is lost", async ({ browser }) => {
     const ed = await newUser("racer");
     await makeStaff(ed, "Editor");
-    const ctx = await browser.newContext();
+    const ctx = await newCtx(browser);
     const p1 = await newStaffPage(ctx, ed);
     const a = await createDraft(p1);
     const p2 = await ctx.newPage();

@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { aal2Token, createDraft, enterAdmin, makeStaff, newUser, rest, sessionIdsOf, db } from "./fixtures";
+import { expect, test, newCtx, aal2Token, createDraft, enterAdmin, makeStaff, newUser, rest, sessionIdsOf, db } from "./fixtures";
 
 test.describe("authentication and permission denial (real ADM-01B boundary)", () => {
   test("an anonymous visitor gets no Admin; the action API refuses without a session", async ({ page, request }) => {
@@ -108,7 +107,7 @@ test.describe("authentication and permission denial (real ADM-01B boundary)", ()
     // session revoked at Auth (GoTrue deletes the session) -> the live check fails
     const a = await newUser("revoked-session");
     await makeStaff(a, "Editor");
-    const ctxA = await browser.newContext();
+    const ctxA = await newCtx(browser);
     const pageA = await ctxA.newPage();
     await enterAdmin(pageA, a);
     await createDraft(pageA);
@@ -123,7 +122,7 @@ test.describe("authentication and permission denial (real ADM-01B boundary)", ()
     // grant expired in the database -> admin entry and every CMS call are refused (fail closed)
     const b = await newUser("expired-grant");
     await makeStaff(b, "Editor");
-    const ctxB = await browser.newContext();
+    const ctxB = await newCtx(browser);
     const pageB = await ctxB.newPage();
     await enterAdmin(pageB, b);
     await createDraft(pageB);
