@@ -43,7 +43,7 @@ jobs:
         run: |
           docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-only postgres:${{ matrix.pg }}
           for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
-      - name: 0027 without the delivery ledger (inactive boundary: every intent reads "blocked")
+      - name: "0027 without the delivery ledger (inactive boundary, every intent reads blocked)"
         run: bash database/tests/admin_cms_reads/run.sh
       - name: 0027 with the ADM-03C delivery ledger (migration 0026)
         env: { FDB_ADMIN_WITH_DELIVERY: '1' }
