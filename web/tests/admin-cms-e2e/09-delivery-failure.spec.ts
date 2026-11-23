@@ -90,7 +90,7 @@ test.describe("failed delivery does not block unrelated deliveries", () => {
       expect(second.report!.delivered).toBe(0);
       expect(second.report!.failures.map((f) => f.code)).toContain("missing_asset");
       const rss = await (await request.get("/news/rss.xml")).text();
-      expect(rss.split(`/news/${v.slug}`).length - 1).toBe(1);
+      expect(rss.split("<item>").filter((item) => item.includes(`/news/${v.slug}`))).toHaveLength(1); // one feed item (its link and guid both carry the slug)
 
       // Recovery: the asset appears, the retry state machine delivers F on the next pass, and the pass is clean.
       mkdirSync(dirname(file), { recursive: true });
