@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
       - 'database/rollback/0025_editorial_private_cms_rollback.sql'
       - 'database/tests/admin_cms/**'
       - 'web/src/lib/admin/cms-contract.ts'
@@ -10,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'database/migrations/0025_editorial_private_cms.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
       - 'database/rollback/0025_editorial_private_cms_rollback.sql'
       - 'database/tests/admin_cms/**'
       - 'web/src/lib/admin/cms-contract.ts'
