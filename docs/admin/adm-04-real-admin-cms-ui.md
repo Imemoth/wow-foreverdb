@@ -83,12 +83,12 @@ export GOTRUE_BIN=$HOME/stack-bin/gotrue POSTGREST_BIN=$HOME/stack-bin/postgrest
 web/tests/admin-cms-stack/fetch-adm03c.sh /tmp/adm03c && export FDB_ADM03C_DIR=/tmp/adm03c
 web/tests/admin-cms-stack/up.sh
 web/tests/admin-cms-stack/build-site.sh
-cd web && node tests/admin-cms-stack/seed-demo.mjs          # prints four demo staff accounts with password and TOTP secret
+cd web && node tests/admin-cms-stack/seed-demo.mjs          # creates four demo staff accounts and prints their emails
 tests/admin-cms-stack/serve.sh                              # leave running; the site is http://localhost:3220
 ```
 
 1. Open `http://localhost:3220/account/login`, sign in as the **Editor**. In *Admin authentication* press **Request TOTP challenge** and enter the code from
-   `node tests/admin-cms-stack/totp.mjs <TOTP secret>` (it works like an authenticator app). You land in `/admin`.
+   `node tests/admin-cms-stack/totp.mjs <email>` (it reads the account's TOTP secret from the throw-away database and works like an authenticator app). The shared demo password is the public test value `demo-staff-passphrase-public-test-value` (`DEMO_PASSPHRASE` in `seed-demo.mjs`). You land in `/admin`.
 2. **Articles → New draft**: fill the form, save. Reload: it persists. **Edit** → save: a new revision (r2); the **Revisions** tab shows both and a diff.
 3. **Submit for review**. Sign in as the **Second Editor** in a private window (same TOTP steps): **Return** with a note, or **Reject**.
 4. Create a **Featured** (highlighted) article, submit it, try **Approve** as the author-capable account: refused (independent approval). Sign in as the **Administrator** and approve.

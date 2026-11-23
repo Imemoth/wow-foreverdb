@@ -1,7 +1,10 @@
 // Creates the DEMO staff accounts of the disposable Admin CMS stack for MANUAL testing by the Product Owner.
 //   cd web && node tests/admin-cms-stack/seed-demo.mjs
-// Every account is a real GoTrue user with a real, already-enrolled TOTP factor. The credentials printed here exist only in this throw-away
-// stack; there is no way to reuse them anywhere else. Re-running creates fresh accounts.
+// Every account is a real GoTrue user with a real, already-enrolled TOTP factor. All demo accounts share the fixed, PUBLIC test password below (the
+// stack is a throw-away cluster that never leaves this machine). Nothing secret is printed: the TOTP code of an account is read on demand with
+//   node tests/admin-cms-stack/totp.mjs <email>
+// Re-running creates fresh accounts.
+const DEMO_PASSPHRASE = "demo-staff-passphrase-public-test-value";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -36,8 +39,7 @@ const people = [
 const out = [];
 for (const p of people) {
   const email = `${p.name.split(" ")[0].toLowerCase()}-${p.name.includes("Second") ? "2-" : ""}${tag}@example.test`;
-  const password = `demo ${randomBytes(6).toString("hex")} pass`;
-  const s = await post("/signup", { email, password });
+  const s = await post("/signup", { email, password: DEMO_PASSPHRASE });
   const uid = s.body.user.id;
   await db.query("insert into admin_private.staff_subjects(user_id,status) values($1,'active')", [uid]);
   for (const role of p.roles) {
@@ -48,10 +50,10 @@ for (const p of people) {
   const ch = await post(`/factors/${enrol.body.id}/challenge`, {}, s.body.access_token);
   const v = await post(`/factors/${enrol.body.id}/verify`, { challenge_id: ch.body.id, code: totp(enrol.body.totp.secret) }, s.body.access_token);
   if (v.status !== 200) throw new Error(`TOTP verify failed for ${email}: ${v.status}`);
-  out.push({ role: p.name, email, password, totpSecret: enrol.body.totp.secret });
+  out.push({ role: p.name, email });
 
 }
 await db.end();
-console.log("\nDemo staff accounts (disposable stack only):\n");
-for (const o of out) console.log(`${o.role}\n  email:       ${o.email}\n  password:    ${o.password}\n  TOTP secret: ${o.totpSecret}\n  code now:    node tests/admin-cms-stack/totp.mjs ${o.totpSecret}\n`);
-console.log("Sign in at http://localhost:3220/account/login, then use \"Request TOTP challenge\" and enter the code to reach /admin.");
+console.log("\nDemo staff accounts (disposable stack only). The shared test password is DEMO_PASSPHRASE in tests/admin-cms-stack/seed-demo.mjs and in the docs.\n");
+for (const o of out) console.log(`${o.role}\n  email:     ${o.email}\n  TOTP code: node tests/admin-cms-stack/totp.mjs ${o.email}\n`);
+console.log("Sign in at http://localhost:3220/account/login, press \"Request TOTP challenge\" and enter the code to reach /admin.");

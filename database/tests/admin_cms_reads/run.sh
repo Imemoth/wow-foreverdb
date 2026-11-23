@@ -13,7 +13,13 @@ migrator=(psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d "$db")
 # The role bootstrap is not idempotent: run it only on a fresh cluster (CI) and reuse the roles on a local cluster.
 psql -X -qAt -U postgres -d postgres -c "select 1 from pg_roles where rolname='fdb_migrator'" | grep -qx 1 \
   || psql -X -q -v ON_ERROR_STOP=1 -U postgres -d postgres -f "$repo/database/tests/admin_private/bootstrap_roles.sql"
-dropdb -U postgres --if-exists "$db"
+dropdb -U postgres --if-exists --force "$db"
+dropdb -U postgres --if-exists --force "${db}_rollback"
+# The Admin migrations create CLUSTER-level roles. A second run on the same disposable cluster (CI runs this suite with and without the delivery
+# ledger) must start without the previous run's roles; they can only be dropped after the databases that hold their objects.
+for r in admin_executor azerdex_cms_dispatch azerdex_cms_delivery; do
+  psql -X -q -U postgres -d postgres -c "drop role if exists $r"
+done
 createdb -U postgres "$db"
 "${root[@]}" -f "$repo/database/tests/admin_private/bootstrap_db.sql"
 "${root[@]}" -f "$repo/database/tests/admin_authorization/bootstrap_auth.sql"
