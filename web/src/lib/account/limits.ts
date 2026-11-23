@@ -52,7 +52,7 @@ export async function chargeEmail(env: ServerEnv, secret: string, action: EmailA
  *   - `reauth`: fresh-password confirmations for the installation link (every attempt counts, right or wrong);
  *   - `link`:   claim-code redemptions forwarded to the database (counted only after the password was confirmed).
  */
-export type AccountAction = "reauth" | "link" | "admin_enroll" | "admin_challenge" | "admin_verify" | "admin_handoff";
+export type AccountAction = "reauth" | "link" | "admin_enroll" | "admin_challenge" | "admin_verify" | "admin_handoff" | "admin_cms_write" | "admin_cms_read";
 
 export const ACCOUNT_LIMITS: Record<AccountAction, { windowSec: number; max: number }> = {
   reauth: { windowSec: 900, max: 5 },
@@ -61,6 +61,9 @@ export const ACCOUNT_LIMITS: Record<AccountAction, { windowSec: number; max: num
   admin_challenge: { windowSec: 900, max: 10 },
   admin_verify: { windowSec: 900, max: 10 },
   admin_handoff: { windowSec: 900, max: 10 },
+  // ADM-04 Admin CMS: per verified staff account, independent of the database's own checks.
+  admin_cms_write: { windowSec: 60, max: 60 },
+  admin_cms_read: { windowSec: 60, max: 240 },
 };
 
 /** Fixed-window counter per (action, account). Throws on a store failure: the caller fails closed. */

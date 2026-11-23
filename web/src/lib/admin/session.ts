@@ -42,8 +42,11 @@ export async function readAdminSession(ac: AccountContext, jar: CookieJar, now =
   } catch { return null; }
 }
 
-/** Every Admin read gets live GoTrue identity and the private entry/freshness decision. */
-export async function resolveAdminSession(ac: AccountContext, jar: CookieJar): Promise<{ ok: true; uid: string; sid: string } | { ok: false }> {
+/**
+ * Every Admin read gets live GoTrue identity and the private entry/freshness decision. The verified access token is returned ONLY so the
+ * server-only CMS adapter can call the database as the staff member; it never leaves the server.
+ */
+export async function resolveAdminSessionToken(ac: AccountContext, jar: CookieJar): Promise<{ ok: true; uid: string; sid: string; at: string } | { ok: false }> {
   const s = await readAdminSession(ac,jar);
   if (!s) return { ok: false };
   const claims = unverifiedJwtPayload(s.at);
@@ -52,5 +55,10 @@ export async function resolveAdminSession(ac: AccountContext, jar: CookieJar): P
   const user = await auth.getUser(ac.cfg,s.at);
   if (!user.ok || !acceptableUser(user.data, { uid:s.uid } as StoredSession)) return { ok: false };
   const status = await callAdminRpc(ac.cfg,"fdb_admin_entry_ready",s.at);
-  return status.ok && status.data ? { ok: true, uid:s.uid, sid:s.sid } : { ok: false };
+  return status.ok && status.data ? { ok: true, uid:s.uid, sid:s.sid, at:s.at } : { ok: false };
+}
+
+export async function resolveAdminSession(ac: AccountContext, jar: CookieJar): Promise<{ ok: true; uid: string; sid: string } | { ok: false }> {
+  const r = await resolveAdminSessionToken(ac,jar);
+  return r.ok ? { ok: true, uid: r.uid, sid: r.sid } : { ok: false };
 }
