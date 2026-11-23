@@ -1,0 +1,141 @@
+name: Admin CMS UI (real isolated backend)
+
+# ADM-04: browser acceptance of the REAL Admin CMS UI against a REAL, EPHEMERAL backend:
+#   PostgreSQL 16 + real GoTrue (pinned tag AND commit) + real PostgREST (pinned release, checksum verified) + the ADM-03B private CMS
+#   + the ADM-04 read RPCs (migration 0027) + the ADM-03C delivery ledger, one-shot worker and public-read projection.
+# ADM-03C (PR #206, still Draft) is a DEVELOPMENT DEPENDENCY: web/tests/admin-cms-stack/adm03c.pin names the exact commit, fetch-adm03c.sh exports
+# only the listed paths into a git-ignored directory, and nothing of it is committed to this branch. When ADM-03C lands in main the overlay is
+# removed and this branch is reconciled before the UI PR may merge. No hosted Supabase, no production credential, no Vercel: every secret in the
+# stack is a public test constant of a throw-away cluster. If a component cannot start the job FAILS (acceptance BLOCKED); it never falls back to the
+# synthetic Admin preview.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-cms-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  GOTRUE_TAG: v2.197.0
+  POSTGREST_TAG: v12.2.12
+  POSTGREST_SHA256: 5de4092f1719da3353c40bf96c8dec6913f2254a7cd0b61cc05f233153b557d5
+
+jobs:
+  read-rpcs-sql:
+    name: Admin CMS read RPCs (0027) on PostgreSQL ${{ matrix.pg }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { pg: ['16', '17'] }
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-only
+      FDB_ADMIN_DISPOSABLE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Disposable PostgreSQL
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-only postgres:${{ matrix.pg }}
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+      - name: 0027 without the delivery ledger (fails closed to "blocked")
+        run: bash database/tests/admin_cms_reads/run.sh
+      - name: Export the pinned ADM-03C development dependency
+        run: web/tests/admin-cms-stack/fetch-adm03c.sh "$RUNNER_TEMP/adm03c"
+      - name: 0027 with the delivery ledger (0026 overlay)
+        env: { FDB_ADM03C_DIR: '${{ runner.temp }}/adm03c' }
+        run: bash database/tests/admin_cms_reads/run.sh
+
+  admin-cms-e2e:
+    name: Admin CMS end-to-end (real GoTrue + PostgREST + worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-test-password
+      STACK_BIN: ${{ github.workspace }}/.stack-bin
+      STACK_DIR: ${{ github.workspace }}/web/tests/admin-cms-stack/.stack
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .node-version, cache: npm, cache-dependency-path: web/package-lock.json }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: false }
+
+      - name: Disposable PostgreSQL 16
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-password postgres:16 -c track_commit_timestamp=on -c max_connections=300
+          for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
+      - name: Restore stack binaries (GoTrue, PostgREST)
+        id: bin
+        uses: actions/cache@v4
+        with:
+          path: .stack-bin
+          key: admin-cms-bin-${{ env.GOTRUE_TAG }}-${{ hashFiles('database/tests/account/build-gotrue.sh') }}-${{ env.POSTGREST_TAG }}-${{ env.POSTGREST_SHA256 }}-v1
+      - name: Build GoTrue (commit-pinned) and download PostgREST (checksum-pinned)
+        if: steps.bin.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p .stack-bin
+          database/tests/account/build-gotrue.sh "$GITHUB_WORKSPACE/.stack-bin/gotrue"
+          curl -fsSL -o /tmp/postgrest.tar.xz "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_TAG}/postgrest-${POSTGREST_TAG}-linux-static-x86-64.tar.xz"
+          echo "${POSTGREST_SHA256}  /tmp/postgrest.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/postgrest.tar.xz -C .stack-bin postgrest
+      - run: npm ci
+
+      - name: Unit, static and boundary tests; typecheck; lint
+        run: npx vitest run && npx tsc --noEmit && npx eslint .
+      - name: Export the pinned ADM-03C development dependency (never committed)
+        run: tests/admin-cms-stack/fetch-adm03c.sh "$RUNNER_TEMP/adm03c"
+      - name: Start the stack (migrations 0001-0012, 0018, 0020-0025, 0026 overlay, 0027; separate public-read database)
+        env:
+          GOTRUE_BIN: ${{ env.STACK_BIN }}/gotrue
+          POSTGREST_BIN: ${{ env.STACK_BIN }}/postgrest
+          FDB_ADM03C_DIR: ${{ runner.temp }}/adm03c
+        run: tests/admin-cms-stack/up.sh
+      - name: Build the website (production build of this branch + the 03C web overlay, in a copy)
+        env: { FDB_ADM03C_DIR: '${{ runner.temp }}/adm03c' }
+        run: tests/admin-cms-stack/build-site.sh
+      - name: Bundle secret scan on the production build of THIS branch (no overlay)
+        env:
+          FOREVERDB_DEPLOYMENT: local
+          ACCOUNT_AUTH_MODE: local
+          ACCOUNT_CSRF_SECRET: CANARY-csrf-secret-0123456789abcdefghijklmnopqrstuvwxyz
+          AZERDEX_READ_DB_URL: postgresql://foreverdb_web_reader:CANARY-db-secret-value@canary.invalid/x
+        run: |
+          set -a; . "$STACK_DIR/env"; set +a
+          export ACCOUNT_AUTH_URL="$ACCOUNT_STACK_URL" ACCOUNT_AUTH_PUBLISHABLE_KEY="$ACCOUNT_STACK_ANON_KEY"
+          npm run build && npm run check:bundle-secrets
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance against the real isolated backend
+        run: npx playwright test -c playwright.admin-cms.config.ts
+      - name: Upload traces, results and stack logs (test data only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-cms-e2e-evidence
+          include-hidden-files: true
+          path: |
+            web/test-results/
+            web/tests/admin-cms-stack/.stack/*.log
+            web/tests/admin-cms-stack/.stack/run/gotrue.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Stop the stack
+        if: always()
+        run: tests/admin-cms-stack/down.sh

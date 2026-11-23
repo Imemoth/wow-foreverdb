@@ -67,12 +67,15 @@ export async function enterAdmin(page: Page, u: Staff): Promise<void> {
   await page.waitForURL(/\/account(\?|$)/);
   const panel = page.getByRole("region", { name: "Admin authentication" });
   await expect(panel).toBeVisible();
+  const enrolledBefore = !!u.secret;
   if (!u.secret) {
     await panel.getByRole("button", { name: "Enroll TOTP" }).click();
     const code = panel.locator("code");
     await expect(code).toBeVisible();
     u.secret = (await code.textContent())!.trim();
   }
+  // For an already enrolled account the panel hides "Enroll TOTP" only once its factor list has loaded; clicking earlier would find no factor.
+  if (enrolledBefore) await expect(panel.getByRole("button", { name: "Enroll TOTP" })).toBeHidden();
   await panel.getByRole("button", { name: "Request TOTP challenge" }).click();
   await expect(panel.getByLabel("Six-digit code")).toBeVisible();
   // A code can be used once per 30 s step: wait for a fresh step when this secret already verified in the current one.
@@ -130,4 +133,58 @@ export async function createDraft(page: Page, o: { slug?: string; title?: string
   await page.getByTestId("save-draft").click();
   await page.waitForURL(/\/admin\/articles\/[0-9a-f-]{36}$/);
   return { slug, title, url: new URL(page.url()).pathname };
+}
+
+/** The staff member's current AAL2 session id (real GoTrue), for the revocation tests. */
+export async function sessionIdsOf(uid: string): Promise<string[]> {
+  const c = await db();
+  try { return (await c.query("select id from auth.sessions where user_id=$1", [uid])).rows.map((r) => r.id as string); } finally { await c.end(); }
+}
+
+/** A fresh API-level AAL2 session at real GoTrue (password grant + TOTP). Used only to talk to PostgREST directly in the negative tests. */
+export async function aal2Token(u: Staff): Promise<string> {
+  const post = async (path: string, body: unknown, token?: string): Promise<any> => {
+    const r = await fetch(`${GATEWAY}/auth/v1${path}`, { method: "POST", headers: { apikey: ANON, "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+    return { status: r.status, body: await r.json() };
+  };
+  const login = await post("/token?grant_type=password", { email: u.email, password: u.password });
+  if (login.status !== 200) throw new Error(`password grant answered ${login.status}`);
+  let token = login.body.access_token as string;
+  let factorId: string;
+  if (!u.secret) {
+    const enrol = await post("/factors", { factor_type: "totp", friendly_name: "api", issuer: "AzerDex" }, token);
+    factorId = enrol.body.id; u.secret = enrol.body.totp.secret;
+    const ch = await post(`/factors/${factorId}/challenge`, {}, token);
+    if (u.lastStep === Math.floor(Date.now() / 30000)) await sleep(30000 - (Date.now() % 30000) + 500);
+    u.lastStep = Math.floor(Date.now() / 30000);
+    const v = await post(`/factors/${factorId}/verify`, { challenge_id: ch.body.id, code: totp(u.secret!) }, token);
+    if (v.status !== 200) throw new Error(`verify answered ${v.status}`);
+    return v.body.access_token;
+  }
+  const factors = await fetch(`${GATEWAY}/auth/v1/user`, { headers: { apikey: ANON, authorization: `Bearer ${token}` } }).then((r) => r.json() as Promise<any>);
+  factorId = factors.factors.find((f: any) => f.status === "verified").id;
+  const ch = await post(`/factors/${factorId}/challenge`, {}, token);
+  if (u.lastStep === Math.floor(Date.now() / 30000)) await sleep(30000 - (Date.now() % 30000) + 500);
+  u.lastStep = Math.floor(Date.now() / 30000);
+  const v = await post(`/factors/${factorId}/verify`, { challenge_id: ch.body.id, code: totp(u.secret) }, token);
+  if (v.status !== 200) throw new Error(`verify answered ${v.status}`);
+  token = v.body.access_token;
+  return token;
+}
+
+export async function rest(token: string | null, path: string, init: { method?: string; body?: unknown } = {}): Promise<{ status: number; body: any }> {
+  const r = await fetch(`${GATEWAY}/rest/v1/${path}`, { method: init.method ?? "GET", headers: { apikey: ANON, "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
+  const t = await r.text();
+  let body: any = t; try { body = t ? JSON.parse(t) : null; } catch { /* keep text */ }
+  return { status: r.status, body };
+}
+
+/** Reads one article's CMS state straight from the private tables as the superuser (verification only, never the UI under test). */
+export async function articleRow(slug: string): Promise<any> {
+  const c = await db();
+  try { return (await c.query("select * from editorial_private.articles where slug=$1", [slug])).rows[0]; } finally { await c.end(); }
+}
+export async function revisionCount(slug: string): Promise<number> {
+  const c = await db();
+  try { return (await c.query("select count(*)::int n from editorial_private.revisions r join editorial_private.articles a using(article_id) where a.slug=$1", [slug])).rows[0].n; } finally { await c.end(); }
 }

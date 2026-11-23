@@ -1,0 +1,6 @@
+# ADM-03C (PR #206, Draft, NOT merged) is a DEVELOPMENT DEPENDENCY of the ADM-04 end-to-end run only: its delivery ledger (migration 0026), its public-read
+# projection (public-read migration 0013), its one-shot worker and the web files that read the projection. Nothing of it is committed here: fetch-adm03c.sh
+# exports exactly these paths at exactly this commit into a git-ignored directory. When ADM-03C lands in main this pin, the overlay and the fetch step are
+# removed and the UI branch is reconciled against main (the PR is not merged before that).
+ADM03C_REF=refs/pull/206/head
+ADM03C_SHA=365125da0398e0839c784da0956cb5444b7c8184
