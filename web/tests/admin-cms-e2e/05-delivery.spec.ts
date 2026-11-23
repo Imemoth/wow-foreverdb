@@ -1,7 +1,6 @@
 import type { Page, Browser } from "@playwright/test";
-import { expect, test, newCtx, DELIVERY, createDraft, db, makeStaff, newStaffPage, newUser, runWorker, articleRow, type Staff } from "./fixtures";
+import { expect, test, newCtx, createDraft, db, makeStaff, newStaffPage, newUser, runWorker, articleRow, type Staff } from "./fixtures";
 
-test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
 const act = async (page: Page, id: string): Promise<void> => { await page.getByTestId(id).click(); };
 const confirm = async (page: Page, name: string | RegExp): Promise<void> => { await page.getByRole("dialog").getByRole("button", { name }).click(); };

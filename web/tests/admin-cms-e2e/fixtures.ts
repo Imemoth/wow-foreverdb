@@ -8,7 +8,8 @@ import pg from "pg";
 const env = process.env as Record<string, string | undefined>;
 export const GATEWAY = env.ACCOUNT_STACK_URL ?? "http://127.0.0.1:54321";
 export const ANON = env.ACCOUNT_STACK_ANON_KEY ?? "";
-export const DELIVERY = env.E2E_DELIVERY === "1";
+/** The repository root: the worker (cms-delivery/) and the public assets live in the checkout itself, no copy and no overlay. */
+const REPO = resolve(__dirname, "../../..");
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function db(name = env.E2E_DB ?? "fdb_account_it"): Promise<pg.Client> {
@@ -106,14 +107,13 @@ export async function ageTotp(sessionOfUser: string, minutes: number): Promise<v
 
 /** One pass of the REAL ADM-03C one-shot delivery worker (a separate process with its own database roles). Returns its JSON report. */
 export function runWorker(): { candidates: number; delivered: number; cancelled: number; retried: number; compensated: number } {
-  if (!DELIVERY) throw new Error("the delivery ledger/worker is not part of this stack (start up.sh with FDB_ADM03C_DIR)");
-  const r = spawnSync(process.execPath, [resolve(env.E2E_STACK_DIR!, "cms-delivery/src/once.mjs")], {
-    cwd: resolve(env.E2E_STACK_DIR!, "repo"),
+  const r = spawnSync(process.execPath, [resolve(REPO, "cms-delivery/src/once.mjs")], {
+    cwd: REPO,
     env: {
       PATH: process.env.PATH ?? "", FDB_CMS_DISPOSABLE: "1", FOREVERDB_DEPLOYMENT: "local", FDB_CMS_TEST_SET_ROLE: "1",
       FDB_CMS_PRIVATE_URL: `postgres://${env.E2E_PG_USER}:${env.E2E_PG_PASSWORD}@${env.E2E_PG_HOST}:${env.E2E_PG_PORT}/${env.E2E_DB}`,
       FDB_CMS_PUBLIC_URL: `postgres://${env.E2E_PG_USER}:${env.E2E_PG_PASSWORD}@${env.E2E_PG_HOST}:${env.E2E_PG_PORT}/${env.E2E_PUBDB}`,
-      FDB_CMS_ASSET_ROOT: resolve(env.E2E_STACK_DIR!, "repo/web/public"),
+      FDB_CMS_ASSET_ROOT: resolve(REPO, "web/public"),
     } as unknown as NodeJS.ProcessEnv, encoding: "utf8", timeout: 60_000,
   });
   if (r.status !== 0) throw new Error(`worker exited ${r.status}: ${r.stderr}`);
@@ -204,7 +204,7 @@ export const newCtx = (browser: Browser): Promise<BrowserContext> => browser.new
 
 /**
  * Test-harness cleanup (cluster superuser, never the product): retires the unfinished delivery intents of one article by marking them cancelled, the
- * way an operator would after triaging a stuck delivery. Needed because the pinned ADM-03C worker retries a failing intent on every pass and aborts
+ * way an operator would after triaging a stuck delivery. Needed because the ADM-03C worker retries a failing intent on every pass and aborts
  * its whole batch on the first failure, so one stuck intent would block every later scenario in the same stack.
  */
 export async function retireStuckIntents(slug: string): Promise<number> {

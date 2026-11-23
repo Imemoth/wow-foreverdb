@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ADM-04 read RPCs (0027) against a DISPOSABLE PostgreSQL cluster. Same bootstrap as database/tests/admin_cms/run.sh.
-# Optional: FDB_ADM03C_DIR=<tree containing PR #206's database/migrations/0026_editorial_delivery_control.sql> applies the
-# ADM-03C delivery ledger first, so the delivery-status read is exercised against its real schema (development dependency only).
+# Optional: FDB_ADMIN_WITH_DELIVERY=1 applies the ADM-03C delivery ledger (database/migrations/0026) first, so the delivery-status read is exercised
+# against its real schema. Without it the inactive boundary is tested: every intent reads "blocked" and nothing can become public.
 set -euo pipefail
 [ "${FDB_ADMIN_DISPOSABLE:-}" = 1 ] || exit 2
 export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-5432}" PGPASSWORD="${PGPASSWORD:-local-test-only}"
@@ -32,8 +32,8 @@ for n in 0020_admin_private_authorization 0021_admin_private_evaluator \
   "${migrator[@]}" -f "$repo/database/migrations/$n.sql"
 done
 delivery=0
-if [ -n "${FDB_ADM03C_DIR:-}" ]; then
-  "${migrator[@]}" -f "$FDB_ADM03C_DIR/database/migrations/0026_editorial_delivery_control.sql"
+if [ "${FDB_ADMIN_WITH_DELIVERY:-}" = 1 ]; then
+  "${migrator[@]}" -f "$repo/database/migrations/0026_editorial_delivery_control.sql"
   delivery=1
 fi
 "${migrator[@]}" -f "$repo/database/migrations/0027_editorial_admin_reads.sql"

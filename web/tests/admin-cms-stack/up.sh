@@ -2,15 +2,12 @@
 # ADM-04: the DISPOSABLE real-backend stack for the Admin CMS UI.
 #
 #   PostgreSQL 16  +  REAL GoTrue (pinned supabase/auth)  +  REAL PostgREST (pinned release)  +  the gateway shim (/auth/v1, /rest/v1)
-#   private DB (migrations 0001-0012, 0018 history, then 0020-0025, [0026 overlay], 0027)  -> the staff Admin and the ADM-03B CMS
-#   public-read DB (optional, only with the ADM-03C overlay)                              -> what the public website reads
+#   private DB (migrations 0001-0012, 0018 history, then 0020-0027)  -> the staff Admin, the ADM-03B CMS, the ADM-03C delivery ledger, the ADM-04 reads
+#   public-read DB (public-read migrations 0001, 0002, 0008, 0013)    -> what the public website reads (ADM-03C projection)
 #
 # Nothing here touches Supabase or any hosted service: every credential is a public test constant of a throw-away cluster.
-# ADM-03C (PR #206, unmerged) is a DEVELOPMENT DEPENDENCY: set FDB_ADM03C_DIR to a checkout of it (pinned by the CI workflow). Without it the
-# stack still runs; the delivery ledger is absent so every publish intent reads "blocked" and nothing can become public (fail closed).
-#
 # Required env: PGHOST PGPORT PGUSER PGPASSWORD (SUPERUSER of the DISPOSABLE cluster), GOTRUE_BIN, POSTGREST_BIN
-# Optional:     STACK_DIR (default ./.stack), FDB_ADM03C_DIR, NODE
+# Optional:     STACK_DIR (default ./.stack), NODE
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -56,27 +53,22 @@ migrator() { PGPASSWORD=local-test-password psql -X -q -v ON_ERROR_STOP=1 -h "$P
 for n in 0020_admin_private_authorization 0021_admin_private_evaluator 0022_admin_auth_handoff 0023_admin_staff_lifecycle 0024_admin_editorial_boundary 0025_editorial_private_cms; do
   migrator -f "$REPO/database/migrations/$n.sql" >/dev/null
 done
-DELIVERY=0
-if [ -n "${FDB_ADM03C_DIR:-}" ]; then
-  migrator -f "$FDB_ADM03C_DIR/database/migrations/0026_editorial_delivery_control.sql" >/dev/null
-  DELIVERY=1
-fi
+migrator -f "$REPO/database/migrations/0026_editorial_delivery_control.sql" >/dev/null
 migrator -f "$REPO/database/migrations/0027_editorial_admin_reads.sql" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/activate-policy.sql"
 
-if [ "$DELIVERY" = 1 ]; then
+{
   # Separate public-read database for the website (what a real deployment keeps apart from the private CMS).
   psql -X -q -v ON_ERROR_STOP=1 -d postgres -c "drop database if exists $PUBDB with (force)" -c "create database $PUBDB"
   for n in 0001_public_read_model 0002_news_model 0008_news_ingest_role 0013_cms_projection; do
-    if [ "$n" = 0013_cms_projection ]; then f="$FDB_ADM03C_DIR/database/public-read/migrations/$n.sql"; else f="$REPO/database/public-read/migrations/$n.sql"; fi
-    psql -X -q -v ON_ERROR_STOP=1 -d "$PUBDB" -f "$f" >/dev/null
+    psql -X -q -v ON_ERROR_STOP=1 -d "$PUBDB" -f "$REPO/database/public-read/migrations/$n.sql" >/dev/null
   done
   # A synthetic, fixed, public test key. Hosted activation provisions a random key out of band; this value must never be reused.
   psql -X -q -v ON_ERROR_STOP=1 -d "$DB" -c "insert into editorial_private.delivery_mac_key(secret) values(pg_catalog.decode(pg_catalog.repeat('4a',32),'hex'))"
   psql -X -q -v ON_ERROR_STOP=1 -d "$PUBDB" -c "insert into cms_pub.delivery_mac_key(secret) values(pg_catalog.decode(pg_catalog.repeat('4a',32),'hex'))"
   psql -X -q -v ON_ERROR_STOP=1 -d "$DB" -c "update editorial_private.delivery_control set enabled=true, reviewed_config_id='00000000-0000-0000-0000-000000000901' where singleton"
   psql -X -q -v ON_ERROR_STOP=1 -d "$PUBDB" -c "alter role foreverdb_web_reader login password 'local-test-only'" 2>/dev/null || true
-fi
+}
 
 env -i PATH="$PATH" HOME="$STACK_DIR" \
   PGRST_DB_URI="postgres://authenticator:local-test-password@$PGHOST:$PGPORT/$DB" \
@@ -95,11 +87,10 @@ E2E_POSTGREST_URL=http://127.0.0.1:$REST
 E2E_JWT_SECRET=$JWT_SECRET
 E2E_DB=$DB
 E2E_PUBDB=$PUBDB
-E2E_DELIVERY=$DELIVERY
 E2E_PG_HOST=$PGHOST
 E2E_PG_PORT=$PGPORT
 E2E_PG_USER=$PGUSER
 E2E_PG_PASSWORD=$PGPASSWORD
 E2E_STACK_DIR=$STACK_DIR
 ENV
-echo "admin CMS stack ready: gateway :$GW (auth+rest), PostgREST :$REST, database $DB, delivery ledger: $DELIVERY"
+echo "admin CMS stack ready: gateway :$GW (auth+rest), PostgREST :$REST, databases $DB + $PUBDB"

@@ -1,13 +1,12 @@
 import type { Page } from "@playwright/test";
-import { DELIVERY, expect, test, newCtx, createDraft, makeStaff, newStaffPage, newUser, retireStuckIntents, runWorker } from "./fixtures";
+import { expect, test, newCtx, createDraft, makeStaff, newStaffPage, newUser, retireStuckIntents, runWorker } from "./fixtures";
 
-test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
 const act = async (page: Page, id: string): Promise<void> => { await page.getByTestId(id).click(); };
 const confirm = async (page: Page, name: string | RegExp): Promise<void> => { await page.getByRole("dialog").getByRole("button", { name }).click(); };
 
 /**
- * Runs LAST on purpose. At the pinned ADM-03C commit (see web/tests/admin-cms-stack/adm03c.pin) the worker's eligibility function
+ * Runs LAST on purpose. In the merged ADM-03C code the worker's eligibility function
  * (editorial_private.cms_dispatch_eligible) declares a record variable `ap` and also aliases `approvals ap`, so every HIGHLIGHTED publish fails with
  * `column reference "ap.approval_id" is ambiguous`, and one failing candidate aborts the whole worker batch. The UI must stay truthful meanwhile:
  * the article remains "Publish pending", nothing becomes public. The test asserts that fail-closed behaviour and, once ADM-03C is fixed, asserts the
@@ -33,7 +32,7 @@ test("highlighted content: approval by another person, publish intent, then real
     expect(status).toBe(200);
   } else {
     expect(defect).toMatch(/ambiguous/);
-    test.info().annotations.push({ type: "adm03c-defect", description: "cms_dispatch_eligible: column reference \"ap.approval_id\" is ambiguous for highlighted publishes (PR #206 @ pinned SHA)" });
+    test.info().annotations.push({ type: "adm03c-defect", description: "cms_dispatch_eligible: column reference \"ap.approval_id\" is ambiguous for highlighted publishes (ADM-03C as merged in main)" });
     await expect(po.getByTestId("article-status")).toHaveText("Publish pending");
     expect(status).toBe(404); // fail closed: undelivered content is never public
     // Free the worker for the scenarios that run after this one (see retireStuckIntents).

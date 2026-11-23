@@ -1,8 +1,7 @@
 import type { Page, Browser } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { DELIVERY, expect, test, newCtx, aal2Token, db, makeStaff, newStaffPage, newUser, rest, runWorker, articleRow, type Staff } from "./fixtures";
+import { expect, test, newCtx, aal2Token, db, makeStaff, newStaffPage, newUser, rest, runWorker, articleRow, type Staff } from "./fixtures";
 
-test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
 const act = async (page: Page, id: string): Promise<void> => { await page.getByTestId(id).click(); };
 const confirm = async (page: Page, name: string | RegExp): Promise<void> => { await page.getByRole("dialog").getByRole("button", { name }).click(); };
@@ -16,7 +15,7 @@ async function team(browser: Browser, tag: string): Promise<{ ed: Staff; owner: 
 }
 
 /**
- * Runs LAST on purpose. A permanently failing intent stays retryable and the pinned ADM-03C worker retries it on EVERY pass; because the first
+ * Runs LAST on purpose. A permanently failing intent stays retryable and the ADM-03C worker retries it on EVERY pass; because the first
  * failure aborts the batch, one such intent blocks every later delivery (head-of-line blocking, recorded in docs/admin/adm-04-real-admin-cms-ui.md).
  * Any spec that needs a working worker therefore runs before this one.
  */
