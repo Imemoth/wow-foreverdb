@@ -149,6 +149,25 @@ if [ "${FDB_ADMIN_EVALUATOR:-}" = 1 ]; then
               and not has_schema_privilege('authenticated','editorial_private','USAGE')
               and not has_function_privilege('anon','public.fdb_cms_create_draft(uuid,text,jsonb,uuid)','EXECUTE')")
           [ "$cms_ok" = t ] || { echo 'real-GoTrue ADM-03B private CMS boundary failed' >&2; exit 1; }
+          if [ "${FDB_ADMIN_CMS_DELIVERY:-}" = 1 ]; then
+            docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
+              psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
+              < "$repo/database/migrations/0026_editorial_delivery_control.sql"
+            delivery_ok=$(docker exec "$pg_name" psql -X -At -U postgres -d "$db_name" \
+              -c "select not (select enabled from editorial_private.delivery_control)
+                and (select count(*) from editorial_private.delivery_mac_key)=0
+                and (select count(*) from editorial_private.delivery_state)=0
+                and (select version_id from admin_private.active_policy)=0
+                and (select relforcerowsecurity from pg_class
+                  where oid='editorial_private.delivery_state'::regclass)
+                and not has_function_privilege('authenticated',
+                  'editorial_private.cms_dispatch_claim(uuid)','EXECUTE')
+                and not has_table_privilege('azerdex_cms_dispatch',
+                  'editorial_private.delivery_state','SELECT')")
+            [ "$delivery_ok" = t ] || { echo 'real-GoTrue ADM-03C inactive boundary failed' >&2; exit 1; }
+            echo 'PASS: pinned real GoTrue, non-superuser 0026 operator and inactive CMS delivery'
+            exit 0
+          fi
           docker exec -i -e PGPASSWORD=local-test-password "$pg_name" \
             psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U fdb_migrator -d "$db_name" \
             < "$repo/database/rollback/0025_editorial_private_cms_rollback.sql"

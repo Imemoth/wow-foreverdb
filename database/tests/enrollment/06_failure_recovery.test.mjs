@@ -141,6 +141,9 @@ describe("ingest failure atomicity", () => {
     const tx = await openUserTx(e.device.claims);
     const r = (await tx.query("select public.fdb_device_ingest($1,$2) as r", [e.secret, snapshot(e.installationId, { updatedAt: 6000, sources: 3 })])).rows[0].r;
     assert.equal(r.ok, true);
+    // pg emits a client-level error when the backend is terminated, even if
+    // the pending COMMIT rejection is separately captured by settle().
+    tx.on("error", () => {});
     await w.admin.query("select pg_terminate_backend($1)", [tx.processID]);
     await settle(tx.query("commit"));
     await settle(tx.end());
