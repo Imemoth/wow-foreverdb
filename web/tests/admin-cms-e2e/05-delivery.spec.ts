@@ -21,7 +21,7 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
     const a = await createDraft(t.pe, { title: "Delivered E2E article" });
     // a draft is never public
     expect(await publicStatus(request, a.slug)).toBe(404);
-    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit");
+    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
 
     await t.po.goto(a.url);
     await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
@@ -75,7 +75,7 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
   test("an unpublish by an Administrator (unpublish permission, no publish permission) also works end to end", async ({ browser, request }) => {
     const t = await team(browser, "adm-unpub");
     const a = await createDraft(t.pe);
-    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit");
+    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
     await t.po.goto(a.url); await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
     runWorker();
     expect(await publicStatus(request, a.slug)).toBe(200);
@@ -89,7 +89,7 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
   test("a publish whose grant is revoked before delivery is CANCELLED by the worker and nothing becomes public", async ({ browser, request }) => {
     const t = await team(browser, "cancel");
     const a = await createDraft(t.pe);
-    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit");
+    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
     await t.po.goto(a.url); await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
     await expect(status(t.po)).toHaveText("Publish pending");
     // the Owner's grant ends before the worker runs (database-side revocation)
@@ -128,7 +128,7 @@ test.describe("publish intent, real delivery receipt, public visibility, unpubli
     expect(created.status, JSON.stringify(created.body)).toBe(200);
     const row = await articleRow(slug);
     await t.pe.goto(`/admin/articles/${row.article_id}`);
-    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit");
+    await act(t.pe, "act-submit"); await confirm(t.pe, "Submit"); await expect(status(t.pe)).toHaveText("In review");
     await t.po.goto(`/admin/articles/${row.article_id}`);
     await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
     expect(() => runWorker()).toThrow(/missing_asset|delivery/);

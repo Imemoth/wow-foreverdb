@@ -20,8 +20,8 @@ test("highlighted content: approval by another person, publish intent, then real
   const pa = await newStaffPage(await newCtx(browser), adm);
   const po = await newStaffPage(await newCtx(browser), owner);
   const a = await createDraft(pe, { highlighted: true, title: "Highlighted delivered article" });
-  await act(pe, "act-submit"); await confirm(pe, "Submit");
-  await pa.goto(a.url); await act(pa, "act-approve"); await confirm(pa, "Approve");
+  await act(pe, "act-submit"); await confirm(pe, "Submit"); await expect(pe.getByTestId("article-status")).toHaveText("In review");
+  await pa.goto(a.url); await act(pa, "act-approve"); await confirm(pa, "Approve"); await expect(pa.getByTestId("article-status")).toHaveText("Approved");
   await po.goto(a.url); await act(po, "act-publish"); await confirm(po, /Request publish/);
   await expect(po.getByTestId("article-status")).toHaveText("Publish pending");
   let defect: string | null = null;
