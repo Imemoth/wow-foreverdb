@@ -294,7 +294,6 @@ The current estimates below are hypotheses only, not feasibility results, teleme
 - Run Lua 5.1/5.4, .NET unit/integration, PostgreSQL + GoTrue security, and Windows x64 package workflows on exact phase HEADs.
 - Review payload diffs and SQL RPC outputs for Guildbook exclusion and aggregate-only privacy; verify `git diff` contains no production configuration/secrets.
 - Keep every implementation PR Draft until upstream merge/dependency and all phase acceptance gates pass. Request owner approval before any merge or production migration/deployment.
-
 ## Geo A closure record — 2026-11-16
 
 Geo A is limited to the Addon collection layer. Its owner-accepted live positive
@@ -365,10 +364,10 @@ confirmation logic and data-safety protections passed existing UI simulations.
 This closure is documentation of Geo A only. It neither applies migration 0019
 nor authorizes sync, production changes, deployment, or Geo B implementation.
 
-## Geo A evidence-model refinement: gathering cast-to-loot
+## Geo A evidence-model refinement: gathering and fishing cast-to-loot
 
-The Addon phase may add the distinct evidence class `correlated_interaction_zone`
-for mining/herbalism only. This is a zone-only contribution supported by a
+The Addon phase adds the distinct evidence class `correlated_interaction_zone`
+for mining/herbalism and ordinary fishing. This is a zone-only contribution supported by a
 bounded successful gathering-cast → unique loot-source relationship; it is not
 source-map evidence and does not move the player's coordinates into the source
 record. The cast's CastGUID is not the GameObject GUID. A GameObject GUID that
@@ -377,7 +376,7 @@ as having been observed at cast start.
 
 Geo A requirements for this case:
 
-- Track one player gathering candidate from `UNIT_SPELLCAST_SENT` through
+- For mining/herbalism, track one player gathering candidate from `UNIT_SPELLCAST_SENT` through
   matching `UNIT_SPELLCAST_SUCCEEDED` to `LOOT_READY` or `LOOT_OPENED`. Require
   exact CastGUID equality when both events expose it. If neither exposes one,
   allow only the one active, ordered, non-overlapping same-spell operation; a
@@ -402,6 +401,15 @@ Geo A requirements for this case:
   never backfill old Unknown or legacy rows. Keep Companion parser compatibility
   by using optional export records that existing parsers ignore.
 
+Ordinary fishing is a separate single-use path: require one recognized channel
+start and matching channel stop, a unique direct bobber GUID, stable validated
+map/zone identity, and actual `LOOT_OPENED` plus `LOOT_READY` timestamps no more
+than five seconds after the stop. Either loot callback order is supported. A
+missing callback, duplicate/overlapping operation, interrupted cast, unrelated
+loot, ambiguous source or map change remains Unknown/unresolved. Fishing-pool
+source attribution stays separate. Neither path makes a source-coordinate
+claim.
+
 Focused Geo A fixtures cover both Lua 5.1 and 5.4, including the no-CastGUID
 single-operation path, cast mismatch, failure/interruption, unrelated/overlap,
 timeout, map transition, source ambiguity, multi-slot and duplicate loot, empty
@@ -410,7 +418,6 @@ no source-coordinate leakage. Owner positive LIVE acceptance has passed for all
 five collectors as recorded above. Negative event paths remain simulated and
 are not claimed as LIVE-verified; static references and fixtures are not
 measurements of Forever latency or false-positive rates.
-
 ## Release dependency reconciliation
 
 PR #186 contains the approved design and plan documents only and targets the

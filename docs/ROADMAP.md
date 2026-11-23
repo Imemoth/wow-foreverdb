@@ -14,6 +14,16 @@ ForeverDB is developed in small, testable milestones. The roadmap is intentional
 ordered so that data correctness and WoW-client compatibility stay ahead of
 polish and distribution work.
 
+## Geographic collection — Geo A (updated 2026-11-22)
+
+- [x] Complete static collector/API evidence review and Lua 5.1/5.4 fixtures; retain Unknown wherever source-map or interaction evidence is absent or ambiguous.
+- [x] Add geographic classes, counters and revisions with explicit empty-counter recovery, preserving global counters, historical observations, legacy locations and Companion export schema 9.
+- [x] Owner-accepted live positive interaction-zone results on `wowf 1.60.1.70862`, Addon `0.7.3-alpha`, marker `geo-a-fishing-event-order-3`: creature loot 36, skinning 33, mining 2, herbalism 4 and ordinary fishing 1. Fishing READY/OPENED order fix confirmed with Raw Brilliant Smallfish in map 1420; owner reports clean taint log.
+- [x] Lua 5.1/5.4 regression suites and independent code review pass; global/geographic conservation, zero-drop, duplicate, privacy and compatibility safeguards reviewed. Negative runtime scenarios remain simulated, not LIVE tested.
+- [ ] All ten mandatory release checks pass on the final exact PR heads and protected merge sequence completes. Current reviewed heads fail the web dependency audit (`GHSA-mfr8-8qww-v76h`, inherited Next.js 16.3.0–16.4.4) and its dependent Web release gate; see [Geo A acceptance report](geo-a-acceptance.md). Keep PRs Draft until fixed and revalidated.
+- [ ] Geo B–E remain unstarted and separately gated; migration 0019 remains a prerequisite for future Geo C ingestion.
+
+Evidence: [Geo A Phase 0 findings](geo-a-phase-0-findings.md), [Geo A acceptance report](geo-a-acceptance.md).
 ## Account V1 — Zero-Touch Enrollment + Registered Sync (next draft PR)
 
 - [x] Product/UX decision (2026-10-13): after website login, a per-download account-bound installation activates automatically at first Companion launch without separate Companion login or claim code. Home and workplace PCs become **separate, revocable installations** under the same Account.

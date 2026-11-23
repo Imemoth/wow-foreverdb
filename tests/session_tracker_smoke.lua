@@ -723,7 +723,7 @@ test("history snapshot records close-time XP and gold rates", function()
     equal(char.history[1].xpGained, 60)
 end)
 
-test("session SavedVariables stay local and schema 9 export has no session records", function()
+test("session SavedVariables stay local and public schema 9 export has no session records", function()
     local FDB, state = setup()
     truthy(FDB:SessionPlayerReady())
 
@@ -732,7 +732,7 @@ test("session SavedVariables stay local and schema 9 export has no session recor
     state:event("PLAYER_XP_UPDATE")
     truthy(FDB:ResetSession()) -- archive one session into history too
 
-    equal(FDB.SCHEMA_VERSION, 9)
+    equal(FDB.SCHEMA_VERSION, 11)
     truthy(FDB.DB.sessions)
     local char = FDB.DB.sessions.characters[state.guid]
     truthy(char)
