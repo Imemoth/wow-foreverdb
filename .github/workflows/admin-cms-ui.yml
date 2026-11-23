@@ -43,10 +43,16 @@ jobs:
         run: |
           docker run -d --name fdb-pg -p 5432:5432 -e POSTGRES_PASSWORD=local-test-only postgres:${{ matrix.pg }}
           for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && break || sleep 1; done
-      - name: "0027 without the delivery ledger (inactive boundary, every intent reads blocked)"
+      - name: "0027 + 0028 without the delivery ledger (inactive boundary, every intent reads blocked)"
         run: bash database/tests/admin_cms_reads/run.sh
-      - name: 0027 with the ADM-03C delivery ledger (migration 0026)
+      - name: 0027 then 0028 with the ADM-03C delivery ledger (migration 0026)
         env: { FDB_ADMIN_WITH_DELIVERY: '1' }
+        run: bash database/tests/admin_cms_reads/run.sh
+      - name: 0028 BEFORE 0027 with the ADM-03C delivery ledger (the two additive migrations are order independent)
+        env: { FDB_ADMIN_WITH_DELIVERY: '1', FDB_ADMIN_0028_FIRST: '1' }
+        run: bash database/tests/admin_cms_reads/run.sh
+      - name: 0028 BEFORE 0027 without the delivery ledger
+        env: { FDB_ADMIN_0028_FIRST: '1' }
         run: bash database/tests/admin_cms_reads/run.sh
 
   admin-cms-e2e:
@@ -95,7 +101,7 @@ jobs:
       - name: Install the delivery worker's dependency (pinned by cms-delivery/package-lock.json)
         working-directory: ${{ github.workspace }}
         run: npm ci --prefix cms-delivery --ignore-scripts
-      - name: Start the stack (migrations 0001-0012, 0018, 0020-0027; separate public-read database)
+      - name: Start the stack (migrations 0001-0012, 0018, 0020-0028; separate public-read database)
         env:
           GOTRUE_BIN: ${{ env.STACK_BIN }}/gotrue
           POSTGREST_BIN: ${{ env.STACK_BIN }}/postgrest

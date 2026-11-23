@@ -29,6 +29,7 @@ describe("ADM-04 adapter: PostgREST error classification (closed, fail-closed)",
     [403, { code: "42501", message: "independent highlighted approval required" }, { kind: "denied", reason: "independent_approval_required" }],
     [403, { code: "42501", message: "whatever internal text" }, { kind: "denied", reason: "forbidden" }],
     [400, { code: "42501", message: "classification downgrade forbidden" }, { kind: "denied", reason: "classification_downgrade" }],
+    [409, { code: "PT409", message: "stale or uneditable revision" }, { kind: "stale" }],
     [409, { code: "40001", message: "stale" }, { kind: "stale" }],
     [400, { code: "40001", message: "stale" }, { kind: "stale" }],
     [409, { code: "23505", message: "editorial request id reused" }, { kind: "conflict", reason: "request_reused" }],
@@ -41,6 +42,11 @@ describe("ADM-04 adapter: PostgREST error classification (closed, fail-closed)",
   });
   it("never leaks database message text into the verdict", () => {
     expect(JSON.stringify(classifyDbError(403, { code: "42501", message: "secret detail: table editorial_private.articles" }))).not.toMatch(/secret|editorial_private/);
+  });
+  it("only the PT409 code is a stale revision: a bare HTTP 409 or another 409 code is not", () => {
+    expect(classifyDbError(409, { message: "stale or uneditable revision" })).toBeNull();
+    expect(classifyDbError(409, { code: "PT410", message: "stale" })).toBeNull();
+    expect(classifyDbError(409, { code: "23505", message: "x" })).toMatchObject({ kind: "conflict" });
   });
   it("an unrecognised failure is not classified (the caller then treats a mutation as unknown outcome)", () => {
     expect(classifyDbError(500, { message: "boom" })).toBeNull();

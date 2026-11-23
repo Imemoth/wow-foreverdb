@@ -2,7 +2,7 @@
 # ADM-04: the DISPOSABLE real-backend stack for the Admin CMS UI.
 #
 #   PostgreSQL 16  +  REAL GoTrue (pinned supabase/auth)  +  REAL PostgREST (pinned release)  +  the gateway shim (/auth/v1, /rest/v1)
-#   private DB (migrations 0001-0012, 0018 history, then 0020-0027)  -> the staff Admin, the ADM-03B CMS, the ADM-03C delivery ledger, the ADM-04 reads
+#   private DB (migrations 0001-0012, 0018 history, then 0020-0028)  -> the staff Admin, the ADM-03B CMS, the ADM-03C delivery ledger, the ADM-04 reads
 #   public-read DB (public-read migrations 0001, 0002, 0008, 0013)    -> what the public website reads (ADM-03C projection)
 #
 # Nothing here touches Supabase or any hosted service: every credential is a public test constant of a throw-away cluster.
@@ -55,6 +55,8 @@ for n in 0020_admin_private_authorization 0021_admin_private_evaluator 0022_admi
 done
 migrator -f "$REPO/database/migrations/0026_editorial_delivery_control.sql" >/dev/null
 migrator -f "$REPO/database/migrations/0027_editorial_admin_reads.sql" >/dev/null
+# ADM-03B/03C backend hotfix (merged): non-retried stale-revision SQLSTATE (PT409), highlighted publication, additive forward repair.
+migrator -f "$REPO/database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/activate-policy.sql"
 
 {

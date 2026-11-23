@@ -2,6 +2,8 @@
 # ADM-04 read RPCs (0027) against a DISPOSABLE PostgreSQL cluster. Same bootstrap as database/tests/admin_cms/run.sh.
 # Optional: FDB_ADMIN_WITH_DELIVERY=1 applies the ADM-03C delivery ledger (database/migrations/0026) first, so the delivery-status read is exercised
 # against its real schema. Without it the inactive boundary is tested: every intent reads "blocked" and nothing can become public.
+# Migration 0028 (ADM-03B/03C backend hotfix, merged) is part of the native stack and is applied here too. Default order: 0027 then 0028 (registry order).
+# FDB_ADMIN_0028_FIRST=1 applies 0028 BEFORE 0027, proving the two additive migrations are order independent.
 set -euo pipefail
 [ "${FDB_ADMIN_DISPOSABLE:-}" = 1 ] || exit 2
 export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-5432}" PGPASSWORD="${PGPASSWORD:-local-test-only}"
@@ -36,7 +38,12 @@ if [ "${FDB_ADMIN_WITH_DELIVERY:-}" = 1 ]; then
   "${migrator[@]}" -f "$repo/database/migrations/0026_editorial_delivery_control.sql"
   delivery=1
 fi
+m0028="$repo/database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql"
+[ "${FDB_ADMIN_0028_FIRST:-}" = 1 ] && "${migrator[@]}" -f "$m0028"
 "${migrator[@]}" -f "$repo/database/migrations/0027_editorial_admin_reads.sql"
+[ "${FDB_ADMIN_0028_FIRST:-}" = 1 ] || "${migrator[@]}" -f "$m0028"
+# 0028 is refused a second time too (pre-flight), whatever the order.
+if "${migrator[@]}" -f "$m0028" >/dev/null 2>&1; then echo '0028 was applied twice' >&2; exit 1; fi
 # Applying twice is refused (pre-flight), and the guarded rollback leaves the 0025 boundary intact.
 if "${migrator[@]}" -f "$repo/database/migrations/0027_editorial_admin_reads.sql" >/dev/null 2>&1; then
   echo '0027 was applied twice' >&2; exit 1; fi
@@ -47,4 +54,6 @@ psql -X -q -v ON_ERROR_STOP=1 -U fdb_migrator -d "${db}_rollback" -f "$repo/data
 psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "${db}_rollback" \
   -c "select to_regprocedure('public.fdb_cms_articles(integer)') is null and to_regprocedure('public.fdb_cms_create_draft(uuid,text,jsonb,uuid)') is not null and to_regprocedure('public.fdb_cms_article(uuid)') is not null" | grep -qx t
 dropdb -U postgres "${db}_rollback"
-echo "ADM-04 read RPCs: PASS (delivery ledger present: $delivery)"
+# Both migrations together: a stale revision is PT409 (not the retried 40001), through the very functions the Admin UI calls.
+"${root[@]}" -v delivery="$delivery" -f "$here/combined_0027_0028.sql"
+echo "ADM-04 read RPCs + 0028: PASS (delivery ledger present: $delivery, 0028 first: ${FDB_ADMIN_0028_FIRST:-0})"

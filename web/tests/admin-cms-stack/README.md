@@ -9,7 +9,7 @@ database, Vercel or any production credential; every secret in it is a public te
 | Auth | **real GoTrue**, built from source by `database/tests/account/build-gotrue.sh` | `supabase/auth` v2.197.0, commit `4eee58f2…` (the build refuses a moved tag) |
 | REST | **real PostgREST** (static release binary) | v12.2.12, sha256 `5de4092f…57d5` |
 | Gateway | `web/tests/auth-stack/stack-server.mjs` (stands in for Kong: `/auth/v1`, `/rest/v1`) | — |
-| Private database `fdb_account_it` | migrations 0001–0012, 0018, **0020–0025** (Admin + ADM-03B CMS), **0026** (ADM-03C delivery ledger), **0027** (ADM-04 reads) — all native in this repository | — |
+| Private database `fdb_account_it` | migrations 0001–0012, 0018, **0020–0025** (Admin + ADM-03B CMS), **0026** (ADM-03C delivery ledger), **0027** (ADM-04 reads), **0028** (ADM-03B/03C hotfix) — all native in this repository | — |
 | Public-read database `cms_public_it` | public-read migrations 0001, 0002, 0008 and **0013** (ADM-03C projection) | — |
 | Worker | the real ADM-03C one-shot dispatcher `cms-delivery/src/once.mjs`, a separate process with its own database roles | repository |
 | Website | a production build of **this checkout** (including the native ADM-03C public adapter), in place | `build-site.sh` |

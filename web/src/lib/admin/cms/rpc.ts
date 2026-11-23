@@ -66,7 +66,9 @@ export function classifyDbError(status: number, body: unknown): CmsFailure | nul
   const code = typeof o.code === "string" ? o.code : "";
   const message = typeof o.message === "string" ? o.message : "";
   if (code === "42501" || status === 403) return { ok: false, kind: "denied", reason: DENIAL[message] ?? "forbidden" };
-  if (code === "40001") return { ok: false, kind: "stale" };
+  // Stale or uneditable revision. Migration 0028 raises PT409 (PostgREST answers HTTP 409 at once). `40001` is the pre-0028 ADM-03B code: kept so a
+  // database that has not applied 0028 still classifies the condition (the pinned PostgREST would retry it, which route.ts guards against).
+  if (code === "PT409" || code === "40001") return { ok: false, kind: "stale" };
   if (code === "23505") return { ok: false, kind: "conflict", reason: /request id reused/.test(message) ? "request_reused" : "slug_taken" };
   if (code === "22023") return { ok: false, kind: "invalid", reason: INVALID.find(([re]) => re.test(message))?.[1] ?? "input" };
   if (status === 400) return { ok: false, kind: "invalid", reason: "input" };

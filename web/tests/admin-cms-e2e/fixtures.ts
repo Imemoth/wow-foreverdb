@@ -105,8 +105,13 @@ export async function ageTotp(sessionOfUser: string, minutes: number): Promise<v
   } finally { await c.end(); }
 }
 
-/** One pass of the REAL ADM-03C one-shot delivery worker (a separate process with its own database roles). Returns its JSON report. */
-export function runWorker(): { candidates: number; delivered: number; cancelled: number; retried: number; compensated: number } {
+export interface WorkerReport { candidates: number; delivered: number; cancelled: number; retried: number; compensated: number; failures: { intent_id: string; code: string }[] }
+
+/**
+ * One pass of the REAL ADM-03C one-shot delivery worker (a separate process with its own database roles), without any interpretation of its exit code.
+ * The worker prints its JSON report, and exits non-zero when it isolated at least one per-intent failure or stopped on a fatal one.
+ */
+export function runWorkerPass(): { status: number | null; report: WorkerReport | null; stderr: string } {
   const r = spawnSync(process.execPath, [resolve(REPO, "cms-delivery/src/once.mjs")], {
     cwd: REPO,
     env: {
@@ -116,8 +121,16 @@ export function runWorker(): { candidates: number; delivered: number; cancelled:
       FDB_CMS_ASSET_ROOT: resolve(REPO, "web/public"),
     } as unknown as NodeJS.ProcessEnv, encoding: "utf8", timeout: 60_000,
   });
-  if (r.status !== 0) throw new Error(`worker exited ${r.status}: ${r.stderr}`);
-  return JSON.parse(r.stdout.trim().split("\n").pop()!);
+  let report: WorkerReport | null = null;
+  try { report = JSON.parse(r.stdout.trim().split("\n").pop()!) as WorkerReport; } catch { /* a fatal stop prints no report */ }
+  return { status: r.status, report, stderr: r.stderr };
+}
+
+/** A STRICT worker pass: a failed delivery, isolated or fatal, fails the test. */
+export function runWorker(): WorkerReport {
+  const r = runWorkerPass();
+  if (r.status !== 0 || !r.report) throw new Error(`worker exited ${r.status}: ${r.stderr} ${JSON.stringify(r.report)}`);
+  return r.report;
 }
 
 export const uniqueSlug = (p = "e2e"): string => `${p}-${randomBytes(4).toString("hex")}`;
@@ -201,24 +214,3 @@ export const test = base.extend({
 });
 export { expect };
 export const newCtx = (browser: Browser): Promise<BrowserContext> => browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
-
-/**
- * Test-harness cleanup (cluster superuser, never the product): retires the unfinished delivery intents of one article by marking them cancelled, the
- * way an operator would after triaging a stuck delivery. Needed because the ADM-03C worker retries a failing intent on every pass and aborts
- * its whole batch on the first failure, so one stuck intent would block every later scenario in the same stack.
- */
-export async function retireStuckIntents(slug: string): Promise<number> {
-  const c = await db();
-  try {
-    await c.query("alter table editorial_private.delivery_state disable trigger all");
-    // an intent that failed BEFORE its first claim has no ledger row yet: create it as cancelled; otherwise cancel the unfinished row
-    const r = await c.query(
-      `insert into editorial_private.delivery_state(intent_id,article_id,generation,state,last_error_code)
-       select i.intent_id,i.article_id,i.generation,'cancelled','e2e_retired' from editorial_private.publication_intents i
-       join editorial_private.articles a using(article_id) where a.slug=$1
-       on conflict (intent_id) do update set state='cancelled',claim_token=null,lease_until=null,last_error_code='e2e_retired'
-       where editorial_private.delivery_state.state<>'delivered'`, [slug]);
-    await c.query("alter table editorial_private.delivery_state enable trigger all");
-    return r.rowCount ?? 0;
-  } finally { await c.end(); }
-}

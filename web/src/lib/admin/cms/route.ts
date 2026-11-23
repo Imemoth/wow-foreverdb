@@ -73,18 +73,18 @@ export async function handleCmsPost(req: NextRequest, action: string): Promise<N
   if (!live.ok) return failure(401, "admin_denied");
   const { cfg } = rt.ac;
   const at = live.at;
-  // ADM-03B reports a stale revision with SQLSTATE 40001. Under the pinned PostgREST that code is RETRIED by the server and, being deterministic,
-  // never succeeds: the request spins on a pooled database connection until the caller gives up. So a stale revision is detected here, from the
-  // authoritative current head, and answered immediately; the database remains the authority for the (narrow) race after this check.
-  // Only `create` is idempotent in the database: a retry of an edit/submit that DID commit (the head or state moved) is answered "stale" here instead of
-  // spinning, the browser reloads and shows the committed result. Nothing can apply twice.
+  // ADM-03B reports a stale revision as PT409 (migration 0028; HTTP 409 at once). Before 0028 it was SQLSTATE 40001, which the pinned PostgREST RETRIES
+  // and, being deterministic, never completes. A stale revision is therefore also detected here, from the authoritative current head, and answered
+  // immediately without a database round trip that could write; the database remains the authority (under the article row lock) for the narrow race
+  // after this check, and answers it promptly with PT409. Only `create` is idempotent in the database: a retry of an edit/submit that DID commit
+  // (the head or state moved) is answered "stale" here, the browser reloads and shows the committed result. Nothing can apply twice.
   const revisionBound = action === "edit" || action === "submit" || action === "review" || action === "approve" || action === "publish";
   if (revisionBound) {
     const b = parsed.data as { articleId: string; revisionId: string };
     const head = await cmsRpc.detail(cfg, at, b.articleId);
     if (head.ok) {
       const a = head.data.article;
-      // exactly the database's own conditions for the two actions that raise 40001 (edit and submit)
+      // exactly the database's own conditions for the two actions that raise PT409 (edit and submit)
       const editable = ["draft", "in_review", "approved", "rejected"].includes(a.review_state);
       const submittable = a.review_state === "draft" || a.review_state === "rejected";
       if (a.current_revision_id !== b.revisionId || (action === "edit" && !editable) || (action === "submit" && !submittable)) return errorResponse({ ok: false, kind: "stale" });
