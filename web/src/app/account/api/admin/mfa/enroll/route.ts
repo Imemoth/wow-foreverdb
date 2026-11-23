@@ -12,5 +12,5 @@ export const POST = accountApi({route:"admin_mfa_enroll",mutating: true,body:z.o
     if (user.data.factors?.some(f => f.factor_type === "totp" && f.status === "verified")) return failure(409,"factor_exists");
     const result = await auth.enrollTotp(c.ac.cfg,session.at);
     if (!result.ok) return failure(result.kind === "rate_limited" ? 429 : 503,"mfa_unavailable");
-    return jsonResponse({ok:true,factorId:result.data.id,qrCode:result.data.totp.qr_code,secret:result.data.totp.secret});
+    return jsonResponse({ok:true,factorId:result.data.id,secret:result.data.totp.secret});
   }));

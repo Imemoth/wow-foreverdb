@@ -192,6 +192,19 @@ describe("ADM-04 UI: error wording is closed and never echoes server text", () =
   });
 });
 
+describe("ADM-04: the pinned GoTrue's real TOTP enrolment reply (a ~280 KB SVG QR code) is accepted and never forwarded", () => {
+  it("parses a large reply; the route drops the image", async () => {
+    const { auth } = await import("@/lib/account/auth-client");
+    const body = { id: U(7), type: "totp", friendly_name: "AzerDex Admin", totp: { qr_code: `<svg>${"<rect/>".repeat(40_000)}</svg>`, secret: "JBSWY3DPEHPK3PXP", uri: "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP" } };
+    stub(200, body);
+    const r = await auth.enrollTotp(cfg, TOKEN);
+    expect(r.ok).toBe(true);
+    stub(200, { ...body, totp: { ...body.totp, qr_code: "x".repeat(600 * 1024) } });
+    expect((await auth.enrollTotp(cfg, TOKEN)).ok).toBe(false); // still bounded
+    expect(readFileSync(join(__dirname, "../../src/app/account/api/admin/mfa/enroll/route.ts"), "utf8")).not.toMatch(/qr_?code/i);
+  });
+});
+
 describe("ADM-04 diff", () => {
   it("line diff and field diff", () => {
     expect(diffLines("a\nb\nc", "a\nx\nc").filter((l) => l.kind !== "same")).toEqual([{ kind: "del", text: "b" }, { kind: "add", text: "x" }]);
