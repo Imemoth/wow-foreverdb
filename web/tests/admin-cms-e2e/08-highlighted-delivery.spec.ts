@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { DELIVERY, expect, test, newCtx, createDraft, makeStaff, newStaffPage, newUser, runWorker } from "./fixtures";
+import { DELIVERY, expect, test, newCtx, createDraft, makeStaff, newStaffPage, newUser, retireStuckIntents, runWorker } from "./fixtures";
 
 test.skip(!DELIVERY, "needs the ADM-03C delivery ledger, worker and public-read database (up.sh with FDB_ADM03C_DIR)");
 
@@ -36,5 +36,7 @@ test("highlighted content: approval by another person, publish intent, then real
     test.info().annotations.push({ type: "adm03c-defect", description: "cms_dispatch_eligible: column reference \"ap.approval_id\" is ambiguous for highlighted publishes (PR #206 @ pinned SHA)" });
     await expect(po.getByTestId("article-status")).toHaveText("Publish pending");
     expect(status).toBe(404); // fail closed: undelivered content is never public
+    // Free the worker for the scenarios that run after this one (see retireStuckIntents).
+    await retireStuckIntents(a.slug);
   }
 });

@@ -201,3 +201,24 @@ export const test = base.extend({
 });
 export { expect };
 export const newCtx = (browser: Browser): Promise<BrowserContext> => browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": uniqueIp() } });
+
+/**
+ * Test-harness cleanup (cluster superuser, never the product): retires the unfinished delivery intents of one article by marking them cancelled, the
+ * way an operator would after triaging a stuck delivery. Needed because the pinned ADM-03C worker retries a failing intent on every pass and aborts
+ * its whole batch on the first failure, so one stuck intent would block every later scenario in the same stack.
+ */
+export async function retireStuckIntents(slug: string): Promise<number> {
+  const c = await db();
+  try {
+    await c.query("alter table editorial_private.delivery_state disable trigger all");
+    // an intent that failed BEFORE its first claim has no ledger row yet: create it as cancelled; otherwise cancel the unfinished row
+    const r = await c.query(
+      `insert into editorial_private.delivery_state(intent_id,article_id,generation,state,last_error_code)
+       select i.intent_id,i.article_id,i.generation,'cancelled','e2e_retired' from editorial_private.publication_intents i
+       join editorial_private.articles a using(article_id) where a.slug=$1
+       on conflict (intent_id) do update set state='cancelled',claim_token=null,lease_until=null,last_error_code='e2e_retired'
+       where editorial_private.delivery_state.state<>'delivered'`, [slug]);
+    await c.query("alter table editorial_private.delivery_state enable trigger all");
+    return r.rowCount ?? 0;
+  } finally { await c.end(); }
+}

@@ -41,7 +41,7 @@ test.describe("failed delivery", () => {
     await t.po.goto(`/admin/articles/${row.article_id}`);
     await act(t.po, "act-publish"); await confirm(t.po, /Request publish/);
     await expect(status(t.po)).toHaveText("Publish pending");
-    expect(() => runWorker()).toThrow(/missing_asset|delivery/);
+    expect(() => runWorker()).toThrow(/missing_asset/);
     await t.po.reload();
     await expect(status(t.po)).toHaveText("Delivery failed");
     await t.po.getByRole("tab", { name: /Delivery/ }).click();
