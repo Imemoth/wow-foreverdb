@@ -44,6 +44,8 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: local-test-only
       FDB_CMS_DISPOSABLE: '1'
+      # The worker refuses to run when CI=true unless the job states that its databases are disposable (same switch as admin-cms-delivery.yml).
+      FDB_CMS_CI: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,6 +69,8 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: local-test-only
       FDB_CMS_DISPOSABLE: '1'
+      # The worker refuses to run when CI=true unless the job states that its databases are disposable (same switch as admin-cms-delivery.yml).
+      FDB_CMS_CI: '1'
       FDB_REPAIR_HTTP: '1'
     steps:
       - uses: actions/checkout@v4
