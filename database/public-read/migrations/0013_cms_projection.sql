@@ -242,6 +242,10 @@ begin
   end if;
   insert into cms_pub.receipts(intent_id,article_id,generation,kind,revision_id,payload_hash)
     values(v_intent,v_article,v_generation,v_kind,v_revision,v_hash) returning * into prior;
+  -- A first insert or receipt uniqueness check can also wait after the row
+  -- lookup. Expiry here rolls back the pointer, snapshot and receipt together.
+  if v_auth_expires<=pg_catalog.date_part('epoch',pg_catalog.clock_timestamp()) then
+    raise exception 'CMS delivery authorization expired while waiting' using errcode='42501'; end if;
   return cms_pub.receipt_json(prior);
 exception when invalid_text_representation or invalid_parameter_value or numeric_value_out_of_range
   then raise exception 'invalid CMS delivery envelope' using errcode='22023';

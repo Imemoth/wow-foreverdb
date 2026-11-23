@@ -172,6 +172,40 @@ try {
   } finally { await delayedDb.end(); }
   assert.equal((await publicDb.query('select generation from cms_pub.articles where article_id=$1',
     [stuck])).rows[0].generation, '1', 'expired in-flight write changed the public pointer');
+  const firstInsertArticle = '00000000-0000-0000-0000-000000000416';
+  const firstInsertIntent = '00000000-0000-0000-0000-000000000417';
+  const firstCore = { kind: 'unpublish', article_id: firstInsertArticle,
+    slug: 'cms-unique-lock', generation: 2 };
+  const firstHash = (await publicDb.query(`select pg_catalog.encode(pg_catalog.sha256(
+    pg_catalog.convert_to($1::jsonb::text,'UTF8')),'hex') as value`,
+  [JSON.stringify(firstCore)])).rows[0].value;
+  const firstExpiry = Math.floor(Date.now() / 1000) + 3;
+  const firstMac = (await publicDb.query('select cms_pub.cms_mac($1) as value',
+    [`${firstInsertIntent}:${firstHash}:${firstExpiry}`])).rows[0].value;
+  const firstEnvelope = { ...firstCore, intent_id: firstInsertIntent,
+    payload_hash: firstHash, auth_expires_epoch: firstExpiry, auth_mac: firstMac };
+  const uniqueDb = new pg.Client({ connectionString: process.env.FDB_CMS_PUBLIC_URL });
+  await uniqueDb.connect();
+  try {
+    await uniqueDb.query('set role azerdex_cms_delivery');
+    await publicDb.query('begin');
+    try {
+      await publicDb.query(`insert into cms_pub.articles(article_id,slug,generation,
+        revision_id,tombstone) values($1,'cms-unique-lock',1,null,true)`, [firstInsertArticle]);
+      const blocked = uniqueDb.query('select pub_admin.cms_apply($1::jsonb)',
+        [JSON.stringify(firstEnvelope)]).then(() => ({ ok: true }),
+        (error) => ({ ok: false, error }));
+      await new Promise((resolve) => setTimeout(resolve, 3300));
+      await publicDb.query('rollback');
+      const result = await blocked;
+      assert.equal(result.ok, false, 'expired first insert was accepted');
+      assert.match(result.error.message, /authorization expired while waiting/);
+    } finally { await publicDb.query('rollback'); }
+  } finally { await uniqueDb.end(); }
+  assert.equal((await publicDb.query('select count(*)::int as n from cms_pub.articles where article_id=$1',
+    [firstInsertArticle])).rows[0].n, 0, 'expired first insert left public content');
+  assert.equal((await publicDb.query('select count(*)::int as n from cms_pub.receipts where intent_id=$1',
+    [firstInsertIntent])).rows[0].n, 0, 'expired first insert left a receipt');
   await privateDb.query(`update admin_private.direct_grants set status='revoked',
     revoked_at=clock_timestamp() where user_id='00000000-0000-0000-0000-000000000101'
     and permission_key='news.article.unpublish' and scope_id=$1`, [stuck]);
