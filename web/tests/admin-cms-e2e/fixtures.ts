@@ -61,10 +61,13 @@ export async function makeStaff(u: Staff, role: RoleName, o: { article?: string;
 /** Full real sign-in through the website UI: password login, then TOTP (enrol once, then challenge) and the Admin hand-off. */
 export async function enterAdmin(page: Page, u: Staff): Promise<void> {
   await page.goto("/account/login");
-  await page.getByLabel("Email address").fill(u.email);
-  await page.getByLabel("Password").fill(u.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/account(\?|$)/);
+  // An account session may already exist in this browser (re-verification after the TOTP freshness window): the login page then redirects to /account.
+  if (new URL(page.url()).pathname !== "/account") {
+    await page.getByLabel("Email address").fill(u.email);
+    await page.getByLabel("Password").fill(u.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/account(\?|$)/);
+  }
   const panel = page.getByRole("region", { name: "Admin authentication" });
   await expect(panel).toBeVisible();
   const enrolledBefore = !!u.secret;
