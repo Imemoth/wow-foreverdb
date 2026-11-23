@@ -207,7 +207,9 @@ test("partial success 2: the global logout TOOK EFFECT but its reply was lost (a
   const marker = (await site.storageState()).cookies.find((x) => x.name === "fdb_reset");
   expect(marker, "the 202 set the sealed reset marker").toBeTruthy();
   const sameBrowser = await playwright.request.newContext({
-    baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": "198.51.100.200" },
+    // Keep the strict per-IP reset budget independent of newClient()'s
+    // randomized 198.51.100.x range; the real limiter stays enabled.
+    baseURL: "http://localhost:3210", extraHTTPHeaders: { "x-forwarded-for": "198.51.101.200" },
     storageState: { cookies: [{ ...marker!, domain: "localhost" }, { name: "fdb_acct", value: second.cookie, domain: "localhost", path: "/account", httpOnly: true, secure: false, sameSite: "Lax", expires: -1 }], origins: [] },
   });
   const done = await post(sameBrowser, "/account/api/reset-password", { password: fresh });
