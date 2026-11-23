@@ -14,7 +14,7 @@ createdb -U postgres "$db"
   alter table auth.users add column phone_confirmed_at timestamptz"
 for n in 0020_admin_private_authorization 0021_admin_private_evaluator \
   0022_admin_auth_handoff 0023_admin_staff_lifecycle 0024_admin_editorial_boundary \
-  0025_editorial_private_cms; do
+  0025_editorial_private_cms 0028_editorial_hotfix_stale_and_highlighted; do
   "${migrator[@]}" -f "database/migrations/$n.sql"
 done
 "${root[@]}" -f database/tests/admin_cms/assertions.sql

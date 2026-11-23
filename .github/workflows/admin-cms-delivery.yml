@@ -4,6 +4,7 @@ on:
     paths:
       - 'cms-delivery/**'
       - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
       - 'database/public-read/migrations/0013_cms_projection.sql'
       - 'database/tests/admin_cms_delivery/**'
       - 'database/tests/admin_private/run-target-gotrue.sh'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'cms-delivery/**'
       - 'database/migrations/0026_editorial_delivery_control.sql'
+      - 'database/migrations/0028_editorial_hotfix_stale_and_highlighted.sql'
       - 'database/public-read/migrations/0013_cms_projection.sql'
       - 'database/tests/admin_cms_delivery/**'
       - 'database/tests/admin_private/run-target-gotrue.sh'
