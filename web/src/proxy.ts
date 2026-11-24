@@ -95,7 +95,8 @@ export async function proxy(request: NextRequest) {
   // Account System V1: /account/** (pages and /account/api/*) is private. It is never cached, never indexed (in every
   // deployment, production included), never leaks an account path/query in Referer, and never receives the anonymous rate-limit cookie.
   // The preview is treated exactly like the private account area: never cached, never indexed, no referrer leak, no anonymous rate-limit cookie.
-  const isAccount = isAccountPath(pathname) || previewPath;
+  // ADM-04: the (local, disposable-only) real Admin namespace is private in exactly the same way.
+  const isAccount = isAccountPath(pathname) || previewPath || pathname === "/admin" || pathname.startsWith("/admin/");
   const accountHeaders: Record<string, string> = isAccount
     ? {
         "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",

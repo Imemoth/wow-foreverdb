@@ -35,7 +35,8 @@ describe("zero-touch enrollment (static)", () => {
       expect(importsOf(join(SRC, f)).filter((i) => /supabase|^node:|auth-client|account\/session$|account\/crypto$/.test(i)), f).toEqual([]);
       expect(text, f).not.toMatch(/process\.env|service[_-]?role|sb_secret_|SERVICE_ROLE/i);
     }
-    expect(all.filter((f) => /rest\/v1/.test(read(f))).map(rel)).toEqual(["lib/account/rpc-client.ts"]);
+    // ADM-04 adds exactly one other server-only module (the Admin CMS adapter); it is unrelated to the enrollment feature.
+    expect(all.filter((f) => /rest\/v1/.test(read(f))).map(rel).sort()).toEqual(["lib/account/rpc-client.ts", "lib/admin/cms/rpc.ts"]);
   });
 
   it("the download route is POST-only (no GET/HEAD/other export), form-protected, and never reads the request URL, cookies or headers itself", () => {

@@ -30,9 +30,10 @@ const config: NextConfig = {
   // pg is a server-only Node dependency.
   serverExternalPackages: ["pg"],
   images: { unoptimized: true },
-  // The proxy buffers request bodies before it runs. The only POST endpoint takes <= 4 KiB, so
-  // cap the buffer far below the 10 MB default (defence in depth; the platform/WAF limit still applies).
-  experimental: { proxyClientMaxBodySize: "8kb" },
+  // The proxy buffers request bodies before it runs. Every POST endpoint is small except the Admin CMS draft save (an article body of up to
+  // 50 000 characters, capped again at 256 KiB by its own bounded reader), so cap the buffer far below the 10 MB default (defence in
+  // depth; the platform/WAF limit still applies).
+  experimental: { proxyClientMaxBodySize: "256kb" },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -16,3 +16,7 @@ map-atlas-out/
 __pycache__/
 *.pyc
 *.blp
+
+# ADM-04 disposable stack (logs, repo copy with the ADM-03C overlay, build output): never committed
+web/tests/admin-cms-stack/.stack/
+/cms-delivery/node_modules

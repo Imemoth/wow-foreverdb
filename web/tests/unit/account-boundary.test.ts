@@ -82,7 +82,9 @@ describe("account boundary (static)", () => {
   });
   it("Auth and RPC URLs are built only in the allowlisted modules", () => {
     const AUTH_ALLOWED = new Set(["lib/account/contracts.ts", "lib/account/auth-client.ts"]);
-    const RPC_ALLOWED = new Set(["lib/account/rpc-client.ts"]);
+    // ADM-04: the Admin CMS adapter is the one other module that names /rest/v1/rpc. It is server-only, closed over the reviewed CMS_RPCS allowlist,
+    // and sends only the staff member's own verified token (never a service key); lib/admin/cms/*.test boundary tests pin that.
+    const RPC_ALLOWED = new Set(["lib/account/rpc-client.ts", "lib/admin/cms/rpc.ts"]);
     expect(files.filter((f) => /\/auth\/v1\//.test(read(f)) && !AUTH_ALLOWED.has(rel(f))).map(rel)).toEqual([]);
     expect(files.filter((f) => /\/rest\/v1/.test(read(f)) && !RPC_ALLOWED.has(rel(f))).map(rel)).toEqual([]);
   });

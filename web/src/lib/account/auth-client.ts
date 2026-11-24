@@ -64,6 +64,8 @@ interface CallSpec<T> {
   parse: z.ZodType<T>;
   /** Success statuses that carry no body (e.g. logout answers 204). */
   emptyOk?: boolean;
+  /** Response size cap; the default is deliberately small. Only the TOTP enrolment reply is larger (see mfaEnrollResponse). */
+  maxBytes?: number;
 }
 
 async function call<T>(cfg: AccountAuthConfig, spec: CallSpec<T>, callbackUrl?: string, recovery = false): Promise<AuthResult<T>> {
@@ -88,7 +90,7 @@ async function call<T>(cfg: AccountAuthConfig, spec: CallSpec<T>, callbackUrl?: 
   } catch {
     return { ok: false, status: 0, code: null, kind: "unavailable" };
   }
-  const text = await readBounded(res);
+  const text = await readBounded(res, spec.maxBytes ?? MAX_RESPONSE_BYTES);
   let json: unknown = null;
   if (text) {
     try {
@@ -110,7 +112,7 @@ async function call<T>(cfg: AccountAuthConfig, spec: CallSpec<T>, callbackUrl?: 
   return { ok: false, status: res.status, code, kind };
 }
 
-async function readBounded(res: Response): Promise<string> {
+async function readBounded(res: Response, limit: number): Promise<string> {
   if (!res.body) return "";
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -120,7 +122,7 @@ async function readBounded(res: Response): Promise<string> {
       const { done, value } = await reader.read();
       if (done) break;
       n += value.byteLength;
-      if (n > MAX_RESPONSE_BYTES) {
+      if (n > limit) {
         await reader.cancel().catch(() => undefined);
         return "";
       }
@@ -140,7 +142,10 @@ async function readBounded(res: Response): Promise<string> {
 
 const anyJson = z.unknown();
 const noBody = z.unknown();
-const mfaEnrollResponse = z.object({ id: z.string().uuid(), type: z.literal("totp"), totp: z.object({ qr_code: z.string().max(8192), secret: z.string().max(256), uri: z.string().max(8192).optional() }) }).passthrough();
+// The pinned GoTrue (v2.197.0) answers an enrolment with an SVG QR code of roughly 280 KB (one <rect> per module). The Admin entry UI shows the
+// secret, never the image, so the value is only bounded here (and dropped by the route), not rendered.
+const ENROLL_MAX_BYTES = 512 * 1024;
+const mfaEnrollResponse = z.object({ id: z.string().uuid(), type: z.literal("totp"), totp: z.object({ qr_code: z.string().max(ENROLL_MAX_BYTES).optional(), secret: z.string().max(256), uri: z.string().max(8192).optional() }) }).passthrough();
 const mfaChallengeResponse = z.object({ id: z.string().uuid(), type: z.literal("totp") }).passthrough();
 
 /** The only callback the website ever hands to Auth: computed from the validated SITE_URL, never from a request. */
@@ -208,7 +213,7 @@ export const auth = {
   },
   enrollTotp(cfg: AccountAuthConfig, accessToken: string) {
     const body = AUTH_BODIES.mfa_enroll.parse({ factor_type: "totp", friendly_name: "AzerDex Admin", issuer: "AzerDex" });
-    return call(cfg, { method: "POST", pathAndQuery: "/auth/v1/factors", bearer: accessToken, body, parse: mfaEnrollResponse });
+    return call(cfg, { method: "POST", pathAndQuery: "/auth/v1/factors", bearer: accessToken, body, parse: mfaEnrollResponse, maxBytes: ENROLL_MAX_BYTES + 4096 });
   },
   challengeTotp(cfg: AccountAuthConfig, accessToken: string, factorId: string) {
     const id = z.string().uuid().parse(factorId);
