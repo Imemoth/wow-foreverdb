@@ -1,0 +1,69 @@
+{
+  "_notice": "SYNTHETIC FIXTURE ONLY. This is not an AzerDex live observation or proof that this boss exists.",
+  "response": {
+    "dataset": "published",
+    "publicationId": 42,
+    "publishedAt": "2026-10-26T12:00:00.000Z",
+    "data": {
+      "type": "creature",
+      "id": 999001,
+      "variants": [
+        {
+          "level": 60,
+          "name": "Synthetic Test Sentinel",
+          "displayKind": "creature",
+          "totalObservations": 110,
+          "lastObservedAt": "2026-10-26T11:50:00.000Z",
+          "indexable": true,
+          "buckets": [
+            { "lootKind": "mob", "observations": 100, "confidence": "high" },
+            { "lootKind": "skinning", "observations": 10, "confidence": "insufficient" }
+          ],
+          "drops": [
+            {
+              "source": { "type": "creature", "id": 999001, "level": 60, "name": "Synthetic Test Sentinel", "displayKind": "creature" },
+              "item": { "id": 99001, "name": "Imaginary Training Blade" },
+              "lootKind": "mob", "drops": 12, "quantity": 12, "observations": 100,
+              "rate": 0.12, "rateLower": 0.07, "rateUpper": 0.198,
+              "confidence": "high", "dominated": false
+            },
+            {
+              "source": { "type": "creature", "id": 999001, "level": 60, "name": "Synthetic Test Sentinel", "displayKind": "creature" },
+              "item": { "id": 99002, "name": "Imaginary Copper Sigil" },
+              "lootKind": "mob", "drops": 3, "quantity": 3, "observations": 100,
+              "rate": 0.03, "rateLower": 0.01, "rateUpper": 0.083,
+              "confidence": "high", "dominated": false
+            },
+            {
+              "source": { "type": "creature", "id": 999001, "level": 60, "name": "Synthetic Test Sentinel", "displayKind": "creature" },
+              "item": { "id": 99003, "name": "Synthetic Leather" },
+              "lootKind": "skinning", "drops": 4, "quantity": 4, "observations": 10,
+              "rate": 0.4, "rateLower": 0.16, "rateUpper": 0.69,
+              "confidence": "insufficient", "dominated": false
+            }
+          ]
+        },
+        {
+          "level": 61,
+          "name": "Synthetic Test Sentinel",
+          "displayKind": "creature",
+          "totalObservations": 8,
+          "lastObservedAt": "2026-10-26T11:52:00.000Z",
+          "indexable": false,
+          "buckets": [{ "lootKind": "mob", "observations": 8, "confidence": "insufficient" }],
+          "drops": [
+            {
+              "source": { "type": "creature", "id": 999001, "level": 61, "name": "Synthetic Test Sentinel", "displayKind": "creature" },
+              "item": { "id": 99001, "name": "Imaginary Training Blade" },
+              "lootKind": "mob", "drops": 1, "quantity": 1, "observations": 8,
+              "rate": null, "rateLower": null, "rateUpper": null,
+              "confidence": "insufficient", "dominated": false
+            }
+          ]
+        }
+      ],
+      "zones": [],
+      "locations": []
+    }
+  }
+}
